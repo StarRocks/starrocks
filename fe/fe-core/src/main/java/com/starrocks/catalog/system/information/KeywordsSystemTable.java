@@ -31,7 +31,7 @@ public class KeywordsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("WORD", TypeFactory.createVarchar(128))
+                        .column("WORD", TypeFactory.createVarcharType(128))
                         .column("RESERVED", BooleanType.BOOLEAN)
                         .build(),
                 TSchemaTableType.SCH_KEYWORDS);

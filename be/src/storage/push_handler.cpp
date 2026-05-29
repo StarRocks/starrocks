@@ -14,6 +14,10 @@
 
 #include "storage/push_handler.h"
 
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -22,7 +26,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -313,7 +316,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
         // read data from broker and write into Rowset of cur_tablet
         VLOG(3) << "start to convert etl file to delta.";
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
+        ChunkPtr chunk = ChunkFactory::new_chunk(schema, 0);
         while (!reader->eof()) {
             st = reader->next_chunk(&chunk);
             if (!st.ok()) {

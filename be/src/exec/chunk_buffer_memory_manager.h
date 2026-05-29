@@ -18,8 +18,8 @@
 #include <cstdint>
 #include <limits>
 
+#include "base/utility/updater.h"
 #include "common/logging.h"
-#include "util/updater.h"
 
 namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
@@ -101,5 +101,33 @@ private:
     std::atomic<int64_t> _peak_num_rows{};
     size_t _max_input_dop;
     std::atomic<bool> _full_events_changed{};
+};
+
+// RAII account record for a single chunk buffered in a local exchange queue.
+// Construction adds the chunk's memory/num_rows to the shared manager exactly once;
+// destruction subtracts them. By holding it via shared_ptr across all queue entries that
+// reference the same chunk, the manager's record is released only when the last
+// reference is consumed.
+class ChunkBufferMemoryEntry {
+public:
+    ChunkBufferMemoryEntry(ChunkBufferMemoryManager* manager, size_t memory_usage, size_t num_rows)
+            : _manager(manager), _memory_usage(memory_usage), _num_rows(num_rows) {
+        _manager->update_memory_usage(static_cast<int64_t>(_memory_usage), static_cast<int64_t>(_num_rows));
+    }
+
+    ~ChunkBufferMemoryEntry() {
+        _manager->update_memory_usage(-static_cast<int64_t>(_memory_usage), -static_cast<int64_t>(_num_rows));
+    }
+
+    ChunkBufferMemoryEntry(const ChunkBufferMemoryEntry&) = delete;
+    ChunkBufferMemoryEntry& operator=(const ChunkBufferMemoryEntry&) = delete;
+
+    size_t memory_usage() const { return _memory_usage; }
+    size_t num_rows() const { return _num_rows; }
+
+private:
+    ChunkBufferMemoryManager* _manager;
+    const size_t _memory_usage;
+    const size_t _num_rows;
 };
 } // namespace starrocks::pipeline

@@ -19,7 +19,7 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,7 +31,7 @@ extern "C" {
 namespace starrocks {
 
 template <typename T>
-Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                           const avro_value_t& value);
 
 } // namespace starrocks

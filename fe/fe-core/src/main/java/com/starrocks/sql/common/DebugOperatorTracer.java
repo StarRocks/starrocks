@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -53,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -62,6 +64,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
@@ -70,6 +73,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -83,6 +87,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
@@ -141,7 +146,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
         return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
-                ", selectedIndexId=" + node.getSelectedIndexId() +
+                ", selectedIndexMetaId=" + node.getSelectedIndexMetaId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
@@ -377,7 +382,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalOlapScan(PhysicalOlapScanOperator node, Void context) {
         return "PhysicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
-                ", selectedIndexId=" + node.getSelectedIndexId() +
+                ", selectedIndexMetaId=" + node.getSelectedIndexMetaId() +
                 ", outputColumns=" + node.getOutputColumns() +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
@@ -564,5 +569,38 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalNoCTE(PhysicalNoCTEOperator node, Void context) {
         return super.visitPhysicalNoCTE(node, context);
+    }
+
+    @Override
+    public String visitPhysicalFetch(PhysicalFetchOperator node, Void context) {
+        Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToLazyColumns = node.getRowIdToLazyColumns();
+        Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator = node.getRowIdToScanOperator();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("PhysicalFetchOperator {");
+        sb.append(rowIdToLazyColumns.entrySet().stream().map(entry -> {
+            Table table = rowIdToScanOperator.get(entry.getKey()).getTable();
+            Set<ColumnRefOperator> columns = entry.getValue();
+            String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "{", "}"));
+            return "table " + table.getId() + " -> " + str;
+        }).collect(Collectors.joining(",", "{", "}")));
+        sb.append("}");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitPhysicalLookUp(PhysicalLookUpOperator node, Void context) {
+        Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToColumns = node.getRowIdToLazyColumns();
+        Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator = node.getRowIdToScanOperator();
+        StringBuilder sb = new StringBuilder();
+        sb.append("PhysicalLookUpOperator {");
+        sb.append(rowIdToColumns.entrySet().stream().map(entry -> {
+            Table table = rowIdToScanOperator.get(entry.getKey()).getTable();
+            Set<ColumnRefOperator> columns = entry.getValue();
+            String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "{", "}"));
+            return "table " + table.getId() + " -> " + str;
+        }).collect(Collectors.joining(",", "{", "}")));
+        sb.append("}");
+        return sb.toString();
     }
 }

@@ -14,10 +14,12 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -33,6 +35,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -40,7 +43,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -102,7 +105,7 @@ public interface ConnectorMetadata {
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName,
-                                            ConnectorMetadatRequestContext requestContext) {
+                                            ConnectorMetadataRequestContext requestContext) {
         return Lists.newArrayList();
     }
 
@@ -131,6 +134,25 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Lazily fetch the table comment when a caller really needs it
+     * (e.g. information_schema.tables). Default implementation returns
+     * the comment already on the cached Table object — i.e. for Iceberg
+     * the comment travels with getTable() so this is free. JDBC overrides
+     * to issue a dedicated REMARKS query.
+     */
+    default String getTableComment(ConnectContext context, String dbName, String tblName) {
+        Table table = getTable(context, dbName, tblName);
+        return table == null ? "" : Strings.nullToEmpty(table.getComment());
+    }
+
+    /**
+     * Build a temporary table from a pass-through query when the connector can infer the result schema.
+     */
+    default Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return null;
+    }
+
+    /**
      * Get the Time Varying Relation (TVR) version range for the table between the specified versions.
      */
     default TvrVersionRange getTableVersionRange(String dbName, Table table,
@@ -146,6 +168,15 @@ public interface ConnectorMetadata {
      */
     default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         return TvrTableSnapshot.empty();
+    }
+
+    /**
+     * Like {@link #getCurrentTvrSnapshot} but lets storages that pin snapshots
+     * per caller attach a reference for {@code mvId} as a side effect. Default
+     * is a pure read.
+     */
+    default TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        return getCurrentTvrSnapshot(dbName, table);
     }
 
     /**
@@ -186,10 +217,6 @@ public interface ConnectorMetadata {
         return RemoteFileInfoDefaultSource.EMPTY;
     }
 
-    default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        return Lists.newArrayList();
-    }
-
     /**
      * Get table meta serialized specification
      *
@@ -207,6 +234,15 @@ public interface ConnectorMetadata {
 
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
+    }
+
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     * Default implementation ignores the context and falls back to the live-snapshot variant.
+     */
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                              ConnectorMetadataRequestContext requestContext) {
+        return getPartitions(table, partitionNames);
     }
 
     /**
@@ -295,10 +331,15 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                            ConnectContext context) {
+        finishSink(dbName, table, commitInfos, branch, extra);
+    }
+
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    default ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
@@ -325,7 +366,7 @@ public interface ConnectorMetadata {
     default void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {
     }
 
-    default void createMaterializedView(CreateMaterializedViewStmt stmt)
+    default void createMaterializedView(CreateSyncMVStmt stmt)
             throws AnalysisException, DdlException {
     }
 
@@ -360,6 +401,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
 
+    default Map<String, String> getCatalogProperties() {
+        return Map.of();
+    }
+
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
@@ -370,5 +415,30 @@ public interface ConnectorMetadata {
     }
 
     default void shutdown() {
+    }
+
+    /**
+     * Check if the delete can be performed using metadata operations only.
+     * This is connector-specific optimization that allows deleting data by
+     * dropping entire files or partitions without generating position delete files.
+     *
+     * @param table     The table to delete from
+     * @param predicate The delete predicate in ScalarOperator form
+     * @return true if metadata-level delete can be used, false otherwise
+     */
+    default boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+        return false;
+    }
+
+    /**
+     * Execute metadata-level delete for the given table and predicate.
+     * This method should only be called when canDeleteUsingMetadata returns true.
+     *
+     * @param table     The table to delete from
+     * @param predicate The delete predicate in ScalarOperator form
+     * @param context   The connect context for audit info
+     */
+    default void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
+        throw new UnsupportedOperationException("Metadata delete is not supported by this connector");
     }
 }

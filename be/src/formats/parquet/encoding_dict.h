@@ -18,19 +18,18 @@
 #include <memory>
 #include <vector>
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
+#include "base/simd/expand.h"
+#include "base/simd/simd.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "formats/parquet/encoding.h"
-#include "simd/expand.h"
-#include "simd/simd.h"
-#include "util/coding.h"
-#include "util/cpu_info.h"
-#include "util/rle_encoding.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -39,6 +38,8 @@ class DictEncoder final : public Encoder {
 public:
     DictEncoder() = default;
     ~DictEncoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictEncoder<{}>", typeid(T).name()); }
 
     Status append(const uint8_t* vals, size_t count) override {
         const T* ptr = (const T*)vals;
@@ -88,55 +89,15 @@ private:
 
 class CacheAwareDictDecoder : public Decoder {
 public:
-    CacheAwareDictDecoder() { _dict_size_threshold = CpuInfo::get_l2_cache_size(); }
+    CacheAwareDictDecoder();
     ~CacheAwareDictDecoder() override = default;
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        switch (content_type) {
-        case DICT_CODE: {
-            FixedLengthColumn<int32_t>* data_column;
-            if (dst->is_nullable()) {
-                auto nullable_column = down_cast<NullableColumn*>(dst);
-                nullable_column->null_column()->append_default(count);
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
-            } else {
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
-            }
-            size_t cur_size = data_column->size();
-            data_column->resize_uninitialized(cur_size + count);
-            int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
-            auto decoded_num = _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
-            if (decoded_num < count) {
-                return Status::InternalError("didn't get enough data from dict-decoder");
-            }
-            break;
-        }
-        case VALUE: {
-#ifdef BE_TEST
-            return _next_batch_value(count, dst, filter);
-#else
-            if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
-                return _next_batch_value(count, dst, filter);
-            } else {
-                return _next_batch_value(count, dst, nullptr);
-            }
-#endif // BE_TEST
-        }
-        default:
-            return Status::NotSupported("read type not supported");
-        }
-        return Status::OK();
-    }
+    std::string to_string() const override { return "CacheAwareDictDecoder"; }
+
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override;
 
     Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
-                                 const FilterData* filter) override {
-        if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
-            return _do_next_batch_with_nulls(count, null_infos, content_type, dst, filter);
-        } else {
-            return _do_next_batch_with_nulls(count, null_infos, content_type, dst, nullptr);
-        }
-        return Status::OK();
-    }
+                                 const FilterData* filter) override;
 
     template <class DataType>
     void assign_data_with_nulls(size_t count, size_t num_non_nulls, const uint8_t* nulls, const DataType* src_data,
@@ -172,7 +133,7 @@ public:
         auto nullable_column = down_cast<NullableColumn*>(dst);
 
         size_t read_count = count - null_cnt;
-        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column().get());
+        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column_raw_ptr());
         // resize data
         data_column->resize_uninitialized(cur_size + count);
         int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -208,6 +169,8 @@ class DictDecoder final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictDecoder<{}>", typeid(T).name()); }
 
     // initialize dictionary
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
@@ -270,7 +233,7 @@ public:
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
         auto nullable_column = down_cast<NullableColumn*>(dst);
-        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         // resize data
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -324,8 +287,8 @@ private:
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
-            nullable_column->null_column()->append_default(count);
-            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            nullable_column->null_column_raw_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         } else {
             data_column = down_cast<FixedLengthColumn<T>*>(dst);
         }
@@ -394,6 +357,8 @@ class DictDecoder<Slice> final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictDecoder<Slice>"); }
 
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
         auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(num_values * sizeof(Slice));
@@ -616,7 +581,7 @@ private:
                 return Status::InternalError("Index not in dictionary bounds");
             }
             if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             for (int i = 0; i < count; ++i) {

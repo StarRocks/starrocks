@@ -42,6 +42,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
@@ -92,7 +93,8 @@ public:
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution open().
-    PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb);
+    PlanFragmentExecutor(const QueryExecutionServices* query_execution_services,
+                         report_status_callback report_status_cb);
 
     // Closes the underlying plan fragment and frees up all resources allocated in open()
     // It is an error to delete a PlanFragmentExecutor with a report callback before open()
@@ -151,8 +153,8 @@ public:
 private:
     Status _prepare_stream_load_pipe(const TExecPlanFragmentParams& request);
 
-    ExecEnv* _exec_env;        // not owned
-    ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
+    const QueryExecutionServices* _query_execution_services; // not owned
+    ExecNode* _plan = nullptr;                               // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
@@ -160,15 +162,15 @@ private:
     report_status_callback _report_status_cb;
 
     // true if _plan->_get_next_internal_vectorized() indicated that it's done
-    bool _done;
+    bool _done{false};
 
     // true if prepare() returned OK
-    bool _prepared;
+    bool _prepared{false};
 
     // true if close() has been called
-    bool _closed;
+    bool _closed{false};
 
-    bool enable_profile;
+    bool enable_profile{true};
 
     // If load_profile_collect_second is set and time cost of load is less than the value,
     // then profile will not be reported to FE even though enable_profile=true
@@ -178,7 +180,7 @@ private:
 
     // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
-    bool _is_report_on_cancel;
+    bool _is_report_on_cancel{true};
 
     // Overall execution status. Either ok() or set to the first error status that
     // was encountered.
@@ -209,10 +211,10 @@ private:
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
-    bool _collect_query_statistics_with_every_batch;
+    bool _collect_query_statistics_with_every_batch{false};
 
     // If this is a runtime filter merge node for some query.
-    bool _is_runtime_filter_merge_node;
+    bool _is_runtime_filter_merge_node{false};
 
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;

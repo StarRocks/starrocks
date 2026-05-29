@@ -253,6 +253,13 @@ struct TExprNode {
   56: optional TDictionaryGetExpr dictionary_get_expr
   // whether this expr is only used in index
   57: optional bool is_index_only_filter
+
+  // lambda function contain non-deterministic sub-exprs
+  58: optional bool is_nondeterministic
+
+  // When true, STRUCT cast matches fields by name instead of by position.
+  // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
+  59: optional bool cast_struct_by_name
 }
 
 struct TPartitionLiteral {

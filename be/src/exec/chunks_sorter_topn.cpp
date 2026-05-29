@@ -14,22 +14,22 @@
 
 #include "chunks_sorter_topn.h"
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/orlp/pdqsort.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
+#include "common/runtime_profile.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
+#include "types/datum.h"
 #include "types/logical_type_infra.h"
-#include "util/defer_op.h"
-#include "util/orlp/pdqsort.h"
-#include "util/runtime_profile.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -66,7 +66,7 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
           _max_buffered_rows(max_buffered_rows),
           _max_buffered_bytes(max_buffered_bytes),
           _max_buffered_chunks(max_buffered_chunks),
-          _init_merged_segment(false),
+
           _limit(limit),
           _offset(offset),
           _topn_type(topn_type) {
@@ -204,6 +204,10 @@ std::vector<RuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* pool)
 
 Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_output_timer);
+    return _do_get_next(chunk, eos);
+}
+
+Status ChunksSorterTopn::_do_get_next(ChunkPtr* chunk, bool* eos) {
     if (_merged_runs.num_chunks() == 0) {
         *chunk = nullptr;
         *eos = true;
@@ -798,6 +802,45 @@ void ChunksSorterTopn::_reset() {
     while (_merged_runs.num_chunks() != 0) {
         _merged_runs.pop_front();
     }
+}
+
+size_t ChunksSorterTopn::_reserved_bytes(const ChunkPtr& chunk) {
+    // This function estimates the memory required for the next push_chunk/set_finishing operation.
+    // Since push_chunk/set_finishing may perform capacity expansion, the peak memory requirement is
+    // twice the original memory.
+    size_t reserved_bytes = 0;
+    if (chunk) {
+        reserved_bytes += chunk->memory_usage();
+    }
+    reserved_bytes += _raw_chunks.mem_usage * 2;
+    reserved_bytes += _merged_runs.mem_usage() * 2;
+    return reserved_bytes;
+}
+
+size_t ChunksSorterTopn::_get_revocable_mem_bytes() {
+    size_t revocable_mem_bytes = 0;
+    revocable_mem_bytes += _raw_chunks.mem_usage;
+    revocable_mem_bytes += _merged_runs.mem_usage();
+    return revocable_mem_bytes;
+}
+
+std::function<StatusOr<ChunkPtr>()> ChunksSorterTopn::_get_chunk_iterator() {
+    return [this]() -> StatusOr<ChunkPtr> {
+        if (_process_raw_chunks_idx < _raw_chunks.chunks.size()) {
+            return std::move(_raw_chunks.chunks[_process_raw_chunks_idx++]);
+        }
+        ChunkPtr chunk;
+        bool eos = false;
+        RETURN_IF_ERROR(_do_get_next(&chunk, &eos));
+        if (eos) {
+            return Status::EndOfFile("No more chunk to restore");
+        }
+        return chunk;
+    };
+}
+
+bool ChunksSorterTopn::_have_no_staging_data() const {
+    return _raw_chunks.chunks.empty() && _merged_runs.num_chunks() == 0;
 }
 
 } // namespace starrocks

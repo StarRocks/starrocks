@@ -324,7 +324,7 @@ wget https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_6
 
 1. 请根据您的 StarRocks 版本下载对应的 Dashboard 模板。
 
-   - [全架构 Dashboard 模版](https://releases.starrocks.io/resources/Dashboard-All-Arch.json)
+   - [全架构 Dashboard 模版](https://releases.starrocks.io/resources/Dashboard-All-Arch-20260113.json)
    - [存算分离 Dashboard 模版 - General](https://releases.starrocks.io/resources/Dashboard-Shared-data-General-3.5.json)
    - [存算分离 Dashboard 模版 - Starlet](https://releases.starrocks.io/resources/Dashboard-Shared-data-Starlet-3.5.json)
 
@@ -546,7 +546,7 @@ Grafana 通过通知策略（Notification policies）来关联报警渠道和报
 
    ![MA-29](../../../_assets/monitor/monitor29.png)
 
-如果您对通知策略的细节感兴趣，或者业务中有更复杂的报警场景要求，可以参考[官方文档](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notification-policies/notifications/)。
+如果您对通知策略的细节感兴趣，或者业务中有更复杂的报警场景要求，可以参考[官方文档](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notifications/notification-policies/)。
 
 ### 3.4 创建报警规则
 
@@ -600,6 +600,7 @@ Grafana 通过通知策略（Notification policies）来关联报警渠道和报
    1. 通过 PromQL 查询获取 Prometheus 中指标项的值。PromQL 是 Prometheus 自己开发的数据查询 DSL 语言，在 Dashboard 的 JSON 模板中也有使用到。每个监控项的 `expr` 属性即为对应的 PromQL。您可以在规则设置页面点击 **Run queries** 按钮查看查询结果。
    2. 对以上查询的结果数据做函数和模式的处理。通常您需要使用 Last 函数获取最新的值，使用 Strict 严格模式来保证若返回值为非数值数据可以展示为 `NaN`。
    3. 对处理过的查询结果设置判断规则。以 FE 为例，如果 FE 节点状态正常，则输出结果为 `1`。若 FE 节点宕机，则结果为 `0`。因此您可以设置判断规则为“小于1”，即 **IS BELOW 1**，出现该情况时即会触发报警。
+
    </details>
 
 5. 设置报警评估规则。
@@ -865,3 +866,49 @@ A：以 Query Error 项为例，您可以为其创建两个报警规则，设置
 
 - **风险**：设置失败率大于 0.05 时，提示为风险，报警发送给开发团队。
 - **严重**：设置失败率大于 0.20 时，提示为严重，报警发送给运维团队。此时报警通知将同时发送给开发团队和运维团队。
+
+### Q: 如何获取更详细的监控指标，包括表级别指标、物化视图指标以及带有用户标签的连接统计信息？
+
+A: 默认情况下，`/metrics` 接口以精简模式收集指标，以尽量减少对性能的影响。要获取详细指标，您需要在请求中添加特定参数，并提供具有 ADMIN 权限用户的 Basic Authentication 凭据。
+
+**支持的参数：**
+
+- `with_table_metrics=all`：收集所有表级别指标。
+- `with_materialized_view_metrics=all`：收集所有物化视图指标。
+- `with_user_connections=all`：收集按用户标签分类的连接统计信息。
+
+**认证要求：**
+
+这些参数仅在请求包含有效的 ADMIN 用户 Basic Authentication 凭据时生效。如果请求是匿名的或用户缺乏 ADMIN 权限，这些参数将被忽略，仅返回默认指标。
+
+**Curl 命令示例：**
+
+```bash
+curl -u <admin_username>:<admin_password> \
+"http://<fe_host>:<fe_http_port>/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all"
+```
+
+**Prometheus 配置示例：**
+
+要在 Prometheus 中启用详细指标收集，请在 `prometheus.yml` 中配置 `params` 和 `basic_auth`：
+
+```yaml
+scrape_configs:
+  - job_name: 'StarRocks_Detailed_Metrics'
+    metrics_path: '/metrics'
+    params:
+      with_table_metrics: ['all']
+      with_materialized_view_metrics: ['all']
+      with_user_connections: ['all']
+    basic_auth:
+      username: '<admin_username>'
+      password: '<admin_password>'
+    static_configs:
+      - targets: ['<fe_host>:<fe_http_port>']
+```
+
+:::note
+
+收集所有表和物化视图指标可能会增加 FE 节点的负载。在大规模环境中，请谨慎使用这些参数。
+
+:::

@@ -111,6 +111,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return table;
     }
 
+    public void setTable(Table table) {
+        this.table = table;
+    }
+
     public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
         return colRefToColumnMetaMap;
     }

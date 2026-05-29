@@ -17,7 +17,7 @@ package com.starrocks.connector;
 import java.util.ArrayList;
 import java.util.List;
 
-public interface RemoteFileInfoSource {
+public interface RemoteFileInfoSource extends AutoCloseable {
     RemoteFileInfo getOutput();
 
     boolean hasMoreOutput();
@@ -28,5 +28,10 @@ public interface RemoteFileInfoSource {
             res.add(getOutput());
         }
         return res;
+    }
+
+    @Override
+    default void close() throws Exception {
+        // default no-op
     }
 }

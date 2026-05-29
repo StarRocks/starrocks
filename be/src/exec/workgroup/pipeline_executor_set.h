@@ -15,9 +15,9 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/thread/cpu_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/cpu_util.h"
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;
@@ -57,6 +57,9 @@ public:
     void change_cpus(CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids);
     void notify_num_total_connector_scan_threads_changed() const;
     void notify_config_changed() const;
+
+    Status update_exec_state_report_max_threads(int max_threads) const;
+    Status update_priority_exec_state_report_max_threads(int max_threads) const;
 
     pipeline::DriverExecutor* driver_executor() const { return _driver_executor.get(); }
     ScanExecutor* scan_executor() const { return _scan_executor.get(); }

@@ -769,3 +769,85 @@ INSERT INTO decimal_test_p50_s10_both_overflow SELECT 12345678901234567890123456
 INSERT INTO decimal_test_p50_s10_both_overflow SELECT -1234567890123456789012345678.12345678955;
 SELECT * FROM decimal_test_p50_s10_both_overflow ORDER BY d1;
 
+-- ============================================
+-- Part 19: PRIMARY KEY Table Tests with Decimal256
+-- ============================================
+
+-- Case 85: PRIMARY KEY table with decimal(39, 0) as value column
+CREATE TABLE decimal_pk_test_p39_s0 (
+    user_id varchar(42) NOT NULL,
+    asset_id varchar(42) NOT NULL,
+    timestamp datetime NOT NULL,
+    shop_id int NOT NULL,
+    day_bucket DATE NOT NULL,
+    value DECIMAL(39, 0) NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(user_id, asset_id, timestamp, shop_id, day_bucket)
+PARTITION BY (day_bucket) 
+DISTRIBUTED BY HASH(user_id)
+PROPERTIES ("replication_num" = "1");
+
+-- Insert basic values
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user001', 'asset001', '2024-01-01 10:00:00', 1, '2024-01-01', 123456789012345678901234567890123456789);
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user001', 'asset001', '2024-01-01 10:00:00', 1, '2024-01-01', 987654321098765432109876543210987654321);
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user002', 'asset002', '2024-01-02 15:30:00', 2, '2024-01-02', -123456789012345678901234567890123456789);
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user003', 'asset003', '2024-01-03 20:45:00', 3, '2024-01-03', 999999999999999999999999999999999999999);
+
+-- Test duplicate key update (should replace old value)
+INSERT INTO decimal_pk_test_p39_s0 VALUES 
+('user002', 'asset002', '2024-01-02 15:30:00', 2, '2024-01-02', 111111111111111111111111111111111111111);
+
+-- Query results
+SELECT user_id, asset_id, shop_id, value FROM decimal_pk_test_p39_s0 ORDER BY user_id, asset_id, shop_id;
+
+-- Case 86: PRIMARY KEY table with decimal(50, 10) as value column with multiple key columns
+CREATE TABLE decimal_pk_test_p50_s10 (
+    id1 bigint NOT NULL,
+    id2 varchar(50) NOT NULL,
+    id3 int NOT NULL,
+    decimal_value DECIMAL(50, 10) NOT NULL,
+    decimal_nullable DECIMAL(65, 15),
+    regular_value bigint
+) ENGINE=OLAP 
+PRIMARY KEY(id1, id2, id3)
+DISTRIBUTED BY HASH(id1)
+PROPERTIES ("replication_num" = "1");
+
+-- Insert various decimal256 values
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(1, 'key001', 100, 1234567890123456789012345678901234567890.1234567890, 12345678901234567890123456789012345678901234567890.123456789012345, 1000);
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(2, 'key002', 200, -9876543210987654321098765432109876543210.9876543210, -98765432109876543210987654321098765432109876543210.987654321098765, 2000);
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(3, 'key003', 300, 5555555555555555555555555555555555555555.5555555555, 55555555555555555555555555555555555555555555555555.555555555555555, 3000);
+
+-- Test with NULL values
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(4, 'key004', 400, 1111111111111111111111111111111111111111.1111111111, NULL, NULL);
+
+-- Test duplicate key update with different decimal values
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(1, 'key001', 100, 9999999999999999999999999999999999999999.9999999999, 99999999999999999999999999999999999999999999999999.999999999999999, 9999);
+
+-- Test boundary values
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(5, 'key005', 500, 0.0000000001, 0.000000000000001, 0);
+INSERT INTO decimal_pk_test_p50_s10 VALUES 
+(6, 'key006', 600, -0.0000000001, -0.000000000000001, -1);
+
+-- Query results ordered by primary key
+SELECT id1, id2, id3, decimal_value, decimal_nullable, regular_value 
+FROM decimal_pk_test_p50_s10 
+ORDER BY id1, id2, id3;
+
+-- Test point query with primary key
+SELECT decimal_value FROM decimal_pk_test_p50_s10 WHERE id1 = 2 AND id2 = 'key002' AND id3 = 200;
+
+-- Test aggregation on primary key table with decimal256
+SELECT COUNT(*), SUM(regular_value), MIN(decimal_value), MAX(decimal_value) 
+FROM decimal_pk_test_p50_s10;
+

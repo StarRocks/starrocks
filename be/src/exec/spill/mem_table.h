@@ -18,17 +18,17 @@
 #include <memory>
 #include <utility>
 
-#include "column/column_helper.h"
+#include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spill_fwd.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;

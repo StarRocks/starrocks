@@ -24,8 +24,8 @@ using std::string;
 #include <vector>
 using std::vector;
 
-#include "common/compiler_util.h"
-#include "common/logging.h"
+#include "gutil/compiler_util.h"
+#include "gutil/logging.h"
 #include "gutil/stl_util.h" // for string_as_array, STLAppendToString
 #include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/numbers.h"

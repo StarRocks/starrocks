@@ -19,9 +19,12 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -75,17 +78,21 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnablePreAggTopNPushDown()) {
+        int topNPushDownAggMode = context.getSessionVariable().getTopNPushDownAggMode();
+        if (topNPushDownAggMode < 0) {
             return false;
         }
 
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
+        if (topn.isTopNPushDownAgg()) {
+            return false;
+        }
 
         if (!topn.hasLimit() || topn.getLimit() > context.getSessionVariable().getCboPushDownTopNLimit()) {
             return false;
         }
 
-        if (topn.getSortPhase() != SortPhase.PARTIAL || topn.hasOffset() || topn.getPredicate() != null) {
+        if (topn.hasOffset() || topn.getPredicate() != null) {
             return false;
         }
 
@@ -108,6 +115,13 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
             return false;
         }
 
+        // Check if the scan under local agg is an external table scan.
+        boolean isExternalScan = isExternalScanOperator(aggGlobalChild);
+
+        if (!isSupportedTopN(topn, isExternalScan)) {
+            return false;
+        }
+
         // verify aggregation result columns are not used in the order by columns of topN.
         List<Ordering> orderByElements = topn.getOrderByElements();
         List<ColumnRefOperator> groupingKeys = aggGlobal.getGroupingKeys();
@@ -117,28 +131,70 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
-
         OptExpression agg = input.inputAt(0);
         LogicalAggregationOperator aggOp = (LogicalAggregationOperator) agg.getOp();
-
         OptExpression localAgg = agg.inputAt(0);
         LogicalAggregationOperator localAggOp = (LogicalAggregationOperator) localAgg.getOp();
 
-        OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
-                        .withOperator(localAggOp)
-                        .setTopNLocalAgg(true)
-                        .build(), localAgg.getInputs());
+        OptExpression pushedDownAgg = buildPushedDownAgg(topn, aggOp, localAggOp, localAgg.getInputs(), context);
+        return Lists.newArrayList(OptExpression.create(topn, pushedDownAgg));
+    }
 
-        OptExpression newLocalTopN = OptExpression.create(new LogicalTopNOperator.Builder()
-                .setOrderByElements(topn.getOrderByElements())
-                .setLimit(topn.getLimit())
-                .setTopNType(topn.getTopNType())
-                .setSortPhase(topn.getSortPhase())
+    private OptExpression buildPushedDownAgg(LogicalTopNOperator topn,
+                                             LogicalAggregationOperator aggOp,
+                                             LogicalAggregationOperator localAggOp,
+                                             List<OptExpression> localAggInputs,
+                                             OptimizerContext context) {
+        // Create a new TopN operator that will be placed above the local aggregate.
+        LogicalTopNOperator localTopNOp = new LogicalTopNOperator.Builder()
+                .withOperator(topn)
+                .setSortPhase(SortPhase.PARTIAL)
                 .setIsSplit(false)
                 .setPerPipeline(true)
-                .build(), newLocalAgg);
+                .build();
+        localTopNOp.setTopNPushDownAgg();
 
-        OptExpression newAgg = OptExpression.create(aggOp, newLocalTopN);
-        return Lists.newArrayList(OptExpression.create(topn, newAgg));
+        LogicalTopNOperator.TopNSortInfo localTopNSortInfo = null;
+        if (context.getSessionVariable().getTopNPushDownAggMode() >= 1) {
+            localTopNSortInfo = new LogicalTopNOperator.TopNSortInfo(
+                    topn.getOrderByElements(), localTopNOp.getSortPhase(), topn.getTopNType(),
+                    topn.getLimit(), topn.getOffset());
+        }
+
+        OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
+                .withOperator(localAggOp)
+                .setTopNLocalAgg(true)
+                .setAggTopnSortInfo(localTopNSortInfo)
+                .build(), localAggInputs);
+        OptExpression newLocalTopN = OptExpression.create(localTopNOp, newLocalAgg);
+        return OptExpression.create(aggOp, newLocalTopN);
+    }
+
+    private boolean isSupportedTopN(LogicalTopNOperator topn, boolean isExternalScan) {
+        if (topn.isSplit()) {
+            return false;
+        }
+        if (topn.getSortPhase() == SortPhase.PARTIAL) {
+            return true;
+        }
+        // Only allow FINAL topN pushdown for external scans to avoid native OLAP regressions.
+        return isExternalScan && topn.getSortPhase() == SortPhase.FINAL;
+    }
+
+    /**
+     * Recursively check if the operator tree under the given expression contains an external table scan.
+     * An external scan is any LogicalScanOperator that is not a LogicalOlapScanOperator.
+     */
+    private boolean isExternalScanOperator(OptExpression expression) {
+        Operator op = expression.getOp();
+        if (op instanceof LogicalScanOperator) {
+            return !(op instanceof LogicalOlapScanOperator);
+        }
+        for (OptExpression child : expression.getInputs()) {
+            if (isExternalScanOperator(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

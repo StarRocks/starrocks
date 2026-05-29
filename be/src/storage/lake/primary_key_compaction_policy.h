@@ -17,7 +17,6 @@
 #include <queue>
 #include <vector>
 
-#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_policy.h"
@@ -44,17 +43,12 @@ public:
     //
     // Same bytes, if we use more io to fetch it, that means more overhead.
     // And in one rowset, the IO count is equal overlapped segment count plus their delvec files.
-    double io_count() const {
-        // rowset_meta_ptr->segments_size() could be zero here, so make sure this >= 1 using max.
-        double cnt = rowset_meta_ptr->overlapped() ? std::max(rowset_meta_ptr->segments_size(), 1) : 1;
-        if (stat.num_dels > 0) {
-            // if delvec file exist, that means we need to read segment files and delvec files both
-            // And update_compaction_delvec_file_io_ratio control the io amp ratio of delvec files, default is 2.
-            // Bigger update_compaction_delvec_file_io_amp_ratio means high priority about merge rowset with delvec files.
-            cnt *= config::update_compaction_delvec_file_io_amp_ratio;
-        }
-        return cnt;
-    }
+    //
+    // Special case: For non-overlapped rowsets that are already large enough
+    // (>= lake_compaction_max_rowset_size), they are already well-compacted
+    // and should have zero compaction priority. This prevents them from being
+    // selected for compaction when they don't need it.
+    double io_count() const;
     double delete_bytes() const {
         if (stat.num_rows == 0) return 0.0;
         if (stat.num_dels >= stat.num_rows) return (double)stat.bytes;

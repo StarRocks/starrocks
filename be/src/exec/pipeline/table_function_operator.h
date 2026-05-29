@@ -15,11 +15,11 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exprs/expr.h"
 #include "exprs/table_function/table_function_factory.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 class TableFunctionOperator final : public Operator {

@@ -15,8 +15,8 @@
 #include "exprs/utility_functions.h"
 
 #include "column/column_visitor_adapter.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
 
 #ifdef __SSE4_2__
 #include <emmintrin.h>
@@ -30,26 +30,28 @@
 #include <limits>
 #include <random>
 
+#include "base/network/cidr.h"
+#include "base/network/network_util.h"
+#include "base/time/monotime.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/uuid/uuid_generator.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
 #include "common/version.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
-#include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/primitive/key_coder.h"
 #include "types/logical_type.h"
-#include "util/cidr.h"
-#include "util/monotime.h"
-#include "util/network_util.h"
-#include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -94,6 +96,15 @@ StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, co
     } else {
         return ColumnHelper::create_const_null_column(1);
     }
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::query_id(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    const TUniqueId& id = state->query_id();
+    if (id.hi == 0 && id.lo == 0) {
+        return ColumnHelper::create_const_null_column(1);
+    }
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(print_id(id), 1);
 }
 
 // UUID fixed 33 bytes.
@@ -231,6 +242,52 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext*, const Colum
     return result;
 }
 
+// UUID v7 generates time-ordered UUIDs according to RFC 9562
+// Returns a VARCHAR column with standard UUID format (8-4-4-4-12)
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
+
+    auto res = BinaryColumn::create();
+    auto& bytes = res->get_bytes();
+    auto& offsets = res->get_offset();
+
+    offsets.resize(num_rows + 1);
+    bytes.resize(36 * num_rows);
+
+    char* ptr = reinterpret_cast<char*>(bytes.data());
+
+    for (int i = 0; i < num_rows; ++i) {
+        offsets[i + 1] = offsets[i] + 36;
+        auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
+        std::string uuid_str = boost::uuids::to_string(uuid);
+        memcpy(ptr, uuid_str.c_str(), 36);
+        ptr += 36;
+    }
+
+    return res;
+}
+
+// UUID v7 numeric version - converts the UUID v7 to a 128-bit integer
+// Note: The byte order of the numeric representation depends on the system's endianness.
+// This is consistent with other numeric UUID conversions in the codebase and provides
+// a stable representation for comparison and storage purposes.
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext*, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
+    auto result = Int128Column::create(num_rows);
+    auto& data = result->get_data();
+
+    for (int i = 0; i < num_rows; ++i) {
+        auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
+        // Convert UUID bytes to int128_t
+        // Direct memcpy is used for consistency with existing uuid_numeric implementation
+        int128_t value;
+        memcpy(&value, uuid.data, 16);
+        data[i] = value;
+    }
+
+    return result;
+}
+
 StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, const Columns& columns) {
     auto column = columns[0];
     std::string msg = "assert_true failed due to false value";
@@ -288,6 +345,7 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
     TGetProfileRequest req;
 
     std::vector<std::string> query_ids;
+    query_ids.reserve(columns[0]->size());
     for (size_t i = 0; i < columns[0]->size(); ++i) {
         query_ids.emplace_back(viewer.value(i));
     }
@@ -548,9 +606,13 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     }
 
     for (size_t i = 0; i < num_rows; i++) {
-        result.append(std::move(buffs[i]));
+        result.append(buffs[i]);
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::materialize(FunctionContext* context, const Columns& columns) {
+    return Column::mutate(columns[0]);
 }
 
 } // namespace starrocks

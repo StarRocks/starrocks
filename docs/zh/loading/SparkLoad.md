@@ -130,7 +130,7 @@ PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
 * Spark 集群相关参数
   * `type`：必填，资源类型，取值为 `spark`。
   * `spark.master`: 必填，Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。
-  * `spark.submit.deployMode`: 必填，Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。
+  * `spark.submit.deployMode`: 必填，Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/latest/running-on-yarn.html#launching-spark-on-yarn)。
   * `spark.hadoop.fs.defaultFS`: 必填，HDFS 中 NameNode 的地址。格式为 `hdfs://namenode_host:port`。
   * YARN ResourceManager 相关参数。
     * 如果 Spark 为单点 ResourceManager，则需要配置`spark.hadoop.yarn.resourcemanager.address`，表示单点 ResourceManager 地址。

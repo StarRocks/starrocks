@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -42,6 +43,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -56,9 +58,12 @@ import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
  * is possible that the worker may not be available later when calling the interfaces of this provider.
  * - All the nodes will be considered as available after the snapshot nodes info are captured, even though it
  * may not be true all the time.
- * - Specifically, when calling `selectBackupWorker()`, the selected node will be checked again if it is in
- * `SimpleScheduler.isInBlocklist()` or not, to make sure that the backup node is in the available node list
- * and not in the block list.
+ * - Backup selection chooses another compute node when the primary is unusable. Eligible buddies differ from the
+ *   primary worker id; they must have been available when this provider was built from the warehouse snapshot, and must
+ *   pass blacklist checks at backup resolution time as well as at snapshot creation. Which algorithm is used depends
+ *   on {@code BlacklistBackupRoutingPolicy}: {@code CIRCULAR} walks the sorted node id ring
+ *   starting after the primary; {@code RANDOM} picks uniformly among eligible nodes. The default policy is {@code CIRCULAR}
+ *   unless another value is passed at construction, and stays fixed for the lifetime of this provider.
  * Also in shared-data mode, all nodes will be treated as compute nodes. so the session variable @@prefer_compute_node
  * will be always true, and @@use_compute_nodes will be always -1 which means using all the available compute nodes.
  */
@@ -67,6 +72,17 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     private static final AtomicInteger NEXT_COMPUTE_NODE_INDEX = new AtomicInteger(0);
 
     public static class Factory implements WorkerProvider.Factory {
+        private final BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy;
+
+        public Factory() {
+            // use default blacklist backup routing policy
+            this(BlacklistBackupRoutingPolicy.getDefault());
+        }
+
+        public Factory(BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
+            this.blacklistBackupRoutingPolicy = blacklistBackupRoutingPolicy;
+        }
+
         @Override
         public DefaultSharedDataWorkerProvider captureAvailableWorkers(
                 SystemInfoService systemInfoService,
@@ -91,39 +107,51 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, computeResource);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, computeResource,
+                    blacklistBackupRoutingPolicy);
         }
     }
 
     /**
      * All the compute nodes (including backends), including those that are not alive or in block list.
      */
-    private final ImmutableMap<Long, ComputeNode> id2ComputeNode;
+    protected final ImmutableMap<Long, ComputeNode> id2ComputeNode;
     /**
      * The available compute nodes, which are alive and not in the block list when creating the snapshot. It is still
      * possible that the node becomes unavailable later, it will be checked again in some of the interfaces.
      */
-    private final ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
+    protected final ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
 
     /**
      * List of the compute node ids, used to select buddy node in case some of the nodes are not available.
      */
-    private ImmutableList<Long> allComputeNodeIds;
+    protected ImmutableList<Long> allComputeNodeIds;
 
     private final Set<Long> selectedWorkerIds;
 
     private final ComputeResource computeResource;
 
+    private final BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy;
+
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                            ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                           ComputeResource computeResource
-    ) {
+                                           ComputeResource computeResource) {
+        this(id2ComputeNode, availableID2ComputeNode, computeResource, BlacklistBackupRoutingPolicy.getDefault());
+    }
+
+    @VisibleForTesting
+    public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
+                                           ComputeResource computeResource,
+                                           BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
         this.allComputeNodeIds = null;
         this.computeResource = computeResource;
+        this.blacklistBackupRoutingPolicy = Preconditions.checkNotNull(blacklistBackupRoutingPolicy,
+                "blacklistBackupRoutingPolicy");
     }
 
     @Override
@@ -143,7 +171,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     @Override
     public void selectWorker(long workerId) throws NonRecoverableException {
         if (getWorkerById(workerId) == null) {
-            reportWorkerNotFoundException(workerId);
+            reportWorkerNotFoundException("", workerId);
         }
         selectWorkerUnchecked(workerId);
     }
@@ -204,13 +232,14 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public void reportWorkerNotFoundException() throws NonRecoverableException {
-        reportWorkerNotFoundException(-1);
+    public void reportWorkerNotFoundException(String errorMessagePrefix) throws NonRecoverableException {
+        reportWorkerNotFoundException(errorMessagePrefix, -1);
     }
 
-    private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
+    private void reportWorkerNotFoundException(String errorMessagePrefix, long workerId) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + computeNodesToString(false));
+                errorMessagePrefix + FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " +
+                        computeNodesToString(false));
     }
 
     @Override
@@ -218,12 +247,51 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return true;
     }
 
-    /**
-     * Try to select the next workerId in the sorted list just after the workerId, if the next one is not available,
-     * e.g. also in BlockList, then try the next one in the list, until all nodes have benn tried.
-     */
     @Override
     public long selectBackupWorker(long workerId) {
+        if (blacklistBackupRoutingPolicy == BlacklistBackupRoutingPolicy.CIRCULAR) {
+            return selectBackupWorkerCircular(workerId);
+        } else if (blacklistBackupRoutingPolicy == BlacklistBackupRoutingPolicy.RANDOM) {
+            return selectBackupWorkerRandom(workerId);
+        } else {
+            throw new IllegalArgumentException("Invalid blacklist backup routing policy: "
+                    + blacklistBackupRoutingPolicy);
+        }
+    }
+
+    /**
+     * Picks a backup worker uniformly at random from the eligible set.
+     * Uses reservoir sampling (k=1) in a single pass to avoid allocating a list per call.
+     */
+    protected long selectBackupWorkerRandom(long workerId) {
+        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+            return -1;
+        }
+        if (allComputeNodeIds == null) {
+            createAvailableIdList();
+        }
+        Preconditions.checkNotNull(allComputeNodeIds);
+        Preconditions.checkState(allComputeNodeIds.contains(workerId));
+
+        int eligibleCount = 0;
+        long chosen = -1;
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
+        for (long buddyId : allComputeNodeIds) {
+            if (!isBuddyEligibleForBackup(buddyId, workerId)) {
+                continue;
+            }
+            eligibleCount++;
+            if (rng.nextInt(eligibleCount) == 0) {
+                chosen = buddyId;
+            }
+        }
+        return chosen;
+    }
+
+    /**
+     * Tries the next id in the sorted list after {@code workerId} (circular), returning the first eligible buddy.
+     */
+    protected long selectBackupWorkerCircular(long workerId) {
         if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
             return -1;
         }
@@ -236,16 +304,21 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         int startPos = allComputeNodeIds.indexOf(workerId);
         int attempts = allComputeNodeIds.size();
         while (attempts-- > 0) {
-            // ensure the buddyId selection is stable, that is, giving the same input, the output is always the same.
-            // TODO: call StarOSAgent interface, let starmgr to choose a buddy node or trigger scheduling as necessary.
             startPos = (startPos + 1) % allComputeNodeIds.size();
             long buddyId = allComputeNodeIds.get(startPos);
-            if (buddyId != workerId && availableID2ComputeNode.containsKey(buddyId) &&
-                    !SimpleScheduler.isInBlocklist(buddyId)) {
+            if (isBuddyEligibleForBackup(buddyId, workerId)) {
                 return buddyId;
             }
         }
         return -1;
+    }
+
+    /**
+     * Whether {@code buddyId} may serve as a backup for {@code workerId} for this query's worker snapshot.
+     */
+    protected boolean isBuddyEligibleForBackup(long buddyId, long workerId) {
+        return buddyId != workerId && availableID2ComputeNode.containsKey(buddyId) &&
+                !SimpleScheduler.isInBlocklist(buddyId);
     }
 
     @Override
@@ -274,7 +347,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return out.toString();
     }
 
-    private void createAvailableIdList() {
+    protected void createAvailableIdList() {
         List<Long> ids = new ArrayList<>(id2ComputeNode.keySet());
         Collections.sort(ids);
         this.allComputeNodeIds = ImmutableList.copyOf(ids);

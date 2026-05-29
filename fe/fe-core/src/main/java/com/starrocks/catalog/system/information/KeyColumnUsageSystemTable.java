@@ -33,19 +33,19 @@ public class KeyColumnUsageSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("COLUMN_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("COLUMN_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ORDINAL_POSITION", IntegerType.BIGINT)
                         .column("POSITION_IN_UNIQUE_CONSTRAINT",
                                 IntegerType.BIGINT)
-                        .column("REFERENCED_TABLE_SCHEMA", TypeFactory.createVarchar(64))
-                        .column("REFERENCED_TABLE_NAME", TypeFactory.createVarchar(64))
-                        .column("REFERENCED_COLUMN_NAME", TypeFactory.createVarchar(64))
+                        .column("REFERENCED_TABLE_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("REFERENCED_TABLE_NAME", TypeFactory.createVarcharType(64))
+                        .column("REFERENCED_COLUMN_NAME", TypeFactory.createVarcharType(64))
                         .build(), TSchemaTableType.SCH_KEY_COLUMN_USAGE);
     }
 }

@@ -24,6 +24,32 @@ namespace starrocks::io {
 
 class NumericStatistics;
 
+// Plain-old-data snapshot of cumulative read/write IO counters. Cheap drop-in alternative
+// to `get_numeric_statistics()` for hot paths that only need a fixed set of counters
+// (e.g. publish-time tracing): a single struct copy with no heap allocation, no string
+// construction, and no vector growth. Streams that do not expose IO breakdown leave every
+// field at zero. Adding a counter only requires extending this struct and the relevant
+// concrete-stream override; the abstract interface stays the same.
+struct IoStatsSnapshot {
+    // bytes
+    int64_t bytes_read_local_disk = 0;
+    int64_t bytes_read_remote = 0;
+    int64_t bytes_write_local_disk = 0;
+    int64_t bytes_write_remote = 0;
+    // op counts
+    int64_t io_count_local_disk = 0;
+    int64_t io_count_remote = 0;
+    // time (ns)
+    int64_t io_ns_read_local_disk = 0;
+    int64_t io_ns_read_remote = 0;
+    int64_t io_ns_write_local_disk = 0;
+    int64_t io_ns_write_remote = 0;
+    // prefetch
+    int64_t prefetch_hit_count = 0;
+    int64_t prefetch_wait_finish_ns = 0;
+    int64_t prefetch_pending_ns = 0;
+};
+
 // InputStream is the superclass of all classes representing an input stream of bytes.
 class InputStream : public Readable {
 public:
@@ -50,6 +76,13 @@ public:
     // If the InputStream implementation doesn't support statistics, a null pointer or
     // an empty statistics is returned.
     virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
+
+    // Cheap fixed-shape variant of `get_numeric_statistics()`. Default returns all zeros.
+    // Prefer this over `get_numeric_statistics()` on hot paths (publish, multi_get, …) —
+    // it avoids the heap-allocated NumericStatistics object and the 11 std::string keys
+    // built by adapter streams. Out-of-line so gcov can credit a `.cpp` line; see
+    // `input_stream.cpp` for the definition.
+    virtual IoStatsSnapshot get_io_stats_snapshot() const;
 };
 
 class InputStreamWrapper : public InputStream {
@@ -80,6 +113,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _impl->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
 private:
     InputStream* _impl;

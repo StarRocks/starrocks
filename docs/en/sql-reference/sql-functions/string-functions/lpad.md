@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns strings with a length of `len` (starting counting from the first syllable) in `str`."
 ---
 
 # lpad

@@ -16,12 +16,13 @@
 
 #include <sstream>
 
-#include "exec/exec_node.h"
+#include "base/string/slice.h"
 #include "exec/jdbc_scanner.h"
 #include "exprs/expr.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "util/slice.h"
 
 namespace starrocks::connector {
 
@@ -131,10 +132,10 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     const auto* jdbc_table = down_cast<const JDBCTableDescriptor*>(_tuple_desc->table_desc());
 
     Status status;
-    std::string driver_name = jdbc_table->jdbc_driver_name();
-    std::string driver_url = jdbc_table->jdbc_driver_url();
-    std::string driver_checksum = jdbc_table->jdbc_driver_checksum();
-    std::string driver_class = jdbc_table->jdbc_driver_class();
+    std::string driver_name(jdbc_table->jdbc_driver_name());
+    std::string driver_url(jdbc_table->jdbc_driver_url());
+    std::string driver_checksum(jdbc_table->jdbc_driver_checksum());
+    std::string driver_class(jdbc_table->jdbc_driver_class());
     std::string driver_location;
 
     status = JDBCDriverManager::getInstance()->get_driver_location(driver_name, driver_url, driver_checksum,

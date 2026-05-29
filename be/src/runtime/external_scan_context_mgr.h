@@ -45,9 +45,11 @@
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
+
+class MetricRegistry;
 
 struct ScanContext {
 public:
@@ -64,7 +66,7 @@ public:
 
 class ExternalScanContextMgr {
 public:
-    ExternalScanContextMgr(ExecEnv* exec_env);
+    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics);
 
     ~ExternalScanContextMgr();
 

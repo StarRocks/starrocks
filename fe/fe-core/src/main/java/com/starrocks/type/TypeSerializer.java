@@ -17,6 +17,10 @@ package com.starrocks.type;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PStructField;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PTypeNode;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TPrimitiveType;
@@ -141,6 +145,29 @@ public class TypeSerializer {
         }
     }
 
+    public static PTypeDesc toProtobuf(Type type) {
+        PTypeDesc container = new PTypeDesc();
+        container.types = new ArrayList<>();
+        toProtobuf(type, container);
+        return container;
+    }
+
+    public static void toProtobuf(Type type, PTypeDesc container) {
+        if (type instanceof ScalarType) {
+            scalarTypeToProtobuf((ScalarType) type, container);
+        } else if (type instanceof ArrayType) {
+            arrayTypeToProtobuf((ArrayType) type, container);
+        } else if (type instanceof MapType) {
+            mapTypeToProtobuf((MapType) type, container);
+        } else if (type instanceof StructType) {
+            structTypeToProtobuf((StructType) type, container);
+        } else if (type instanceof PseudoType) {
+            pseudoTypeToProtobuf((PseudoType) type, container);
+        } else {
+            throw new IllegalArgumentException("Unknown type: " + type.getClass().getName());
+        }
+    }
+
     private static void scalarTypeToThrift(ScalarType type, TTypeDesc container) {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
@@ -181,6 +208,35 @@ public class TypeSerializer {
         }
     }
 
+    private static void scalarTypeToProtobuf(ScalarType type, PTypeDesc container) {
+        PTypeNode node = new PTypeNode();
+        container.types.add(node);
+        node.type = TTypeNodeType.SCALAR.getValue();
+
+        PrimitiveType primitiveType = type.getPrimitiveType();
+        PScalarType scalarType = new PScalarType();
+        scalarType.type = TypeSerializer.toThrift(primitiveType).getValue();
+        switch (primitiveType) {
+            case CHAR:
+            case VARCHAR:
+            case VARBINARY:
+            case HLL:
+                scalarType.len = type.getLength();
+                break;
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMAL256:
+                scalarType.precision = type.getScalarPrecision();
+                scalarType.scale = type.getScalarScale();
+                break;
+            default:
+                break;
+        }
+        node.scalarType = scalarType;
+    }
+
     private static void arrayTypeToThrift(ArrayType type, TTypeDesc container) {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
@@ -189,12 +245,28 @@ public class TypeSerializer {
         toThrift(type.getItemType(), container);
     }
 
+    private static void arrayTypeToProtobuf(ArrayType type, PTypeDesc container) {
+        PTypeNode node = new PTypeNode();
+        container.types.add(node);
+        Preconditions.checkNotNull(type.getItemType());
+        node.type = TTypeNodeType.ARRAY.getValue();
+        toProtobuf(type.getItemType(), container);
+    }
+
     private static void mapTypeToThrift(MapType type, TTypeDesc container) {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
         node.setType(TTypeNodeType.MAP);
         toThrift(type.getKeyType(), container);
         toThrift(type.getValueType(), container);
+    }
+
+    private static void mapTypeToProtobuf(MapType type, PTypeDesc container) {
+        PTypeNode node = new PTypeNode();
+        container.types.add(node);
+        node.type = TTypeNodeType.MAP.getValue();
+        toProtobuf(type.getKeyType(), container);
+        toProtobuf(type.getValueType(), container);
     }
 
     private static void structTypeToThrift(StructType type, TTypeDesc container) {
@@ -211,6 +283,19 @@ public class TypeSerializer {
         }
     }
 
+    private static void structTypeToProtobuf(StructType type, PTypeDesc container) {
+        PTypeNode node = new PTypeNode();
+        container.types.add(node);
+        Preconditions.checkNotNull(type.getFields());
+        Preconditions.checkState(!type.getFields().isEmpty(),
+                "StructType must contains at least one StructField.");
+        node.type = TTypeNodeType.STRUCT.getValue();
+        node.structFields = new ArrayList<>();
+        for (StructField field : type.getFields()) {
+            structFieldToProtobuf(field, container, node);
+        }
+    }
+
     private static void structFieldToThrift(StructField field, TTypeDesc container, TTypeNode node) {
         TStructField tfield = new TStructField();
         tfield.setName(field.getName());
@@ -221,7 +306,21 @@ public class TypeSerializer {
         toThrift(field.getType(), container);
     }
 
+    private static void structFieldToProtobuf(StructField field, PTypeDesc container, PTypeNode node) {
+        PStructField pfield = new PStructField();
+        pfield.name = field.getName();
+        if (field.getComment() != null) {
+            pfield.comment = field.getComment();
+        }
+        node.structFields.add(pfield);
+        toProtobuf(field.getType(), container);
+    }
+
     private static void pseudoTypeToThrift(PseudoType type, TTypeDesc container) {
+        Preconditions.checkArgument(false, "PseudoType should not exposed to external");
+    }
+
+    private static void pseudoTypeToProtobuf(PseudoType type, PTypeDesc container) {
         Preconditions.checkArgument(false, "PseudoType should not exposed to external");
     }
 

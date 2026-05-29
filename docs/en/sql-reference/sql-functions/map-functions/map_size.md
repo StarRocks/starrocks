@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the number of elements in a MAP value."
 ---
 
 # map_size

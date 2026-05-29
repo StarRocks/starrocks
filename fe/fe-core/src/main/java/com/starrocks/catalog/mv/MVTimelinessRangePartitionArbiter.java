@@ -47,9 +47,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessRangePartitionArbiter.class);
 
-    public MVTimelinessRangePartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
-        this.differ = new RangePartitionDiffer(mv, isQueryRewrite, null);
+    public MVTimelinessRangePartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
+        this.differ = new RangePartitionDiffer(mv, queryRewriteParams, null);
     }
 
     @Override
@@ -79,6 +79,9 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                     mvTimelinessInfo);
+            if (baseChangedPartitionNames == null) {
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
 
         // collect all ref base table's partition range map

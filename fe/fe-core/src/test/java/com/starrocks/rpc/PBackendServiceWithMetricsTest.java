@@ -27,7 +27,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
@@ -180,20 +179,6 @@ public class PBackendServiceWithMetricsTest {
         };
 
         Future<PGetFileSchemaResult> result = pBackendServiceWithMetrics.getFileSchema(new PGetFileSchemaRequest());
-        assertNotNull(result);
-    }
-
-    @Test
-    public void testSubmitMVMaintenanceTaskAsync() throws Exception {
-        new Expectations() {
-            {
-                pBackendService.submitMVMaintenanceTaskAsync((PMVMaintenanceTaskRequest) any);
-                result = CompletableFuture.completedFuture(new PMVMaintenanceTaskResult());
-            }
-        };
-
-        Future<PMVMaintenanceTaskResult> result =
-                pBackendServiceWithMetrics.submitMVMaintenanceTaskAsync(new PMVMaintenanceTaskRequest());
         assertNotNull(result);
     }
 

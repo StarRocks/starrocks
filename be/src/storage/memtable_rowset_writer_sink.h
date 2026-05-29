@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+// Sink for writing memtable data to rowsets
+// Used for local storage engine where data is written directly to rowsets
 class MemTableRowsetWriterSink : public MemTableSink {
 public:
     explicit MemTableRowsetWriterSink(RowsetWriter* w) : _rowset_writer(w) {}
@@ -28,13 +30,18 @@ public:
 
     DISALLOW_COPY(MemTableRowsetWriterSink);
 
+    // Write chunk directly to rowset
+    // NOTE: slot_idx is not used as this sink doesn't support parallel flush with ordering
     Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr, bool eos = false,
-                       int64_t* flush_data_size = nullptr) override {
+                       int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override {
         return _rowset_writer->flush_chunk(chunk, seg_info);
     }
 
+    // Write chunk with deletes directly to rowset
+    // NOTE: slot_idx is not used as this sink doesn't support parallel flush with ordering
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info = nullptr,
-                                    bool eos = false, int64_t* flush_data_size = nullptr) override {
+                                    bool eos = false, int64_t* flush_data_size = nullptr,
+                                    int64_t slot_idx = -1) override {
         return _rowset_writer->flush_chunk_with_deletes(upserts, deletes, seg_info);
     }
 

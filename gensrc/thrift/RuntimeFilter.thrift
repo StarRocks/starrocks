@@ -41,7 +41,7 @@ include "Types.thrift"
 
 enum TRuntimeFilterBuildJoinMode {
   NONE,
-  BORADCAST,
+  BROADCAST,
   PARTITIONED,
   LOCAL_HASH_BUCKET,
   COLOCATE,
@@ -148,6 +148,11 @@ struct TRuntimeFilterDescription {
   19: optional bool is_broad_cast_join_in_skew;
   // only set when is_broad_cast_join_in_skew is true
   20: optional i32 skew_shuffle_filter_id;
+
+  // fields for TOPN RuntimeFilter
+  21: optional bool is_asc;
+  22: optional bool is_nulls_first;
+  23: optional i64 limit;
 }
 
 struct TRuntimeFilterProberParams {

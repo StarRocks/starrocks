@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/pipeline/source_operator.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::pipeline {
 
@@ -42,9 +42,14 @@ public:
         DCHECK((_long_values != nullptr) ^ (_string_values != nullptr));
     }
 
-    bool has_output() const override { return _next_processed_row_index < _rows_total; }
+    bool has_output() const override { return !is_finished(); }
 
-    bool is_finished() const override { return !has_output(); }
+    bool is_finished() const override { return _is_finished || _next_processed_row_index >= _rows_total; }
+
+    Status set_finished(RuntimeState* state) override {
+        _is_finished = true;
+        return Status::OK();
+    }
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -58,16 +63,17 @@ private:
     const size_t _start_index;
     const size_t _rows_total;
     size_t _next_processed_row_index{0};
+    bool _is_finished{false};
 };
 
 class RawValuesSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     RawValuesSourceOperatorFactory(int32_t id, int32_t plan_node_id, const std::vector<SlotDescriptor*>& dst_slots,
-                                   const TypeDescriptor& value_type, std::vector<int64_t>&& long_values,
+                                   TypeDescriptor value_type, std::vector<int64_t>&& long_values,
                                    std::vector<std::string>&& string_values)
             : SourceOperatorFactory(id, "raw_values_source", plan_node_id),
               _dst_slots(dst_slots),
-              _constant_type(value_type),
+              _constant_type(std::move(value_type)),
               _long_values(std::move(long_values)),
               _string_values(std::move(string_values)) {
         DCHECK(_dst_slots.size() == 1);

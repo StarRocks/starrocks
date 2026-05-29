@@ -99,7 +99,7 @@ public class OptExpression {
 
     public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, List<OptExpression> inputs) {
         OptExpression expr = new OptExpression(op);
-        expr.inputs = inputs;
+        expr.inputs = Lists.newArrayList(inputs);
         expr.tvrOptMeta = tvrOptMeta;
         return expr;
     }
@@ -178,6 +178,15 @@ public class OptExpression {
         op.clearRowOutputInfo();
         getRowOutputInfo();
     }
+
+    public void clearAndInitOutputInfo() {
+        for (OptExpression optExpression : inputs) {
+            optExpression.clearAndInitOutputInfo();
+        }
+        op.clearRowOutputInfo();
+        property.setOutputColumns(new ColumnRefSet(getRowOutputInfo().getOutputColRefs()));
+    }
+
 
     public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
         this.requiredProperties = requiredProperties;
@@ -312,7 +321,7 @@ public class OptExpression {
         }
 
         public Builder setInputs(List<OptExpression> inputs) {
-            optExpression.inputs = inputs;
+            optExpression.inputs = Lists.newArrayList(inputs);
             return this;
         }
 

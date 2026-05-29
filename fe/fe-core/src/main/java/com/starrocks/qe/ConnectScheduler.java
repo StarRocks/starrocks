@@ -156,7 +156,7 @@ public class ConnectScheduler {
             currentConnAtomic.incrementAndGet();
             connectionMap.put((long) ctx.getConnectionId(), ctx);
 
-            if (ctx instanceof ArrowFlightSqlConnectContext) {
+            if (ctx.isArrowFlightSql()) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
                 arrowFlightSqlConnectContextMap.put(context.getArrowFlightSqlToken(), context);
             }
@@ -223,7 +223,13 @@ public class ConnectScheduler {
         boolean removed;
         try {
             connStatsLock.lock();
-            removed = connectionMap.remove((long) ctx.getConnectionId()) != null;
+            // Identity-aware remove: only drop the mapping if the entry at this
+            // connectionId is this exact context. A context can hold a stale
+            // connectionId after a failed registerConnection(), and the 24-bit
+            // counter in ConnectionIdGenerator wraps after 2^24 connections, so
+            // a blind remove(key) risks evicting a different live session that
+            // happens to own the same id.
+            removed = connectionMap.remove((long) ctx.getConnectionId(), ctx);
             if (removed) {
                 numberConnection.decrementAndGet();
                 AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
@@ -237,7 +243,7 @@ public class ConnectScheduler {
                         ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
             }
 
-            if (ctx instanceof ArrowFlightSqlConnectContext) {
+            if (ctx.isArrowFlightSql()) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
                 arrowFlightSqlConnectContextMap.remove(context.getArrowFlightSqlToken());
             }

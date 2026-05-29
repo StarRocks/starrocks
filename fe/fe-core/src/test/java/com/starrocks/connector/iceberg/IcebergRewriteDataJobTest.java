@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.catalog.TableName;
+import com.google.common.collect.Lists;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra;
@@ -33,8 +33,13 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TSinkCommitInfo;
 import mockit.Mock;
@@ -75,6 +80,7 @@ public class IcebergRewriteDataJobTest {
                 0L,
                 10L,
                 1L,
+                false,
                 ctx,
                 alter
         );
@@ -116,12 +122,14 @@ public class IcebergRewriteDataJobTest {
         when(alter.getTableName()).thenReturn("t");
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, ctx, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, false, ctx, alter);
 
         IcebergScanNode scanNode = mock(IcebergScanNode.class);
         Deencapsulation.setField(job, "scanNodes", Collections.singletonList(scanNode));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> job.execute());
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
+            job.execute();
+        });
         assertEquals("Must call prepare() before execute()", ex.getMessage());
     }
 
@@ -163,7 +171,7 @@ public class IcebergRewriteDataJobTest {
         when(sv.clone()).thenReturn(sv);
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, ctx, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, false, ctx, alter);
 
         // ---- Prepare minimal fields required by execute() ----
         InsertStmt parsedInsert = mock(InsertStmt.class);
@@ -184,10 +192,12 @@ public class IcebergRewriteDataJobTest {
 
         IcebergScanNode localScanNode = mock(IcebergScanNode.class);
         ExecPlan localPlan = mockPlanWithOneIcebergScan(localScanNode);
+        final StatementBase[] plannedStmt = new StatementBase[1];
 
         new MockUp<StatementPlanner>() {
             @Mock
             public ExecPlan plan(StatementBase stmt, ConnectContext session) {
+                plannedStmt[0] = stmt;
                 return localPlan;
             }
         };
@@ -211,8 +221,10 @@ public class IcebergRewriteDataJobTest {
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);  
         InsertStmt fakeInsertStmt = Mockito.mock(InsertStmt.class);
-        PartitionNames pn = mock(PartitionNames.class);
-        when(fakeInsertStmt.getTableName()).thenReturn(new TableName("c", "db", "t"));
+        PartitionRef pn = new PartitionRef(Collections.emptyList(), false, NodePosition.ZERO);
+        when(fakeInsertStmt.getTableRef()).thenReturn(new TableRef(
+                QualifiedName.of(Lists.newArrayList("c", "db", "t")),
+                null, NodePosition.ZERO));
         when(fakeInsertStmt.getTargetPartitionNames()).thenReturn(pn);
         when(fakeInsertStmt.getLabel()).thenReturn("label_123");
         when(fakeInsertStmt.getTargetColumnNames()).thenReturn(Collections.emptyList());
@@ -224,7 +236,7 @@ public class IcebergRewriteDataJobTest {
         Deencapsulation.setField(job, "parsedStmt", fakeInsertStmt);
         new mockit.Expectations() {
             {
-                new com.starrocks.sql.ast.IcebergRewriteStmt(fakeInsertStmt, anyBoolean);
+                new com.starrocks.sql.ast.IcebergRewriteStmt(fakeInsertStmt, anyBoolean, anyBoolean);
                 result = rewriteStmt;
                 minTimes = 0;
             }
@@ -248,7 +260,54 @@ public class IcebergRewriteDataJobTest {
         verify(localScanNode, times(1)).rebuildScanRange(eq(oneGroup));
 
         verify(executor, times(1)).handleDMLStmt(eq(localPlan), isA(com.starrocks.sql.ast.IcebergRewriteStmt.class));
+        Assertions.assertTrue(plannedStmt[0] instanceof IcebergRewriteStmt);
 
         verify(state, never()).setError(anyString());
+    }
+
+    @Test
+    public void prepare_shouldPlanWithRewriteStmt() throws Exception {
+        ConnectContext ctx = mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessionVariable = mock(SessionVariable.class);
+        when(ctx.getSessionVariable()).thenReturn(sessionVariable);
+
+        AlterTableStmt alter = mock(AlterTableStmt.class);
+        when(alter.getTableName()).thenReturn("t");
+
+        ValuesRelation valuesRelation = new ValuesRelation(Collections.emptyList(), Collections.emptyList());
+        QueryStatement queryStatement = new QueryStatement(valuesRelation);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("c", "db", "t")), null, NodePosition.ZERO);
+        InsertStmt parsedInsert = new InsertStmt(tableRef, queryStatement);
+        parsedInsert.setOrigStmt(new OriginStatement("insert into t select 1", 0));
+        IcebergScanNode scanNode = mock(IcebergScanNode.class);
+        IcebergConnectorScanRangeSource source = mock(IcebergConnectorScanRangeSource.class);
+        when(scanNode.getSourceRange()).thenReturn(source);
+        when(source.getSourceFileScanOutputs(Mockito.anyInt(), Mockito.anyLong(), Mockito.anyBoolean()))
+                .thenReturn(Collections.emptyList());
+
+        new MockUp<com.starrocks.sql.parser.SqlParser>() {
+            @Mock
+            public List<StatementBase> parse(String sql, SessionVariable ignoredSessionVariable) {
+                return Collections.singletonList(parsedInsert);
+            }
+        };
+
+        final StatementBase[] plannedStmt = new StatementBase[1];
+        ExecPlan execPlan = mockPlanWithOneIcebergScan(scanNode);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) {
+                plannedStmt[0] = stmt;
+                return execPlan;
+            }
+        };
+
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(
+                "insert into t select 1", false, 0L, 10L, 1L, false, ctx, alter);
+
+        job.prepare();
+
+        Assertions.assertTrue(plannedStmt[0] instanceof IcebergRewriteStmt);
+        Assertions.assertNotSame(parsedInsert, plannedStmt[0]);
     }
 }

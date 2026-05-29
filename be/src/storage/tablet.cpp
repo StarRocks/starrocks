@@ -43,7 +43,14 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/time/ratelimit.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
+#include "common/util/table_metrics.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -63,43 +70,38 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/ratelimit.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 
-TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
-    return std::make_shared<Tablet>(tablet_meta, data_dir);
+TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir,
+                                                TableMetricsManager* table_metrics_mgr) {
+    return std::make_shared<Tablet>(tablet_meta, data_dir, table_metrics_mgr);
 }
 
-Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
+Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableMetricsManager* table_metrics_mgr)
         : BaseTablet(tablet_meta, data_dir),
-          _last_cumu_compaction_failure_millis(0),
-          _last_base_compaction_failure_millis(0),
-          _last_cumu_compaction_success_millis(0),
-          _last_base_compaction_success_millis(0),
-          _cumulative_point(kInvalidCumulativePoint) {
+          _cumulative_point(kInvalidCumulativePoint),
+          _table_metrics_mgr(table_metrics_mgr) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
+    _keys_type = _max_version_schema->keys_type();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
-#ifndef BE_TEST
-    StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics_mgr->register_table(_tablet_meta->table_id());
+    }
 }
 
-Tablet::Tablet() {
+Tablet::Tablet(KeysType keys_type) {
+    _keys_type = keys_type;
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::~Tablet() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
-#ifndef BE_TEST
-    StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
-#endif
+    if (_table_metrics_mgr != nullptr && _tablet_meta != nullptr) {
+        _table_metrics_mgr->unregister_table(_tablet_meta->table_id());
+    }
 }
 
 Status Tablet::_init_once_action() {
@@ -122,7 +124,8 @@ Status Tablet::_init_once_action() {
     for (const auto& rs_meta : _tablet_meta->all_rs_metas()) {
         Version version = rs_meta->version();
         RowsetSharedPtr rowset;
-        auto st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, rs_meta, &rowset);
+        auto st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, rs_meta, &rowset,
+                                               _data_dir->get_meta());
         if (!st.ok()) {
             LOG(WARNING) << "fail to init rowset. tablet_id=" << tablet_id() << ", schema_hash=" << schema_hash()
                          << ", version=" << version << ", res=" << st;
@@ -139,8 +142,8 @@ Status Tablet::_init_once_action() {
         Version version = inc_rs_meta->version();
         RowsetSharedPtr rowset = get_rowset_by_version(version);
         if (rowset == nullptr) {
-            auto st =
-                    RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, inc_rs_meta, &rowset);
+            auto st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, inc_rs_meta,
+                                                   &rowset, _data_dir->get_meta());
             if (!st.ok()) {
                 LOG(WARNING) << "fail to init incremental rowset. tablet_id:" << tablet_id()
                              << ", schema_hash:" << schema_hash() << ", version=" << version << ", res=" << st;
@@ -234,7 +237,8 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     for (auto& rs_meta : rowsets_to_clone) {
         Version version = {rs_meta->start_version(), rs_meta->end_version()};
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, rs_meta, &rowset);
+        st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, rs_meta, &rowset,
+                                          _data_dir->get_meta());
         if (!st.ok()) {
             LOG(WARNING) << "fail to init rowset. version=" << version;
             return st;
@@ -1003,7 +1007,7 @@ void Tablet::calc_missed_versions(int64_t spec_version, std::vector<Version>* mi
     std::shared_lock rdlock(_meta_lock);
     if (_updates != nullptr) {
         for (int64_t v = _updates->max_version() + 1; v <= spec_version; v++) {
-            missed_versions->emplace_back(Version(v, v));
+            missed_versions->emplace_back(v, v);
         }
     } else {
         calc_missed_versions_unlocked(spec_version, missed_versions);
@@ -1032,7 +1036,7 @@ void Tablet::calc_missed_versions_unlocked(int64_t spec_version, std::vector<Ver
     for (const Version& version : existing_versions) {
         if (version.first > last_version + 1) {
             for (int64_t i = last_version + 1; i < version.first; ++i) {
-                missed_versions->emplace_back(Version(i, i));
+                missed_versions->emplace_back(i, i);
             }
         }
         last_version = version.second;
@@ -1041,7 +1045,7 @@ void Tablet::calc_missed_versions_unlocked(int64_t spec_version, std::vector<Ver
         }
     }
     for (int64_t i = last_version + 1; i <= spec_version; ++i) {
-        missed_versions->emplace_back(Version(i, i));
+        missed_versions->emplace_back(i, i);
     }
 }
 
@@ -1094,6 +1098,15 @@ int64_t Tablet::max_readable_version() const {
             DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
         }
         return v;
+    }
+}
+
+int64_t Tablet::min_readable_version() const {
+    if (_updates != nullptr) {
+        return _updates->min_readable_version();
+    } else {
+        std::shared_lock rdlock(_meta_lock);
+        return _timestamped_version_tracker.get_min_readable_version();
     }
 }
 

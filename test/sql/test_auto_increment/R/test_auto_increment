@@ -76,6 +76,9 @@ CREATE DATABASE test_table_with_null;
 USE test_table_with_null;
 -- result:
 -- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
 -- result:
 -- !result

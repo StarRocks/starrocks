@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Reverses a string or array."
 ---
 
 # reverse

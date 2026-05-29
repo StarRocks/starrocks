@@ -44,7 +44,7 @@ import java.util.List;
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
-            .add("MinVersion")
+            .add("MinVersion").add("Range")
             .build();
 
     private final Database db;
@@ -76,7 +76,8 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
 
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             for (Tablet tablet : index.getTablets()) {
                 List<Comparable> tabletInfo = Lists.newArrayList();
@@ -86,10 +87,11 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfo.add(lakeTablet.getMinVersion());
+                tabletInfo.add(String.valueOf(lakeTablet.getRange()));
                 tabletInfos.add(tabletInfo);
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
         return tabletInfos;
     }
@@ -135,8 +137,13 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid tablet id format: " + tabletIdStr);
         }
 
+        // Take per-table READ: index.getTablet reads MaterializedIndex.idToTablets,
+        // which is a plain HashMap. A concurrent schema change or rebalance
+        // (IX + table WRITE) can race with this get, so the lock pins the table while
+        // we resolve the tablet reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long lockTableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), lockTableId, LockType.READ);
         try {
             Tablet tablet = index.getTablet(tabletId);
             if (tablet == null) {
@@ -145,7 +152,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             Preconditions.checkState(tablet instanceof LakeTablet);
             return new LakeTabletProcNode((LakeTablet) tablet);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), lockTableId, LockType.READ);
         }
     }
 
@@ -169,7 +176,8 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                     new Gson().toJson(tablet.getBackendIds(computeResource)),
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
                     String.valueOf(tablet.getRowCount(0L)),
-                    String.valueOf(tablet.getMinVersion())
+                    String.valueOf(tablet.getMinVersion()),
+                    String.valueOf(tablet.getRange())
             );
             result.addRow(row);
 

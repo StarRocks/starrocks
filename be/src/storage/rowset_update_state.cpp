@@ -14,8 +14,17 @@
 
 #include "rowset_update_state.h"
 
+#include "base/debug/trace.h"
+#include "base/phmap/phmap.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/stack_util.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
@@ -28,11 +37,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/defer_op.h"
-#include "util/phmap/phmap.h"
-#include "util/stack_util.h"
-#include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -73,7 +77,7 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
     auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
     RandomAccessFileOptions opts;
     auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);
@@ -86,8 +90,8 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
     TRY_CATCH_BAD_ALLOC(read_buffer.resize(file_size));
     RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
     auto col = pk_column->clone();
-    RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()));
-    TRY_CATCH_BAD_ALLOC(col->raw_data());
+    const auto* end = read_buffer.data() + read_buffer.size();
+    RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
     _memory_usage += col != nullptr ? col->memory_usage() : 0;
     _deletes[idx] = std::move(col);
     return Status::OK();
@@ -107,11 +111,12 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
     OlapReaderStatistics stats;
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
-    auto res = rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }
@@ -120,7 +125,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     auto& dest = _upserts[idx];
     auto col = pk_column->clone();
@@ -136,7 +141,8 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
             }
         }
         RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
@@ -145,10 +151,6 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         itr->close();
     }
     dest = std::move(col);
-    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-    // So we try build slice in advance in here to make sure the correctness of memory statistics
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest != nullptr ? dest->memory_usage() : 0;
 
     return Status::OK();
@@ -162,12 +164,14 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     _tablet_id = tablet->tablet_id();
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(
+            PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     // if rowset is partial rowset, we need to load rowset totally because we don't support load multiple load
     // for partial update so far
     bool ignore_mem_limit =
@@ -195,24 +199,28 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
 Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(
+            PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     return _load_deletes(rowset, idx, pk_column.get());
 }
 
 Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, true));
     return _load_upserts(rowset, upsert_id, pk_column.get());
 }
 
@@ -329,8 +337,8 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, 
         }
         _partial_update_value_columns_schema =
                 ChunkHelper::convert_schema(tablet_schema, _partial_update_value_column_ids);
-        auto res = rowset->get_segment_iterators2(_partial_update_value_columns_schema, tablet_schema, nullptr, 0,
-                                                  &_partial_update_value_column_read_stats);
+        auto res = rowset->get_segment_iterators2(_partial_update_value_columns_schema, tablet_schema,
+                                                  MetaLoadMode::NONE, 0, &_partial_update_value_column_read_stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -342,10 +350,10 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, 
         return Status::OK();
     }
     ChunkUniquePtr chunk;
-    TRY_CATCH_BAD_ALLOC(chunk = ChunkHelper::new_chunk(_partial_update_value_columns_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk = ChunkFactory::new_chunk(_partial_update_value_columns_schema, 4096));
     auto num_rows = rowset->segments()[idx]->num_rows();
     _partial_update_states[idx].partial_update_value_columns =
-            ChunkHelper::new_chunk(_partial_update_value_columns_schema, num_rows);
+            ChunkFactory::new_chunk(_partial_update_value_columns_schema, num_rows);
     while (true) {
         chunk->reset();
         auto st = itr->get_next(chunk.get());
@@ -404,7 +412,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].write_columns_uid.resize(read_columns.size()));
     TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size()));
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
-        auto column = ChunkHelper::column_from_field(*read_column_schema.field(i).get());
+        auto column = ChunkFactory::column_from_field(*read_column_schema.field(i).get());
         read_columns[i] = column->clone_empty();
         _partial_update_states[idx].write_columns[i] = column->clone_empty();
         _partial_update_states[idx].write_columns_uid[i] = read_column_schema.field(i)->uid();
@@ -481,7 +489,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
                                                     idx);
     _auto_increment_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
 
-    auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());
+    auto column = ChunkFactory::column_from_field(*read_column_schema.field(0).get());
     read_column[0] = column->clone_empty();
     _auto_increment_partial_update_states[idx].write_column = column->clone_empty();
 
@@ -541,8 +549,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     */
     _auto_increment_partial_update_states[idx].delete_pks = _upserts[idx]->clone_empty();
     std::vector<uint32_t> delete_idxes;
-    const auto* data =
-            reinterpret_cast<const int64*>(_auto_increment_partial_update_states[idx].write_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_auto_increment_partial_update_states[idx].write_column->accept(&visitor));
+    const auto* data = reinterpret_cast<const int64*>(visitor.result());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user

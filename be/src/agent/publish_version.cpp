@@ -16,7 +16,12 @@
 
 #include <bvar/bvar.h>
 
+#include "agent/agent_metrics.h"
+#include "base/concurrency/countdown_latch.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
+#include "common/thread/threadpool.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
@@ -28,11 +33,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/countdown_latch.h"
-#include "util/defer_op.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -112,7 +112,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.partition_id = publish_version_req.partition_version_infos[i].partition_id;
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
-                task.rowset = std::move(itr.second.first);
+                task.rowset = itr.second.first;
                 task.is_shadow = itr.second.second;
                 // rowset can be nullptr if it just prepared but not committed
                 if (task.rowset != nullptr) {
@@ -285,6 +285,9 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
                     pair.__set_version(max_continuous_version);
+                    if (is_replication_txn) {
+                        pair.__set_min_readable_version(tablet->min_readable_version());
+                    }
                 }
 
                 if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {
@@ -324,7 +327,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 << "ms"
                 << " #already_finished:" << total_tablet_cnt - num_active_tablet;
     } else {
-        StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
+        AgentMetrics::instance()->publish_task_failed_total.increment(1);
         LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " gtid: " << publish_version_req.gtid
                      << " #partition:" << num_partition << " #tablet:" << tablet_tasks.size() << " error_tablets("
                      << error_tablet_ids.size() << "):" << JoinInts(error_tablet_ids, ",")

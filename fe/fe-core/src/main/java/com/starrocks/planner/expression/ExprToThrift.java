@@ -18,10 +18,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -71,6 +75,8 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TAggregateExpr;
@@ -78,6 +84,7 @@ import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
 import com.starrocks.thrift.TAnalyticWindowBoundaryType;
 import com.starrocks.thrift.TAnalyticWindowType;
+import com.starrocks.thrift.TAssertion;
 import com.starrocks.thrift.TBinaryLiteral;
 import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TCaseExpr;
@@ -95,6 +102,7 @@ import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.thrift.TIntLiteral;
 import com.starrocks.thrift.TJoinOp;
+import com.starrocks.thrift.TKeysType;
 import com.starrocks.thrift.TLargeIntLiteral;
 import com.starrocks.thrift.TPlaceHolder;
 import com.starrocks.thrift.TSlotRef;
@@ -181,6 +189,18 @@ public final class ExprToThrift {
         return TVarType.SESSION;
     }
 
+    public static TAssertion assertionToThrift(AssertNumRowsElement.Assertion assertion) {
+        Preconditions.checkNotNull(assertion, "Assertion should not be null");
+        return switch (assertion) {
+            case EQ -> TAssertion.EQ;
+            case NE -> TAssertion.NE;
+            case LT -> TAssertion.LT;
+            case LE -> TAssertion.LE;
+            case GT -> TAssertion.GT;
+            case GE -> TAssertion.GE;
+        };
+    }
+
     public static SetType setTypeFromThrift(TVarType thriftType) {
         if (thriftType == TVarType.GLOBAL) {
             return SetType.GLOBAL;
@@ -189,6 +209,16 @@ public final class ExprToThrift {
             return SetType.VERBOSE;
         }
         return SetType.SESSION;
+    }
+
+    public static TKeysType keysTypeToThrift(KeysType keysType) {
+        Preconditions.checkNotNull(keysType, "Keys type should not be null");
+        return switch (keysType) {
+            case PRIMARY_KEYS -> TKeysType.PRIMARY_KEYS;
+            case DUP_KEYS -> TKeysType.DUP_KEYS;
+            case UNIQUE_KEYS -> TKeysType.UNIQUE_KEYS;
+            case AGG_KEYS -> TKeysType.AGG_KEYS;
+        };
     }
 
     public static TExprOpcode compoundPredicateOperatorToThrift(CompoundPredicate.Operator operator) {
@@ -206,29 +236,46 @@ public final class ExprToThrift {
     }
 
     public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window) {
+        return analyticWindowToThrift(window, ExprToThrift::treeToThrift);
+    }
+
+    public static TAnalyticWindow analyticWindowToNormalForm(AnalyticWindow window, FragmentNormalizer normalizer) {
+        return analyticWindowToThrift(window, expr -> ExprToNormalFormVisitor.treeToNormalForm(expr, normalizer));
+    }
+
+    private static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window,
+                                                          java.util.function.Function<Expr, TExpr> exprSerializer) {
         Preconditions.checkNotNull(window, "Analytic window should not be null when converting to thrift");
         TAnalyticWindow result = new TAnalyticWindow(analyticWindowTypeToThrift(window.getType()));
         AnalyticWindowBoundary leftBoundary = window.getLeftBoundary();
         if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
-            result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType()));
+            result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType(),
+                    exprSerializer));
         }
         AnalyticWindowBoundary rightBoundary = window.getRightBoundary();
         Preconditions.checkNotNull(rightBoundary, "Right boundary must be set before converting to thrift");
         if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
-            result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType()));
+            result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType(),
+                    exprSerializer));
         }
         return result;
     }
 
     private static TAnalyticWindowBoundary analyticWindowBoundaryToThrift(AnalyticWindowBoundary boundary,
-                                                                          AnalyticWindow.Type windowType) {
+                                                                          AnalyticWindow.Type windowType,
+                                                                          java.util.function.Function<Expr, TExpr> exprSerializer) {
         TAnalyticWindowBoundary result = new TAnalyticWindowBoundary(
                 analyticWindowBoundaryTypeToThrift(boundary.getBoundaryType()));
         if (boundary.getBoundaryType().isOffset() && windowType == AnalyticWindow.Type.ROWS) {
             Preconditions.checkNotNull(boundary.getOffsetValue(), "Offset value is required for ROWS window");
             result.setRows_offset_value(boundary.getOffsetValue().longValue());
         }
-        // TODO: range windows need range_offset_predicate
+        if (boundary.getBoundaryType().isOffset() && windowType == AnalyticWindow.Type.RANGE) {
+            Preconditions.checkNotNull(boundary.getExpr(), "Offset expression is required for RANGE window");
+            Expr rangeBoundaryExpr = Preconditions.checkNotNull(boundary.getAnalyzedRangeBoundaryExpr(),
+                    "Analyzed RANGE boundary expression is required for RANGE offset window");
+            result.setRange_boundary_expr(exprSerializer.apply(rangeBoundaryExpr));
+        }
         return result;
     }
 
@@ -375,6 +422,10 @@ public final class ExprToThrift {
         public Void visitInformationFunction(InformationFunction node, TExprNode msg) {
             msg.node_type = TExprNodeType.INFO_FUNC;
             msg.info_func = new TInfoFunc(node.getIntValue(), node.getStrValue());
+            if (FunctionSet.CURRENT_WAREHOUSE.equalsIgnoreCase(node.getFuncType())
+                    && node.getStrValue() != null) {
+                msg.info_func.setStr_value(node.getStrValue());
+            }
             return null;
         }
 
@@ -487,6 +538,8 @@ public final class ExprToThrift {
         public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, TExprNode msg) {
             msg.setNode_type(TExprNodeType.LAMBDA_FUNCTION_EXPR);
             msg.setOutput_column(node.getCommonSubOperatorNum());
+            boolean exists = AnalyzerUtils.containsNonDeterministicFunction(node.getChild(0)).first;
+            msg.setIs_nondeterministic(exists);
             return null;
         }
 
@@ -508,10 +561,20 @@ public final class ExprToThrift {
         public Void visitCastExpr(CastExpr node, TExprNode msg) {
             msg.node_type = TExprNodeType.CAST_EXPR;
             msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
-            if (node.getChild(0).getType().isComplexType()) {
-                msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
-            } else {
-                msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
+            Type childType = node.getChild(0).getType();
+            if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()
+                    || childType.isVarchar()) {
+                msg.setChild_type_desc(TypeSerializer.toThrift(childType));
+            }
+            if (!childType.isComplexType()) {
+                msg.setChild_type(TypeSerializer.toThrift(childType.getPrimitiveType()));
+            }
+            if (childType.isStructType() && node.getType().isStructType()) {
+                ConnectContext ctx = ConnectContext.get();
+                if (ctx != null && SqlModeHelper.check(ctx.getSessionVariable().getSqlMode(),
+                        SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
+                    msg.setCast_struct_by_name(true);
+                }
             }
             return null;
         }

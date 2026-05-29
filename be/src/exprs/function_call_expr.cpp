@@ -16,22 +16,21 @@
 
 #include <cstdint>
 
+#include "base/failpoint/fail_point.h"
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/user_function_cache.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
-#include "util/failpoint/fail_point.h"
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -121,7 +120,9 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
-                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uniq_id */;
+                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
+                                 _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */ ||
+                                 _fn.fid == 30470 /* http_request */;
 
     return Status::OK();
 }
@@ -220,9 +221,10 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
     // For no args function call (pi, e)
     if (result.value()->is_constant() && ptr != nullptr) {
-        result.value()->resize(ptr->num_rows());
+        result.value()->as_mutable_raw_ptr()->resize(ptr->num_rows());
     }
-    RETURN_IF_ERROR(result.value()->unfold_const_children(_type));
+    auto mut_col = result.value()->as_mutable_raw_ptr();
+    RETURN_IF_ERROR(mut_col->unfold_const_children(_type));
     return result;
 }
 

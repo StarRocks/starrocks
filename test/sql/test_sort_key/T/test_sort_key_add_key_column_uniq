@@ -1,0 +1,54 @@
+-- name: test_sort_key_add_key_column_uniq
+create database test_uniq_add_key_sort_${uuid0};
+use test_uniq_add_key_sort_${uuid0};
+
+CREATE TABLE `uniq_t` (
+    `k1` int NOT NULL,
+    `k2` int NOT NULL,
+    `v1` bigint,
+    `v2` bigint
+)
+UNIQUE KEY(k1, k2)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+ORDER BY(k2, k1)
+PROPERTIES ("replication_num" = "1");
+
+insert into uniq_t values (1, 3, 10, 20), (2, 1, 30, 40), (3, 2, 50, 60);
+select * from uniq_t order by k1;
+
+-- Add key column at default position (last key)
+alter table uniq_t add column k3 int key default '0';
+function: wait_alter_table_finish()
+select * from uniq_t order by k1;
+insert into uniq_t values (4, 4, 70, 80, 1);
+select * from uniq_t order by k1;
+
+-- Add key column at middle position (AFTER k1)
+alter table uniq_t add column k4 int key default '0' after k1;
+function: wait_alter_table_finish()
+select * from uniq_t order by k1;
+insert into uniq_t values (5, 2, 90, 100, 1, 2);
+select * from uniq_t order by k1;
+
+-- Add key column without specifying position
+alter table uniq_t add column k5 int key default '0';
+function: wait_alter_table_finish()
+select * from uniq_t order by k1;
+insert into uniq_t values (6, 3, 110, 120, 1, 2, 3);
+select * from uniq_t order by k1;
+
+-- Explicit reorder via ALTER TABLE ORDER BY
+alter table uniq_t order by (k1, k4, k5, k2, k3);
+function: wait_alter_table_finish()
+select * from uniq_t order by k1;
+insert into uniq_t values (7, 1, 130, 140, 1, 2, 3);
+select * from uniq_t order by k1;
+
+-- Add key column after reorder
+alter table uniq_t add column k6 int key default '0';
+function: wait_alter_table_finish()
+select * from uniq_t order by k1;
+insert into uniq_t values (8, 2, 4, 1, 2, 4, 150, 160);
+select * from uniq_t order by k1;
+
+drop database test_uniq_add_key_sort_${uuid0} force;

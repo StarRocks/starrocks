@@ -24,6 +24,7 @@
 #include "types/constexpr.h"
 
 #ifdef STARROCKS_JIT_ENABLE
+#include "column/raw_data_visitor.h"
 #include "exprs/jit/ir_helper.h"
 #endif
 
@@ -164,7 +165,7 @@ VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& ty
 #undef CASE_TYPE_COLUMN
 
 StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Chunk* ptr) {
-    ColumnPtr column = _value->clone_empty();
+    MutableColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {
         column->resize(ptr->num_rows());
@@ -192,7 +193,9 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JI
     if (only_null) {
         ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, 0));
     } else {
-        ASSIGN_OR_RETURN(datum.value, IRHelper::load_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
+        RawDataVisitor rv;
+        RETURN_IF_ERROR(_value->accept(&rv));
+        ASSIGN_OR_RETURN(datum.value, IRHelper::load_ir_number(jit_ctx->builder, _type.type, rv.result()));
     }
     return datum;
 }

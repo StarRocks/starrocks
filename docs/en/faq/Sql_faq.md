@@ -1,14 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "This topic provides answers to some frequently asked questions about SQL."
 ---
 
 # SQL query
 
 This topic provides answers to some frequently asked questions about SQL.
-
-## This error "fail to allocate memory." when I build a materialized view
-
-To solve this problem, increase the value of the `memory_limitation_per_thread_for_schema_change` parameter in the **be.conf** file. This parameter refers to the maximum storage that can be allocated for a single task to change the scheme. The default value of the maximum storage is 2 GB.
 
 ## Does StarRocks support caching query results?
 

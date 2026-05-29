@@ -15,27 +15,20 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <sys/types.h>
 
 #include <atomic>
-#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
-#include "common/config.h"
+#include "base/time/time.h"
 #include "common/statusor.h"
-#include "util/time.h"
 
 namespace starrocks {
-
-struct PythonEnv {
-    std::string home;
-    std::string get_python_path() const { return fmt::format("{}/bin/python3", home); }
-};
 
 class ArrowFlightWithRW;
 class PyFunctionDescriptor;
@@ -60,8 +53,8 @@ public:
     void terminate_and_wait() {
         lock_free_call_once(_once, [this]() {
             terminate();
-            wait();
             remove_unix_socket();
+            wait();
         });
     }
     void remove_unix_socket();
@@ -70,7 +63,7 @@ public:
     void set_url(std::string url) { _url = std::move(url); }
 
     void touch() { _last_touch_time = MonotonicSeconds(); }
-    bool expired() { return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec; }
+    bool expired();
 
     void mark_dead() { _is_dead = true; }
     bool is_dead() { return _is_dead; }
@@ -94,15 +87,11 @@ public:
 
     StatusOr<WorkerClientPtr> get_client(const PyFunctionDescriptor& func_desc);
 
-    static std::string unix_socket(pid_t pid) {
-        std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
-        return unix_socket;
-    }
+    static std::string unix_socket(pid_t pid);
 
-    static std::string unix_socket_path(pid_t pid) {
-        std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
-        return unix_socket_path;
-    }
+    static std::string unix_socket_prefix();
+
+    static std::string unix_socket_path(pid_t pid);
 
     static std::string bootstrap() {
         const char* server_main = "flight_server.py";
@@ -125,34 +114,9 @@ class PythonEnvManager {
 public:
     ~PythonEnvManager() { close(); }
 
-    Status init(const std::vector<std::string>& envs) {
-        for (const auto& env : envs) {
-            std::filesystem::path path = env;
-            if (!std::filesystem::is_directory(path)) {
-                return Status::InvalidArgument(fmt::format("unsupported python env: {} not a directory", env));
-            }
-
-            if (!std::filesystem::exists(path / "bin/python3")) {
-                return Status::InvalidArgument(fmt::format("unsupported python env: {} not found python", env));
-            }
-
-            PythonEnv python_env;
-            python_env.home = env;
-            _envs[env] = python_env;
-        }
-        return Status::OK();
-    }
-
     static PythonEnvManager& getInstance() {
         static PythonEnvManager instance;
         return instance;
-    }
-
-    StatusOr<PythonEnv> getDefault() {
-        if (_envs.empty()) {
-            return Status::InternalError("not found avaliable env");
-        }
-        return _envs.begin()->second;
     }
 
     void start_background_cleanup_thread();
@@ -161,7 +125,5 @@ public:
 private:
     bool _running = false;
     std::unique_ptr<std::thread> _cleanup_thread;
-    // readyonly after init
-    std::unordered_map<std::string, PythonEnv> _envs;
 };
 } // namespace starrocks

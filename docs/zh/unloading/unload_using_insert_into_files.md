@@ -206,10 +206,25 @@ SELECT * FROM sales_records;
 ```SQL
 -- 导出为 CSV 文件。
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/csvfile/', 
-  'format' = 'csv', 
-  'csv.column_separator' = ',', 
+  'path' = 'file:///home/ubuntu/csvfile/',
+  'format' = 'csv',
+  'csv.column_separator' = ',',
   'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- 导出为 CSV 文件，并使用 enclose/escape（RFC 4180 风格）。
+-- 包含逗号或双引号的字段值会被 enclose 字符包裹，内部出现的双引号
+-- 会被重复转义（因为 csv.escape 与 csv.enclose 相同）。NULL 值输出为
+-- \N，不进行包裹。
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/csvfile_enclosed/',
+  'format' = 'csv',
+  'csv.column_separator' = ',',
+  'csv.row_delimiter' = '\n',
+  'csv.enclose' = '"',
+  'csv.escape' = '"',
+  'csv.include_header' = 'true'
 )
 SELECT * FROM sales_records;
 
@@ -221,6 +236,23 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 ```
+
+:::note
+
+设置 `csv.enclose` 后，每个非 NULL 字段值都会被 enclose 字符包裹，字段值内出现的
+enclose 字符（以及当 `csv.escape` 不同时，escape 字符自身）会使用 `csv.escape` 字符
+转义。NULL 值输出为 `\N`，不进行包裹。
+
+若需要将 RFC 4180 双引号重复格式的输出（即 `csv.escape` 等于 `csv.enclose`）重新导入
+到 StarRocks，请在读端只设置 `csv.enclose`，不要设置 `csv.escape`。StarRocks 的 CSV
+reader 通过其 ENCLOSE 状态原生处理双引号重复。
+
+此外，NULL 值仅在 `csv.escape` 不是反斜杠（`\`）时才能正确 roundtrip。NULL 标记
+固定为 `\N`，当 `csv.escape = '\\'` 时，读端的 ESCAPE 状态会吃掉前导反斜杠，把 `\N`
+解析为字面字符 `N`，而不是 NULL。需要 NULL roundtrip 的数据集请使用 `csv.escape = '"'`
+（RFC 4180 双引号重复）。
+
+:::
 
 ## 另请参阅
 

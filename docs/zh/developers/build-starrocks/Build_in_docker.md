@@ -19,26 +19,18 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
   | **分支名** | **镜像名**                          |
   | ---------- | ----------------------------------- |
   | main       | starrocks/dev-env-ubuntu:latest     |
+  | branch-4.1 | starrocks/dev-env-ubuntu:4.1-latest |
+  | branch-4.0 | starrocks/dev-env-ubuntu:4.0-latest |
   | branch-3.5 | starrocks/dev-env-ubuntu:3.5-latest |
-  | branch-3.4 | starrocks/dev-env-ubuntu:3.4-latest |
-  | branch-3.3 | starrocks/dev-env-ubuntu:3.3-latest |
-  | branch-3.2 | starrocks/dev-env-ubuntu:3.2-latest |
-  | branch-3.1 | starrocks/dev-env-ubuntu:3.1-latest |
-  | branch-3.0 | starrocks/dev-env-ubuntu:3.0-latest |
-  | branch-2.5 | starrocks/dev-env-ubuntu:2.5-latest |
 
 - For CentOS 7.9:
 
   | **分支名** | **镜像名**                           |
   | ---------- | ------------------------------------ |
   | main       | starrocks/dev-env-centos7:latest     |
+  | branch-4.1 | starrocks/dev-env-centos7:4.1-latest |
+  | branch-4.0 | starrocks/dev-env-centos7:4.0-latest |
   | branch-3.5 | starrocks/dev-env-centos7:3.5-latest |
-  | branch-3.4 | starrocks/dev-env-centos7:3.4-latest |
-  | branch-3.3 | starrocks/dev-env-centos7:3.3-latest |
-  | branch-3.2 | starrocks/dev-env-centos7:3.2-latest |
-  | branch-3.1 | starrocks/dev-env-centos7:3.1-latest |
-  | branch-3.0 | starrocks/dev-env-centos7:3.0-latest |
-  | branch-2.5 | starrocks/dev-env-centos7:2.5-latest |
 
 ## 前提条件
 

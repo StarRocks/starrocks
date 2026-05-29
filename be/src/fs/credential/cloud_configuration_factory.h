@@ -62,6 +62,13 @@ static const std::string AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client
 static const std::string AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
 static const std::string AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
 
+// Credentials for Huawei OBS
+static const std::string HUAWEI_OBS_ACCESS_KEY = "fs.obs.access_key";
+static const std::string HUAWEI_OBS_SECRET_KEY = "fs.obs.secret_key";
+static const std::string HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
+static const std::string HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
+static const std::string HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
+
 class CloudConfigurationFactory {
 public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration);

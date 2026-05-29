@@ -20,14 +20,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.AutoInferUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
@@ -41,17 +40,22 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,11 +76,11 @@ import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.JsonType.JSON;
 
-public class StatisticsMetaManager extends FrontendDaemon {
+public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
-        super("statistics-meta-manager", 60L * 1000L);
+        super("statistics-meta-manager", Config.statistic_manager_sleep_time_sec * 1000L);
     }
 
     private boolean checkDatabaseExist() {
@@ -153,8 +157,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
             KeysType keysType = KeysType.UNIQUE_KEYS;
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, SAMPLE_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, com.starrocks.sql.parser.NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, KEY_COLUMN_NAMES),
@@ -185,8 +191,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, FULL_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, FULL_STATISTICS_KEY_COLUMNS),
@@ -215,8 +223,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, HISTOGRAM_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, HISTOGRAM_KEY_COLUMNS),
@@ -252,8 +262,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, EXTERNAL_FULL_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(EXTERNAL_FULL_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
@@ -281,8 +294,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, EXTERNAL_HISTOGRAM_KEY_COLUMNS),
@@ -318,8 +334,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(MULTI_COLUMN_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(KeysType.PRIMARY_KEYS, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
@@ -366,8 +384,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, SPM_BASELINE_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName, columns, EngineType.defaultEngine().name(),
+                    tableRef, columns, EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, List.of("id")), null,
                     new HashDistributionDesc(10, List.of("id")),
                     properties, null, "");
@@ -402,8 +422,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, QUERY_HISTORY_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName, columns, EngineType.defaultEngine().name(),
+                    tableRef, columns, EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, List.of("dt", "frontend")), null,
                     new HashDistributionDesc(10, List.of("dt")),
                     properties, null, "");
@@ -432,12 +454,16 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    private void trySleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            LOG.warn(e.getMessage(), e);
-        }
+    /**
+     * Sleep for {@code millis} ms. Re-throws {@link InterruptedException} so the caller can stop
+     * the current leader-session cycle promptly. Callers running inside {@link #runAfterLeaseValid}
+     * must propagate the exception (or otherwise return) instead of swallowing it, so that
+     * {@link LeaderDaemon#stopGracefully(long)} can drain the worker on demotion. The interrupt
+     * flag is intentionally cleared by {@link Thread#sleep}; we let the exception itself signal
+     * stop.
+     */
+    private void trySleep(long millis) throws InterruptedException {
+        Thread.sleep(millis);
     }
 
     private boolean createTable(String tableName) {
@@ -465,7 +491,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    public boolean alterTable(String tableName) {
+    public boolean alterTable(String tableName) throws InterruptedException {
         ConnectContext context = StatisticUtils.buildConnectContext();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
         Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -478,7 +504,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    public boolean alterFullStatisticsTable(ConnectContext context, Table table) {
+    public boolean alterFullStatisticsTable(ConnectContext context, Table table) throws InterruptedException {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
@@ -488,8 +514,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
                             new TypeDef(IntegerType.BIGINT),
                             false, null, null, true, defaultValueDef, "");
                     AddColumnClause addColumnClause = new AddColumnClause(columnDef, null, null, new HashMap<>());
+                    QualifiedName qualifiedName = QualifiedName.of(
+                            Arrays.asList(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, table.getName()));
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     AlterTableStmt alterTableStmt = new AlterTableStmt(
-                            new TableName(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, table.getName()),
+                            tableRef,
                             Lists.newArrayList(addColumnClause));
 
                     try {
@@ -501,6 +530,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     }
 
                     while (table.getColumn(columnName) == null) {
+                        if (isStopped()) {
+                            return false;
+                        }
                         // `alter table` may be sync in the shared-nothing cluster. So we need to check if job is done.
                         // TODO(stephen): This check is not robust because we can't get job handle here.
                         List<AlterJobV2> unfinishedAlterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
@@ -528,19 +560,22 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return true;
     }
 
-    private void refreshStatisticsTable(String tableName) {
-        while (!checkTableExist(tableName)) {
+    private void refreshStatisticsTable(String tableName) throws InterruptedException {
+        while (!isStopped() && !checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
         }
+        if (isStopped()) {
+            return;
+        }
         if (checkTableExist(tableName)) {
             StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
 
-        while (!checkTableCompatible(tableName)) {
+        while (!isStopped() && !checkTableCompatible(tableName)) {
             if (alterTable(tableName)) {
                 break;
             }
@@ -550,14 +585,17 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() throws InterruptedException {
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
-        while (!checkDatabaseExist()) {
+        while (!isStopped() && !checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
             }
             trySleep(10000);
+        }
+        if (isStopped()) {
+            return;
         }
 
         refreshStatisticsTable(SAMPLE_STATISTICS_TABLE_NAME);
@@ -568,6 +606,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
+        if (isStopped()) {
+            return;
+        }
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
@@ -578,25 +619,30 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     public void createStatisticsTablesForTest() {
-        while (!checkDatabaseExist()) {
-            if (createDatabase()) {
-                break;
+        try {
+            while (!checkDatabaseExist()) {
+                if (createDatabase()) {
+                    break;
+                }
+                trySleep(1);
             }
-            trySleep(1);
-        }
 
-        boolean existsSample = false;
-        boolean existsFull = false;
-        while (!existsSample || !existsFull) {
-            existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
-            existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
-            if (!existsSample) {
-                createTable(SAMPLE_STATISTICS_TABLE_NAME);
+            boolean existsSample = false;
+            boolean existsFull = false;
+            while (!existsSample || !existsFull) {
+                existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
+                existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
+                if (!existsSample) {
+                    createTable(SAMPLE_STATISTICS_TABLE_NAME);
+                }
+                if (!existsFull) {
+                    createTable(FULL_STATISTICS_TABLE_NAME);
+                }
+                trySleep(1);
             }
-            if (!existsFull) {
-                createTable(FULL_STATISTICS_TABLE_NAME);
-            }
-            trySleep(1);
+        } catch (InterruptedException e) {
+            // Test helper: just restore the interrupt flag and return.
+            Thread.currentThread().interrupt();
         }
     }
 

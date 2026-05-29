@@ -20,10 +20,10 @@
 #include <queue>
 #include <unordered_map>
 
+#include "base/phmap/phmap.h"
 #include "block_manager.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::spill {
 

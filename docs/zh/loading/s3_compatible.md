@@ -95,7 +95,6 @@ Broker Load 支持如下数据文件格式：
           DISTRIBUTED BY HASH(`id`);
    ```
 
-<!-- other S3 compat (minio) -->
 ## 从其他兼容 S3 协议的对象存储导入
 
 下述命令以 CSV 格式和 MinIO 存储为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
@@ -132,7 +131,7 @@ PROPERTIES
 
 提交导入作业以后，您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
-确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
+确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
 
 ```SQL
 SELECT * FROM table1;
@@ -179,7 +178,7 @@ PROPERTIES
 
 提交导入作业以后，您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
-确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
+确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
 
 ```SQL
 SELECT * FROM table1;
@@ -235,7 +234,7 @@ PROPERTIES
 
 提交导入作业以后，您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
-确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句来查询 `table1` 和 `table2` 中的数据：
+确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句来查询 `table1` 和 `table2` 中的数据：
 
 1. 查询 `table1` 的数据，如下所示：
 
@@ -267,10 +266,9 @@ PROPERTIES
    4 rows in set (0.01 sec)
    ```
 
-<!-- Common footer -->
 ## 查看导入作业
 
-通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 Broker Load 作业的结果。该功能自 3.1 版本起支持。
+通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 Broker Load 作业的结果。该功能自 3.1 版本起支持。
 
 示例一：通过如下命令查看 `test_db` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示两条结果数据：
 

@@ -60,7 +60,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
-    void update_exec_stats(RuntimeState* state) override;
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override;
 
 private:
     enum JoinStage {
@@ -99,6 +99,9 @@ private:
     void iterate_enumerate_chunk(const ChunkPtr& chunk, const std::function<void(bool, size_t, size_t)>& call);
 
     Status _eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter);
+
+    // eval conjuncts for nest loop join
+    Status _eval_conjuncts(const ChunkPtr& chunk);
 
     // Join type check
     bool _is_left_join() const;

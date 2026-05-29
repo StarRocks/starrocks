@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -22,9 +23,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -42,6 +44,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -220,15 +223,23 @@ public class StatisticsCalcUtils {
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-        long deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
+        LocalDateTime statsUpdateTime = basicStatsMeta.getUpdateTime();
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), selectedPartitions);
+
+        // Lazy evaluation of deltaRows: only compute when at least one partition needs it.
+        // This avoids expensive iteration over all table partitions (e.g., 36000 partitions)
+        // when statistics are up-to-date.
+        Long deltaRows = null;
+
         Map<Long, Long> result = Maps.newHashMap();
         for (Partition partition : selectedPartitions) {
             long partitionRowCount;
             Optional<Long> tableStatistic =
                     tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
             LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+
+            boolean needDelta;
             if (tableStatistic.isEmpty()) {
                 partitionRowCount = partition.getRowCount();
                 // tablet stats collection is async on both FE and BE.  Each BE and leader FE synchronize every 5 minutes by default.
@@ -236,14 +247,17 @@ public class StatisticsCalcUtils {
                 // all BE nodes every 5 minutes to obtain tablet information. There is a situation where FE sends a tablet stats
                 // retrieval request before BE has collected tablet stats for its local node, resulting in tablet row count of 0.
                 // To prevent the occasional occurrence of cardinality being 0 in tables after overwrite, an adaptation has been made here.
-                if (updateDatetime.isAfter(lastWorkTimestamp) || partitionRowCount == 0) {
-                    partitionRowCount += deltaRows;
-                }
+                needDelta = updateDatetime.isAfter(lastWorkTimestamp) || partitionRowCount == 0;
             } else {
                 partitionRowCount = tableStatistic.get();
-                if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                    partitionRowCount += deltaRows;
+                needDelta = updateDatetime.isAfter(statsUpdateTime);
+            }
+
+            if (needDelta) {
+                if (deltaRows == null) {
+                    deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
                 }
+                partitionRowCount += deltaRows;
             }
 
             result.put(partition.getId(), partitionRowCount);
@@ -303,24 +317,23 @@ public class StatisticsCalcUtils {
 
     private static @Nullable List<Partition> getSelectedPartitions(Operator node, OlapTable olapTable) {
         List<Partition> selectedPartitions;
-        if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
-                node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
-            return null;
-        } else if (node.isLogical()) {
+        if (node.isLogical()) {
             LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
             if (olapScanOperator.getSelectedPartitionId() == null) {
                 selectedPartitions = Lists.newArrayList(olapScanOperator.getTable().getPartitions());
             } else {
+                // filter out null partitions that may have been dropped concurrently
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                        olapTable::getPartition).filter(Objects::nonNull).collect(Collectors.toList());
             }
         } else {
             PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
             if (olapScanOperator.getSelectedPartitionId() == null) {
                 selectedPartitions = Lists.newArrayList(olapScanOperator.getTable().getPartitions());
             } else {
+                // filter out null partitions that may have been dropped concurrently
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                        olapTable::getPartition).filter(Objects::nonNull).collect(Collectors.toList());
             }
         }
         return selectedPartitions;
@@ -353,6 +366,14 @@ public class StatisticsCalcUtils {
         } else {
             return 0;
         }
+    }
+
+    public static void ensureStatistics(OptExpression optExpression, OptimizerContext optimizerContext) {
+        if (optExpression.getStatistics() == null) {
+            Utils.calculateStatistics(optExpression, optimizerContext);
+        }
+        Preconditions.checkState(optExpression.getStatistics() != null,
+                "Statistics is null after calculateStatistics");
     }
 
 }

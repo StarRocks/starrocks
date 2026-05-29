@@ -18,6 +18,7 @@
 
 #include <cstring>
 
+#include "base/container/raw_container.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -25,7 +26,6 @@
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spill_fwd.h"
 #include "gutil/macros.h"
-#include "util/raw_container.h"
 
 namespace starrocks::spill {
 
@@ -34,7 +34,7 @@ enum class SerdeType {
 };
 
 struct AlignedBuffer {
-    static constexpr int PAGE_SIZE = 4096;
+    static constexpr int kPageSize = 4096;
     AlignedBuffer() = default;
 
     ~AlignedBuffer() noexcept {
@@ -62,7 +62,7 @@ struct AlignedBuffer {
     void resize(size_t size) {
         if (_capacity < size) {
             void* new_data = nullptr;
-            if (UNLIKELY(posix_memalign(&new_data, PAGE_SIZE, size) != 0)) {
+            if (UNLIKELY(posix_memalign(&new_data, kPageSize, size) != 0)) {
                 throw ::std::bad_alloc();
             }
             if (_data != nullptr) {

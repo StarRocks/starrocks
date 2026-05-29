@@ -27,6 +27,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
@@ -39,6 +41,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -186,14 +189,17 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                                                            PhysicalPropertySet physicalPropertySet,
                                                            List<DistributionCol> leftOnPredicateColumns,
                                                            List<DistributionCol> rightOnPredicateColumns) {
-        // only HashDistributionSpec need update equivalentDescriptor
-        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
+        // Only specs carrying an EquivalentDescriptor need updating: hash
+        // (shuffle) and range (colocate). Other specs pass through unchanged.
+        DistributionSpec spec = physicalPropertySet.getDistributionProperty().getSpec();
+        EquivalentDescriptor equivDesc;
+        if (physicalPropertySet.getDistributionProperty().isShuffle()) {
+            equivDesc = ((HashDistributionSpec) spec).getEquivDesc();
+        } else if (spec instanceof RangeDistributionSpec) {
+            equivDesc = ((RangeDistributionSpec) spec).getEquivalentDescriptor();
+        } else {
             return physicalPropertySet;
         }
-
-        HashDistributionSpec distributionSpec = (HashDistributionSpec) physicalPropertySet.getDistributionProperty().getSpec();
-
-        EquivalentDescriptor equivDesc = distributionSpec.getEquivDesc();
 
         JoinOperator joinOperator = node.getJoinType();
         if (joinOperator.isAnyInnerJoin()) {
@@ -346,6 +352,35 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         List<DistributionCol> leftOnPredicateColumns = joinHelper.getLeftCols();
         List<DistributionCol> rightOnPredicateColumns = joinHelper.getRightCols();
 
+        // Range-colocate join: both children are RangeDistributionSpec.
+        // ChildOutputPropertyGuarantor.canRangeColocateJoin already rejected
+        // right-family / full-outer joins, so the join type here is safe.
+        DistributionSpec leftRawSpec = leftChildOutputProperty.getDistributionProperty().getSpec();
+        DistributionSpec rightRawSpec = rightChildOutputProperty.getDistributionProperty().getSpec();
+        if (leftRawSpec instanceof RangeDistributionSpec && rightRawSpec instanceof RangeDistributionSpec) {
+            // Left-dominated output (inner / left-outer / left-semi / left-anti).
+            PhysicalPropertySet outputProperty = createPropertySetByDistribution(leftRawSpec);
+            return updateEquivalentDescriptor(node, outputProperty,
+                    leftOnPredicateColumns, rightOnPredicateColumns);
+        }
+
+        // Defense in depth: mixed (Range, Hash) reaching the deriver means the
+        // upstream Guarantor's range→hash normalization did not run.  Fail loud
+        // — the deriver cannot install exchange enforcers itself, and silently
+        // returning a derived property risks downstream misclassification of
+        // the join mode.
+        boolean leftIsRange = leftRawSpec instanceof RangeDistributionSpec;
+        boolean rightIsRange = rightRawSpec instanceof RangeDistributionSpec;
+        boolean leftIsHash = leftRawSpec instanceof HashDistributionSpec;
+        boolean rightIsHash = rightRawSpec instanceof HashDistributionSpec;
+        if ((leftIsRange && rightIsHash) || (leftIsHash && rightIsRange)) {
+            throw new StarRocksPlannerException(
+                    "Mixed range-distribution / hash-distribution JOIN reached output-property "
+                            + "derivation; the upstream Guarantor was expected to normalize the "
+                            + "range side to hash. left=" + leftRawSpec + ", right=" + rightRawSpec,
+                    ErrorType.INTERNAL_ERROR);
+        }
+
         DistributionProperty leftChildDistributionProperty = leftChildOutputProperty.getDistributionProperty();
         DistributionProperty rightChildDistributionProperty = rightChildOutputProperty.getDistributionProperty();
         if (leftChildDistributionProperty.isShuffle() && rightChildDistributionProperty.isShuffle()) {
@@ -381,17 +416,22 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                         leftOnPredicateColumns, rightOnPredicateColumns);
 
             } else {
-                LOG.error("Children output property distribution error.left child property: {}, " +
-                                "right child property: {}, join node: {}",
-                        leftChildDistributionProperty, rightChildDistributionProperty, node);
-                throw new IllegalStateException("Children output property distribution error.");
+                throw childrenDistributionError(node, leftChildDistributionProperty, rightChildDistributionProperty);
             }
         } else {
-            LOG.error("Children output property distribution error.left child property: {}, " +
-                            "right child property: {}, join node: {}",
-                    leftChildDistributionProperty, rightChildDistributionProperty, node);
-            throw new IllegalStateException("Children output property distribution error.");
+            throw childrenDistributionError(node, leftChildDistributionProperty, rightChildDistributionProperty);
         }
+    }
+
+    private static StarRocksPlannerException childrenDistributionError(PhysicalJoinOperator node,
+                                                                       DistributionProperty leftProperty,
+                                                                       DistributionProperty rightProperty) {
+        LOG.error("Children output property distribution error. left={}, right={}, join={}",
+                leftProperty, rightProperty, node);
+        return new StarRocksPlannerException(
+                "Children output property distribution error. left=" + leftProperty
+                        + ", right=" + rightProperty,
+                ErrorType.INTERNAL_ERROR);
     }
 
     private PhysicalPropertySet computeShuffleJoinOutputProperty(JoinOperator joinType,
@@ -473,18 +513,32 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         // if RepeatColumnRef is (cola,colb),(cola), and childrenOutputProperties is hash(cola,colb)
         // since cola will be inserted with null value, it's unsafe to use hash(cola,colb)
         DistributionProperty outputDistribution = EmptyDistributionProperty.INSTANCE;
+        DistributionSpec childSpec = childDistribution.getSpec();
+        Set<Integer> commonRefs = subRefs.stream().map(ColumnRefOperator::getId).collect(Collectors.toSet());
         if (childDistribution.isShuffle()) {
             boolean canFollowChild = true;
-            HashDistributionSpec childDistributionSpec = (HashDistributionSpec) childDistribution.getSpec();
-            Set<Integer> commonRefs = subRefs.stream().map(ColumnRefOperator::getId).collect(Collectors.toSet());
-
+            HashDistributionSpec childDistributionSpec = (HashDistributionSpec) childSpec;
             for (DistributionCol col : childDistributionSpec.getHashDistributionDesc().getDistributionCols()) {
                 if (!commonRefs.contains(col.getColId())) {
                     canFollowChild = false;
                     break;
                 }
             }
-
+            if (canFollowChild) {
+                outputDistribution = childDistribution;
+            }
+        } else if (childSpec instanceof RangeDistributionSpec) {
+            // Range variant: use direct column-id intersection (not equivalence)
+            // because Repeat nulls out physical columns; equivalence through
+            // nulled columns is unsafe.
+            RangeDistributionSpec childRangeSpec = (RangeDistributionSpec) childSpec;
+            boolean canFollowChild = true;
+            for (DistributionCol col : childRangeSpec.getColocateColumns()) {
+                if (!commonRefs.contains(col.getColId())) {
+                    canFollowChild = false;
+                    break;
+                }
+            }
             if (canFollowChild) {
                 outputDistribution = childDistribution;
             }
@@ -503,6 +557,15 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             return createPropertySetByDistribution(new HashDistributionSpec(
                     new HashDistributionDesc(((HashDistributionSpec) olapDistributionSpec).getShuffleColumns(),
                             HashDistributionDesc.SourceType.LOCAL), equivDesc));
+        } else if (olapDistributionSpec instanceof RangeDistributionSpec) {
+            // Rebuild with selected partitions (partition pruning ran between
+            // RelationTransformer skeleton construction and this point).
+            RangeDistributionSpec skeleton = (RangeDistributionSpec) olapDistributionSpec;
+            EquivalentDescriptor equivDesc = new EquivalentDescriptor(
+                    node.getTable().getId(), node.getSelectedPartitionId());
+            equivDesc.initDistributionUnionFind(skeleton.getColocateColumns());
+            return createPropertySetByDistribution(
+                    new RangeDistributionSpec(skeleton.getColocateColumns(), equivDesc));
         } else if (olapDistributionSpec.getType() == DistributionSpec.DistributionType.ANY) {
             return PhysicalPropertySet.EMPTY;
         } else {
@@ -701,14 +764,26 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             return;
         }
 
-        if (!(oldProperty.getDistributionProperty().getSpec() instanceof HashDistributionSpec)) {
+        // Select the spec's colocate columns + its EquivalentDescriptor.
+        // Range spec uses the same EquivalentDescriptor plumbing as hash, so
+        // the same equivalence-union logic applies.
+        DistributionSpec spec = oldProperty.getDistributionProperty().getSpec();
+        List<DistributionCol> distributionCols;
+        EquivalentDescriptor equivDesc;
+        if (spec instanceof HashDistributionSpec) {
+            HashDistributionSpec hashSpec = (HashDistributionSpec) spec;
+            distributionCols = hashSpec.getShuffleColumns();
+            equivDesc = hashSpec.getEquivDesc();
+        } else if (spec instanceof RangeDistributionSpec) {
+            RangeDistributionSpec rangeSpec = (RangeDistributionSpec) spec;
+            distributionCols = rangeSpec.getColocateColumns();
+            equivDesc = rangeSpec.getEquivalentDescriptor();
+        } else {
             return;
         }
 
-        HashDistributionSpec distributionSpec =
-                (HashDistributionSpec) oldProperty.getDistributionProperty().getSpec();
         final Map<Integer, DistributionCol> idToDistributionCol = Maps.newHashMap();
-        distributionSpec.getShuffleColumns().forEach(e -> idToDistributionCol.put(e.getColId(), e));
+        distributionCols.forEach(e -> idToDistributionCol.put(e.getColId(), e));
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
             ColumnRefSet usedCols = entry.getValue().getUsedColumns();
@@ -716,12 +791,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             Optional<Boolean> nullStrictInfo = remainDistributionFunc(entry.getValue(), idToDistributionCol);
             if (nullStrictInfo.isPresent()) {
                 if (nullStrictInfo.get()) {
-                    distributionSpec.getEquivDesc().unionDistributionCols(
+                    equivDesc.unionDistributionCols(
                             new DistributionCol(entry.getKey().getId(), true),
                             idToDistributionCol.get(usedCols.getFirstId())
                     );
                 } else {
-                    distributionSpec.getEquivDesc().unionNullRelaxCols(
+                    equivDesc.unionNullRelaxCols(
                             new DistributionCol(entry.getKey().getId(), false),
                             idToDistributionCol.get(usedCols.getFirstId()).getNullRelaxCol()
                     );

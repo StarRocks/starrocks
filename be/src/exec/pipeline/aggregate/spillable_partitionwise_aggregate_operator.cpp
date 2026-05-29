@@ -15,6 +15,9 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
+#include "exec/pipeline/query_context.h"
+#include "runtime/runtime_state_helper.h"
+
 namespace starrocks::pipeline {
 
 bool SpillablePartitionWiseAggregateSinkOperator::need_input() const {
@@ -34,7 +37,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _agg_op->aggregator()->spill_channel()->set_finishing_if_not_reuseable();
+        _agg_op->aggregator()->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
@@ -47,12 +50,10 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
         RETURN_IF_ERROR(_agg_op->set_finishing(state));
         return Status::OK();
     }
-    if (!_agg_op->aggregator()->spill_channel()->has_task()) {
-        if (_agg_op->aggregator()->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
-            _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
-        }
-    }
+    // Always queue a spill task for residual hash table and streaming data.
+    // Even if channel has_task(), the in-flight task may have been created with
+    // should_spill_hash_table=false and won't drain the hash table.
+    _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
 
     auto flush_function = [this](RuntimeState* state) {
         auto& spiller = _agg_op->aggregator()->spiller();
@@ -85,10 +86,13 @@ void SpillablePartitionWiseAggregateSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_agg_op->prepare(state));
+    RETURN_IF_ERROR(_agg_op->prepare_local_state(state));
+
     DCHECK(!_agg_op->aggregator()->is_none_group_by_exprs());
     _agg_op->aggregator()->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
@@ -276,9 +280,6 @@ ChunkPtr& SpillablePartitionWiseAggregateSinkOperator::_append_hash_column(Chunk
 
 Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_agg_op->aggregator()->hash_map_variant().size() == 0, Status::OK());
-    if (should_spill_hash_table) {
-        _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
-    }
     CHECK(!_agg_op->aggregator()->spill_channel()->has_task());
     RETURN_IF_ERROR(
             _agg_op->aggregator()->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));
@@ -287,13 +288,18 @@ Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState
 
 std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator::_build_spill_task(
         RuntimeState* state, bool should_spill_hash_table) {
-    auto chunk_provider = [this, state, should_spill_hash_table]() -> StatusOr<ChunkPtr> {
+    auto chunk_provider = [this, state, should_spill_hash_table,
+                           iterator_initialized = false]() mutable -> StatusOr<ChunkPtr> {
         if (!_streaming_chunks.empty()) {
             auto chunk = _streaming_chunks.front();
             _streaming_chunks.pop();
             return chunk;
         }
-        if (should_spill_hash_table) {
+        if (should_spill_hash_table && _agg_op->aggregator()->hash_map_variant().size() > 0) {
+            if (!iterator_initialized) {
+                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
+                iterator_initialized = true;
+            }
             if (!_agg_op->aggregator()->is_ht_eos()) {
                 auto chunk = std::make_shared<Chunk>();
                 RETURN_IF_ERROR(_agg_op->aggregator()->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
@@ -309,7 +315,7 @@ std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator:
         _streaming_bytes = 0;
         return Status::EndOfFile("no more data in current aggregator");
     };
-    return [this, chunk_provider]() -> StatusOr<ChunkPtr> {
+    return [this, chunk_provider]() mutable -> StatusOr<ChunkPtr> {
         auto maybe_chunk = chunk_provider();
         if (maybe_chunk.ok()) {
             auto chunk = std::move(maybe_chunk.value());
@@ -369,6 +375,13 @@ Status SpillablePartitionWiseAggregateSourceOperator::prepare(RuntimeState* stat
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     RETURN_IF_ERROR(_non_pw_agg->prepare(state));
     RETURN_IF_ERROR(_pw_agg->prepare(state));
+    return Status::OK();
+}
+
+Status SpillablePartitionWiseAggregateSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_agg->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_agg->prepare_local_state(state));
     return Status::OK();
 }
 
@@ -495,7 +508,7 @@ StatusOr<ChunkPtr> SpillablePartitionWiseAggregateSourceOperator::_pull_spilled_
                     state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_agg->need_input() && !_pw_agg->is_finished());
-                RETURN_IF_ERROR(_pw_agg->push_chunk(state, std::move(maybe_chunk.value())));
+                RETURN_IF_ERROR(_pw_agg->push_chunk(state, maybe_chunk.value()));
             } else if (maybe_chunk.status().is_end_of_file()) {
                 _curr_partition_eos = true;
                 RETURN_IF_ERROR(_pw_agg->set_finishing(state));

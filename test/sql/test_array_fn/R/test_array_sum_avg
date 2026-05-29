@@ -1,4 +1,4 @@
--- name: test_array_sum_avg @mac
+-- name: test_array_sum_avg @mac @no_arrow_flight_sql
 CREATE TABLE test_array_functions (
     id INT,
     array_boolean ARRAY<BOOLEAN>,

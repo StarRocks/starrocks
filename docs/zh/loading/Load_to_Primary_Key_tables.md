@@ -5,7 +5,7 @@ keywords: ['zhujian']
 
 # 通过导入实现数据变更
 
-StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句对 StarRocks 表进行数据变更。
+StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句对表进行数据变更。
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 

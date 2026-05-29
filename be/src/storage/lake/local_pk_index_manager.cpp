@@ -17,13 +17,17 @@
 
 #include <chrono>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 

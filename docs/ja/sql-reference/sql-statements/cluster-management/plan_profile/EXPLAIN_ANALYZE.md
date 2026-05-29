@@ -22,7 +22,7 @@ EXPLAIN ANALYZE <statement>
 
 ## パラメータ
 
-`statement`: Query Profile を表示する SQL ステートメントです。[SELECT](../../table_bucket_part_index/SELECT.md) と [INSERT INTO](../../loading_unloading/INSERT.md) の両方がサポートされています。
+`statement`: Query Profile を表示する SQL ステートメントです。[SELECT](../../table_bucket_part_index/SELECT/SELECT.md) と [INSERT INTO](../../loading_unloading/INSERT.md) の両方がサポートされています。
 
 ## 使用上の注意
 

@@ -24,12 +24,12 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "base/testutil/assert.h"
+#include "common/config_object_storage_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_s3.h"
 #include "fs/s3/poco_http_client_factory.h"
 #include "io/s3_input_stream.h"
-#include "testutil/assert.h"
 
 namespace starrocks::poco {
 

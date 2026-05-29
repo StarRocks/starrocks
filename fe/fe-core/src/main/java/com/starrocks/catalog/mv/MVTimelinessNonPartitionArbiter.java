@@ -31,13 +31,14 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessNonPartitionArbiter.class);
 
-    public MVTimelinessNonPartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
+    public MVTimelinessNonPartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
     }
 
     /**
@@ -67,12 +68,20 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
-            // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
-            if (mvBaseTableUpdateInfo != null &&
-                    mvBaseTableUpdateInfo.getToRefreshPCells() != null &&
+            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, queryRewriteParams);
+            if (mvBaseTableUpdateInfo == null) {
+                logMVPrepare(mv, "Non-partitioned base table update info is unknown, need refresh totally.");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+            if (mvBaseTableUpdateInfo.getToRefreshPCells() != null &&
                     !mvBaseTableUpdateInfo.getToRefreshPCells().isEmpty()) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(mv, tableInfo, table)) {
+                logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }
         }

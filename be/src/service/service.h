@@ -14,10 +14,11 @@
 
 #pragma once
 
-#include "util/logging.h"
+#include <vector>
+
+#include "platform/store_path.h"
 
 namespace starrocks {
-class ExecEnv;
 
 void start_be(const std::vector<StorePath>& paths, bool as_cn);
 } // namespace starrocks

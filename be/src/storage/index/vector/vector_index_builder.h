@@ -18,6 +18,8 @@
 
 namespace starrocks {
 
+class Column;
+
 enum IndexBuilderType { TEN_ANN = 0, UNKNOWN = 100 };
 
 class VectorIndexBuilder {
@@ -33,6 +35,14 @@ public:
 
     // flush data into disk
     virtual Status flush() = 0;
+
+    // close the index builder and finalize the underlying file.
+    // Must be called after flush() and before reading the index file,
+    // because remote FS (S3) objects are only visible after close().
+    // Returns the first I/O error captured by the underlying writer, or OK on success;
+    // tenann's IndexFileWriter API returns void from Flush/Close so the writer retains
+    // its first error internally and surfaces it here.
+    virtual Status close() const { return Status::OK(); }
 
     // we should make sure the independence of TenAnn index, include data and metadata, to make [[IndexScanNode]] simple
     // enough in the future other than to read the meta both in StarRocks and TenAnn.

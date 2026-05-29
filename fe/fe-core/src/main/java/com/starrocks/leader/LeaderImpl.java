@@ -181,12 +181,7 @@ public class LeaderImpl {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status;
-            if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                status = new TStatus(TStatusCode.LEADER_TRANSFERRED);
-            } else {
-                status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            }
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
             LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
@@ -417,6 +412,7 @@ public class LeaderImpl {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
+                createReplicaTask.markSendSucceeded();
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
                         tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
@@ -480,7 +476,7 @@ public class LeaderImpl {
         try {
             long dbId = task.getDbId();
             long tableId = task.getTableId();
-            long indexId = task.getIndexId();
+            long indexMetaId = task.getIndexId();
             long backendId = task.getBackendId();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
@@ -490,7 +486,7 @@ public class LeaderImpl {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
                     if (olapTable != null) {
-                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                         if (indexMeta != null) {
                             indexMeta.removeUpdateSchemaBackend(backendId);
                         }
@@ -869,7 +865,18 @@ public class LeaderImpl {
             result.setStatus(status);
             return result;
         }
-        return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        try {
+            return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        } catch (IllegalStateException e) {
+            // Leader-lease fence fired inside ReportHandler: demotion raced the isLeader() check
+            // above. Translate to the same non-master status so the BE re-resolves the current
+            // leader rather than retrying on this FE.
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master: " +
+                    (Strings.isNullOrEmpty(e.getMessage()) ? "leader lease invalidated" : e.getMessage())));
+            result.setStatus(status);
+            return result;
+        }
     }
 
     private void finishAlterTask(AgentTask task) {
@@ -938,7 +945,7 @@ public class LeaderImpl {
                     tableMeta.addToBloomfilter_columns(bfColumn);
                 }
             }
-            tableMeta.setBase_index_id(olapTable.getBaseIndexId());
+            tableMeta.setBase_index_id(olapTable.getBaseIndexMetaId());
             tableMeta.setColocate_group(olapTable.getColocateGroup());
             tableMeta.setKey_type(olapTable.getKeysType().name());
 
@@ -967,9 +974,7 @@ public class LeaderImpl {
                 partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
                 tableMeta.addToPartitions(partitionMeta);
                 short replicaNum = partitionInfo.getReplicationNum(partition.getId());
-                boolean inMemory = partitionInfo.getIsInMemory(partition.getId());
                 basePartitionDesc.putToReplica_num_map(partition.getId(), replicaNum);
-                basePartitionDesc.putToIn_memory_map(partition.getId(), inMemory);
                 DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
                 TDataProperty thriftDataProperty = new TDataProperty();
                 thriftDataProperty.setStorage_medium(dataProperty.getStorageMedium());
@@ -1038,7 +1043,7 @@ public class LeaderImpl {
 
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> indexes =
-                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL);
+                        partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());
@@ -1048,7 +1053,7 @@ public class LeaderImpl {
                     indexMeta.setRollup_index_id(-1L);
                     indexMeta.setRollup_finished_version(-1L);
                     TSchemaMeta schemaMeta = new TSchemaMeta();
-                    MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(index.getId());
+                    MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
                     schemaMeta.setSchema_version(materializedIndexMeta.getSchemaVersion());
                     schemaMeta.setSchema_hash(materializedIndexMeta.getSchemaHash());
                     schemaMeta.setShort_key_col_count(materializedIndexMeta.getShortKeyColumnCount());

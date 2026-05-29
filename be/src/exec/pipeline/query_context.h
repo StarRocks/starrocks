@@ -16,29 +16,34 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
 
-#include "exec/pipeline/fragment_context.h"
+#include "base/concurrency/spinlock.h"
+#include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
+#include "base/metrics.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/spill/query_spill_manager.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/descriptors_fwd.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/debug/query_trace.h"
-#include "util/hash.h"
-#include "util/hash_util.hpp"
-#include "util/spinlock.h"
-#include "util/time.h"
 
 namespace starrocks {
 
-class StreamEpochManager;
+class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
 
@@ -54,7 +59,10 @@ class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
-    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
@@ -175,6 +183,7 @@ public:
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
                           RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
+    const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     Status init_spill_manager(const TQueryOptions& query_options);
@@ -281,14 +290,18 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
+    // Snapshot statistic without requiring final sink (best-effort, used for failure/cancel reporting).
+    std::shared_ptr<QueryStatistics> snapshot_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
     bool is_final_sink() const { return _is_final_sink; }
     void set_final_sink() { _is_final_sink = true; }
 
-    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
+    bool mark_audit_statistics_reported() {
+        bool expected = false;
+        return _audit_statistics_reported.compare_exchange_strong(expected, true);
+    }
 
-    // STREAM MV
-    StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
+    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
     spill::QuerySpillManager* spill_manager() { return _spill_manager.get(); }
 
@@ -300,15 +313,20 @@ public:
         return _connector_scan_operator_mem_share_arbitrator;
     }
 
+    GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
+        return _global_late_materialization_ctx_mgr;
+    }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
 private:
-    ExecEnv* _exec_env = nullptr;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
+    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
-    size_t _total_fragments;
+    size_t _total_fragments{0};
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
     int64_t _delivery_deadline = 0;
@@ -346,6 +364,7 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    std::atomic_bool _audit_statistics_reported = false;
 
     struct ScanStats {
         std::atomic<int64_t> total_scan_rows_num = 0;
@@ -385,13 +404,10 @@ private:
     std::shared_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
 
-    // STREAM MV
-    std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
-
-    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
-
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
+
+    GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
 };
 
 // TODO: use brpc::TimerThread refactor QueryContext
@@ -399,7 +415,7 @@ class QueryContextManager {
 public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr);
     StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
@@ -436,6 +452,7 @@ private:
 
     std::atomic<bool> _stop{false};
     std::shared_ptr<std::thread> _clean_thread;
+    MetricRegistry* _metrics = nullptr;
 
     inline static const char* _metric_name = "pip_query_ctx_cnt";
     std::unique_ptr<UIntGauge> _query_ctx_cnt;

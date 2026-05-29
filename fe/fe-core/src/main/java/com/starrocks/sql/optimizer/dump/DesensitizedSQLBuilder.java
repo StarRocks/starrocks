@@ -29,7 +29,6 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -51,6 +50,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -79,6 +79,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
@@ -120,7 +121,8 @@ public class DesensitizedSQLBuilder {
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.JDBC
-                || table.getType() == Table.TableType.FILE) {
+                || table.getType() == Table.TableType.FILE
+                || table.getType() == Table.TableType.BENCHMARK) {
             tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
         } else if (table instanceof OlapTable) {
             tableDef = visitor.desensitizeOlapTableDef(pair.first, (OlapTable) pair.second);
@@ -248,6 +250,11 @@ public class DesensitizedSQLBuilder {
                         .append(")");
             }
             sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+                sqlBuilder.append("[materialized] ");
+            } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+                sqlBuilder.append("[not_materialized] ");
+            }
             return sqlBuilder.toString();
         }
 
@@ -301,7 +308,8 @@ public class DesensitizedSQLBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = Optional.ofNullable(node.getChildExpressions())
+                    .orElse(node.getFunctionParams().exprs()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -328,7 +336,9 @@ public class DesensitizedSQLBuilder {
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
             sqlBuilder.append(
-                    tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+                    Optional.ofNullable(tableFunction.getChildExpressions())
+                            .orElse(tableFunction.getFunctionParams().exprs()).stream().map(this::visit)
+                            .collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
@@ -663,7 +673,7 @@ public class DesensitizedSQLBuilder {
             sb.append(desensitizeDistributionInfo(olapTable.getIdToColumn(), distributionInfo));
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();

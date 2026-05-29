@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.0 release notes: Primary Key table GA with Stream/Broker/Routine Load support, external table support, expression pushdown to storage layer, and memory management improvements."
 ---
 
 # StarRocks version 2.0
@@ -129,7 +130,7 @@ Release date: January 21, 2022
 ### Improvements
 
 - Hive's implicit_cast operations can be read when StarRocks uses external tables to query Hive data. [#2829](https://github.com/StarRocks/starrocks/pull/2829)
-- The read/write lock is used to fix high CPU usage when StarRocks CBO collects statistics to support high-concurrency queries. [#2901](https://github.com/StarRocks/starrocks/pull/2901)
+- The read/write lock is used to fix high CPU usage when StarRocks CBO collects statistics to support high concurrency queries. [#2901](https://github.com/StarRocks/starrocks/pull/2901)
 - CBO statistics gathering and UNION operator are optimized.
 
 ### Bug Fixes

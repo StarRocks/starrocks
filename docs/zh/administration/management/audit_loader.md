@@ -48,6 +48,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `pendingTimeMs` BIGINT COMMENT "查询在队列中等待的时间（毫秒）",
   `candidateMVs` VARCHAR(65533) NULL COMMENT "候选物化视图列表",
   `hitMvs` VARCHAR(65533) NULL COMMENT "命中MV列表",
+  `QueriedRelations` ARRAY<VARCHAR(65533)> NULL COMMENT "SQL 直接引用的表和视图列表",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse 名"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
@@ -197,6 +198,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
           digest:
     planCpuCosts: 0
     planMemCosts: 0
+QueriedRelations: ["default_catalog.db1.tbl1","default_catalog.db1.view1"]
     …………
     ```
 

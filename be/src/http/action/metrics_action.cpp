@@ -26,13 +26,13 @@
 
 #include <string>
 
-#include "common/config.h"
+#include "base/metrics.h"
+#include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/tracer.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
@@ -327,16 +327,16 @@ void MetricsAction::handle(HttpRequest* req) {
     std::string str;
     if (type == "core") {
         SimpleCoreMetricsVisitor visitor;
-        _metrics->collect(&visitor);
+        _process_metrics_registry->collect_root(&visitor);
         str.assign(visitor.to_string());
     } else if (type == "json") {
         JsonMetricsVisitor visitor;
-        _metrics->collect(&visitor);
+        _process_metrics_registry->collect_root(&visitor);
         _collect_table_metrics(&visitor);
         str.assign(visitor.to_string());
     } else {
         PrometheusMetricsVisitor visitor;
-        _metrics->collect(&visitor);
+        _process_metrics_registry->collect_root(&visitor);
         _collect_table_metrics(&visitor);
         if (config::dump_metrics_with_bvar) {
             bvar::Variable::dump_exposed(&visitor, &_options);
@@ -364,7 +364,7 @@ void MetricsAction::handle(HttpRequest* req) {
 
 void MetricsAction::_collect_table_metrics(starrocks::MetricsVisitor* visitor) {
     if (config::enable_collect_table_metrics) {
-        StarRocksMetrics::instance()->table_metrics_mgr()->metric_registry()->collect(visitor);
+        _process_metrics_registry->collect_table(visitor);
     }
 }
 

@@ -83,7 +83,7 @@ insert into sc2 values (5, map{5: map{50:map{500: 505}}}, row(5, map{50: 505}, m
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from sc2 order by v1;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
 -- result:
 0
-{"meta":[{"name":"v1","type":"bigint(20)"},{"name":"map1","type":"map<int(11),map<int(11),map<int(11),int(11)>>>"},{"name":"st1","type":"struct<s1 int(11), sm2 map<int(11),int(11)>, sm3 map<int(11),map<int(11),int(11)>>>"},{"name":"st2","type":"struct<s1 int(11), sa2 array<int(11)>, ss3 struct<sss1 int(11), sss2 struct<ssss1 int(11), ssss2 int(11)>>>"}]}
+{"meta":[{"name":"v1","type":"bigint(20)"},{"name":"map1","type":"map<int(11),map<int(11),map<int(11),int(11)>>>"},{"name":"st1","type":"struct<`s1` int(11), `sm2` map<int(11),int(11)>, `sm3` map<int(11),map<int(11),int(11)>>>"},{"name":"st2","type":"struct<`s1` int(11), `sa2` array<int(11)>, `ss3` struct<`sss1` int(11), `sss2` struct<`ssss1` int(11), `ssss2` int(11)>>>"}]}
 {"data":[1,{"1": {"10": {"100": 101}}},{"s1": 1, "sm2": {"10": 101}, "sm3": {"10": {"100": 101}}},{"s1": 1, "sa2": [1, 10, 101], "ss3": {"sss1": 1, "sss2": {"ssss1": 10, "ssss2": 11}}}]}
 {"data":[2,{"2": {"20": {"200": 202}}},{"s1": 2, "sm2": {"20": 202}, "sm3": {"20": {"200": 202}}},{"s1": 2, "sa2": [2, 20, 202], "ss3": {"sss1": 2, "sss2": {"ssss1": 20, "ssss2": 22}}}]}
 {"data":[3,{"3": {"30": {"300": 303}}},{"s1": 3, "sm2": {"30": 303}, "sm3": {"30": {"300": 303}}},{"s1": 3, "sa2": [3, 30, 303], "ss3": {"sss1": 3, "sss2": {"ssss1": 30, "ssss2": 33}}}]}

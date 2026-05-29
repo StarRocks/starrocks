@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+description: "The Primary Key table uses a new storage engine designed by StarRocks."
 ---
 
 # Primary Key tables
@@ -91,7 +92,6 @@ If you are sensitive to memory usage and want to reduce memory consumption durin
 be.conf
 
 l0_max_mem_usage = (some value which smaller than 104857600, default is 104857600)
-skip_pk_preload = true
 
 // Shared-nothing cluster
 transaction_apply_worker_count = (some value smaller than cpu core number, default is cpu core number)

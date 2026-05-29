@@ -14,8 +14,8 @@
 
 #include "storage/rowset/metadata_cache.h"
 
+#include "base/container/lru_cache.h"
 #include "storage/rowset/rowset.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 
@@ -77,10 +77,7 @@ void MetadataCache::_cache_value_deleter(const CacheKey& /*key*/, void* value) {
 }
 
 void MetadataCache::_warmup(const std::string& key) {
-    Cache::Handle* handle = _cache->lookup(CacheKey(key));
-    if (handle != nullptr) {
-        _cache->release(handle);
-    }
+    _cache->touch(CacheKey(key));
 }
 
 } // namespace starrocks

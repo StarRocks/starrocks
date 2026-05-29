@@ -1268,4 +1268,8 @@ public class NodeMgr {
     protected LeaderInfo getLeaderInfo() {
         return new LeaderInfo(leaderIp, leaderHttpPort, leaderRpcPort);
     }
+
+    public void setBrokerMgr(BrokerMgr brokerMgr) {
+        this.brokerMgr = brokerMgr;
+    }
 }

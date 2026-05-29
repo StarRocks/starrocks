@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
+description: "Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query."
 ---
 
 # Query Hint
@@ -43,6 +44,17 @@ DISTRIBUTED BY HASH(`key`)
 BUCKETS 10 
 REFRESH ASYNC 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
+```
+
+Specify system variables in a nested query:
+
+```SQL
+-- To specify hints in the main query
+WITH t AS (SELECT region, sales_amount FROM sales_orders)  
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_planner_agg_stage = '2') */  
+       SUM(sales_amount) AS total_sales_amount  
+FROM t;
+
 ```
 
 ## User-defined variable hint

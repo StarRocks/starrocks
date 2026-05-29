@@ -19,16 +19,20 @@
 #include <functional>
 #include <iostream>
 
+#include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
@@ -36,7 +40,6 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -48,7 +51,7 @@ using std::vector;
 class SegmentRewriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _fs = FileSystem::CreateSharedFromString("posix://").value();
+        _fs = FileSystemFactory::CreateSharedFromString("posix://").value();
         ASSERT_OK(_fs->create_dir_recursive(kSegmentDir));
     }
 
@@ -78,15 +81,15 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
     auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
-    auto partial_chunk = ChunkHelper::new_chunk(partial_schema, chunk_size);
+    auto partial_chunk = ChunkFactory::new_chunk(partial_schema, chunk_size);
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         partial_chunk->reset();
-        auto& cols = partial_chunk->columns();
+        auto cols = partial_chunk->columns();
         for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
         }
         ASSERT_OK(writer.append_chunk(*partial_chunk));
     }
@@ -109,14 +112,14 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
              create_int_value_pb(5)});
     std::string dst_file_name = kSegmentDir + "/rewrite_rowset";
     std::vector<uint32_t> read_column_ids{2, 4};
-    std::vector<MutableColumnPtr> write_columns(read_column_ids.size());
+    MutableColumns write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
-        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         write_columns[i] = column->clone_empty();
         for (auto j = 0; j < num_rows; ++j) {
-            write_columns[i]->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
+            write_columns[i]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
         }
     }
 
@@ -135,10 +138,10 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
-    auto seg_iterator = res.value();
+    const auto& seg_iterator = res.value();
 
     size_t count = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = seg_iterator->get_next(chunk.get());

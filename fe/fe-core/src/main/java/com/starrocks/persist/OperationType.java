@@ -100,8 +100,8 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
-    // light schema change for add and drop columns
-    public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
+    // fast schema evolution for alter columns
+    public static final short OP_FAST_ALTER_TABLE_COLUMNS = 107;
 
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
@@ -117,10 +117,6 @@ public class OperationType {
     // set table replication_num config 266
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_REPLICATION_NUM = 266;
-
-    // set table in memory
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_IN_MEMORY = 267;
 
     // global dict
     @IgnorableOnReplayFailed
@@ -199,6 +195,16 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_FLAT_JSON_CONFIG = 10020;
+
+    // statistic meta batch remove 10032 ~ 10034
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_BASIC_STATS_META_BATCH = 10032;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_HISTOGRAM_STATS_META_BATCH = 10033;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH = 10034;
 
 
     // workgroup 10021 ~ 10030
@@ -415,6 +421,14 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
 
+    // Colocate range mgr update (range distribution colocate). Marked @IgnorableOnReplayFailed
+    // to match the sibling colocate ops; if a follower skips this record under
+    // metadata_journal_ignore_replay_failure, the next DDL on the same group is fail-loud via
+    // ColocateTableIndex.addTableToGroup's range-metadata-missing guard rather than silently
+    // corrupting dispatch.
+    @IgnorableOnReplayFailed
+    public static final short OP_COLOCATE_RANGE_UPDATE = 12135;
+
     //Export json format log
 
     @IgnorableOnReplayFailed
@@ -593,6 +607,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DICTIONARY_MGR_V2 = 13403;
+
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
@@ -618,6 +635,11 @@ public class OperationType {
     public static final short OP_ADD_SQL_QUERY_BLACK_LIST = 13520;
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_SQL_DIGEST_BLACK_LIST = 13522;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_SQL_DIGEST_BLACK_LIST = 13523;
 
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_GROUP_PROVIDER = 13530;

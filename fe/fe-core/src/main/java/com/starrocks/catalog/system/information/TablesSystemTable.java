@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -34,6 +35,7 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -42,6 +44,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -59,13 +62,13 @@ public class TablesSystemTable extends SystemTable {
 
     public TablesSystemTable(String catalogName) {
         super(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
-                .column("TABLE_CATALOG", TypeFactory.createVarchar(FN_REFLEN))
-                .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("ENGINE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                .column("TABLE_CATALOG", TypeFactory.createVarcharType(FN_REFLEN))
+                .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("ENGINE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                 .column("VERSION", BIGINT)
-                .column("ROW_FORMAT", TypeFactory.createVarchar(10))
+                .column("ROW_FORMAT", TypeFactory.createVarcharType(10))
                 .column("TABLE_ROWS", BIGINT)
                 .column("AVG_ROW_LENGTH", BIGINT)
                 .column("DATA_LENGTH", BIGINT)
@@ -76,10 +79,10 @@ public class TablesSystemTable extends SystemTable {
                 .column("CREATE_TIME", DATETIME)
                 .column("UPDATE_TIME", DATETIME)
                 .column("CHECK_TIME", DATETIME)
-                .column("TABLE_COLLATION", TypeFactory.createVarchar(MY_CS_NAME_SIZE))
+                .column("TABLE_COLLATION", TypeFactory.createVarcharType(MY_CS_NAME_SIZE))
                 .column("CHECKSUM", BIGINT)
-                .column("CREATE_OPTIONS", TypeFactory.createVarchar(255))
-                .column("TABLE_COMMENT", TypeFactory.createVarchar(2048))
+                .column("CREATE_OPTIONS", TypeFactory.createVarcharType(255))
+                .column("TABLE_COMMENT", TypeFactory.createVarcharType(2048))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
 
@@ -152,6 +155,11 @@ public class TablesSystemTable extends SystemTable {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
         TGetTablesInfoRequest params = new TGetTablesInfoRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);
@@ -163,10 +171,10 @@ public class TablesSystemTable extends SystemTable {
             ConstantOperator value = binary.getChild(1).cast();
             switch (name.toUpperCase()) {
                 case "TABLE_NAME":
-                    params.setTable_name(value.getVarchar());
+                    params.setTable_name(PatternMatcher.escapeLikeValue(value.getVarchar()));
                     break;
                 case "TABLE_SCHEMA":
-                    authInfo.setPattern(value.getVarchar());
+                    authInfo.setPattern(PatternMatcher.escapeLikeValue(value.getVarchar()));
                     break;
                 default:
                     throw new NotImplementedException("unsupported column: " + name);

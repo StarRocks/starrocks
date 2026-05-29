@@ -36,9 +36,7 @@ package com.starrocks.http.action;
 
 import com.github.vertical_blank.sqlformatter.SqlFormatter;
 import com.google.common.base.Strings;
-import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ProfileManager;
-import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -129,8 +127,8 @@ public class QueryProfileAction extends WebBaseAction {
     private String getAnalyzeProfileResult(ProfileManager.ProfileElement queryProfile) {
         String analysis;
         try {
-            analysis = ExplainAnalyzer.analyze(queryProfile.plan, RuntimeProfileParser.parseFrom(
-                    CompressionUtils.gzipDecompressString(queryProfile.profileContent)), Collections.emptyList(), false);
+            analysis = ExplainAnalyzer.analyze(queryProfile.plan,
+                    queryProfile.getRuntimeProfile(), Collections.emptyList(), false);
             analysis = analysis.replaceAll(ANSI_REGEX, "");
         } catch (Exception e) {
             String queryId = queryProfile.infoStrings.getOrDefault(ProfileManager.QUERY_ID, "unknown");

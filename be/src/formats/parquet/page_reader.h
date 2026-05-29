@@ -19,12 +19,12 @@
 #include <cstdint>
 #include <string_view>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 #include "storage/rowset/page_handle.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class ObjectCache;

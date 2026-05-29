@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.thrift.TAssertNumRowsNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -78,7 +79,7 @@ public class AssertNumRowsNode extends PlanNode {
         msg.assert_num_rows_node = new TAssertNumRowsNode();
         msg.assert_num_rows_node.setDesired_num_rows(desiredNumOfRows);
         msg.assert_num_rows_node.setSubquery_string(subqueryString);
-        msg.assert_num_rows_node.setAssertion(assertion.toThrift());
+        msg.assert_num_rows_node.setAssertion(ExprToThrift.assertionToThrift(assertion));
     }
 
     @Override
@@ -95,7 +96,7 @@ public class AssertNumRowsNode extends PlanNode {
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalAssertNumRowsNode assertNumRowsNode = new TNormalAssertNumRowsNode();
         assertNumRowsNode.setDesired_num_rows(desiredNumOfRows);
-        assertNumRowsNode.setAssertion(assertion.toThrift());
+        assertNumRowsNode.setAssertion(ExprToThrift.assertionToThrift(assertion));
         planNode.setAssert_num_rows_node(assertNumRowsNode);
         planNode.setNode_type(TPlanNodeType.ASSERT_NUM_ROWS_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);

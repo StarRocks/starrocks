@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -43,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
@@ -364,13 +366,28 @@ public class ScalarOperatorsReuse {
         // enable some special logic codes only for lambda functions.
         private boolean hasLambdaFunction;
 
+        // Normalize children group ids for commutative compound predicates (AND/OR) so that
+        // expressions like `a AND b` and `b AND a` map to the same OperatorId. This mirrors
+        // CompoundPredicateOperator#equals, which sorts AND/OR children before comparing;
+        // without this normalization, the two forms would be tracked as distinct common
+        // subexpressions and later collide as a single key in the rewritten ImmutableMap.
+        private static List<Integer> normalizeChildrenGroup(ScalarOperator operator, List<Integer> groups) {
+            if (operator instanceof CompoundPredicateOperator) {
+                CompoundPredicateOperator compound = (CompoundPredicateOperator) operator;
+                if (compound.isAnd() || compound.isOr()) {
+                    return groups.stream().sorted().toList();
+                }
+            }
+            return groups;
+        }
+
         public boolean hasLambdaFunction() {
             return hasLambdaFunction;
         }
 
         private CommonResult collectCommonOperatorsByDepth(int depth, ScalarOperator operator, List<Integer> groups,
                                                            CommonOperatorContext context) {
-            OperatorId id = new OperatorId(operator, groups);
+            OperatorId id = new OperatorId(operator, normalizeChildrenGroup(operator, groups));
             Map<OperatorId, Integer> level = operatorsByDepth.computeIfAbsent(depth, c -> Maps.newHashMap());
 
             boolean isDuplicated = level.containsKey(id);
@@ -503,6 +520,18 @@ public class ScalarOperatorsReuse {
         for (ScalarOperator operator : columnRefMap.values()) {
             ScalarOperator rewriteOperator =
                     ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(operator, commonSubOperators);
+
+            // array_sort_lambda/array_map contains non-deterministic functions like rand(), should not
+            // be extracted CSE from.
+            boolean shouldNotReplace = ScalarOperatorUtil.getStream(operator)
+                    .filter(child -> (child instanceof CallOperator))
+                    .map(child -> (CallOperator) child)
+                    .filter(child -> child.getFnName().equals(FunctionSet.ARRAY_SORT_LAMBDA) ||
+                            child.getFnName().equals(FunctionSet.ARRAY_MAP))
+                    .anyMatch(Utils::hasNonDeterministicFunc);
+            if (shouldNotReplace) {
+                continue;
+            }
             if (!rewriteOperator.equals(operator)) {
                 hasRewritten = true;
                 break;

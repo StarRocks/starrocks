@@ -40,24 +40,24 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # tenann
-TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.0-RELEASE/tenann-v0.5.0-RELEASE-arm64-nosve.tar.gz"
-TENANN_NAME="tenann-v0.5.0-RELEASE-arm64-nosve.tar.gz"
-TENANN_SOURCE="tenann-v0.5.0-RELEASE"
-TENANN_MD5SUM="18c61b80e3e4039bd3c6ca95231cb645"
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-beta.3/tenann-v0.5.1-beta.3-nosve-arm64.tar.gz"
+TENANN_NAME="tenann-v0.5.1-beta.3-nosve-arm64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.1-beta.3-nosve"
+TENANN_MD5SUM="c9db2e3e34577ea5fdeca467fc13a514"
 # uncomment this for SVE version for better performance on ARM servers with SVE support
-#TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.0-RELEASE/tenann-v0.5.0-RELEASE-arm64.tar.gz"
-#TENANN_NAME="tenann-v0.5.0-RELEASE-arm64.tar.gz"
-#TENANN_SOURCE="tenann-v0.5.0-RELEASE"
-#TENANN_MD5SUM="b8683b3df546944b60bc8fe3db8db3af"
+#TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-beta.3/tenann-v0.5.1-beta.3-arm64.tar.gz"
+#TENANN_NAME="tenann-v0.5.1-beta.3-arm64.tar.gz"
+#TENANN_SOURCE="tenann-v0.5.1-beta.3"
+#TENANN_MD5SUM="2050a74ff3bfb7a526ce8093ab2bbb3f"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc1/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="652306980eb0a99d23823e75de807749"
+STARCACHE_MD5SUM="901cbd54823c73588a6f43e4d3b32e44"
 
 # pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251124/pprof-linux-arm64.zip"
-PPROF_NAME="pprof.zip"
+PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260520/pprof-linux-arm64"
+PPROF_NAME="pprof"
 PPROF_SOURCE="pprof"
-PPROF_MD5SUM="1be75288c41a703f213b7dc98a59e4aa"
+PPROF_MD5SUM="2787dabcc94982ee19a19439630bfd2a"

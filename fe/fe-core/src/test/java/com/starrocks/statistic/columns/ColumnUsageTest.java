@@ -241,8 +241,8 @@ class ColumnUsageTest extends PlanTestBase {
             List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
             Assertions.assertEquals(1, collectJobs.size());
             StatisticsCollectJob job0 = collectJobs.get(0);
-            Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, job0.getAnalyzeType());
-            Assertions.assertEquals(List.of("v1", "v2", "v3"), job0.getColumnNames());
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, job0.getAnalyzeType());
+            Assertions.assertEquals(List.of("v1"), job0.getColumnNames());
             Config.statistic_auto_collect_small_table_size = defaultSmallTableSize;
             Config.statistic_auto_collect_max_predicate_column_size_on_sample_strategy = defaultPredicateColumnSize;
         }
@@ -286,5 +286,20 @@ class ColumnUsageTest extends PlanTestBase {
             ColumnUsage restored = GsonUtils.GSON.fromJson(json, ColumnUsage.class);
             Assertions.assertEquals(usage, restored);
         }
+    }
+
+    @Test
+    public void testPredicateColumnsVacuumSkipsWhenTtlDisabled() throws Exception {
+        starRocksAssert.query("select * from t0 where v1 > 1").explainQuery();
+        PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
+        TableName t0 = new TableName(connectContext.getDatabase(), "t0");
+        Assertions.assertEquals(1, mgr.queryPredicateColumns(t0).size());
+
+        long beforeValue = Config.statistic_predicate_columns_ttl_hours;
+        Config.statistic_predicate_columns_ttl_hours = -1;
+        mgr.vacuum();
+        Assertions.assertEquals(1, mgr.queryPredicateColumns(t0).size());
+
+        Config.statistic_predicate_columns_ttl_hours = beforeValue;
     }
 }

@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# cos_similarity_norm
+# cosine_similarity_norm
 
 2 つの正規化されたベクトル間の角度の余弦を計算することによって、それらの類似性を測定します。角度はベクトルの方向によって形成され、ベクトルの大きさの違いは無視されます。この関数は、入力ベクトルが正規化されていることを前提としています。コサイン類似度を計算する前にベクトルを正規化する必要がある場合は、[cosine_similarity](./cos_similarity.md) を使用してください。
 

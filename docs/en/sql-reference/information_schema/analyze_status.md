@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`analyze_status` provides information about the status of analyze jobs."
 ---
 
 # analyze_status

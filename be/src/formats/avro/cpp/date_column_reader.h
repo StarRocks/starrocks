@@ -27,7 +27,7 @@ namespace starrocks::avrocpp {
 // where the int stores the number of days from the unix epoch, 1 January 1970 (ISO calendar).
 class DateColumnReader final : public ColumnReader {
 public:
-    explicit DateColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
+    explicit DateColumnReader(std::string_view col_name, const TypeDescriptor& type_desc)
             : ColumnReader(col_name, type_desc) {}
     ~DateColumnReader() override = default;
 
@@ -45,7 +45,7 @@ private:
 // where the long stores the number of microseconds from the unix epoch, 1 January 1970 00:00:00.000000.
 class DatetimeColumnReader final : public ColumnReader {
 public:
-    explicit DatetimeColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,
+    explicit DatetimeColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                   const cctz::time_zone& timezone)
             : ColumnReader(col_name, type_desc), _timezone(timezone) {}
     ~DatetimeColumnReader() override = default;

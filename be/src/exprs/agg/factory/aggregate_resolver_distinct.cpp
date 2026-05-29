@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -22,7 +22,7 @@ namespace starrocks {
 struct DistinctDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
+        if constexpr (lt_is_aggregate<lt> || lt_is_binary<lt>) {
             using DistinctState = DistinctAggregateState<lt, SumResultLT<lt>>;
             using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState>(
@@ -60,7 +60,9 @@ struct DistinctDispatcher {
 };
 
 void AggregateFuncResolver::register_distinct() {
-    for (auto type : aggregate_types()) {
+    auto multi_distinct_types = aggregate_types();
+    multi_distinct_types.push_back(TYPE_VARBINARY);
+    for (auto type : multi_distinct_types) {
         type_dispatch_all(type, DistinctDispatcher(), this);
     }
 }

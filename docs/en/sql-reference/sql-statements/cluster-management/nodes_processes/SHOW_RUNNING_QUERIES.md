@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`SHOW RUNNING QUERIES` displays information of all queries that are running or pending in the query queue."
 ---
 
 # `SHOW RUNNING QUERIES`

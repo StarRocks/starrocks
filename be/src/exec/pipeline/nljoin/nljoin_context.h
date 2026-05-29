@@ -29,8 +29,7 @@
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
-#include "runtime/chunk_cursor.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

@@ -14,6 +14,7 @@
 
 #include "formats/orc/orc_input_stream.h"
 
+#include "common/config_scan_io_fwd.h"
 #include "exprs/cast_expr.h"
 #include "formats/orc/orc_mapping.h"
 #include "fs/fs.h"
@@ -21,8 +22,24 @@
 
 namespace starrocks {
 
-ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream)
+ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, SharedBufferedInputStream* sb_stream)
         : _file(file), _length(length), _sb_stream(sb_stream) {}
+
+uint64_t ORCHdfsFileStream::getNaturalReadSize() const {
+    return config::orc_natural_read_size;
+}
+
+uint64_t ORCHdfsFileStream::getNaturalReadSizeAfterSeek() const {
+    return config::orc_natural_read_size / 4;
+}
+
+bool ORCHdfsFileStream::isIOCoalesceEnabled() const {
+    return config::orc_coalesce_read_enable;
+}
+
+bool ORCHdfsFileStream::isIOAdaptiveCoalesceEnabled() const {
+    return config::io_coalesce_adaptive_lazy_active;
+}
 
 void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
     if (buf == nullptr) {
@@ -44,7 +61,7 @@ void ORCHdfsFileStream::releaseToOffset(const int64_t offset) {
     _sb_stream->release_to_offset(offset);
 }
 
-Status ORCHdfsFileStream::setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+Status ORCHdfsFileStream::setIORanges(const std::vector<SharedBufferedInputStream::IORange>& io_ranges,
                                       const bool coalesce_active_lazy_column) {
     if (!_sb_stream) {
         return Status::OK();
@@ -63,7 +80,7 @@ bool ORCHdfsFileStream::isAlreadyCollectedInSharedBuffer(const int64_t offset, c
 void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     if (!_sb_stream) return;
 
-    std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
+    std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
     bs_io_ranges.reserve(io_ranges.size());
     for (const auto& r : io_ranges) {
         bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size), r.is_active);

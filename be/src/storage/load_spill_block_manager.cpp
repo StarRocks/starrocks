@@ -16,13 +16,18 @@
 
 #include <vector>
 
+#include "base/uid_util.h"
+#include "common/config_ingest_fwd.h"
+#include "common/thread/threadpool.h"
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
-#include "util/threadpool.h"
+#include "runtime/mem_tracker.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -30,11 +35,11 @@ static int calc_max_merge_blocks_thread() {
 #ifndef BE_TEST
     // The starting point for setting the maximum number of threads for load spill:
     // 1. Meet the memory limit requirements (by config::load_spill_merge_memory_limit_percent) for load spill.
-    // 2. Each thread can use 1GB(by config::load_spill_max_merge_bytes) of memory.
+    // 2. Each thread can use 1GB(by config::load_spill_memory_usage_per_merge) of memory.
     // 3. The maximum number of threads is limited by config::load_spill_merge_max_thread.
     int64_t load_spill_merge_memory_limit_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->limit() *
                                                   config::load_spill_merge_memory_limit_percent / (int64_t)100;
-    int max_merge_blocks_thread = load_spill_merge_memory_limit_bytes / config::load_spill_max_merge_bytes;
+    int max_merge_blocks_thread = load_spill_merge_memory_limit_bytes / config::load_spill_memory_usage_per_merge;
 #else
     int max_merge_blocks_thread = 1;
 #endif
@@ -49,12 +54,23 @@ Status LoadSpillBlockMergeExecutor::init() {
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_merge_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("tablet_internal_parallel_merge")
+                            .set_min_threads(1)
+                            .set_max_threads(calc_max_merge_blocks_thread())
+                            .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
+                            .build(&_tablet_internal_parallel_merge_pool));
+    StorageMetrics::instance()->register_thread_pool_metrics("tablet_internal_parallel_merge",
+                                                             _tablet_internal_parallel_merge_pool.get());
     return Status::OK();
 }
 
 Status LoadSpillBlockMergeExecutor::refresh_max_thread_num() {
     if (_merge_pool != nullptr) {
-        return _merge_pool->update_max_threads(calc_max_merge_blocks_thread());
+        RETURN_IF_ERROR(_merge_pool->update_max_threads(calc_max_merge_blocks_thread()));
+    }
+    if (_tablet_internal_parallel_merge_pool != nullptr) {
+        RETURN_IF_ERROR(_tablet_internal_parallel_merge_pool->update_max_threads(calc_max_merge_blocks_thread()));
     }
     return Status::OK();
 }
@@ -63,15 +79,24 @@ std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_token() {
     return _merge_pool->new_token(ThreadPool::ExecutionMode::SERIAL);
 }
 
-void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
+std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_tablet_internal_parallel_merge_token() {
+    return _tablet_internal_parallel_merge_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+}
+
+void LoadSpillBlockContainer::append_block(spill::BlockGroup* block_group, const spill::BlockPtr& block) {
+    // Move append outside the lock to reduce lock contention
+    block_group->append(block);
     std::lock_guard guard(_mutex);
-    _block_groups.back().append(block);
     _total_bytes += block->size();
 }
 
-void LoadSpillBlockContainer::create_block_group() {
+// Create a new block group tagged with the given slot_idx
+// @param slot_idx: slot index from flush token, used to track submission order
+// @return: pointer to the newly created block group
+spill::BlockGroup* LoadSpillBlockContainer::create_block_group(int64_t slot_idx) {
     std::lock_guard guard(_mutex);
-    _block_groups.emplace_back(spill::BlockGroup());
+    _block_groups.emplace_back(BlockGroupPtrWithSlot{std::make_shared<spill::BlockGroup>(), slot_idx});
+    return _block_groups.back().block_group.get();
 }
 
 bool LoadSpillBlockContainer::empty() {
@@ -80,12 +105,35 @@ bool LoadSpillBlockContainer::empty() {
 }
 
 spill::BlockPtr LoadSpillBlockContainer::get_block(size_t gid, size_t bid) {
-    return _block_groups[gid].blocks()[bid];
+    return _block_groups[gid].block_group->blocks()[bid];
 }
 
 LoadSpillBlockManager::~LoadSpillBlockManager() {
     // release blocks before block manager
     _block_container.reset();
+}
+
+Status LoadSpillBlockManager::clear_parent_path() {
+    // _remote_dir_manager is initialized in init(), skip cleanup if init() was not called or failed
+    Status status = Status::OK();
+    if (_remote_dir_manager != nullptr) {
+        spill::AcquireDirOptions acquire_dir_opts;
+        acquire_dir_opts.data_size = 1; // just need acquire a dir
+        auto dir_st = _remote_dir_manager->acquire_writable_dir(acquire_dir_opts);
+        if (!dir_st.ok()) {
+            LOG(WARNING) << "Failed to acquire dir for clearing load spill parent path, load_id=" << print_id(_load_id)
+                         << ", error=" << dir_st.status();
+            return dir_st.status();
+        }
+        auto dir = std::move(dir_st).value();
+        std::string parent_path = dir->dir() + "/" + print_id(_load_id);
+        status = dir->fs()->delete_dir(parent_path);
+        if (!status.ok() && !status.is_not_found()) {
+            LOG(WARNING) << "Failed to clear load spill parent path, load_id=" << print_id(_load_id)
+                         << ", error=" << status;
+        }
+    }
+    return status;
 }
 
 Status LoadSpillBlockManager::init() {
@@ -94,7 +142,7 @@ Status LoadSpillBlockManager::init() {
     // Remote FS can also use data cache to speed up.
 
     if (!_fs) {
-        ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_remote_spill_path));
+        ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_remote_spill_path));
     }
     if (_fs->type() != FileSystem::Type::STARLET) {
         // in starlet fs, there is opt create_missing_parent and it will create the parent dir if not exists.
@@ -126,6 +174,19 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.name = "load_spill";
     opts.block_size = block_size;
     opts.force_remote = force_remote;
+    // Parent path deletion is handled explicitly by the caller via clear_parent_path(),
+    // so skip it at the block layer to avoid races with files still in use.
+    opts.skip_parent_path_deletion = true;
+    // In flat layout, per-file deletion is delegated to the merge hot-delete path
+    // and vacuum_full (eliminating S3 DeleteObject on the write hot path).
+    opts.skip_file_deletion = _enable_flat_layout;
+    if (_enable_flat_layout) {
+        // Encode <txn_id_hex>_<load_id>_<frag_id> into the file name so vacuum can
+        // reclaim by parsing the leading hex segment alone. See class-level comment.
+        opts.flat_layout = true;
+        opts.flat_name_prefix =
+                fmt::format("{:016x}_{}_{}", _txn_id, print_id(_load_id), print_id(_fragment_instance_id));
+    }
     return _block_manager->acquire_block(opts);
 }
 

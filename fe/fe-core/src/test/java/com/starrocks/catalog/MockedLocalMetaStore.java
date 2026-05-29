@@ -24,6 +24,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -90,6 +91,15 @@ public class MockedLocalMetaStore extends LocalMetastore {
     }
 
     @Override
+    public void unprotectCreateDb(Database database) {
+        nameToDb.put(database.getFullName(), database);
+        idToDb.put(database.getId(), database);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        globalTransactionMgr.addDatabaseTransactionMgr(database.getId());
+    }
+
+    @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         Database db = getDb(stmt.getDbName());
         String tableName = stmt.getTableName();
@@ -104,7 +114,6 @@ public class MockedLocalMetaStore extends LocalMetastore {
         long partitionId = idGenerator.getNextId();
         SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, DEFAULT_REPLICATION_NUM);
-        partitionInfo.setIsInMemory(partitionId, false);
 
         OlapTable olapTable = new OlapTable(
                 tableId,
@@ -124,7 +133,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
                 (short) 0,
                 TStorageType.COLUMN,
                 KeysType.DUP_KEYS);
-        olapTable.setBaseIndexId(indexId);
+        olapTable.setBaseIndexMetaId(indexId);
         olapTable.setReplicationNum(DEFAULT_REPLICATION_NUM);
 
         Partition partition = createPartition(

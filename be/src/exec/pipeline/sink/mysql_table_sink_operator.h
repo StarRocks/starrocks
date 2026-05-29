@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -32,7 +32,7 @@ public:
     MysqlTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                            std::shared_ptr<MysqlTableSinkIOBuffer> mysql_table_sink_buffer)
             : Operator(factory, id, "mysql_table_sink", plan_node_id, false, driver_sequence),
-              _mysql_table_sink_buffer(std::move(std::move(mysql_table_sink_buffer))) {}
+              _mysql_table_sink_buffer(std::move(mysql_table_sink_buffer)) {}
 
     ~MysqlTableSinkOperator() override = default;
 

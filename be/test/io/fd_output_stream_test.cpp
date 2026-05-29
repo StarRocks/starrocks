@@ -17,8 +17,8 @@
 #include <fcntl.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "common/logging.h"
-#include "testutil/assert.h"
 
 namespace starrocks::io {
 

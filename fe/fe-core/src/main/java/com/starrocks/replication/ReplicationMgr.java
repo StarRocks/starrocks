@@ -14,13 +14,14 @@
 
 package com.starrocks.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -28,6 +29,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -41,7 +43,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class ReplicationMgr extends FrontendDaemon {
+public class ReplicationMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ReplicationMgr.class);
 
     @SerializedName(value = "runningJobs")
@@ -58,14 +60,26 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         runRunningJobs();
         clearExpiredJobs();
     }
 
+    // runningJobs / committedJobs / abortedJobs are persistent state (saved/loaded via image,
+    // updated on followers via editlog replay). They must NOT be cleared on demotion - the
+    // next leader resumes those jobs from the same maps. So no onStopped() override is needed.
+
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
-        ReplicationJob job = new ReplicationJob(request);
+        LOG.debug("Add replication job, database id: {}, table id: {}, job id: {}",
+                request.getDatabase_id(), request.getTable_id(), request.getJob_id());
+        ReplicationJob job = isLakeReplicationJob(request) ?
+                new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
+    }
+
+    private boolean isLakeReplicationJob(TTableReplicationRequest request) {
+        return request != null && request.src_cluster_run_mode != null
+                && request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA);
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {
@@ -132,6 +146,11 @@ public class ReplicationMgr extends FrontendDaemon {
         for (ReplicationJob job : toRemovedJobs) {
             runningJobs.remove(job.getTableId(), job);
         }
+    }
+
+    @VisibleForTesting
+    public void removeRunningJob(ReplicationJob job) {
+        runningJobs.remove(job.getTableId(), job);
     }
 
     public void finishRemoteSnapshotTask(RemoteSnapshotTask task, TFinishTaskRequest request) {
@@ -212,15 +231,16 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
-    private void clearExpiredJobs() {
+    protected void clearExpiredJobs() {
         for (Iterator<Map.Entry<Long, ReplicationJob>> it = committedJobs.entrySet().iterator(); it.hasNext();) {
             ReplicationJob job = it.next().getValue();
             if (!job.isExpired()) {
                 continue;
             }
 
-            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job);
-            it.remove();
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job, wal -> {
+                it.remove();
+            });
         }
 
         for (Iterator<Map.Entry<Long, ReplicationJob>> it = abortedJobs.entrySet().iterator(); it.hasNext();) {
@@ -229,8 +249,9 @@ public class ReplicationMgr extends FrontendDaemon {
                 continue;
             }
 
-            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job);
-            it.remove();
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job, wal -> {
+                it.remove();
+            });
         }
     }
 

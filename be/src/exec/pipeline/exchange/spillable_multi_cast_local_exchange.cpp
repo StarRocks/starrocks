@@ -16,11 +16,16 @@
 
 #include <memory>
 
+#include "base/container/raw_container.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/dir_manager.h"
@@ -29,11 +34,9 @@
 #include "exec/spill/options.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "serde/protobuf_serde.h"
-#include "util/defer_op.h"
-#include "util/raw_container.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -92,6 +95,10 @@ void SpillableMultiCastLocalExchanger::open_sink_operator() {
 
 void SpillableMultiCastLocalExchanger::close_sink_operator() {
     _queue->close_producer();
+}
+
+bool SpillableMultiCastLocalExchanger::is_all_sources_finished() const {
+    return _queue->is_all_source_finished();
 }
 
 void SpillableMultiCastLocalExchanger::enter_release_memory_mode() {

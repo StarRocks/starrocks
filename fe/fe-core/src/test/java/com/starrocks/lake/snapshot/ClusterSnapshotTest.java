@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
@@ -36,23 +37,33 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
-import com.starrocks.persist.EditLog;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.ClusterSnapshotAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
-import mockit.Delegate;
-import mockit.Expectations;
+import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TBrokerFD;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -67,9 +78,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class ClusterSnapshotTest {
-    @Mocked
-    private EditLog editLog;
-
     private StarOSAgent starOSAgent = new StarOSAgent();
 
     private String storageVolumeName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
@@ -91,23 +99,7 @@ public class ClusterSnapshotTest {
         } catch (Exception ignore) {
         }
 
-        new Expectations() {
-            {
-                editLog.logClusterSnapshotLog((ClusterSnapshotLog) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logClusterSnapshotLog(ClusterSnapshotLog log) {
-                    }
-                };
-            }
-        };
-
         new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-
             @Mock
             public ClusterSnapshotMgr getClusterSnapshotMgr() {
                 return clusterSnapshotMgr;
@@ -151,6 +143,21 @@ public class ClusterSnapshotTest {
             public void deletePath(String path, Map<String, String> loadProperties) {
                 return;
             } // IOException
+
+            @Mock
+            public TBrokerFD openWriter(String path, Map<String, String> loadProperties) {
+                return new TBrokerFD();
+            }
+
+            @Mock
+            public void pwrite(TBrokerFD fd, long offset, byte[] data) {
+                return;
+            }
+
+            @Mock
+            public void closeWriter(TBrokerFD fd) {
+                return;
+            }
         };
 
         setAutomatedSnapshotOff(false);
@@ -159,7 +166,7 @@ public class ClusterSnapshotTest {
     private void setAutomatedSnapshotOn(boolean testReplay) {
         if (!testReplay) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOn(
-                    new AdminSetAutomatedSnapshotOnStmt(storageVolumeName));
+                    new AdminSetAutomatedSnapshotOnStmt(storageVolumeName, null));
         } else {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOn(storageVolumeName);
         }
@@ -197,6 +204,7 @@ public class ClusterSnapshotTest {
         String turnOnSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON";
         // no sv
         analyzeFail(turnOnSql + " STORAGE VOLUME testSv");
+        analyzeFail(turnOnSql + " INTERVAL 0 SECOND");
 
         analyzeSuccess(turnOnSql);
         setAutomatedSnapshotOn(false);
@@ -209,6 +217,17 @@ public class ClusterSnapshotTest {
         analyzeFail(turnOFFSql);
         setAutomatedSnapshotOn(false);
         analyzeSuccess(turnOFFSql);
+        setAutomatedSnapshotOff(false);
+
+        String turnOnWithIntervalSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON INTERVAL 10 SECOND";
+        analyzeSuccess(turnOnWithIntervalSql);
+        setAutomatedSnapshotOn(false);
+        setAutomatedSnapshotOff(false);
+
+        String alterIntervalSql = "ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 5 MINUTE";
+        analyzeFail(alterIntervalSql);
+        setAutomatedSnapshotOn(false);
+        analyzeSuccess(alterIntervalSql);
         setAutomatedSnapshotOff(false);
 
         // 2. test getInfo and network utils
@@ -231,10 +250,230 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testUploadWritesMetaFile() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        List<String> writeFilePaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+                return;
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writeFilePaths.add(destFilePath);
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        Assertions.assertEquals(1, writeFilePaths.size());
+        Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testClearDeletesMetaFileFirst() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.FINISHED);
+
+        List<String> deletedPaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> loadProperties) {
+                deletedPaths.add(path);
+            }
+        };
+
+        ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
+
+        Assertions.assertEquals(2, deletedPaths.size());
+        // First deletion should be the meta file
+        Assertions.assertTrue(deletedPaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        // Second deletion should be the snapshot directory
+        Assertions.assertFalse(deletedPaths.get(1).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testCheckSnapshotMetaFileExist() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) {
+                return remotePath.endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            }
+        };
+
+        Assertions.assertTrue(ClusterSnapshotUtils.checkSnapshotMetaFileExist(
+                "s3://bucket/path/snapshot1", new HashMap<>()));
+        Assertions.assertEquals("s3://bucket/path/snapshot1/" + ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME,
+                ClusterSnapshotUtils.getSnapshotMetaFilePath("s3://bucket/path/snapshot1"));
+    }
+
+    @Test
+    public void testDeleteSnapshotMetaFileException() {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                throw new StarRocksException("delete failed");
+            }
+        };
+
+        // Should not throw, just log warning
+        ExceptionChecker.expectThrowsNoException(
+                () -> ClusterSnapshotUtils.deleteSnapshotMetaFile("s3://bucket/path/snapshot1", new HashMap<>()));
+    }
+
+    @Test
+    public void testReadLocalSnapshotMetaFile() throws Exception {
+        Path tempDir = Files.createTempDirectory("snapshot_read_test");
+        try {
+            // Case 1: file does not exist — returns null
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 2: valid meta file — returns ClusterSnapshot
+            ClusterSnapshot snapshot = new ClusterSnapshot(1L, "test_snapshot",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8));
+
+            ClusterSnapshot result = ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString());
+            Assertions.assertNotNull(result);
+            Assertions.assertEquals("test_snapshot", result.getSnapshotName());
+            Assertions.assertEquals(100L, result.getFeJournalId());
+            Assertions.assertEquals(200L, result.getStarMgrJournalId());
+
+            // Case 3: corrupted file — returns null
+            Files.write(metaFile.toPath(), "invalid json".getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 4: valid JSON but missing snapshotName — returns null
+            ClusterSnapshot incomplete = new ClusterSnapshot(1L, null,
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(incomplete).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 5: valid JSON but zero journalId — returns null
+            ClusterSnapshot zeroJournal = new ClusterSnapshot(1L, "test",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 0L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(zeroJournal).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+        } finally {
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            metaFile.delete();
+            tempDir.toFile().delete();
+        }
+    }
+
+    @Test
+    public void testDeleteLocalSnapshotMetaFile() throws Exception {
+        // Create a temp directory and a snapshot_meta.json file
+        Path tempDir = Files.createTempDirectory("snapshot_test");
+        File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+        Assertions.assertTrue(metaFile.createNewFile());
+        Assertions.assertTrue(metaFile.exists());
+
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+        Assertions.assertFalse(metaFile.exists());
+
+        // Call again on non-existing file — should be a no-op
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+
+        tempDir.toFile().delete();
+    }
+
+    @Test
+    public void testIntervalLiteralConversionInAnalyzer() {
+        setAutomatedSnapshotOff(false);
+        AdminSetAutomatedSnapshotOnStmt onStmt = (AdminSetAutomatedSnapshotOnStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON INTERVAL 2 MINUTE");
+        Assertions.assertEquals(120, onStmt.getIntervalSeconds());
+
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt alterStmt = (AdminAlterAutomatedSnapshotIntervalStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 3 HOUR");
+        Assertions.assertEquals(10800, alterStmt.getIntervalSeconds());
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAutomatedSnapshotIntervalScheduling() {
+        setAutomatedSnapshotOn(false);
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 30;
+        try {
+            Assertions.assertEquals(30,
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getEffectiveAutomatedSnapshotIntervalSeconds());
+
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotInterval(120);
+            Assertions.assertEquals(120,
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getEffectiveAutomatedSnapshotIntervalSeconds());
+
+            long now = System.currentTimeMillis();
+            Assertions.assertFalse(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .canScheduleNextJob(now));
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .canScheduleNextJob(now - 120_000L - 1));
+        } finally {
+            Config.automated_cluster_snapshot_interval_seconds = oldValue;
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
+    public void testAlterIntervalThroughExecutor() throws Exception {
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt stmt = (AdminAlterAutomatedSnapshotIntervalStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 2 SECOND");
+        DDLStmtExecutor.execute(stmt, AnalyzeTestUtil.getConnectContext());
+        Assertions.assertEquals(2,
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotIntervalSeconds());
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAlterIntervalAnalyzerValidation() {
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt nullIntervalStmt =
+                new AdminAlterAutomatedSnapshotIntervalStmt(null);
+        Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(nullIntervalStmt, AnalyzeTestUtil.getConnectContext()));
+
+        IntervalLiteral invalidLiteral = new IntervalLiteral(new StringLiteral("x"), new UnitIdentifier("SECOND"));
+        AdminAlterAutomatedSnapshotIntervalStmt invalidIntervalStmt =
+                new AdminAlterAutomatedSnapshotIntervalStmt(invalidLiteral);
+        Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(invalidIntervalStmt, AnalyzeTestUtil.getConnectContext()));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAlterIntervalAnalyzerRunModeValidation() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return false;
+            }
+        };
+
+        AnalyzeTestUtil.analyzeFail("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 1 SECOND",
+                "Automated snapshot only support share data mode");
+    }
+
+    @Test
     public void testReplayClusterSnapshotLog() {
         // create atuomated snapshot request log
         ClusterSnapshotLog logCreate = new ClusterSnapshotLog();
-        logCreate.setAutomatedSnapshotOn(storageVolumeName);
+        logCreate.setAutomatedSnapshotOn(storageVolumeName, 0);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
@@ -243,6 +482,12 @@ public class ClusterSnapshotTest {
         logDrop.setAutomatedSnapshotOff();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
         Assertions.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
+
+        ClusterSnapshotLog logInterval = new ClusterSnapshotLog();
+        logInterval.setAutomatedSnapshotInterval(120);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logInterval);
+        Assertions.assertEquals(120,
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotIntervalSeconds());
 
         // create snapshot job log
         ClusterSnapshotLog logSnapshotJob = new ClusterSnapshotLog();

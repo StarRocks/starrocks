@@ -74,9 +74,13 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
+        if (!predicate.getChild(1).isVariable()) {
+            return predicate;
+        }
+
         ScalarOperator result = predicate.commutative();
         Preconditions.checkState(!(result.getChild(0).isConstant() && result.getChild(1).isVariable()),
-                "Normalized predicate error: " + result);
+                "Normalized predicate error: %s", result);
         return result;
     }
 

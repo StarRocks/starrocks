@@ -1,0 +1,60 @@
+-- name: test_initcap
+-- description: Test for initcap function
+
+-- Setup Database
+CREATE DATABASE IF NOT EXISTS test_initcap_db;
+USE test_initcap_db;
+
+-- Case 1: Standard Sentences
+SELECT initcap('hello world');
+SELECT initcap('HELLO WORLD');
+SELECT initcap('hElLo wOrLd');
+
+-- Case 2: Delimiters (Tabs, Spaces, Punctuation)
+SELECT initcap('starrocks database');
+SELECT initcap('   hello   world   ');
+SELECT initcap('one,two.three;four');
+SELECT initcap('alpha-beta_gamma');
+
+-- Case 3: Numbers and Alphanumeric Combinations
+SELECT initcap('1st place');
+SELECT initcap('word1 word2');
+SELECT initcap('123abc456');
+
+-- Case 4: Special Logic Check
+SELECT initcap('macDonald');
+
+-- Case 5: Single Characters and Symbols
+SELECT initcap('a');
+SELECT initcap('A');
+SELECT initcap('z');
+SELECT initcap('.');
+SELECT initcap('?');
+
+-- Case 6: Empty and NULL
+SELECT initcap('');
+SELECT initcap(NULL);
+
+-- Case 7: Table Test (Vectorized Execution Check)
+drop table if exists t_initcap_test;
+create table t_initcap_test (
+    id int,
+    str varchar(100)
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+insert into t_initcap_test values
+(1, 'hello world'),
+(2, 'HELLO WORLD'),
+(3, '1st place'),
+(4, NULL),
+(5, ''),
+(6, '   spaces   '),
+(7, 'complex-string_here.123');
+
+select id, str, initcap(str) from t_initcap_test order by id;
+
+-- Cleanup
+DROP DATABASE test_initcap_db;

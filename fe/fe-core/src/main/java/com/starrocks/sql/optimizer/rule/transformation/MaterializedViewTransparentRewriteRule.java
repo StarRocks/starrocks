@@ -24,10 +24,12 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor.MvCopyFailurePolicy;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -173,7 +175,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
         // mv's to refresh partition info
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
-        MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
+        MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
         if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
             logMVRewrite(context, this, "Get mv to refresh partition info failed, and redirect to mv's defined query");
             return getOptExpressionByDefault(context, mv, mvPlanContext, olapScanOperator, queryTables);
@@ -181,7 +185,13 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
+                mv, mvPlanContext, mvUpdateInfo, queryTables, 0, MvCopyFailurePolicy.FALLBACK_TO_LIVE_MV);
+        if (mvContext == null) {
+            logMVRewrite(context, this,
+                    "Failed to build transparent rewrite context for {}, redirect to default transparent behavior",
+                    mv.getName());
+            return getOptExpressionByDefault(context, mv, mvPlanContext, olapScanOperator, queryTables);
+        }
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         // use ordered output columns to ensure the order of output columns if the mv contains order-by clause.
@@ -228,7 +238,12 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         mvUpdateInfo.addMVToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
+                mv, mvPlanContext, mvUpdateInfo, queryTables, 0, MvCopyFailurePolicy.FALLBACK_TO_LIVE_MV);
+        if (mvContext == null) {
+            logMVRewrite(context, this,
+                    "Failed to build defined-query redirect context for {}", mv.getName());
+            throw new RuntimeException("Failed to build defined-query redirect context for mv: " + mv.getName());
+        }
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         List<Column> mvColumns = mv.getOrderedOutputColumns();

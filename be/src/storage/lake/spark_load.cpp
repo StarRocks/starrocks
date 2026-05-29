@@ -14,6 +14,12 @@
 
 #include "storage/lake/spark_load.h"
 
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "exec/file_scanner/file_scanner.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -56,8 +62,8 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
 
     auto tablet_schema = cur_tablet.get_schema();
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    ChunkPtr chunk = ChunkFactory::new_chunk(schema, 0);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
     // 2. Init PushBrokerReader to read broker file if exist,
     //    in case of empty push this will be skipped.
@@ -112,14 +118,15 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
     txn_log->set_tablet_id(cur_tablet.id());
     txn_log->set_txn_id(_request.transaction_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        if (is_segment(f.path)) {
-            op_write->mutable_rowset()->add_segments(std::move(f.path));
-            op_write->mutable_rowset()->add_segment_size(f.size.value());
-            op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-        } else {
-            return Status::InternalError(fmt::format("unknown file {}", f.path));
-        }
+    for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
+        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_size(f.size.value());
+        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
+        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
+        f.write_sort_key_fields_to(segment_meta);
+        segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());

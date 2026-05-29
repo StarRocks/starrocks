@@ -14,22 +14,39 @@
 
 #include "column/map_column.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <numeric>
 #include <set>
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
-#include "column/datum.h"
 #include "column/fixed_length_column.h"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "util/mysql_row_buffer.h"
+#include "types/datum.h"
 
 namespace starrocks {
+static std::vector<uint32_t> _build_sorted_key_indices(const Column* keys, size_t offset, size_t map_size) {
+    std::vector<std::pair<DatumKey, uint32_t>> keyed_indices;
+    keyed_indices.reserve(map_size);
+    for (uint32_t i = 0; i < map_size; ++i) {
+        keyed_indices.emplace_back(keys->get(offset + i).convert2DatumKey(), i);
+    }
+    std::sort(keyed_indices.begin(), keyed_indices.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+
+    std::vector<uint32_t> sorted_indices;
+    sorted_indices.reserve(map_size);
+    for (const auto& kv : keyed_indices) {
+        sorted_indices.emplace_back(kv.second);
+    }
+    return sorted_indices;
+}
+
 void MapColumn::check_or_die() const {
     const auto offsets = _offsets->immutable_data();
     CHECK_EQ(offsets.back(), _keys->size());
@@ -60,16 +77,6 @@ size_t MapColumn::capacity() const {
     return _offsets->capacity() - 1;
 }
 
-const uint8_t* MapColumn::raw_data() const {
-    DCHECK(false) << "Don't support map column raw_data";
-    return nullptr;
-}
-
-uint8_t* MapColumn::mutable_raw_data() {
-    DCHECK(false) << "Don't support map column mutable_raw_data";
-    return nullptr;
-}
-
 size_t MapColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     const auto offsets = _offsets->immutable_data();
@@ -95,10 +102,27 @@ void MapColumn::resize(size_t n) {
 }
 
 void MapColumn::assign(size_t n, size_t idx) {
-    DCHECK_LE(idx, this->size()) << "Range error when assign MapColumn.";
+    DCHECK_LT(idx, this->size()) << "Range error when assign MapColumn.";
     auto desc = this->clone_empty();
-    auto datum = get(idx); // just reference
-    desc->append_value_multiple_times(&datum, n);
+
+    const auto& offsets_data = _offsets->immutable_data();
+    const uint32_t offset = offsets_data[idx];
+    const uint32_t map_size = offsets_data[idx + 1] - offset;
+    const auto sorted_indices = _build_sorted_key_indices(_keys.get(), offset, map_size);
+
+    auto* desc_map = down_cast<MapColumn*>(desc.get());
+    auto* desc_keys = desc_map->_keys.get();
+    auto* desc_values = desc_map->_values.get();
+    auto* desc_offsets = desc_map->_offsets.get();
+    for (size_t c = 0; c < n; ++c) {
+        for (uint32_t sorted_idx : sorted_indices) {
+            const uint32_t element_idx = offset + sorted_idx;
+            desc_keys->append(*_keys, element_idx, 1);
+            desc_values->append(*_values, element_idx, 1);
+        }
+        desc_offsets->append(desc_offsets->get_data().back() + map_size);
+    }
+
     swap_column(*desc);
     desc->reset_column();
 }
@@ -134,7 +158,7 @@ void MapColumn::append(const Column& src, size_t offset, size_t count) {
 
 void MapColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_map_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     for (uint32_t i = 0; i < size; i++) {
@@ -254,20 +278,14 @@ uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) const {
     strings::memcpy_inlined(pos, &map_size, sizeof(map_size));
     size_t ser_size = sizeof(map_size);
 
-    // unstable sort keys, map keys must be unique
-    SmallPermutation perm(map_size);
-    {
-        for (uint32_t i = 0; i < map_size; i++) {
-            perm[i].index_in_chunk = offset + i;
-        }
-        Tie tie(map_size, 1);
-        std::pair<int, int> range{0, map_size};
-        auto st = sort_and_tie_column(false, _keys, SortDesc(true, true), perm, tie, range, false);
-        DCHECK(st.ok());
-    }
+    std::vector<uint32_t> perm(map_size);
+    std::iota(perm.begin(), perm.end(), 0);
+    std::stable_sort(perm.begin(), perm.end(), [this, offset](uint32_t lhs, uint32_t rhs) {
+        return _keys->compare_at(offset + lhs, offset + rhs, *_keys, -1) < 0;
+    });
 
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t index = perm[i].index_in_chunk;
+        uint32_t index = offset + perm[i];
         ser_size += _keys->serialize(index, pos + ser_size);
         ser_size += _values->serialize(index, pos + ser_size);
     }
@@ -510,62 +528,6 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
     return !safe_eq && has_null_eq ? EQUALS_NULL : EQUALS_TRUE;
 }
 
-void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets_data = _offsets->immutable_data();
-    uint32_t offset = offsets_data[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t map_size = offsets_data[idx + 1] - offset;
-
-    *hash = HashUtil::fnv_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
-    uint32_t base_hash = *hash;
-    for (size_t i = 0; i < map_size; ++i) {
-        uint32_t pair_hash = base_hash;
-        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _keys->fnv_hash_at(&pair_hash, ele_offset);
-        _values->fnv_hash_at(&pair_hash, ele_offset);
-
-        // for get same hash on un-order map, we need to satisfies the commutative law
-        *hash += pair_hash;
-    }
-}
-
-void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets_data = _offsets->immutable_data();
-    uint32_t offset = offsets_data[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t map_size = offsets_data[idx + 1] - offset;
-
-    *hash = HashUtil::zlib_crc_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
-    uint32_t base_hash = *hash;
-    for (size_t i = 0; i < map_size; ++i) {
-        uint32_t pair_hash = base_hash;
-        uint32_t ele_offset = offset + i;
-        _keys->crc32_hash_at(&pair_hash, ele_offset);
-        _values->crc32_hash_at(&pair_hash, ele_offset);
-
-        // for get same hash on un-order map, we need to satisfies the commutative law
-        *hash += pair_hash;
-    }
-}
-
-// TODO: fnv_hash and crc32_hash in map column may has performance problem
-// We need to make it possible in the future to provide vistor interface to iterator data
-// as much as possible
-
-void MapColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        fnv_hash_at(hash + i, i);
-    }
-}
-
-void MapColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        crc32_hash_at(hash + i, i);
-    }
-}
-
 int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of MapColumn
     // XOR the offsets column and elements column
@@ -689,32 +651,50 @@ std::string MapColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> MapColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> MapColumn::upgrade_if_overflow() {
     if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of MapColumn exceed the limit");
     }
 
-    auto ret = upgrade_helper_func(&_keys);
+    auto ret = upgrade_helper_func(_keys->as_mutable_raw_ptr());
     if (!ret.ok()) {
         return ret;
     }
+    if (ret.value() != nullptr) {
+        _keys = std::move(ret.value());
+    }
 
-    return upgrade_helper_func(&_values);
+    ret = upgrade_helper_func(_values->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _values = std::move(ret.value());
+    }
+
+    return ret;
 }
 
-StatusOr<ColumnPtr> MapColumn::downgrade() {
-    auto ret = downgrade_helper_func(&_keys);
+StatusOr<MutableColumnPtr> MapColumn::downgrade() {
+    auto ret = downgrade_helper_func(_keys->as_mutable_raw_ptr());
     if (!ret.ok()) {
         return ret;
     }
+    if (ret.value() != nullptr) {
+        _keys = std::move(ret.value());
+    }
 
-    return downgrade_helper_func(&_values);
+    ret = downgrade_helper_func(_values->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _values = std::move(ret.value());
+    }
+
+    return ret;
 }
 
 Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 2) << "Map schema does not match data's";
-    _keys = ColumnHelper::unfold_const_column(type.children[0], _keys->size(), _keys);
-    _values = ColumnHelper::unfold_const_column(type.children[1], _values->size(), _values);
+    size_t keys_size = _keys->size();
+    size_t values_size = _values->size();
+    _keys = ColumnHelper::unfold_const_column(type.children[0], keys_size, _keys);
+    _values = ColumnHelper::unfold_const_column(type.children[1], values_size, _values);
     return Status::OK();
 }
 

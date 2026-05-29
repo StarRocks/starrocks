@@ -20,6 +20,8 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 public class AuditEventTest {
     @Test
     public void testAuditEvent() {
@@ -34,6 +36,7 @@ public class AuditEventTest {
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
                 .setQueryId("queryId")
+                .setWriteClientTimeMs(100)
                 .setStmtId(123)
                 .setStmt("stmt")
                 .setDigest("digest")
@@ -42,7 +45,9 @@ public class AuditEventTest {
                 .setWarehouse("wh")
                 .setSessionId("sessionId")
                 .setCustomQueryId("customQueryId")
+                .setCustomSessionName("customSessionName")
                 .setCNGroup("test_cngroup")
+                .setQueriedRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
                 .addReadLocalCnt(100)
                 .addReadRemoteCnt(100);
 
@@ -72,8 +77,12 @@ public class AuditEventTest {
         Assertions.assertEquals("wh", event.warehouse);
         Assertions.assertEquals("sessionId", event.sessionId);
         Assertions.assertEquals("customQueryId", event.customQueryId);
+        Assertions.assertEquals("customSessionName", event.customSessionName);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
+        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"),
+                event.queriedRelations);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
+        Assertions.assertEquals(100, event.writeClientTimeMs);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());
     }
 }

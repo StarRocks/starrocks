@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Refreshes all active connections to apply global variables that have been changed by `SET GLOBAL`."
 ---
 
 # REFRESH CONNECTIONS

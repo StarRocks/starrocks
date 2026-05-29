@@ -26,7 +26,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -152,7 +152,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
         Assertions.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
@@ -232,7 +232,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
         Assertions.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
@@ -501,7 +501,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                                 // the priority for next refresh batch is 70 which is specified in executeOption
                                 Assertions.assertEquals(70, status.getPriority());
 
-                                MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                                MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 Assertions.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
@@ -548,7 +548,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -693,7 +693,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
         Assertions.assertTrue(mvTaskRunContext.getExecPlan() != null);
         ExecPlan execPlan = mvTaskRunContext.getExecPlan();

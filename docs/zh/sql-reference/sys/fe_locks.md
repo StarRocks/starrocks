@@ -42,7 +42,7 @@ displayed_sidebar: docs
 
 ```sql
 SELECT lock_object, lock_mode, hold_time_ms, thread_info
-FROM information_schema.fe_locks 
+FROM sys.fe_locks 
 WHERE hold_time_ms > 10000  -- 持有超过10秒的锁
 ORDER BY hold_time_ms DESC;
 ```
@@ -51,7 +51,7 @@ ORDER BY hold_time_ms DESC;
 
 ```sql
 SELECT lock_object, COUNT(*) as lock_count
-FROM information_schema.fe_locks 
+FROM sys.fe_locks 
 WHERE granted = true
 GROUP BY lock_object
 HAVING COUNT(*) > 1;
@@ -61,7 +61,7 @@ HAVING COUNT(*) > 1;
 
 ```sql
 SELECT lock_object, waiter_list
-FROM information_schema.fe_locks 
+FROM sys.fe_locks 
 WHERE waiter_list != '';
 ```
 

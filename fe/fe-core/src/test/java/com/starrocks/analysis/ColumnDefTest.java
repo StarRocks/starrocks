@@ -347,7 +347,7 @@ public class ColumnDefTest {
     @Test
     public void testInvalidVarcharInsideArray() {
         assertThrows(SemanticException.class, () -> {
-            Type tooLongVarchar = TypeFactory.createVarchar(TypeFactory.getOlapMaxVarcharLength() + 1);
+            Type tooLongVarchar = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength() + 1);
             ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, null, true,
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);

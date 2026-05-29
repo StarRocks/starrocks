@@ -17,19 +17,20 @@
 #include <bthread/mutex.h>
 
 #include <atomic>
+#include <functional>
 #include <list>
 #include <memory>
 #include <queue>
 #include <unordered_set>
 
+#include "base/brpc/disposable_closure.h"
+#include "base/phmap/phmap.h"
+#include "base/utility/defer_op.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/disposable_closure.h"
-#include "util/internal_service_recoverable_stub.h"
-#include "util/phmap/phmap.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::pipeline {
 
@@ -97,16 +98,13 @@ public:
 
     void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
     void notify_observers() { _observable.notify_sink_observers(); }
-    auto defer_notify() {
-        return DeferOp([this]() {
-            _observable.notify_sink_observers();
-            if (bthread_self()) {
-                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
-            }
-        });
-    }
+    DeferOp<std::function<void()>> defer_notify();
 
     int64_t get_sent_bytes() const { return _bytes_sent; }
+
+    void update_memory_limit(size_t mem_limit);
+
+    std::string to_string() const;
 
 private:
     using Mutex = bthread::Mutex;
@@ -178,8 +176,9 @@ private:
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
 
     std::atomic<int32_t> _total_in_flight_rpc = 0;
-    std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
+
+    size_t _memory_limit = 0;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.

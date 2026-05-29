@@ -15,18 +15,24 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -147,6 +153,35 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         Assertions.assertEquals(4, incrementalPartitions.size());
     }
 
+    @Test
+    public void testRefreshExternalTablePreciseFallsBackToInvalidateJdbcTableCache() throws Exception {
+        String mvName = "jdbc_parttbl_mv6";
+        boolean originalConfig = Config.enable_materialized_view_external_table_precise_refresh;
+        List<List<String>> calls = Lists.newArrayList();
+        List<Boolean> onlyCachedPartitions = Lists.newArrayList();
+        Config.enable_materialized_view_external_table_precise_refresh = true;
+        try {
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public void refreshTable(String catalogName, String srDbName, Table table,
+                                         List<String> partitionNames, boolean onlyCached) {
+                    if (table.isJDBCTable()) {
+                        calls.add(Lists.newArrayList(partitionNames));
+                        onlyCachedPartitions.add(onlyCached);
+                    }
+                }
+            };
+
+            starRocksAssert.refreshMvPartition("refresh materialized view " + mvName + " partition " +
+                    "start('20230801') end('20230803')");
+            Assertions.assertFalse(calls.isEmpty());
+            Assertions.assertTrue(calls.stream().allMatch(List::isEmpty));
+            Assertions.assertTrue(onlyCachedPartitions.stream().allMatch(value -> !value));
+        } finally {
+            Config.enable_materialized_view_external_table_precise_refresh = originalConfig;
+        }
+    }
+
     @NotNull
     private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -239,7 +274,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
                             .collect(Collectors.toList());
             Assertions.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             // mv partition p202308_202309 is force refreshed and visible version is increased
-            Assertions.assertEquals(partitionVersionMap.get("p202308_202309"),
+            Assertions.assertTrue(partitionVersionMap.get("p202308_202309") <
                     materializedView.getPartition("p202308_202309")
                             .getDefaultPhysicalPartition().getVisibleVersion());
         }
@@ -333,7 +368,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
 
         // get base table partitions
         List<String> baseParNames =
-                mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+                mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(4, baseParNames.size());
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");

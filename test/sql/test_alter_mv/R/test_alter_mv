@@ -8,6 +8,10 @@ INSERT INTO t0 VALUES(1,1),(2,2),(1,3),(2,4);
 CREATE MATERIALIZED VIEW mv1 REFRESH IMMEDIATE MANUAL AS SELECT c0 AS k, count(c1) as cnt FROM t0 GROUP BY c0;
 -- result:
 -- !result
+function: wait_async_materialized_view_finish("${db[0]}", "mv1")
+-- result:
+None
+-- !result
 CREATE INDEX index_cnt ON mv1(cnt) USING BITMAP COMMENT 'index1';
 -- result:
 -- !result
@@ -112,8 +116,5 @@ SELECT * FROM test_mv1 ORDER BY k1;
 2020-10-24	2020-10-25 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
 -- !result
 DROP TABLE t1;
--- result:
--- !result
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="true");
 -- result:
 -- !result

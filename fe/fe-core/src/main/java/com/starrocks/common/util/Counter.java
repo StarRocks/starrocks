@@ -115,6 +115,29 @@ public class Counter {
         return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
     }
 
+    /**
+     * Returns true if this counter should be displayed in the profile output.
+     * The display behavior is controlled by the display_threshold in strategy:
+     * - threshold < 0: always display (force show even if zero)
+     * - threshold == 0: always display (default, for compatibility)
+     * - threshold > 0: display only if value > threshold
+     */
+    public boolean shouldDisplay() {
+        // Handle null strategy - default to always display for compatibility
+        if (strategy == null) {
+            return true;
+        }
+        long threshold = strategy.display_threshold;
+        // threshold < 0: always display (force show even if zero)
+        // threshold == 0: always display (default, for compatibility)
+        // threshold > 0: display only if value > threshold
+        if (threshold <= 0) {
+            return true;
+        } else {
+            return value > threshold;
+        }
+    }
+
     public void setStrategy(TCounterStrategy strategy) {
         this.strategy = strategy;
     }

@@ -21,8 +21,9 @@
 namespace starrocks {
 class Utils {
 public:
-    static std::string format_name(const std::string& col_name, bool case_sensitive) {
-        return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+    static std::string format_name(std::string_view col_name, bool case_sensitive) {
+        std::string s(col_name);
+        return case_sensitive ? s : boost::algorithm::to_lower_copy(s);
     }
 };
 

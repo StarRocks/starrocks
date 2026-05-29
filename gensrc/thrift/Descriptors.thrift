@@ -38,14 +38,30 @@ namespace java com.starrocks.thrift
 include "Types.thrift"
 include "Exprs.thrift"
 
+enum TRowPositionType {
+    ICEBERG_V3_ROW_POSITION,
+    OLAP_ROW_POSITION,
+    LAKE_ROW_POSITION,
+}
+
+// used to describe row position for different tables
+struct TRowPositionDescriptor {
+    1: optional TRowPositionType row_position_type;
+    // which node used to do fetch operation
+    2: optional Types.TSlotId row_source_slot;
+    3: optional list<Types.TSlotId> fetch_ref_slots;
+    4: optional list<Types.TSlotId> lookup_ref_slots;
+    5: optional i32 scan_node_id;
+}
+
 struct TSlotDescriptor {
   1: optional Types.TSlotId id
   2: optional Types.TTupleId parent
   3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
-  6: optional i32 nullIndicatorByte // Deprecated
-  7: optional i32 nullIndicatorBit // Deprecated
+  6: optional i32 nullIndicatorByte = 0 // Deprecated
+  7: optional i32 nullIndicatorBit = -1 // Deprecated
   8: optional string colName;
   9: optional i32 slotIdx // Deprecated
   10: optional bool isMaterialized // Deprecated
@@ -56,6 +72,7 @@ struct TSlotDescriptor {
   // for example, the physical name of a column in a parquet file.
   // used in delta lake column mapping name mode
   14: optional string col_physical_name
+  15: optional bool is_virtual_column = false
 }
 
 struct TTupleDescriptor {
@@ -194,6 +211,8 @@ enum TSchemaTableType {
     SCH_RECYCLEBIN_CATALOGS,
 
     SCH_FE_THREADS,
+
+    SCH_BE_TABLET_WRITE_LOG
 }
 
 enum THdfsCompression {
@@ -211,6 +230,14 @@ enum TIndexType {
   GIN,
   NGRAMBF,
   VECTOR,
+}
+
+// Not define UNKNOWN type for better compatibility with
+// DistributionInfo.DistributionInfoType definition
+enum TOlapTableDistributionType {
+    HASH,
+    RANDOM,
+    RANGE,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -244,7 +271,18 @@ struct TColumn {
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    // Default value expression for complex types (array/map/struct).
+    // If set, BE will evaluate this expression and convert to JSON string for storage.
+    // For simple types, use |default_value| (field 6) instead.
+    22: optional Exprs.TExpr default_expr
+}
+
+// Key information for locating a specific table schema version.
+struct TTableSchemaKey {
+  1: optional i64 db_id
+  2: optional i64 table_id
+  3: optional i64 schema_id
 }
 
 struct TOlapTableTablet {
@@ -253,6 +291,8 @@ struct TOlapTableTablet {
 }
 
 struct TOlapTableIndexTablets {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `index id` is set to the `index meta id`.
     1: required i64 index_id
     2: required list<i64> tablet_ids
     3: optional list<TOlapTableTablet> tablets
@@ -297,6 +337,8 @@ struct TOlapTablePartitionParam {
     8: optional list<Exprs.TExpr> partition_exprs
 
     9: optional bool enable_automatic_partition
+
+    10: optional TOlapTableDistributionType distribution_type
 }
 
 struct TOlapTableColumnParam {
@@ -306,7 +348,9 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id // index id
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
+    1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
@@ -450,6 +494,9 @@ struct THdfsTable {
 
     // timezone
     11: optional string time_zone
+
+    // resolved Avro reader schema json from avro.schema.literal/url
+    12: optional string avro_schema_json
 }
 
 struct TFileTable {
@@ -498,6 +545,16 @@ struct TTableFunctionTable {
 
     10: optional bool parquet_use_legacy_encoding
     11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
+
+    // enclose character for CSV unload. When set, all non-NULL field values are
+    // wrapped with this character; occurrences of the enclose character (and the
+    // escape character itself) within field content are escaped using csv_escape.
+    13: optional i8 csv_enclose
+
+    // escape character for CSV unload. Used together with csv_enclose.
+    14: optional i8 csv_escape
 }
 
 struct TIcebergSchemaField {

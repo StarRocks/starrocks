@@ -48,7 +48,7 @@ public:
 
     Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
 
-    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) {
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
     }
 
@@ -74,6 +74,8 @@ public:
     Status finish(SegmentPB* segment = nullptr) override;
 
     void close() override;
+
+    StatusOr<std::unique_ptr<TabletWriter>> clone() const override;
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 

@@ -17,33 +17,46 @@
 #include <memory>
 #include <vector>
 
-#include "agent/master_info.h"
+#include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_rpc_client_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
+#include "common/thread/thread.h"
+#include "common/util/thrift_client_cache.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
-#include "util/defer_op.h"
-#include "util/thread.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
+namespace {
+
+const RuntimeServices* runtime_services(const QueryExecutionServices* query_execution_services) {
+    return query_execution_services != nullptr ? query_execution_services->runtime : nullptr;
+}
+
+} // namespace
+
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
-          _total_fragments(0),
+
           _num_fragments(0),
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
-    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
     _lifetime_sw.start();
 }
 
@@ -75,11 +88,11 @@ QueryContext::~QueryContext() noexcept {
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
-    if (_exec_env != nullptr) {
+    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
         if (_is_runtime_filter_coordinator) {
-            _exec_env->runtime_filter_worker()->close_query(_query_id);
+            services->runtime_filter_worker->close_query(_query_id);
         }
-        _exec_env->runtime_filter_cache()->remove(_query_id);
+        services->runtime_filter_cache->remove(_query_id);
     }
 
     // Make sure all bytes are released back to parent trackers.
@@ -108,6 +121,9 @@ void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) 
 }
 
 void QueryContext::count_down_fragments() {
+    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
+        return this->count_down_fragments(services->query_context_mgr);
+    }
     return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
@@ -167,6 +183,9 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         }
         _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
                 new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
+        if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
+            _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
+        }
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -187,7 +206,11 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
 Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
-        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
+        auto* services = runtime_services(_query_execution_services);
+        auto* g_spill_manager =
+                services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
+        auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : ExecEnv::GetInstance()->spill_dir_mgr();
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager, spill_dir_mgr);
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;
@@ -295,6 +318,36 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     return res;
 }
 
+std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
+    auto res = std::make_shared<QueryStatistics>();
+    res->add_cpu_costs(cpu_cost());
+    if (_mem_tracker != nullptr) {
+        res->add_mem_costs(mem_cost_bytes());
+    }
+    res->add_spill_bytes(get_spill_bytes());
+    res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
+    res->add_transmitted_bytes(get_transmitted_bytes());
+
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+            res->add_stats_item(stats_item);
+        }
+    }
+
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
+                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
+    }
+
+    _sub_plan_query_statistics_recvr->aggregate(res.get());
+    return res;
+}
+
 void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
     ScanStats* stats = nullptr;
     {
@@ -329,12 +382,14 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
           _context_maps(_num_slots),
           _second_chance_maps(_num_slots) {}
 
-Status QueryContextManager::init() {
+Status QueryContextManager::init(MetricRegistry* metrics) {
+    _metrics = metrics;
     // regist query context metrics
-    auto metrics = StarRocksMetrics::instance()->metrics();
-    _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
-    metrics->register_metric(_metric_name, _query_ctx_cnt.get());
-    metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+    if (_metrics != nullptr) {
+        _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
+        _metrics->register_metric(_metric_name, _query_ctx_cnt.get());
+        _metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+    }
 
     try {
         _clean_thread = std::make_shared<std::thread>(_clean_func, this);
@@ -378,8 +433,9 @@ size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
 
 QueryContextManager::~QueryContextManager() {
     // unregist metrics
-    auto metrics = StarRocksMetrics::instance()->metrics();
-    metrics->deregister_hook(_metric_name);
+    if (_metrics != nullptr) {
+        _metrics->deregister_hook(_metric_name);
+    }
     _query_ctx_cnt.reset();
 
     if (_clean_thread) {
@@ -585,7 +641,7 @@ void QueryContextManager::report_fragments_with_same_host(
                 params.__set_done(false);
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -629,8 +685,8 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
 
 void QueryContextManager::report_fragments(
         const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
-    std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
     std::vector<std::shared_ptr<QueryContext>> need_report_query_ctx;
+    std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
 
     std::vector<PipeLineReportTaskKey> fragment_context_non_exist;
 
@@ -686,7 +742,7 @@ void QueryContextManager::report_fragments(
             params.__set_done(false);
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 

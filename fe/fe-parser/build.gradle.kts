@@ -39,7 +39,15 @@ dependencies {
 
 tasks.withType<Test> {
     // Configure JMockit agent for tests
-    jvmArgs("-javaagent:${repositories.mavenLocal().url.path}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar")
+    jvmArgs(
+        "-javaagent:${repositories.mavenLocal().url.path}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar",
+        // Java 21 module access (Maven surefire 3.2.5 auto-injects these)
+        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens", "java.base/java.io=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent=ALL-UNNAMED",
+    )
 
     // Set for parallel test execution similar to Maven config
     maxParallelForks = providers.gradleProperty("fe_ut_parallel").map { it.toInt() }.getOrElse(1)
@@ -52,9 +60,17 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+tasks.named<JavaCompile>("compileJava") {
+    dependsOn("checkstyleMain")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
+}
+
 // Checkstyle configuration to match Maven behavior
 checkstyle {
-    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 

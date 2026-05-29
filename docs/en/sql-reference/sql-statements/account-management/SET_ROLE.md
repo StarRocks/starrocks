@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET ROLE activates roles, along with all of its associated privileges and nested roles, for the current session."
 ---
 
 # SET ROLE
@@ -18,6 +19,8 @@ Users can only activate roles that have been assigned to them.
 You can query the roles of a user using [SHOW GRANTS](./SHOW_GRANTS.md).
 
 You can query the active roles of the current user using `SELECT CURRENT_ROLE()`. For more information, see [current_role](../../sql-functions/utility-functions/current_role.md).
+
+The activated role affects all authorization checks, including queries against `information_schema` system views. For example, after executing `SET ROLE role1`, queries like `SELECT * FROM information_schema.tables` will only return tables accessible through `role1`. This ensures that role-based access control is consistently applied across all system catalogs and metadata queries.
 
 ## Syntax
 

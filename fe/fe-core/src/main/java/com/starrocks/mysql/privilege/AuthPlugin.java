@@ -55,7 +55,8 @@ public class AuthPlugin {
                             Config.authentication_ldap_simple_bind_root_pwd,
                             Config.authentication_ldap_simple_bind_base_dn,
                             Config.authentication_ldap_simple_user_search_attr,
-                            authString);
+                            authString,
+                            Config.authentication_ldap_simple_bind_dn_pattern);
                 }
 
                 case AUTHENTICATION_JWT -> {

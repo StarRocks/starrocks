@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -71,17 +70,10 @@ public class UserProperty {
     @SerializedName(value = "s")
     private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
-    public void update(String userName, List<Pair<String, String>> properties) throws DdlException {
-        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        UserIdentity user = authenticationMgr.getUserIdentityByName(userName);
-        update(user, properties);
-    }
-
-    // update the user properties
-    // we should check the properties and throw exceptions if the properties are invalid
-    public void update(UserIdentity user, List<Pair<String, String>> properties) throws DdlException {
+    public UpdateInfo checkUpdate(List<Pair<String, String>> properties) throws DdlException {
+        UpdateInfo result = new UpdateInfo();
         if (properties == null || properties.isEmpty()) {
-            return;
+            return result;
         }
 
         String newDatabase = getDatabase();
@@ -91,7 +83,7 @@ public class UserProperty {
             String value = entry.second;
 
             if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                checkMaxConn(value);
+                result.maxConn = checkMaxConn(value);
             } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
                 // we do not check database existence here, because we should
                 // check catalog existence first.
@@ -99,13 +91,16 @@ public class UserProperty {
             } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                 checkCatalog(value);
                 newCatalog = value;
+                result.catalog = value;
             } else if (key.startsWith(PROP_SESSION_PREFIX)) {
                 String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
                 if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
                     checkCatalog(value);
                     newCatalog = value;
+                    result.catalog = value;
                 } else {
                     checkSessionVariable(sessionKey, value);
+                    result.sessionVariables.put(sessionKey, value);
                 }
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
@@ -113,34 +108,31 @@ public class UserProperty {
         }
         if (!newDatabase.equalsIgnoreCase(getDatabase())) {
             checkDatabase(newCatalog, newDatabase);
+            result.database = newDatabase;
         }
+        return result;
+    }
 
-        newDatabase = getDatabase();
-        for (Pair<String, String> entry : properties) {
-            String key = entry.first;
-            String value = entry.second;
+    public void update(UpdateInfo result) {
+        if (result.maxConn != null) {
+            setMaxConn(result.maxConn);
+        }
+        if (result.catalog != null) {
+            setCatalog(result.catalog);
+        }
+        if (result.database != null) {
+            setDatabase(result.database);
+        }
+        for (Map.Entry<String, String> entry : result.sessionVariables.entrySet()) {
+            setSessionVariable(entry.getKey(), entry.getValue());
+        }
+    }
 
-            if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                long maxConn = checkMaxConn(value);
-                setMaxConn(maxConn);
-            } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
-                // we do not check database existence here, because we should
-                // check catalog existence first.
-                newDatabase = value;
-            } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
-                setCatalog(value);
-            } else if (key.startsWith(PROP_SESSION_PREFIX)) {
-                String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
-                if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
-                    setCatalog(value);
-                } else {
-                    setSessionVariable(sessionKey, value);
-                }
-            }
-        }
-        if (!newDatabase.equalsIgnoreCase(getDatabase())) {
-            setDatabase(newDatabase);
-        }
+    // update the user properties
+    // we should check the properties and throw exceptions if the properties are invalid
+    public void update(List<Pair<String, String>> properties) throws DdlException {
+        UpdateInfo result = checkUpdate(properties);
+        update(result);
     }
 
     // We do not check the variable default_session_database and default_session_catalog here, because we have checked them
@@ -338,5 +330,15 @@ public class UserProperty {
 
     private void setMaxConn(long value) {
         maxConn = value;
+    }
+
+    public static class UpdateInfo {
+        Long maxConn;
+
+        String database;
+
+        String catalog;
+
+        Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     }
 }

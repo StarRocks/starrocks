@@ -14,7 +14,7 @@
 
 #include "exec/schema_scanner/schema_collations_scanner.h"
 
-#include "exec/schema_scanner/schema_helper.h"
+#include "exec/schema_scanner/schema_column_filler.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -27,12 +27,20 @@ SchemaScanner::ColumnDesc SchemaCollationsScanner::_s_cols_columns[] = {
         {"IS_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"IS_COMPILED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"SORTLEN", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PAD_ATTRIBUTE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
+// PAD_ATTRIBUTE follows MySQL 8 rules: UCA 9.0.0+ collations (utf8mb4_0900_*)
+// are NO PAD, all others (including utf8_general_ci) are PAD SPACE. See MySQL
+// reference manual section "Trailing Space Handling in Comparisons".
 SchemaCollationsScanner::CollationStruct SchemaCollationsScanner::_s_collations[] = {
-        {"utf8_general_ci", "utf8", 33, "Yes", "Yes", 1},
-        {nullptr, nullptr, 0, nullptr, nullptr, 0},
+        {"utf8_general_ci", "utf8", 33, "Yes", "Yes", 1, "PAD SPACE"},
+        {nullptr, nullptr, 0, nullptr, nullptr, 0, nullptr},
 };
+
+const SchemaCollationsScanner::CollationStruct* SchemaCollationsScanner::collations() {
+    return _s_collations;
+}
 
 SchemaCollationsScanner::SchemaCollationsScanner()
         : SchemaScanner(_s_cols_columns, sizeof(_s_cols_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -46,52 +54,61 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // COLLATION_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 Slice value(_s_collations[_index].name, strlen(_s_collations[_index].name));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // charset
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 Slice value(_s_collations[_index].charset, strlen(_s_collations[_index].charset));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 3: {
             // id
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].id);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_s_collations[_index].id);
             }
             break;
         }
         case 4: {
             // is_default
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
                 Slice value(_s_collations[_index].is_default, strlen(_s_collations[_index].is_default));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 5: {
             // IS_COMPILED
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
                 Slice value(_s_collations[_index].is_compile, strlen(_s_collations[_index].is_compile));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 6: {
             // sortlen
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].sortlen);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_s_collations[_index].sortlen);
+            }
+            break;
+        }
+        case 7: {
+            // pad_attribute
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(7);
+                Slice value(_s_collations[_index].pad_attribute, strlen(_s_collations[_index].pad_attribute));
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }

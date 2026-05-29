@@ -16,14 +16,14 @@
 #include <csignal>
 #include <thread>
 
+#include "base/hash/unaligned_access.h"
+#include "base/time/time.h"
 #include "bthread/timer_thread.h"
 #include "butil/resource_pool.h"
-#include "common/config.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
-#include "util/time.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -53,9 +53,6 @@ private:
     LazyMsgCallBack _callback;
     int64_t _begin_time = 0;
 };
-
-// export from stack_util.h
-std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 
 // SignalTimerGuard class manages a timer to capture and log thread stack traces after a specified timeout.
 // Note: If bthread yields. you may not get the expected stacktrace. But it's still safe.
@@ -125,6 +122,8 @@ private:
     }
 };
 
+int64_t pipeline_poller_timeout_guard_ms();
+
 }; // namespace starrocks
 
 #define WARN_IF_TIMEOUT_MS(timeout_ms, msg_callback) \
@@ -132,6 +131,6 @@ private:
 
 #define WARN_IF_TIMEOUT(timeout_ms, lazy_msg) WARN_IF_TIMEOUT_MS(timeout_ms, [&]() { return lazy_msg; })
 
-#define WARN_IF_POLLER_TIMEOUT(lazy_msg) WARN_IF_TIMEOUT(config::pipeline_poller_timeout_guard_ms, lazy_msg)
+#define WARN_IF_POLLER_TIMEOUT(lazy_msg) WARN_IF_TIMEOUT(starrocks::pipeline_poller_timeout_guard_ms(), lazy_msg)
 
 #define DUMP_TRACE_IF_TIMEOUT(timeout_ms) auto VARNAME_LINENUM(guard) = SignalTimerGuard(timeout_ms)

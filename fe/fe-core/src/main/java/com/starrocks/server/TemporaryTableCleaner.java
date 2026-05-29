@@ -16,8 +16,7 @@ package com.starrocks.server;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.system.Frontend;
@@ -35,26 +34,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 
 // TemporaryTableCleaner is used to automatically clean up temporary tables.
 // It is only executed on the FE leader.
 // It periodically obtains the active session IDs related to all temporary tables on all FEs and
 // automatically cleans up temporary tables that are no longer active.
-public class TemporaryTableCleaner extends FrontendDaemon  {
+public class TemporaryTableCleaner extends LeaderDaemon  {
     private static final Logger LOG = LogManager.getLogger(TemporaryTableCleaner.class);
-    private static final int TEMP_TABLE_CLEANER_THREAD_NUM = 1;
-    private static final int TEMP_TABLE_CLEANER_QUEUE_SIZE = 100000;
-
-    private final ExecutorService executor;
 
     public TemporaryTableCleaner() {
-        this.executor = ThreadPoolManager.newDaemonFixedThreadPool(TEMP_TABLE_CLEANER_THREAD_NUM, TEMP_TABLE_CLEANER_QUEUE_SIZE,
-                "temp-table-cleaner-pool", false);
+        super("temporary-table-cleaner");
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (FeConstants.runningUnitTest && !FeConstants.temporaryTableCleanerTest) {
             return;
         }

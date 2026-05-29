@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This view does not apply to the available features in StarRocks."
 ---
 
 # triggers

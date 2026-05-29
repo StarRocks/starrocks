@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 1
+description: "Version naming is detailed in the [versioning](../introduction/versioning.md) documentation."
 ---
 
 # Version Release Guide
@@ -51,8 +52,9 @@ For example, at the time this document was published, StarRocks version 3.4 is i
 
 ```bash
 git switch branch-3.3
-cat .github.status
+cat .github/.status
 ```
+
 ```bash
 bugfix-only
 ```

@@ -51,8 +51,9 @@ StarRocks のすべてのプルリクエストは、**feature**、**enhancement*
 
 ```bash
 git switch branch-3.3
-cat .github.status
+cat .github/.status
 ```
+
 ```bash
 bugfix-only
 ```

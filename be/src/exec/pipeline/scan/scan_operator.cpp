@@ -14,24 +14,28 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
-#include <util/time.h>
-
+#include "base/concurrency/race_detect.h"
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
 #include "column/chunk.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/expr_executor.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
-#include "util/race_detect.h"
-#include "util/runtime_profile.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -55,7 +59,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
 }
 
 ScanOperator::~ScanOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }
@@ -94,7 +98,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
 
     if (_scan_node->is_enable_topn_filter_back_pressure()) {
-        if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
+        if (auto* runtime_filters = get_factory()->get_runtime_bloom_filters(); runtime_filters != nullptr) {
             auto has_topn_filters =
                     std::any_of(runtime_filters->descriptors().begin(), runtime_filters->descriptors().end(),
                                 [](const auto& e) { return e.second->is_stream_build_filter(); });
@@ -251,16 +255,18 @@ void ScanOperator::_detach_chunk_sources() {
     }
 }
 
-void ScanOperator::update_exec_stats(RuntimeState* state) {
-    auto ctx = state->query_ctx();
-    if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
-        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
-            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
-            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
-        }
+OperatorExecStatsSnapshot ScanOperator::exec_stats_snapshot() const {
+    OperatorExecStatsSnapshot snapshot;
+    snapshot.plan_node_id = _plan_node_id;
+    snapshot.update_pull_rows = true;
+    snapshot.pull_rows = COUNTER_VALUE(_pull_row_num_counter);
+    if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        snapshot.update_rf_filter_rows = true;
+        int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+        int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+        snapshot.rf_filter_rows = input_rows - output_rows;
     }
+    return snapshot;
 }
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
@@ -317,7 +323,7 @@ std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) 
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
-    const auto* global_rf_collector = runtime_bloom_filters();
+    const auto* global_rf_collector = get_factory()->get_runtime_bloom_filters();
     if (global_rf_collector == nullptr) {
         return 0;
     }
@@ -450,10 +456,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+            SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
-            auto& chunk_source = _chunk_sources[chunk_source_index];
+            auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
             [[maybe_unused]] std::string category;
@@ -623,7 +630,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     // _query_ctx uses lazy initialization, maybe it is not initialized
     // under certain circumstance
     if (query_ctx == nullptr) {
-        query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+        auto* query_execution_services = state->query_execution_services();
+        query_ctx = query_execution_services->runtime->query_context_mgr->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
     if (!query_ctx->enable_profile()) {
@@ -667,8 +675,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     TEST_SUCC_POINT("ScanOperatorFactory::prepare");
 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_scan_node->get_heavy_expr_ctxs(), state));
-    RETURN_IF_ERROR(Expr::open(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(ExprExecutor::open(_scan_node->get_heavy_expr_ctxs(), state));
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -682,7 +690,7 @@ void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
     // Do not call Expr::close, since async io task would access heavy exprs after
     // they are closed; exprs in scan operators are auto-closed by ExprContext.
-    // Expr::close(_scan_node->get_heavy_expr_ctxs(), state);
+    // ExprExecutor::close(_scan_node->get_heavy_expr_ctxs(), state);
     OperatorFactory::close(state);
 }
 
@@ -705,7 +713,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     }
 
     if ((!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) && !ops.back()->has_topn_filter()) {
-        ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
+        pipeline::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
     ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);

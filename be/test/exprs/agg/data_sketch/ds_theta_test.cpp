@@ -19,20 +19,20 @@
 #include <cmath>
 #include <memory>
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/util/thrift_util.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "runtime/mem_pool.h"
-#include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
-#include "util/slice.h"
-#include "util/thrift_util.h"
-#include "util/unaligned_access.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 

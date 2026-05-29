@@ -29,6 +29,7 @@ AggStateDesc AggStateDesc::from_thrift(const TAggStateDesc& desc) {
     auto return_type = TypeDescriptor::from_thrift(desc.ret_type);
     // arg types
     std::vector<TypeDescriptor> arg_types;
+    arg_types.reserve(desc.arg_types.size());
     for (auto& arg_type : desc.arg_types) {
         arg_types.emplace_back(TypeDescriptor::from_thrift(arg_type));
     }

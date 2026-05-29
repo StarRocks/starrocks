@@ -14,26 +14,28 @@
 
 package com.starrocks.alter.reshard;
 
-import com.starrocks.proto.IdenticalTabletInfoPB;
-import com.starrocks.proto.MergingTabletInfoPB;
-import com.starrocks.proto.ReshardingTabletsInfoPB;
-import com.starrocks.proto.SplittingTabletInfoPB;
+import com.starrocks.proto.ReshardingTabletInfoPB;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /*
  * PublishTabletsInfo is for publish version
  */
 public class PublishTabletsInfo {
     private final List<Long> tabletIds = new ArrayList<>();
-    private final ReshardingTabletsInfoPB reshardingTablets = new ReshardingTabletsInfoPB();
+    private final List<ReshardingTabletInfoPB> reshardingTablets = new ArrayList<>();
 
-    public PublishTabletsInfo() {
-        reshardingTablets.splittingTabletInfos = new ArrayList<>();
-        reshardingTablets.mergingTabletInfos = new ArrayList<>();
-        reshardingTablets.identicalTabletInfos = new ArrayList<>();
-    }
+    // A ReshardingTablet may be registered under every one of its old tablet
+    // ids (see MergeTabletJob.registerReshardingTablets). Iteration over
+    // partition tablets then calls addReshardingTablet multiple times for the
+    // same logical op. Dedupe by getIdentityKey() so each op is serialised
+    // into the wire request exactly once. Without this dedup, BE fan-outs
+    // parallel publish_resharding_tablet tasks that self-conflict on the
+    // per-reshard publish slot, leaving MERGE stuck in RUNNING.
+    private final Set<Long> addedReshardOpIds = new HashSet<>();
 
     public List<Long> getTabletIds() {
         return tabletIds;
@@ -43,68 +45,27 @@ public class PublishTabletsInfo {
         tabletIds.add(tabletId);
     }
 
-    public boolean isReshardingTabletsEmpty() {
-        return reshardingTablets.splittingTabletInfos.isEmpty()
-                && reshardingTablets.mergingTabletInfos.isEmpty()
-                && reshardingTablets.identicalTabletInfos.isEmpty();
-    }
-
-    public ReshardingTabletsInfoPB getReshardingTablets() {
-        if (isReshardingTabletsEmpty()) {
-            return null;
-        }
+    public List<ReshardingTabletInfoPB> getReshardingTablets() {
         return reshardingTablets;
     }
 
     public void addReshardingTablet(ReshardingTablet reshardingTablet) {
-        SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
-        if (splittingTablet != null) {
-            addSplittingTablet(splittingTablet);
-        }
-
-        MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
-        if (mergingTablet != null) {
-            addMergingTablet(mergingTablet);
-        }
-
-        IdenticalTablet identicalTablet = reshardingTablet.getIdenticalTablet();
-        if (identicalTablet != null) {
-            addIdenticalTablet(identicalTablet);
+        if (addedReshardOpIds.add(reshardingTablet.getFirstNewTabletId())) {
+            reshardingTablets.add(reshardingTablet.toProto());
         }
     }
 
     public List<Long> getOldTabletIds() {
         List<Long> oldTabletIds = new ArrayList<>(tabletIds);
-        for (SplittingTabletInfoPB splittingTabletInfoPB : reshardingTablets.splittingTabletInfos) {
-            oldTabletIds.add(splittingTabletInfoPB.getOldTabletId());
-        }
-        for (MergingTabletInfoPB mergingTabletInfoPB : reshardingTablets.mergingTabletInfos) {
-            oldTabletIds.addAll(mergingTabletInfoPB.getOldTabletIds());
-        }
-        for (IdenticalTabletInfoPB identicalTabletInfoPB : reshardingTablets.identicalTabletInfos) {
-            oldTabletIds.add(identicalTabletInfoPB.getOldTabletId());
+        for (ReshardingTabletInfoPB reshardingTabletInfoPB : reshardingTablets) {
+            if (reshardingTabletInfoPB.splittingTabletInfo != null) {
+                oldTabletIds.add(reshardingTabletInfoPB.splittingTabletInfo.getOldTabletId());
+            } else if (reshardingTabletInfoPB.mergingTabletInfo != null) {
+                oldTabletIds.addAll(reshardingTabletInfoPB.mergingTabletInfo.getOldTabletIds());
+            } else if (reshardingTabletInfoPB.identicalTabletInfo != null) {
+                oldTabletIds.add(reshardingTabletInfoPB.identicalTabletInfo.getOldTabletId());
+            }
         }
         return oldTabletIds;
-    }
-
-    private void addSplittingTablet(SplittingTablet splittingTablet) {
-        SplittingTabletInfoPB splittingTabletInfoPB = new SplittingTabletInfoPB();
-        splittingTabletInfoPB.oldTabletId = splittingTablet.getOldTabletId();
-        splittingTabletInfoPB.newTabletIds = splittingTablet.getNewTabletIds();
-        reshardingTablets.splittingTabletInfos.add(splittingTabletInfoPB);
-    }
-
-    private void addMergingTablet(MergingTablet mergingTablet) {
-        MergingTabletInfoPB mergingTabletInfoPB = new MergingTabletInfoPB();
-        mergingTabletInfoPB.oldTabletIds = mergingTablet.getOldTabletIds();
-        mergingTabletInfoPB.newTabletId = mergingTablet.getNewTabletId();
-        reshardingTablets.mergingTabletInfos.add(mergingTabletInfoPB);
-    }
-
-    private void addIdenticalTablet(IdenticalTablet identicalTablet) {
-        IdenticalTabletInfoPB identicalTabletInfoPB = new IdenticalTabletInfoPB();
-        identicalTabletInfoPB.oldTabletId = identicalTablet.getOldTabletId();
-        identicalTabletInfoPB.newTabletId = identicalTablet.getNewTabletId();
-        reshardingTablets.identicalTabletInfos.add(identicalTabletInfoPB);
     }
 }

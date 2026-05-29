@@ -40,8 +40,13 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
+#include "base/hash/crc32c.h"
+#include "base/string/slice.h"
+#include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/split.h"
@@ -58,12 +63,10 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
-#include "util/crc32c.h"
-#include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
-#include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT
@@ -76,6 +79,10 @@ bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segm
                                                          60);
 
 namespace starrocks {
+
+#ifdef BE_TEST
+bool Segment::_s_allow_batch_update_mode = true;
+#endif
 
 using strings::Substitute;
 
@@ -246,6 +253,9 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
     }
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    if (res.status().is_not_found()) {
+        StorageMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
@@ -272,6 +282,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
+    _skip_vector_index =
+            footer.has_vector_index_storage_type() && footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
     return Status::OK();
 }
 
@@ -347,15 +359,15 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     return _new_iterator(schema, read_options);
 }
 
-Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter,
-                                            const SegmentReadOptions& opts) {
+Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
+                                            const IndexReadOptions& index_opt) {
     auto column_reader_iter = _column_readers.find(ucid);
 
     if (column_reader_iter != _column_readers.end()) {
         std::shared_ptr<TabletIndex> index_meta;
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
         if (index_meta.get() != nullptr) {
-            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts));
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, opts, index_opt);
         }
     }
     return Status::OK();
@@ -475,7 +487,22 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
         ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
-        if (_column_readers[id]->column_type() == column.type()) {
+        bool need_cast = false;
+        if (_column_readers[id]->column_type() != column.type()) {
+            need_cast = true;
+        } else if (column.type() == TYPE_CHAR) {
+            // if the column is a char column, we need to check if the length of the column is the same as
+            // the length stored in the segment footer (the original length when the segment was written).
+            // Because the char column is padded with 0 to the length of the tablet column and the storage
+            // bitmap index and zone map need it.
+            // In shared-data mode, segments may be opened with a new tablet schema that has a different
+            // CHAR length than what's stored on disk, so we must compare against the segment's stored length.
+            int32_t segment_column_length = _column_readers[id]->column_length();
+            if (segment_column_length != column.length()) {
+                need_cast = true;
+            }
+        }
+        if (!need_cast) {
             return source_iter;
         } else {
             auto nullable = _column_readers[id]->is_nullable();
@@ -496,9 +523,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         const TypeInfoPtr& type_info = get_type_info(column);
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                 column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
-                num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+                num_rows(), path);
         return default_value_iter;
     }
 }
@@ -523,8 +548,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
                                                                          column.default_value(), column.is_nullable(),
                                                                          type_info, column.length(), num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_iter->init(iter_opts));
         VLOG(2) << "root column '" << col_name << "' not found in segment, return default for path: " << full_path;
         return default_iter;
     }
@@ -574,8 +597,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_null_iter->init(iter_opts));
         VLOG(2) << "json field " << full_path << " not found in segment, return NULL directly";
         return default_null_iter;
     }
@@ -649,9 +670,36 @@ size_t Segment::_column_index_mem_usage() const {
     return size;
 }
 
+void Segment::turn_off_batch_update_cache_size() {
+#ifdef BE_TEST
+    if (!_s_allow_batch_update_mode) return;
+#endif
+    if (_batch_on_flags_counter.fetch_sub(1, std::memory_order_relaxed) == 1) {
+        if (_dirty_cache_counter.exchange(0) > 0) {
+            if (_tablet_manager != nullptr) {
+                auto mem_cost = mem_usage();
+                // Use FileInfo::cache_key() so this matches the key load_segment registered under;
+                // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
+                // their cache entries would never get the post-open memory cost, defeating
+                // metacache capacity control.
+                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
+                                                           reinterpret_cast<intptr_t>(this));
+            }
+        }
+    }
+}
+
 void Segment::update_cache_size() {
     if (_tablet_manager != nullptr) {
-        _tablet_manager->update_segment_cache_size(file_name(), reinterpret_cast<intptr_t>(this));
+        // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
+        if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
+            auto mem_cost = mem_usage();
+            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
+                                                       reinterpret_cast<intptr_t>(this));
+        } else {
+            // under batch mode, only increase the _dirty_cache_counter
+            _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 }
 

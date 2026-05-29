@@ -1,0 +1,50 @@
+-- name: test_extract_range_predicate_from_scalar_apply @sequential @slow
+CREATE TABLE site_access (
+    event_day DATETIME NOT NULL,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT DEFAULT '0'
+)
+PRIMARY KEY(event_day, site_id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, site_id)
+properties(
+"replication_num"="1"
+);  
+INSERT INTO site_access select 
+days_add('2024-01-01 10:00:00', i%365) as event_day, 
+i%10 as site_id, 
+concat('C_',i%7) as city_code,
+concat('U_',i) as user_name,
+10%rand() as pv
+from table(generate_series(0,1000)) t(i);
+-- result:
+-- !result
+CREATE TABLE txn_timezone(
+    id int,
+    server_tz string,
+    txn_tz string
+)
+properties(
+"replication_num"="1"
+);
+-- result:
+-- !result
+INSERT INTO txn_timezone (id, server_tz, txn_tz) VALUES
+(1,  'UTC',                'UTC'),
+(2,  'Asia/Shanghai',      'UTC'),
+(3,  'UTC',                'Asia/Shanghai'),
+(4,  'America/New_York',   'America/Los_Angeles'),
+(5,  'Europe/London',      'Europe/Berlin'),
+(6,  'Asia/Tokyo',         'Asia/Seoul'),
+(7,  'America/Chicago',    'America/New_York'),
+(8,  'Australia/Sydney',   'Asia/Singapore'),
+(9,  'Europe/Paris',       'UTC'),
+(10, 'Asia/Kolkata',       'Asia/Dubai');
+-- result:
+-- !result
+function: assert_explain_costs_contains("select count(1) from  site_access where site_id = 1 and  event_day = (select convert_tz('2024-02-03 12:30:29', server_tz, txn_tz) from txn_timezone where id = 1);", "partitionsRatio=3/365")
+-- result:
+None
+-- !result

@@ -38,10 +38,11 @@
 #include <cstdio>
 #include <sstream>
 
+#include "base/bit/bit_util.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "util/bit_util.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
@@ -53,8 +54,12 @@ const int MemPool::MAX_CHUNK_SIZE;
 const int MemPool::DEFAULT_ALIGNMENT;
 uint32_t MemPool::k_zero_length_region_ alignas(std::max_align_t) = MEM_POOL_POISON;
 
+int MemPool::memory_max_alignment() {
+    return config::memory_max_alignment;
+}
+
 MemPool::ChunkInfo::ChunkInfo(const MemChunk& chunk_) : chunk(chunk_) {
-    StarRocksMetrics::instance()->memory_pool_bytes_total.increment(chunk.size);
+    RuntimeMetrics::instance()->memory_pool_bytes_total.increment(chunk.size);
 }
 
 MemPool::~MemPool() {
@@ -63,7 +68,7 @@ MemPool::~MemPool() {
         total_bytes_released += chunk.chunk.size;
         MemChunkAllocator::free(chunk.chunk);
     }
-    StarRocksMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
+    RuntimeMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
 }
 
 void MemPool::clear() {
@@ -88,7 +93,7 @@ void MemPool::free_all() {
     total_allocated_bytes_ = 0;
     total_reserved_bytes_ = 0;
 
-    StarRocksMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
+    RuntimeMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
 }
 
 bool MemPool::find_chunk(size_t min_size, bool check_limits) {

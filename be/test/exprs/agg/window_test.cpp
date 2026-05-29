@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -87,8 +88,8 @@ static inline Columns build_args_with_custom_offset(const ColumnPtr& value, cons
 }
 
 TEST_F(LagWindowTest, test_basic_lag) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -99,7 +100,7 @@ TEST_F(LagWindowTest, test_basic_lag) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(0, value_col->size());
     const int64_t offset = 1;
 
@@ -130,9 +131,10 @@ TEST_F(LagWindowTest, test_basic_lag) {
     }
 }
 
-TEST_F(LagWindowTest, test_lag_ignore_nulls) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
+    // lag_in (ignoreNulls=true) with non-constant default column [1, 2, 3, 4]
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -143,7 +145,58 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+
+    auto default_data_col = Int32Column::create();
+    auto default_null_col = NullColumn::create();
+    for (int i = 0; i < 4; ++i) {
+        default_data_col->append(i + 1);
+        default_null_col->append(0);
+    }
+    ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
+    const int64_t offset = 1;
+
+    Columns args = build_lag_args(value_col, offset, default_col);
+    std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
+
+    const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
+    auto state = ManagedAggrState::create(ctx, lag_func);
+    lag_func->reset(ctx, args, state->state());
+
+    const int64_t N = value_col->size();
+    // row0: no previous non-null -> default_col[0]=1
+    // row1: previous non-null is row0=10
+    // row2: skip null row1, previous non-null is row0=10
+    // row3: previous non-null is row2=30
+    int32_t expected_vals[] = {1, 10, 10, 30};
+    for (int64_t row = 0; row < N; ++row) {
+        int64_t frame_start = row - offset;
+        int64_t frame_end = frame_start + 1;
+
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(),
+                                                       /*peer_group_start*/ 0,
+                                                       /*peer_group_end*/ N, frame_start, frame_end);
+
+        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_INT, /*ignoreNulls=*/true>*>(state->state());
+        ASSERT_FALSE(lag_state->is_null) << "row=" << row;
+        ASSERT_EQ(expected_vals[row], lag_state->value) << "row=" << row;
+    }
+}
+
+TEST_F(LagWindowTest, test_lag_ignore_nulls) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+
+    data_col->append(10);
+    null_col->append(0);
+    data_col->append(0);
+    null_col->append(1);
+    data_col->append(30);
+    null_col->append(0);
+    data_col->append(40);
+    null_col->append(0);
+
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
     const int64_t offset = 1;
 
@@ -174,8 +227,8 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls) {
 }
 
 TEST_F(LagWindowTest, test_default_value_is_col) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -186,16 +239,16 @@ TEST_F(LagWindowTest, test_default_value_is_col) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
-    Int32Column::Ptr default_data_col = Int32Column::create();
-    NullColumn::Ptr default_null_col = NullColumn::create();
+    auto default_data_col = Int32Column::create();
+    auto default_null_col = NullColumn::create();
 
     for (int i = 0; i < 4; ++i) {
         default_data_col->append(i + 1);
         default_null_col->append(0);
     }
-    ColumnPtr default_col = NullableColumn::create(default_data_col, default_null_col);
+    ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
 
     const int64_t offset = 1;
 
@@ -225,63 +278,47 @@ TEST_F(LagWindowTest, test_default_value_is_col) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+TEST_F(LagWindowTest, test_lag_large_binary) {
+    auto data_col = LargeBinaryColumn::create();
+    auto null_col = NullColumn::create();
 
-    data_col->append(10);
+    data_col->append(Slice("a"));
     null_col->append(0);
-    data_col->append(0);
-    null_col->append(1);
-    data_col->append(30);
+    data_col->append(Slice("b"));
     null_col->append(0);
-    data_col->append(40);
+    data_col->append(Slice("c"));
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
-
-    Int32Column::Ptr default_data_col = Int32Column::create();
-    NullColumn::Ptr default_null_col = NullColumn::create();
-
-    for (int i = 0; i < 4; ++i) {
-        default_data_col->append(i + 1);
-        default_null_col->append(0);
-    }
-
-    ColumnPtr default_col = NullableColumn::create(default_data_col, default_null_col);
-
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("z"), value_col->size());
     const int64_t offset = 1;
 
     Columns args = build_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
-    const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
+    const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_VARCHAR, TYPE_VARCHAR, true);
     auto state = ManagedAggrState::create(ctx, lag_func);
     lag_func->reset(ctx, args, state->state());
 
     const int64_t N = value_col->size();
+    std::vector<std::string> expected{"z", "a", "b"};
     for (int64_t row = 0; row < N; ++row) {
         int64_t frame_start = row - offset;
-        int64_t frame_end = frame_start + 1; // half-open [start, end)
+        int64_t frame_end = frame_start + 1;
 
-        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(),
-                                                       /*peer_group_start*/ 0,
-                                                       /*peer_group_end*/ N, frame_start, frame_end);
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(), 0, N, frame_start,
+                                                       frame_end);
 
-        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_INT, /*ignoreNulls=*/true>*>(state->state());
-        int32_t expected = (row == 0) ? 1 : (row == 1) ? 10 : (row == 2) ? 10 : (row == 3) ? 30 : -1;
-
-        if (lag_state->is_null) {
-            ASSERT_EQ(expected, 0) << "row=" << row;
-        } else {
-            ASSERT_EQ(expected, lag_state->value) << "row=" << row;
-        }
+        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_VARCHAR, /*ignoreNulls=*/false>*>(state->state());
+        ASSERT_FALSE(lag_state->is_null) << "row=" << row;
+        Slice value = AggDataTypeTraits<TYPE_VARCHAR>::get_ref(lag_state->value);
+        ASSERT_EQ(expected[row], value.to_string()) << "row=" << row;
     }
 }
 
 TEST_F(LagWindowTest, test_default_value_is_null) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -292,17 +329,18 @@ TEST_F(LagWindowTest, test_default_value_is_null) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
-    Int32Column::Ptr default_data_col = Int32Column::create();
-    NullColumn::Ptr default_null_col = NullColumn::create();
+    auto default_data_col = Int32Column::create();
+    auto default_null_col = NullColumn::create();
 
     for (int i = 0; i < 4; ++i) {
         default_data_col->append(0);
         default_null_col->append(1);
     }
-    ColumnPtr col_ptr = NullableColumn::create(default_data_col, default_null_col);
-    auto default_col = ConstColumn::create(col_ptr->as_mutable_ptr(), col_ptr->size());
+    auto col_ptr = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
+    size_t size = col_ptr->size();
+    auto default_col = ConstColumn::create(std::move(col_ptr), size);
     const int64_t offset = 1;
 
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -333,8 +371,8 @@ TEST_F(LagWindowTest, test_default_value_is_null) {
 }
 
 TEST_F(LagWindowTest, test_default_value_is_null_ignore_nulls) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -345,17 +383,18 @@ TEST_F(LagWindowTest, test_default_value_is_null_ignore_nulls) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
-    Int32Column::Ptr default_data_col = Int32Column::create();
-    NullColumn::Ptr default_null_col = NullColumn::create();
+    auto default_data_col = Int32Column::create();
+    auto default_null_col = NullColumn::create();
 
     for (int i = 0; i < 4; ++i) {
         default_data_col->append(0);
         default_null_col->append(1);
     }
-    ColumnPtr col_ptr = NullableColumn::create(default_data_col, default_null_col);
-    auto default_col = ConstColumn::create(col_ptr->as_mutable_ptr(), col_ptr->size());
+    auto col_ptr = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
+    size_t size = col_ptr->size();
+    auto default_col = ConstColumn::create(std::move(col_ptr), size);
     const int64_t offset = 1;
 
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -386,8 +425,8 @@ TEST_F(LagWindowTest, test_default_value_is_null_ignore_nulls) {
 }
 
 TEST_F(LagWindowTest, test_default_col_is_null_ignore_nulls) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -398,16 +437,16 @@ TEST_F(LagWindowTest, test_default_col_is_null_ignore_nulls) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
-    Int32Column::Ptr default_data_col = Int32Column::create();
-    NullColumn::Ptr default_null_col = NullColumn::create();
+    auto default_data_col = Int32Column::create();
+    auto default_null_col = NullColumn::create();
 
     for (int i = 0; i < 4; ++i) {
         default_data_col->append(0);
         default_null_col->append(1);
     }
-    ColumnPtr default_col = NullableColumn::create(default_data_col, default_null_col);
+    ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
     const int64_t offset = 1;
 
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -438,8 +477,8 @@ TEST_F(LagWindowTest, test_default_col_is_null_ignore_nulls) {
 }
 
 TEST_F(LagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -450,16 +489,16 @@ TEST_F(LagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
-    Int32Column::Ptr default_data_col = Int32Column::create();
-    NullColumn::Ptr default_null_col = NullColumn::create();
+    auto default_data_col = Int32Column::create();
+    auto default_null_col = NullColumn::create();
 
     for (int i = 0; i < 5; ++i) {
         default_data_col->append(0);
         default_null_col->append(1);
     }
-    ColumnPtr default_col = NullableColumn::create(default_data_col, default_null_col);
+    ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
     const int64_t offset = 1;
 
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -493,8 +532,8 @@ TEST_F(LagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
 
 TEST_F(LagWindowTest, test_lag_offset_is_null_sets_zero) {
     // value column with mixed nulls
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -505,15 +544,16 @@ TEST_F(LagWindowTest, test_lag_offset_is_null_sets_zero) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
     // Build a nullable const offset column -> offset treated as 0
-    Int64Column::Ptr off_data = Int64Column::create();
-    NullColumn::Ptr off_null = NullColumn::create();
+    auto off_data = Int64Column::create();
+    auto off_null = NullColumn::create();
     off_data->append(0);
     off_null->append(1); // NULL offset
-    ColumnPtr off_nullable = NullableColumn::create(off_data, off_null);
-    ColumnPtr offset_const = ConstColumn::create(off_nullable->as_mutable_ptr(), value_col->size());
+    ColumnPtr off_nullable = NullableColumn::create(std::move(off_data), std::move(off_null));
+    size_t size = off_nullable->size();
+    ColumnPtr offset_const = ConstColumn::create(std::move(off_nullable), size);
 
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
     Columns args = build_args_with_custom_offset(value_col, offset_const, default_col);
@@ -544,8 +584,8 @@ TEST_F(LagWindowTest, test_lag_offset_is_null_sets_zero) {
 
 TEST_F(LagWindowTest, test_lead_ignore_nulls_basic) {
     // value column with mixed nulls
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
 
     data_col->append(10);
     null_col->append(0);
@@ -556,7 +596,7 @@ TEST_F(LagWindowTest, test_lead_ignore_nulls_basic) {
     data_col->append(40);
     null_col->append(0);
 
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(77, value_col->size());
     const int64_t offset = 1;
 
@@ -589,8 +629,8 @@ TEST_F(LagWindowTest, test_lead_ignore_nulls_basic) {
 
 TEST_F(LagWindowTest, test_non_const_default_out_of_range_oob) {
     // value column with mixed nulls
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
     data_col->append(10);
     null_col->append(0);
     data_col->append(0);
@@ -599,12 +639,12 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_oob) {
     null_col->append(0);
     data_col->append(40);
     null_col->append(0);
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
     // default column: empty (size=0) -> def_col_ok=false when out-of-range, expect NULL
-    Int32Column::Ptr def_data = Int32Column::create();
-    NullColumn::Ptr def_null = NullColumn::create();
-    ColumnPtr default_col = NullableColumn::create(def_data, def_null);
+    auto def_data = Int32Column::create();
+    auto def_null = NullColumn::create();
+    ColumnPtr default_col = NullableColumn::create(std::move(def_data), std::move(def_null));
 
     const int64_t offset = 1;
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -625,8 +665,8 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_oob) {
 
 TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
     // value column with mixed nulls
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
     data_col->append(10);
     null_col->append(0);
     data_col->append(0);
@@ -635,11 +675,11 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
     null_col->append(0);
     data_col->append(40);
     null_col->append(0);
-    ColumnPtr value_col = NullableColumn::create(data_col, null_col);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
     // default column: sized properly
-    Int32Column::Ptr def_data = Int32Column::create();
-    NullColumn::Ptr def_null = NullColumn::create();
+    auto def_data = Int32Column::create();
+    auto def_null = NullColumn::create();
     def_data->append(100);
     def_null->append(0);
     def_data->append(200);
@@ -648,7 +688,7 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
     def_null->append(0);
     def_data->append(400);
     def_null->append(0);
-    ColumnPtr default_col = NullableColumn::create(def_data, def_null);
+    ColumnPtr default_col = NullableColumn::create(std::move(def_data), std::move(def_null));
 
     const int64_t offset = 1;
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -671,8 +711,8 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
 
 TEST_F(LagWindowTest, test_normal_window_null_value_no_default_applied) {
     // value column with a null at row=1; default constant should NOT apply in normal-window path
-    Int32Column::Ptr data_col = Int32Column::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
     data_col->append(10);
     null_col->append(0);
     data_col->append(0);
@@ -709,7 +749,7 @@ TEST_F(LagWindowTest, test_normal_window_null_value_no_default_applied) {
 TEST_F(LagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
     auto elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto offs = UInt32Column::create();
-    ArrayColumn::Ptr arr = ArrayColumn::create(elem, offs);
+    auto arr = ArrayColumn::create(std::move(elem), std::move(offs));
     arr->append_datum(DatumArray{(int32_t)10});
     arr->append_datum(DatumArray{(int32_t)20});
     arr->append_datum(DatumArray{(int32_t)30});
@@ -718,9 +758,10 @@ TEST_F(LagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
 
     auto def_elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto def_offs = UInt32Column::create();
-    ArrayColumn::Ptr def_arr = ArrayColumn::create(def_elem, def_offs);
+    auto def_arr = ArrayColumn::create(std::move(def_elem), std::move(def_offs));
     def_arr->append_datum(DatumArray{(int32_t)99, (int32_t)100});
-    ColumnPtr default_const = ConstColumn::create(def_arr->as_mutable_ptr(), value_col->size());
+    size_t size = def_arr->size();
+    ColumnPtr default_const = ConstColumn::create(std::move(def_arr), size);
 
     const int64_t offset = 2;
     Columns args = build_lag_args(value_col, offset, default_const);
@@ -749,7 +790,7 @@ TEST_F(LagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
 TEST_F(LagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
     auto elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto offs = UInt32Column::create();
-    ArrayColumn::Ptr arr = ArrayColumn::create(elem, offs);
+    auto arr = ArrayColumn::create(std::move(elem), std::move(offs));
     arr->append_datum(DatumArray{(int32_t)10});
     arr->append_datum(DatumArray{(int32_t)20});
     arr->append_datum(DatumArray{(int32_t)30});
@@ -758,9 +799,10 @@ TEST_F(LagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
 
     auto def_elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto def_offs = UInt32Column::create();
-    ArrayColumn::Ptr def_arr = ArrayColumn::create(def_elem, def_offs);
+    auto def_arr = ArrayColumn::create(std::move(def_elem), std::move(def_offs));
     def_arr->append_datum(DatumArray{(int32_t)7, (int32_t)8});
-    ColumnPtr default_const = ConstColumn::create(def_arr->as_mutable_ptr(), value_col->size());
+    size_t size = def_arr->size();
+    ColumnPtr default_const = ConstColumn::create(std::move(def_arr), size);
 
     const int64_t offset = 1;
     Columns args = build_lag_args(value_col, offset, default_const);
@@ -787,7 +829,7 @@ TEST_F(LagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
 TEST_F(LagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore_nulls) {
     auto elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto offs = UInt32Column::create();
-    ArrayColumn::Ptr arr = ArrayColumn::create(elem, offs);
+    auto arr = ArrayColumn::create(std::move(elem), std::move(offs));
     arr->append_datum(DatumArray{(int32_t)10});
     arr->append_datum(DatumArray{(int32_t)20});
     arr->append_datum(DatumArray{(int32_t)30});
@@ -796,10 +838,11 @@ TEST_F(LagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore
 
     auto def_elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto def_offs = UInt32Column::create();
-    ArrayColumn::Ptr def_arr = ArrayColumn::create(def_elem, def_offs);
+    auto def_arr = ArrayColumn::create(std::move(def_elem), std::move(def_offs));
     def_arr->append_datum(DatumArray{(int32_t)500});
     def_arr->append_datum(DatumArray{(int32_t)600});
-    ColumnPtr default_col = NullableColumn::create(def_arr->as_mutable_ptr(), NullColumn::create(2, 0));
+    auto null_col = NullColumn::create(2, 0);
+    ColumnPtr default_col = NullableColumn::create(std::move(def_arr), std::move(null_col));
 
     const int64_t offset = 1;
     Columns args = build_lag_args(value_col, offset, default_col);
@@ -817,6 +860,60 @@ TEST_F(LagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore
 
     auto* s = reinterpret_cast<LeadLagState<TYPE_ARRAY, true>*>(state->state());
     ASSERT_TRUE(s->is_null);
+}
+
+TEST_F(LagWindowTest, test_lag_large_binary_non_const_default) {
+    // LargeBinaryColumn as value, regular BinaryColumn as non-const default.
+    // This tests the fix for wrong down_cast on columns[2] when columns[0] is LargeBinaryColumn.
+    auto data_col = LargeBinaryColumn::create();
+    auto null_col = NullColumn::create();
+
+    data_col->append(Slice("alpha"));
+    null_col->append(0);
+    data_col->append(Slice("beta"));
+    null_col->append(0);
+    data_col->append(Slice("gamma"));
+    null_col->append(0);
+
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+
+    // Default column is regular BinaryColumn (not LargeBinaryColumn)
+    auto def_data_col = BinaryColumn::create();
+    auto def_null_col = NullColumn::create();
+    def_data_col->append(Slice("d0"));
+    def_null_col->append(0);
+    def_data_col->append(Slice("d1"));
+    def_null_col->append(0);
+    def_data_col->append(Slice("d2"));
+    def_null_col->append(0);
+    ColumnPtr default_col = NullableColumn::create(std::move(def_data_col), std::move(def_null_col));
+
+    const int64_t offset = 1;
+
+    Columns args = build_lag_args(value_col, offset, default_col);
+    std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
+
+    const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_VARCHAR, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, lag_func);
+    lag_func->reset(ctx, args, state->state());
+
+    const int64_t N = value_col->size();
+    // row0: out of range -> default_col[0]="d0"
+    // row1: lag(1) -> row0="alpha"
+    // row2: lag(1) -> row1="beta"
+    std::vector<std::string> expected{"d0", "alpha", "beta"};
+    for (int64_t row = 0; row < N; ++row) {
+        int64_t frame_start = row - offset;
+        int64_t frame_end = frame_start + 1;
+
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(), 0, N, frame_start,
+                                                       frame_end);
+
+        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_VARCHAR, /*ignoreNulls=*/false>*>(state->state());
+        ASSERT_FALSE(lag_state->is_null) << "row=" << row;
+        Slice value = AggDataTypeTraits<TYPE_VARCHAR>::get_ref(lag_state->value);
+        ASSERT_EQ(expected[row], value.to_string()) << "row=" << row;
+    }
 }
 
 } // namespace starrocks

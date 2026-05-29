@@ -110,7 +110,13 @@ import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 public class HiveMetastoreApiConverter {
     private static final Logger LOG = LogManager.getLogger(HiveMetastoreApiConverter.class);
     private static final String SPARK_SQL_SOURCE_PROVIDER = "spark.sql.sources.provider";
+    private static final String HIVE2_COLLECTION_DELIM = "colelction.delim";
     private static final Set<String> STATS_PROPERTIES = ImmutableSet.of(ROW_COUNT, TOTAL_SIZE, NUM_FILES);
+    private static final ImmutableList<String> SERDE_PROPERTY_KEYS = ImmutableList.of(
+            serdeConstants.FIELD_DELIM, serdeConstants.LINE_DELIM,
+            serdeConstants.COLLECTION_DELIM, serdeConstants.MAPKEY_DELIM,
+            OpenCSVSerde.SEPARATORCHAR, serdeConstants.HEADER_COUNT,
+            serdeConstants.SERIALIZATION_FORMAT, HIVE2_COLLECTION_DELIM);
 
     private static boolean isDeltaLakeTable(Map<String, String> tableParams) {
         return tableParams.containsKey(SPARK_SQL_SOURCE_PROVIDER) &&
@@ -144,7 +150,7 @@ public class HiveMetastoreApiConverter {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 
@@ -167,7 +173,7 @@ public class HiveMetastoreApiConverter {
                 properties.getOrDefault(HIVE_TABLE_SERDE_LIB, HiveStorageFormat.UNSUPPORTED.getSerde()));
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(table.getTableName())
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
@@ -231,6 +237,7 @@ public class HiveMetastoreApiConverter {
         serdeInfo.setName(table.getCatalogTableName());
         HiveStorageFormat storageFormat = table.getStorageFormat();
         serdeInfo.setSerializationLib(storageFormat.getSerde());
+        serdeInfo.setParameters(table.getSerdeProperties());
 
         StorageDescriptor sd = new StorageDescriptor();
         sd.setLocation(table.getTableLocation());
@@ -251,6 +258,7 @@ public class HiveMetastoreApiConverter {
         HiveStorageFormat hiveSd = partition.getStorage();
         serdeInfo.setName(partition.getTableName());
         serdeInfo.setSerializationLib(hiveSd.getSerde());
+        serdeInfo.setParameters(partition.getSerDeParameters());
 
         StorageDescriptor sd = new StorageDescriptor();
         sd.setLocation(emptyToNull(partition.getLocation()));
@@ -301,11 +309,11 @@ public class HiveMetastoreApiConverter {
             TrinoViewDefinition trinoViewDefinition = GsonUtils.GSON.fromJson(new String(bytes),
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
-            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName,
                     table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
                     hiveViewText, HiveView.Type.Trino);
         } else {
-            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName,
                     table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
                     table.getViewExpandedText(), HiveView.Type.Hive);
         }
@@ -344,7 +352,7 @@ public class HiveMetastoreApiConverter {
         List<String> partitionColumnNames = toPartitionColumnNamesForHudiTable(table, hudiTableConfig);
 
         HudiTable.Builder tableBuilder = HudiTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(table.getTableName())
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hudi"))
@@ -580,6 +588,16 @@ public class HiveMetastoreApiConverter {
         return RemoteFileInputFormat.fromHdfsInputFormatClass(inputFormat);
     }
 
+    public static Map<String, String> extractSerdeProperties(Map<String, String> properties) {
+        Map<String, String> serdeProps = Maps.newHashMap();
+        for (String key : SERDE_PROPERTY_KEYS) {
+            if (properties.containsKey(key)) {
+                serdeProps.put(key, properties.get(key));
+            }
+        }
+        return serdeProps;
+    }
+
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> parameters) {
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
@@ -589,8 +607,8 @@ public class HiveMetastoreApiConverter {
         // There is a typo in Hive 2.x version, and fixed in Hive 3.x version.
         // https://issues.apache.org/jira/browse/HIVE-16922
         String collectionDelim;
-        if (parameters.containsKey("colelction.delim")) {
-            collectionDelim = parameters.getOrDefault("colelction.delim", "");
+        if (parameters.containsKey(HIVE2_COLLECTION_DELIM)) {
+            collectionDelim = parameters.getOrDefault(HIVE2_COLLECTION_DELIM, "");
         } else {
             collectionDelim = parameters.getOrDefault(serdeConstants.COLLECTION_DELIM, "");
         }

@@ -34,10 +34,10 @@ public class LoadTrackingLogsSystemTable {
                 builder()
                         .column("ID", IntegerType.BIGINT)
                         .column("JOB_ID", IntegerType.BIGINT)
-                        .column("LABEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DATABASE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_LOG", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DATABASE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_LOG", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_LOAD_TRACKING_LOGS);
     }
 }

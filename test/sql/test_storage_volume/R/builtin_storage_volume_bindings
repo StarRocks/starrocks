@@ -1,0 +1,40 @@
+-- name: test_builtin_sv_no_lock_leak @cloud
+CREATE STORAGE VOLUME IF NOT EXISTS sv_${uuid0} type = s3 LOCATIONS = ('s3://${oss_bucket}/test_sv_lock_${uuid0}') COMMENT 'lock leak regression test sv' PROPERTIES ("aws.s3.endpoint"="${oss_endpoint}", "aws.s3.region"="${oss_region}", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="true", "aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}");
+-- result:
+-- !result
+CREATE DATABASE db_bound_${uuid0} PROPERTIES("storage_volume" = "sv_${uuid0}");
+-- result:
+-- !result
+CREATE DATABASE db_builtin_${uuid0};
+-- result:
+-- !result
+SET sv_${uuid0} AS DEFAULT STORAGE VOLUME;
+-- result:
+-- !result
+DROP STORAGE VOLUME builtin_storage_volume;
+-- result:
+[REGEX]Storage volume 'builtin_storage_volume' is referenced by dbs or tables
+-- !result
+CREATE TABLE db_bound_${uuid0}.t1 (k1 INT, v1 VARCHAR(10)) DISTRIBUTED BY HASH(k1) BUCKETS 1;
+-- result:
+-- !result
+ALTER DATABASE db_bound_${uuid0} SET("storage_volume" = "builtin_storage_volume");
+-- result:
+-- !result
+DROP DATABASE db_bound_${uuid0} FORCE;
+-- result:
+-- !result
+DROP DATABASE db_builtin_${uuid0} FORCE;
+-- result:
+-- !result
+shell: sleep 5
+-- result:
+0
+
+-- !result
+SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
+-- result:
+-- !result
+DROP STORAGE VOLUME sv_${uuid0};
+-- result:
+-- !result

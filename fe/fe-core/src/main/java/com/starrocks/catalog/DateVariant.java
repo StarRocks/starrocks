@@ -56,7 +56,7 @@ public class DateVariant extends Variant {
     }
 
     @Override
-    public int compareTo(Variant other) {
+    protected int compareToImpl(Variant other) {
         Preconditions.checkArgument(other instanceof DateVariant, other);
         DateVariant otherDateTime = (DateVariant) other;
 

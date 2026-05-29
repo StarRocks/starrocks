@@ -24,10 +24,10 @@
 #include <memory>
 #include <utility>
 
+#include "base/random/random.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
-#include "util/random.h"
 
 namespace starrocks::spill {
 
@@ -99,6 +99,10 @@ public:
     Status init(const std::string& spill_dirs);
 
     StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
+
+    // Read-only snapshot of the managed directories; used by metrics hooks
+    // to aggregate spill disk usage.
+    std::vector<DirPtr> dirs() const { return _dirs; }
 
 private:
     bool is_same_disk(const std::string& path1, const std::string& path2) {

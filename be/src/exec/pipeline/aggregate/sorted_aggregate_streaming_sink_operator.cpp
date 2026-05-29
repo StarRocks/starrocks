@@ -29,7 +29,7 @@ SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
 
 Status SortedAggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     _accumulator.set_max_size(state->chunk_size());
     return _aggregator->open(state);
 }
@@ -52,7 +52,7 @@ Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) 
     ASSIGN_OR_RETURN(auto res, _aggregator->pull_eos_chunk());
     DCHECK(_accumulator.need_input());
     if (res && !res->is_empty()) {
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
     }
     _accumulator.finalize();
     while (_accumulator.has_output()) {
@@ -84,7 +84,7 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
     }
     DCHECK(_accumulator.need_input());
     if (res && !res->is_empty()) {
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
     }
     if (_accumulator.has_output()) {
         auto accumulated = std::move(_accumulator.pull());

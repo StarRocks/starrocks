@@ -31,26 +31,28 @@ public class MetadataExecutor {
 
     public void asyncExecuteSQL(MetadataCollectJob job) {
         ConnectContext context = job.getContext();
-        context.setThreadLocalInfo();
-        String sql = job.getSql();
-        ExecPlan execPlan;
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
-        } catch (Exception e) {
-            LOG.error("Failed to execute metadata collect job", e);
-            context.getState().setError(e.getMessage());
-            return;
+        try (var scope = context.bindScope()) {
+            String sql = job.getSql();
+            ExecPlan execPlan;
+            StatementBase parsedStmt;
+            try {
+                parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+                execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
+            } catch (Exception e) {
+                LOG.error("Failed to execute metadata collect job", e);
+                context.getState().setError(e.getMessage());
+                return;
+            }
+
+            this.executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+
+            LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(),
+                    job.getTableName());
+            executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
         }
-
-        this.executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
-        context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
-        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-
-        LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(), job.getTableName());
-        executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
     }
 
     public Coordinator getCoordinator() {

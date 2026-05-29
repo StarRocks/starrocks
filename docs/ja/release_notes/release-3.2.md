@@ -477,7 +477,7 @@ displayed_sidebar: docs
 ### 改善点
 
 - JDK8 のデフォルト GC アルゴリズムを G1 にアップグレードしました。 [#37268](https://github.com/StarRocks/starrocks/pull/37268)
-- セッション変数 [sql_mode](https://docs.starrocks.io/docs/3.2/reference/System_variable/#sql_mode) に新しい値オプション `GROUP_CONCAT_LEGACY` を追加し、v2.5 より前のバージョンでの [group_concat](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) 関数の実装ロジックとの互換性を提供します。 [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- セッション変数 [sql_mode](https://docs.starrocks.io/docs/3.2/sql-reference/System_variable/#sql_mode) に新しい値オプション `GROUP_CONCAT_LEGACY` を追加し、v2.5 より前のバージョンでの [group_concat](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) 関数の実装ロジックとの互換性を提供します。 [#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - [AWS S3 の Broker Load ジョブ](https://docs.starrocks.io/docs/3.2/loading/s3/) の認証情報 `aws.s3.access_key` と `aws.s3.access_secret` を監査ログで非表示にしました。 [#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - `information_schema` データベースの `be_tablets` ビューに新しいフィールド `INDEX_DISK` を追加しました。これは永続インデックスのディスク使用量（バイト単位）を記録します。 [#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) ステートメントが返す結果に新しいフィールド `OtherMsg` を追加しました。これは最後に失敗したタスクに関する情報を示します。 [#35806](https://github.com/StarRocks/starrocks/pull/35806)

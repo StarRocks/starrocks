@@ -44,7 +44,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -58,6 +57,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -68,6 +68,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -205,27 +206,45 @@ public class VariableMgr {
         return defaultSessionVariable;
     }
 
-    // Set value to a variable
-    private boolean setValue(Object obj, Field field, String value) throws DdlException {
-        VarAttr attr = field.getAnnotation(VarAttr.class);
-
-        String varName = attr.show().isEmpty() ? attr.name() : attr.show();
+    private void setParsedValue(Object obj, Field field, Object parsedVal) throws DdlException {
+        String varName = getVarName(field);
         Method setter = SessionVariable.SETTER_MAP.get(field.getName());
-        Object parsed = parseValue(field.getType(), varName, value);
 
         try {
             if (setter != null) {
-                setter.invoke(obj, parsed);
+                setter.invoke(obj, parsedVal);
             } else {
-                field.set(obj, parsed);
+                field.set(obj, parsedVal);
             }
         } catch (NumberFormatException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, varName, value);
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, varName, parsedVal);
         }
+    }
 
-        return true;
+    // Set value to a variable
+    private void setValue(Object obj, Field field, String value) throws DdlException {
+        Object parsedVal = parseValue(field.getType(), getVarName(field), value);
+        setParsedValue(obj, field, parsedVal);
+    }
+
+    private String getVarName(Field field) {
+        VarAttr attr = field.getAnnotation(VarAttr.class);
+        return attr.show().isEmpty() ? attr.name() : attr.show();
+    }
+
+    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field,
+                                    Object value)
+            throws DdlException {
+        final String originalWarehouseName = sessionVariable.getWarehouseName();
+        setParsedValue(sessionVariable, field, value);
+        final String newWarehouseName = sessionVariable.getWarehouseName();
+
+        // after set warehouse, need to reset compute resource
+        if (newWarehouseName != null && !newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
+            connectContext.setCurrentWarehouse(newWarehouseName);
+        }
     }
 
     private Object parseValue(Class<?> type, String varName, String raw) throws DdlException {
@@ -267,7 +286,51 @@ public class VariableMgr {
     }
 
     public SessionVariable newSessionVariable() {
-        return (SessionVariable) defaultSessionVariable.clone();
+        return defaultSessionVariable.clone();
+    }
+
+    public void applyWarehouseVariable(SessionVariable sv) {
+        final String warehouseName = sv.getWarehouseName();
+        final Map<String, String> warehouseVariables = getWarehouseVariables(warehouseName);
+        if (!warehouseVariables.isEmpty()) {
+            try {
+                for (Map.Entry<String, String> vars : warehouseVariables.entrySet()) {
+                    final SystemVariable systemVariable =
+                            new SystemVariable(vars.getKey(), new StringLiteral(vars.getValue()));
+                    setSystemVariable(sv, systemVariable, true);
+                }
+            } catch (DdlException e) {
+                LOG.warn("failed to init warehouse session variable. ignored", e);
+            }
+        }
+    }
+    public void applySessionVariable(Map<String, String> modifiedVariables, SessionVariable sv) throws DdlException {
+        for (Map.Entry<String, String> entry : modifiedVariables.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
+                continue;
+            }
+            SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+            setSystemVariable(sv, variable, true);
+        }
+    }
+    public void applyModifiedVariable(Map<String, SystemVariable> modifiedVariables, SessionVariable sv) {
+        // apply modified session variable
+        try {
+            for (Map.Entry<String, SystemVariable> entry : modifiedVariables.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
+                    continue;
+                }
+                setSystemVariable(sv, entry.getValue(), true);
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to apply user session variable", e);
+        }
+    }
+
+
+    private Map<String, String> getWarehouseVariables(String warehouseName) {
+        final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        return warehouse.getWarehouseSessionVariable();
     }
 
     // Check if this sessionVariable can be set correctly
@@ -334,23 +397,30 @@ public class VariableMgr {
             }
         }
 
+        Object parsedVal = parseValue(ctx.getField().getType(), getVarName(ctx.getField()), value);
+
         if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
-            setGlobalVariableAndWriteEditLog(ctx, attr.name(), value);
+            setGlobalVariableAndWriteEditLog(ctx, attr.name(), parsedVal);
         }
 
         // set session variable
-        setValue(sessionVariable, ctx.getField(), value);
+        if (!SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name())) {
+            setParsedValue(sessionVariable, ctx.getField(), parsedVal);
+        }
     }
 
-    private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, String value) throws DdlException {
+    private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, Object parsedVal) throws DdlException {
         wLock.lock();
         try {
-            setValue(ctx.getObj(), ctx.getField(), value);
             // write edit log
-            GlobalVarPersistInfo info =
-                    new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(name));
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logGlobalVariableV2(info);
+            GlobalVarPersistInfo info = new GlobalVarPersistInfo(name, parsedVal);
+            GlobalStateMgr.getCurrentState().getEditLog().logGlobalVariableV2(info, wal -> {
+                try {
+                    setParsedValue(ctx.getObj(), ctx.getField(), parsedVal);
+                } catch (DdlException e) {
+                    LOG.warn("set variable failed, should not happen", e);
+                }
+            });
         } finally {
             wLock.unlock();
         }
@@ -358,8 +428,7 @@ public class VariableMgr {
 
     public void setCaseInsensitive(boolean caseInsensitive) throws DdlException {
         VarContext ctx = getVarContext(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE);
-        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE,
-                String.valueOf(caseInsensitive));
+        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE, caseInsensitive);
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -459,7 +528,7 @@ public class VariableMgr {
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
-            
+
             for (String varName : root.keySet()) {
                 VarContext varContext = getVarContext(varName);
                 if (varContext == null) {
@@ -630,7 +699,7 @@ public class VariableMgr {
         SessionVariable defaultVar;
         rLock.lock();
         try {
-            defaultVar = (SessionVariable) defaultSessionVariable.clone();
+            defaultVar = defaultSessionVariable.clone();
         } finally {
             rLock.unlock();
         }
@@ -642,7 +711,7 @@ public class VariableMgr {
                     refreshedCount++;
                 }
             } catch (Exception e) {
-                LOG.warn("Failed to refresh variables for connection {}: {}", 
+                LOG.warn("Failed to refresh variables for connection {}: {}",
                         ctx.getConnectionId(), e.getMessage());
             }
         }
@@ -652,18 +721,18 @@ public class VariableMgr {
 
     /**
      * Refresh variables for a single connection.
-     * 
-     * @param ctx the connection context
+     *
+     * @param ctx        the connection context
      * @param defaultVar the default session variables (current global defaults)
-     * @param force if true, force refresh all variables even if they have been modified by the session
+     * @param force      if true, force refresh all variables even if they have been modified by the session
      * @return true if any variables were refreshed
      */
     private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar, boolean force) {
         SessionVariable sessionVar = ctx.getSessionVariable();
         Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
-        
+
         boolean refreshed = false;
-        
+
         // Iterate through all session variables and refresh those that haven't been modified
         for (Field field : SessionVariable.class.getDeclaredFields()) {
             VarAttr attr = field.getAnnotation(VarAttr.class);

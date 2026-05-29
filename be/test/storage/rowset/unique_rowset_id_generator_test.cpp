@@ -21,9 +21,9 @@
 
 #include <iostream>
 
-#include "util/pretty_printer.h"
-#include "util/runtime_profile.h"
-#include "util/threadpool.h"
+#include "base/utility/pretty_printer.h"
+#include "common/runtime_profile.h"
+#include "common/thread/threadpool.h"
 
 namespace starrocks {
 class UniqueRowsetIdGeneratorTest : public testing::Test {};

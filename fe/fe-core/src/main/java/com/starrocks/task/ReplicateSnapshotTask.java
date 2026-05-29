@@ -37,6 +37,14 @@ public class ReplicateSnapshotTask extends AgentTask {
     private final List<TSnapshotInfo> srcSnapshotInfos;
     private final byte[] encryptionMeta;
 
+    // for lake
+    private final long virtualTabletId;
+    private final long srcDbId;
+    private final long srcTableId;
+    private final long srcPartitionId;
+    // Full path of source partition (only set for S3 storage when FE provides the full path)
+    private final String srcPartitionFullPath;
+
     public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion, long dataVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
@@ -55,6 +63,43 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcVisibleVersion = srcVisibleVersion;
         this.srcSnapshotInfos = srcSnapshotInfos;
         this.encryptionMeta = encryptionMeta;
+
+        this.virtualTabletId = -1;
+        this.srcDbId = -1;
+        this.srcTableId = -1;
+        this.srcPartitionId = -1;
+        this.srcPartitionFullPath = null;
+    }
+
+    // for lake
+    public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId,
+                                          long tabletId, TTabletType tabletType, long transactionId,
+                                          int schemaHash, long visibleVersion, long dataVersion,
+                                          long srcTabletId, TTabletType srcTabletType,
+                                          int srcSchemaHash, long srcVisibleVersion,
+                                          byte[] encryptionMeta, long virtualTabletId,
+                                          long srcDbId, long srcTableId, long srcPartitionId,
+                                          String srcPartitionFullPath) {
+        super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
+                System.currentTimeMillis());
+        this.transactionId = transactionId;
+        this.tabletType = tabletType;
+        this.schemaHash = schemaHash;
+        this.visibleVersion = visibleVersion;
+        this.dataVersion = dataVersion;
+        this.srcTabletId = srcTabletId;
+        this.srcTabletType = srcTabletType;
+        this.srcSchemaHash = srcSchemaHash;
+        this.srcVisibleVersion = srcVisibleVersion;
+        this.encryptionMeta = encryptionMeta;
+        this.virtualTabletId = virtualTabletId;
+        this.srcDbId = srcDbId;
+        this.srcTableId = srcTableId;
+        this.srcPartitionId = srcPartitionId;
+        this.srcPartitionFullPath = srcPartitionFullPath;
+
+        this.srcToken = null;
+        this.srcSnapshotInfos = null;
     }
 
     public TReplicateSnapshotRequest toThrift() {
@@ -77,6 +122,16 @@ public class ReplicateSnapshotTask extends AgentTask {
         request.setSrc_snapshot_infos(srcSnapshotInfos);
         request.setEncryption_meta(encryptionMeta);
 
+        request.setVirtual_tablet_id(virtualTabletId);
+        request.setSrc_db_id(srcDbId);
+        request.setSrc_table_id(srcTableId);
+        request.setSrc_partition_id(srcPartitionId);
+
+        // Full path of source partition (only set when partitioned prefix is enabled)
+        if (srcPartitionFullPath != null) {
+            request.setSrc_partition_full_path(srcPartitionFullPath);
+        }
+
         return request;
     }
 
@@ -93,6 +148,10 @@ public class ReplicateSnapshotTask extends AgentTask {
         sb.append(", src visible version: ").append(srcVisibleVersion);
         sb.append(", src snapshot infos: ").append(srcSnapshotInfos);
         sb.append(", dest backend: ").append(backendId);
+        sb.append(", src db id: ").append(srcDbId);
+        sb.append(", src table id: ").append(srcTableId);
+        sb.append(", src partition id: ").append(srcPartitionId);
+        sb.append(", src partition full path: ").append(srcPartitionFullPath);
         return sb.toString();
     }
 }

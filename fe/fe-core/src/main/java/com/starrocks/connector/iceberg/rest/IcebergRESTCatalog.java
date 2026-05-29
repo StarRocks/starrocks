@@ -87,6 +87,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private Map<String, String> restCatalogProperties;
     private final boolean nestedNamespaceEnabled;
     private final boolean viewEndpointsEnabled;
+    private final boolean enableVendedCredentials;
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -104,7 +105,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-        boolean enableVendedCredentials =
+        this.enableVendedCredentials =
                 Boolean.parseBoolean(restCatalogProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
         if (enableVendedCredentials) {
             restCatalogProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
@@ -138,11 +139,18 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.conf = conf;
         this.nestedNamespaceEnabled = false;
         this.viewEndpointsEnabled = true;
+        this.restCatalogProperties = Maps.newHashMap();
+        this.enableVendedCredentials = false;
     }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
         return IcebergCatalogType.REST_CATALOG;
+    }
+
+    @Override
+    public Map<String, String> getCatalogProperties() {
+        return delegate.properties();
     }
 
     @Override
@@ -249,7 +257,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public Database getDB(ConnectContext context, String dbName) {
         try {
             Map<String, String> dbMeta = delegate.loadNamespaceMetadata(buildContext(context), convertDbNameToNamespace(dbName));
-            return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
+            return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
         } catch (RESTException re) {
             LOG.error("Failed to get database using REST Catalog, for dbName {}", dbName, re);
             throw new StarRocksConnectorException("Failed to get database using REST Catalog",
@@ -444,20 +452,24 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private SessionCatalog.SessionContext buildContext(ConnectContext context) {
         String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
 
-        Map<String, String> credentials;
-        if (Strings.isNullOrEmpty(context.getAuthToken())) {
+        // only pass user's auth token to REST Catalog when security mode is JWT
+        boolean isJwtSecurity = Security.JWT.name().equalsIgnoreCase(
+                restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"));
+        if (!isJwtSecurity || Strings.isNullOrEmpty(context.getAuthToken())) {
             return SessionCatalog.SessionContext.createEmpty();
-        } else {
-            ImmutableMap.Builder<String, String> mapBuilder = ImmutableMap.<String, String>builder()
-                    .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken());
-
-            if (Security.JWT.name().equalsIgnoreCase(restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"))) {
-                mapBuilder.put(OAuth2Properties.TOKEN, context.getAuthToken());
-            }
-            credentials = mapBuilder.buildOrThrow();
         }
+
+        Map<String, String> credentials = ImmutableMap.<String, String>builder()
+                .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken())
+                .put(OAuth2Properties.TOKEN, context.getAuthToken())
+                .buildOrThrow();
 
         return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, ImmutableMap.of(),
                 context.getCurrentUserIdentity());
+    }
+
+    @Override
+    public boolean isVendedCredentialsEnabled() {
+        return enableVendedCredentials;
     }
 }

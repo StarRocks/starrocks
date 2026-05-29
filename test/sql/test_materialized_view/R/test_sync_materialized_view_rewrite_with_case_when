@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view_rewrite_with_case_when
+-- name: test_sync_materialized_view_rewrite_with_case_when @native
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
 -- result:
 -- !result

@@ -17,17 +17,23 @@
 
 #include "exec/short_circuit_hybrid.h"
 
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
+#include "exec/data_sinks/memory_scratch_sink.h"
 #include "exec/scan_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/memory_scratch_sink.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 Status ShortCircuitHybridScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
@@ -60,7 +66,7 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     DCHECK(_tuple_desc != nullptr);
 
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
@@ -87,7 +93,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
     auto tablet_schema = _tablets[0]->tablet_schema()->schema();
     auto column_ids = tablet_schema->field_column_ids();
     auto tablet_schema_without_rowstore = std::make_unique<Schema>(tablet_schema, column_ids);
-    auto result_chunk = ChunkHelper::new_chunk(*_tuple_desc, result_size);
+    auto result_chunk = RuntimeChunkHelper::new_chunk(*_tuple_desc, result_size);
 
     //idx is column id, value is slot id
     if (result_size > 0) {
@@ -95,7 +101,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
         for (auto slot_desc : _tuple_desc->slots()) {
             auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
             if (field->is_key()) {
-                result_chunk->get_column_by_slot_id(slot_desc->id())
+                result_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id())
                         ->append(*(_key_chunk->get_column_by_name(field->name().data()).get()));
             }
         }
@@ -103,11 +109,11 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
         for (auto slot_desc : _tuple_desc->slots()) {
             auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
             if (!field->is_key()) {
-                result_chunk->get_column_by_slot_id(slot_desc->id())
+                result_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id())
                         ->append(*(_value_chunk->get_column_by_name(field->name().data()).get()));
             }
         }
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
         if (result_chunk->num_rows() == 0) {
             *eos = true;
         }
@@ -124,12 +130,13 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
     DCHECK(_tablets.size() > 0);
     _tablet_schema = _tablets[0]->tablet_schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     auto key_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
 
-    _key_chunk = ChunkHelper::new_chunk(key_schema, _num_rows);
+    _key_chunk = ChunkFactory::new_chunk(key_schema, _num_rows);
     _key_chunk->reset();
 
     for (int i = 0; i < _num_rows; ++i) {
@@ -148,10 +155,10 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             std::vector<ExprContext*> expr_ctxs;
             std::vector<TExpr> key_literal_expr{keys_literal_expr[j]};
             // prepare
-            RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
-                                                    runtime_state()));
-            RETURN_IF_ERROR(Expr::prepare(expr_ctxs, runtime_state()));
-            RETURN_IF_ERROR(Expr::open(expr_ctxs, runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
+                                                           runtime_state()));
+            RETURN_IF_ERROR(ExprExecutor::prepare(expr_ctxs, runtime_state()));
+            RETURN_IF_ERROR(ExprExecutor::open(expr_ctxs, runtime_state()));
             auto& iteral_expr_ctx = expr_ctxs[0];
             ASSIGN_OR_RETURN(ColumnPtr value, iteral_expr_ctx->root()->evaluate_const(iteral_expr_ctx));
             if (UNLIKELY(value == nullptr || value->only_null() || value->is_null(0))) {
@@ -159,7 +166,7 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             }
             // add const column to chunk
             auto const_column = ColumnHelper::get_data_column(value.get());
-            _key_chunk->get_column_by_index(j)->append(*const_column);
+            _key_chunk->get_column_raw_ptr_by_index(j)->append(*const_column);
         }
     }
 
@@ -180,9 +187,9 @@ Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found
     }
     auto value_schema = std::make_unique<Schema>(_tablet_schema->schema(), value_column_ids);
     // tmp value_chunk, order not match key_chunk
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
+    ChunkPtr value_chunk = ChunkFactory::new_chunk(*(value_schema), _num_rows);
     // final value_chunk, order match key_chunk
-    _value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
+    _value_chunk = ChunkFactory::new_chunk(*(value_schema), _num_rows);
 
     std::vector<int> key_idx_to_value_idx(_num_rows, -1);
     int value_chunk_idx = 0;
@@ -194,7 +201,7 @@ Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found
         _table_reader = std::make_shared<TableReader>();
         RETURN_IF_ERROR(_table_reader->init(params));
 
-        auto current_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
+        auto current_chunk = ChunkFactory::new_chunk(*(value_schema), _num_rows);
         // current tablet will return all key_chunk mapping whether has value
         // true , means vector idx of key_chunk have value
         std::vector<bool> curent_found;

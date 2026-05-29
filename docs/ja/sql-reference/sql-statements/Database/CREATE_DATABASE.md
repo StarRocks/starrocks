@@ -27,7 +27,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 **PROPERTIES (オプション)**
 
-`storage_volume`: 共有データクラスタ内でデータベースを保存するために使用されるストレージボリュームの名前を指定します。
+`storage_volume`: 共有データクラスタ内でデータベースを保存するために使用されるストレージボリュームの名前を指定します。指定しない場合、デフォルトのストレージボリュームがデータベースにアタッチされます。このプロパティは `ALTER DATABASE` ステートメントで変更できます。
 
 ## 例
 
@@ -51,3 +51,4 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 - [SHOW DATABASES](SHOW_DATABASES.md)
 - [DESC](../table_bucket_part_index/DESCRIBE.md)
 - [DROP DATABASE](DROP_DATABASE.md)
+- [ALTER DATABASE](ALTER_DATABASE.md)

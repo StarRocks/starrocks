@@ -18,6 +18,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskSchedule;
 
+import java.util.Map;
+
 public class AlterTaskInfo implements Writable {
     @SerializedName("name")
     private String name;
@@ -28,6 +30,12 @@ public class AlterTaskInfo implements Writable {
     @SerializedName("schedule")
     private TaskSchedule schedule;
 
+    @SerializedName("state")
+    private Constants.TaskState state;
+
+    @SerializedName("properties")
+    private Map<String, String> properties;
+
     public AlterTaskInfo() {
         // for persist
     }
@@ -36,6 +44,16 @@ public class AlterTaskInfo implements Writable {
         this.name = name;
         this.type = type;
         this.schedule = schedule;
+    }
+
+    public AlterTaskInfo(String name, Constants.TaskState state) {
+        this.name = name;
+        this.state = state;
+    }
+
+    public AlterTaskInfo(String name, Map<String, String> properties) {
+        this.name = name;
+        this.properties = properties;
     }
 
     public String getName() {
@@ -48,5 +66,13 @@ public class AlterTaskInfo implements Writable {
 
     public TaskSchedule getSchedule() {
         return schedule;
+    }
+
+    public Constants.TaskState getState() {
+        return state;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 }

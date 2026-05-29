@@ -36,9 +36,9 @@
 
 #include <deque>
 #include <queue>
+#include <utility>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
@@ -47,6 +47,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
+#include "types/datum.h"
 
 namespace starrocks {
 class Field;
@@ -72,7 +73,7 @@ public:
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                            TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
                            TabletSchemaCSPtr base_tablet_schema = nullptr) = 0;
-    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = std::move(msg); }
     std::string alter_msg_header() { return _alter_msg_header; }
 
     std::string _alter_msg_header;
@@ -139,7 +140,7 @@ public:
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
-    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = std::move(msg); }
 
     const std::string& get_task_detail_msg() { return _task_detail_msg; }
 

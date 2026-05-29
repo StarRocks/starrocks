@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 #include <gtest/gtest.h>
 

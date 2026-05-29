@@ -294,3 +294,20 @@ function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (
 
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k1 = n3.k1', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 656323320')
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n3.k3', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 478298162')
+
+CREATE TABLE `t_histogram_all_columns` (
+    `k1` int,
+    `k2` varchar(20),
+    `k3` date
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t_histogram_all_columns VALUES
+    (1, 'a', '2020-01-01'),
+    (2, 'b', '2020-01-02'),
+    (3, 'b', '2020-01-03'),
+    (NULL, NULL, NULL);
+
+[UC] ANALYZE TABLE t_histogram_all_columns UPDATE HISTOGRAM ON ALL COLUMNS;
+function: assert_explain_costs_contains('select * from t_histogram_all_columns', 'MCV: [[1:10][2:10][3:10]]', 'MCV: [[b:20][a:10]] ESTIMATE', 'MCV: [[2020-01-01:10][2020-01-02:10][2020-01-03:10]]')
+

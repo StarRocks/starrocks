@@ -16,11 +16,11 @@
 
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                          \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                          \
@@ -32,6 +32,13 @@
     }
 
 namespace starrocks {
+
+JVMMetrics* JVMMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new JVMMetrics();
+    return instance;
+}
 
 Status JVMMetrics::init() {
     RETURN_IF_ERROR(detect_java_runtime());

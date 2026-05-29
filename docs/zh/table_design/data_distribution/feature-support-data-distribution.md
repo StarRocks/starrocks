@@ -57,6 +57,10 @@ sidebar_position: 50
     </tr>
 </table>
 
+:::note
+从 v4.1 版本开始，Tablet 的最大容量已调整为 100 GB。
+:::
+
 ## 分区
 
 <table>

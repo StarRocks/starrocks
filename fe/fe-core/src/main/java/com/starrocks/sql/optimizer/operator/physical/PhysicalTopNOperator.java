@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -118,6 +119,14 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return perPipeline;
     }
 
+    public boolean isTopNPushDownAgg() {
+        return isPerPipeline() || isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
@@ -172,6 +181,18 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return visitor.visitPhysicalTopN(optExpression, context);
     }
 
+    @Override
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet set = super.getUsedColumns();
+        if (partitionByColumns != null) {
+            partitionByColumns.forEach(set::union);
+        }
+        if (preAggCall != null) {
+            preAggCall.values().forEach(v -> set.union(v.getUsedColumns()));
+        }
+        return set;
+    }
+
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         // nothing to do
         if (preAggCall == null) {
@@ -216,6 +237,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             builder.isSplit = operator.isSplit;
             builder.isEnforced = operator.isEnforced;
             builder.perPipeline = operator.perPipeline;
+            builder.preAggCall = operator.preAggCall;
             return this;
         }
 

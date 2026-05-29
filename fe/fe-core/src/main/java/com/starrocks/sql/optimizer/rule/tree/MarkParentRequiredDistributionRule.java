@@ -29,11 +29,22 @@ import java.util.List;
 
 public class MarkParentRequiredDistributionRule implements TreeRewriteRule {
 
-    private static final Visitor VISITOR = new Visitor();
+    // Whether to treat global dict presence as a hard distribution requirement.
+    // In some optimizations (e.g. skew join v2 rewrite), we want to ignore global dict so that the rewrite
+    // can still adjust distributions. We will re-mark it later for other rules (e.g. tuning guide).
+    private final boolean considerGlobalDict;
+
+    public MarkParentRequiredDistributionRule() {
+        this(true);
+    }
+
+    public MarkParentRequiredDistributionRule(boolean considerGlobalDict) {
+        this.considerGlobalDict = considerGlobalDict;
+    }
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        root.getOp().accept(VISITOR, root, false);
+        root.getOp().accept(new Visitor(considerGlobalDict), root, false);
         return root;
     }
 
@@ -42,6 +53,12 @@ public class MarkParentRequiredDistributionRule implements TreeRewriteRule {
     // ensure the global dict should be reset correctly in the new distribution which is a tedious work.
     // If no OptExpression's child has global dict, we just need consider the requirement from its parent.
     private static class Visitor extends OptExpressionVisitor<Boolean, Boolean> {
+        private final boolean considerGlobalDict;
+
+        private Visitor(boolean considerGlobalDict) {
+            this.considerGlobalDict = considerGlobalDict;
+        }
+
         private boolean visitChildren(List<OptExpression> children, Boolean existRequiredDistribution) {
             boolean existGlobalDict = false;
             for (OptExpression child : children) {
@@ -122,8 +139,8 @@ public class MarkParentRequiredDistributionRule implements TreeRewriteRule {
         @Override
         public Boolean visitPhysicalOlapScan(OptExpression optExpression, Boolean existRequiredDistribution) {
             PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
-            boolean existGlobalDict = CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
-                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr());
+            boolean existGlobalDict = considerGlobalDict && (CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
+                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr()));
             optExpression.setExistRequiredDistribution(existRequiredDistribution || existGlobalDict);
             return existGlobalDict;
         }
@@ -131,8 +148,8 @@ public class MarkParentRequiredDistributionRule implements TreeRewriteRule {
         @Override
         public Boolean visitPhysicalHiveScan(OptExpression optExpression, Boolean existRequiredDistribution) {
             PhysicalHiveScanOperator scanOperator = (PhysicalHiveScanOperator) optExpression.getOp();
-            boolean existGlobalDict = CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
-                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr());
+            boolean existGlobalDict = considerGlobalDict && (CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
+                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr()));
             optExpression.setExistRequiredDistribution(existRequiredDistribution || existGlobalDict);
             return existGlobalDict;
         }
@@ -140,8 +157,8 @@ public class MarkParentRequiredDistributionRule implements TreeRewriteRule {
         @Override
         public Boolean visitPhysicalIcebergScan(OptExpression optExpression, Boolean existRequiredDistribution) {
             PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
-            boolean existGlobalDict = CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
-                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr());
+            boolean existGlobalDict = considerGlobalDict && (CollectionUtils.isNotEmpty(scanOperator.getGlobalDicts()) ||
+                    MapUtils.isNotEmpty(scanOperator.getGlobalDictsExpr()));
             optExpression.setExistRequiredDistribution(existRequiredDistribution || existGlobalDict);
             return existGlobalDict;
         }

@@ -19,10 +19,14 @@
 #include <limits>
 #include <utility>
 
+#include "base/container/fixed_hash_map.h"
+#include "base/failpoint/fail_point.h"
+#include "base/phmap/phmap.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/aggregate/agg_hash_set.h"
@@ -31,10 +35,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/fixed_hash_map.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -60,7 +60,7 @@ concept AllocFunc = HasKeyType<HashMapWithKey>&& requires(T t, const typename Ha
 template <PhmapSeed seed>
 using Int8AggHashMap = SmallFixedSizeHashMap<int8_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
-using Int16AggHashMap = phmap::flat_hash_map<int16_t, AggDataPtr, StdHashWithSeed<int16_t, seed>>;
+using Int16AggHashMap = SmallFixedSizeHashMap<int16_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
 using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr, StdHashWithSeed<int32_t, seed>>;
 template <PhmapSeed seed>
@@ -100,17 +100,8 @@ using SliceAggTwoLevelHashMap =
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
 template <typename T>
-concept HasImmutableData = requires(T t) {
-    {t.immutable_data()};
-};
-
-template <typename T>
 auto get_immutable_data(T* obj) {
-    if constexpr (HasImmutableData<T>) {
-        return obj->immutable_data();
-    } else {
-        return obj->get_proxy_data();
-    }
+    return obj->immutable_data();
 }
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
@@ -433,10 +424,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    void insert_keys_to_columns(const ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-            auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());
+            auto* column = down_cast<ColumnType*>(nullable_column->data_column_raw_ptr());
             column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
             nullable_column->null_column_data().resize(chunk_size);
         } else {
@@ -653,11 +644,11 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-            auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
+            auto* column = down_cast<BinaryColumn*>(nullable_column->data_column_raw_ptr());
             keys.resize(chunk_size);
             column->append_strings(keys.data(), keys.size());
             nullable_column->null_column_data().resize(chunk_size);
@@ -895,7 +886,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         return max_size;
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
         // deserialization by column will cause the memory locality to deteriorate,
@@ -1089,7 +1080,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         DCHECK(fixed_byte_size != -1);
         tmp_slices.reserve(chunk_size);
 
@@ -1252,7 +1243,7 @@ struct AggHashMapWithCompressedKeyFixedSize
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         bitcompress_deserialize(key_columns, bases, offsets, used_bits, chunk_size, sizeof(FixedSizeSliceKey),
                                 keys.data());
     }

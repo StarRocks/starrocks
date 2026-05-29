@@ -18,10 +18,12 @@
 
 #include <thread>
 
+#include "base/testutil/parallel_test.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
-#include "testutil/parallel_test.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "Overview of StarRocks logging: FE and BE log file types, content, configuration, log rolling and retention strategies for troubleshooting and performance analysis."
+---
+
 When deploying and operating StarRocks, understanding and properly using the logging system is critical for troubleshooting, performance analysis, and system tuning. This article provides a detailed overview of the log file types, typical content, configuration methods, and log rolling and retention strategies for both the Frontend (FE) and Backend (BE or CN) components of StarRocks.
 
 The information in this document is based on StarRocks Version 3.5.x.

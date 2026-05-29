@@ -25,28 +25,29 @@
 #include <utility>
 #include <vector>
 
+#include "base/bit/bit_util.h"
+#include "base/decimal_types.h"
+#include "base/time/timezone_utils.h"
+#include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/time_types.h"
-#include "runtime/types.h"
-#include "storage/olap_common.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "util/bit_util.h"
-#include "util/decimal_types.h"
-#include "util/int96.h"
-#include "util/timezone_utils.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -60,7 +61,7 @@ public:
     Int32ToDateConverter() = default;
     ~Int32ToDateConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int32ToTimeConverter final : public ColumnConverter {
@@ -68,7 +69,7 @@ public:
     Int32ToTimeConverter() = default;
     ~Int32ToTimeConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int32ToDateTimeConverter final : public ColumnConverter {
@@ -76,7 +77,7 @@ public:
     Int32ToDateTimeConverter() = default;
     ~Int32ToDateTimeConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int64ToTimeConverter final : public ColumnConverter {
@@ -84,7 +85,7 @@ public:
     Int64ToTimeConverter() = default;
     ~Int64ToTimeConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int96ToDateTimeConverter final : public ColumnConverter {
@@ -94,11 +95,19 @@ public:
 
     Status init(const std::string& timezone);
     // convert column from int96 to timestamp
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 
 private:
     int _offset = 0;
     cctz::time_zone _ctz;
+};
+
+class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
+public:
+    FixedLenByteArrayToUUIDConverter() = default;
+    ~FixedLenByteArrayToUUIDConverter() override = default;
+
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int64ToDateTimeConverter final : public ColumnConverter {
@@ -107,7 +116,7 @@ public:
     ~Int64ToDateTimeConverter() override = default;
 
     Status init(const std::string& timezone, const tparquet::SchemaElement& schema_element);
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 
 private:
     bool _is_adjusted_to_utc = false;
@@ -118,7 +127,7 @@ private:
 };
 
 template <typename SourceType, typename DestType>
-void convert_int_to_int(SourceType* __restrict__ src, DestType* __restrict__ dst, size_t size) {
+void convert_int_to_int(const SourceType* __restrict__ src, DestType* __restrict__ dst, size_t size) {
     for (size_t i = 0; i < size; i++) {
         dst[i] = DestType(src[i]);
     }
@@ -131,7 +140,7 @@ public:
     NumericToNumericConverter() = default;
     ~NumericToNumericConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override {
+    Status convert(const Column* src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
@@ -140,12 +149,13 @@ public:
 
         auto* src_column =
                 ColumnHelper::as_raw_column<FixedLengthColumn<SourceType>>(src_nullable_column->data_column());
-        auto* dst_column = ColumnHelper::as_raw_column<FixedLengthColumn<DestType>>(dst_nullable_column->data_column());
+        auto* dst_column =
+                ColumnHelper::as_raw_column<FixedLengthColumn<DestType>>(dst_nullable_column->data_column_raw_ptr());
 
         auto& src_data = src_column->get_data();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
-        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+        auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
         size_t size = dst_null_data.size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
@@ -172,7 +182,7 @@ public:
         }
     }
 
-    Status convert(const ColumnPtr& src, Column* dst) override {
+    Status convert(const Column* src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
@@ -181,12 +191,12 @@ public:
 
         auto* src_column =
                 ColumnHelper::as_raw_column<FixedLengthColumn<SourceType>>(src_nullable_column->data_column());
-        auto* dst_column = ColumnHelper::as_raw_column<DestColumnType>(dst_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<DestColumnType>(dst_nullable_column->data_column_raw_ptr());
 
         auto& src_data = src_column->get_data();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
-        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+        auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
         bool has_null = false;
         size_t size = src_column->size();
@@ -276,7 +286,7 @@ public:
         }
     }
 
-    Status convert(const ColumnPtr& src, Column* dst) override {
+    Status convert(const Column* src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
@@ -284,12 +294,12 @@ public:
         dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
-        auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column_raw_ptr());
 
-        const BinaryColumn::Bytes& src_data = src_column->get_bytes();
+        auto src_data = src_column->get_immutable_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
-        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+        auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
         size_t size = src_column->size();
         if (_type_length > sizeof(DestPrimitiveType)) {
@@ -302,15 +312,15 @@ public:
 
         // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
         // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
-#define M(SZ, K, T)                                                                                       \
-    case SZ:                                                                                              \
-        if (has_null) {                                                                                   \
-            t_convert<SZ, K, T, true>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(),  \
-                                      src_data.data());                                                   \
-        } else {                                                                                          \
-            t_convert<SZ, K, T, false>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), \
-                                       src_data.data());                                                  \
-        }                                                                                                 \
+#define M(SZ, K, T)                                                                                            \
+    case SZ:                                                                                                   \
+        if (has_null) {                                                                                        \
+            t_convert<SZ, K, T, true>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()),  \
+                                      dst_data.data(), src_data.data());                                       \
+        } else {                                                                                               \
+            t_convert<SZ, K, T, false>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()), \
+                                       dst_data.data(), src_data.data());                                      \
+        }                                                                                                      \
         break;
 
 #define MX(T)          \
@@ -354,6 +364,69 @@ private:
     DestPrimitiveType _scale_factor = 1;
     int32_t _type_length = 0;
 };
+
+// UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
+// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+static constexpr int kUUIDByteLength = 16;
+static constexpr int kUUIDStringLength = 36;
+
+Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst) {
+    auto* src_nullable = ColumnHelper::as_raw_column<NullableColumn>(src);
+    auto* dst_nullable = down_cast<NullableColumn*>(dst);
+    auto* src_col = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable->data_column());
+    auto* dst_col = ColumnHelper::as_raw_column<BinaryColumn>(dst_nullable->data_column_raw_ptr());
+
+    const auto& src_null = src_nullable->null_column()->get_data();
+    auto& dst_null = dst_nullable->null_column_raw_ptr()->get_data();
+
+    size_t n = src_col->size();
+    dst_null.resize(n);
+    memcpy(dst_null.data(), src_null.data(), n);
+
+    static constexpr char HEX[] = "0123456789abcdef";
+    char buf[kUUIDStringLength];
+
+    for (size_t i = 0; i < n; i++) {
+        if (src_null[i]) {
+            dst_col->append_default();
+            continue;
+        }
+        Slice s = src_col->get_slice(i);
+        if (UNLIKELY(s.size != kUUIDByteLength)) {
+            return Status::Corruption(strings::Substitute(
+                    "parquet UUID column has unexpected byte length $0, expected $1", s.size, kUUIDByteLength));
+        }
+        const auto* bytes = reinterpret_cast<const uint8_t*>(s.data);
+        int pos = 0;
+        for (int j = 0; j < 4; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 4; j < 6; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 6; j < 8; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 8; j < 10; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 10; j < kUUIDByteLength; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        dst_col->append(Slice(buf, kUUIDStringLength));
+    }
+    dst_nullable->set_has_null(src_nullable->has_null());
+    return Status::OK();
+}
 
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
@@ -484,7 +557,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
         int32_t type_length = field.type_length;
-        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+        bool is_uuid = schema_element.__isset.logicalType && schema_element.logicalType.__isset.UUID;
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         switch (col_type) {
@@ -503,6 +578,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
                                                                                      type_length);
+            break;
+        case LogicalType::TYPE_VARCHAR:
+        case LogicalType::TYPE_CHAR:
+            if (is_uuid) {
+                need_convert = true;
+                *converter = std::make_unique<FixedLenByteArrayToUUIDConverter>();
+            }
             break;
         default:
             break;
@@ -541,9 +623,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
 
     if (need_convert && *converter == nullptr) {
-        return Status::NotSupported(
-                strings::Substitute("parquet column reader: not supported convert from parquet `$0` to `$1`",
-                                    ::tparquet::to_string(parquet_type), type_to_string(col_type)));
+        return Status::NotSupported(strings::Substitute(
+                "parquet column reader: not supported convert from parquet `$0` to `$1`, field=$2",
+                ::tparquet::to_string(parquet_type), type_to_string(col_type), field.debug_string()));
     }
 
     if (!need_convert) {
@@ -553,8 +635,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     return Status::OK();
 }
 
-ColumnPtr ColumnConverter::create_src_column() {
-    ColumnPtr data_column = nullptr;
+MutableColumnPtr ColumnConverter::create_src_column() {
+    MutableColumnPtr data_column = nullptr;
     switch (parquet_type) {
     case tparquet::Type::type::BOOLEAN:
         data_column = FixedLengthColumn<uint8_t>::create();
@@ -579,10 +661,10 @@ ColumnPtr ColumnConverter::create_src_column() {
         data_column = BinaryColumn::create();
         break;
     }
-    return NullableColumn::create(data_column, NullColumn::create());
+    return NullableColumn::create(std::move(data_column), NullColumn::create());
 }
 
-Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst) {
+Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -590,14 +672,14 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<DateColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DateColumn>(dst_nullable_column->data_column_raw_ptr());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
         dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
@@ -606,7 +688,7 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     return Status::OK();
 }
 
-Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int32ToTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -614,14 +696,14 @@ Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column_raw_ptr());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
@@ -633,7 +715,7 @@ Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     return Status::OK();
 }
 
-Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -641,14 +723,14 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column_raw_ptr());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
@@ -672,7 +754,7 @@ Status Int96ToDateTimeConverter::init(const std::string& timezone) {
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -680,14 +762,14 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int96_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+    auto* dst_column = down_cast<TimestampColumn*>(dst_nullable_column->data_column_raw_ptr());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     auto fill_dst_fn = [&]<bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
@@ -773,7 +855,7 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
     return Status::OK();
 }
 
-Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -781,14 +863,14 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column_raw_ptr());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
@@ -825,7 +907,7 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     return Status::OK();
 }
 
-Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -833,14 +915,14 @@ Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column_raw_ptr());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];

@@ -16,13 +16,11 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowProcedureStmt extends ShowStmt {
 
     private String pattern;
-    private Expr where;
 
     public ShowProcedureStmt(String pattern, Expr where) {
         this(pattern, where, NodePosition.ZERO);
@@ -31,7 +29,7 @@ public class ShowProcedureStmt extends ShowStmt {
     public ShowProcedureStmt(String pattern, Expr where, NodePosition pos) {
         super(pos);
         this.pattern = pattern;
-        this.predicate = (Predicate) where;
+        this.predicate = where;
     }
 
     public ShowProcedureStmt() {

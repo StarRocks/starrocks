@@ -44,10 +44,10 @@
 #include "agent/agent_common.h"
 #include "agent/status.h"
 #include "agent/utils.h"
+#include "common/system/cpu_usage_info.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "storage/storage_engine.h"
-#include "util/cpu_usage_info.h"
 
 namespace starrocks {
 

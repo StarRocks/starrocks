@@ -14,10 +14,10 @@
 
 #include "exprs/hash_functions.h"
 
+#include "base/hash/xxh3.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
-#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -143,9 +143,7 @@ inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, c
     const auto& col = columns[0];
     const size_t row_size = col->size();
 
-    if (col->only_null()) {
-        return col;
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     if (col->is_constant()) {
         uint32_t hash_value = 0;
@@ -163,7 +161,7 @@ inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, c
     const uint8_t* null_data = nullptr;
     if (is_nullable) {
         auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(col);
-        null_data = null_column->null_column()->get_data().data();
+        null_data = null_column->immutable_null_column_data().data();
     }
 
     for (size_t row = 0; row < row_size; ++row) {

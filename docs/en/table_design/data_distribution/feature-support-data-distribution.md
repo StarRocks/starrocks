@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
 sidebar_position: 50
+description: "Reference for partitioning and bucketing feature support in StarRocks, including expression partitioning, list partitioning, random bucketing, and colocate group support."
 ---
 
 # Feature Support: Data Distribution
@@ -57,6 +58,10 @@ This document outlines the partitioning and bucketing features supported by Star
     </tr>
 </table>
 
+:::note
+From v4.1 onwards, the maximum size of a tablet is changed to 100 GB.
+:::
+
 ## Partitioning
 
 <table>
@@ -105,7 +110,7 @@ This document outlines the partitioning and bucketing features supported by Star
     </tr>
 </table>
 
-###  Differences between partitioning strategies
+### Differences between partitioning strategies
 
 <table>
     <tr>

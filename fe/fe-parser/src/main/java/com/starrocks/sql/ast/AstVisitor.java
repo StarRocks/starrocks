@@ -146,6 +146,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitDelSqlDigestBlackListStatement(DelSqlDigestBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -166,7 +170,19 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -182,11 +198,103 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowSmallFilesStatement(ShowSmallFilesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDeleteStatement(ShowDeleteStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTransactionStatement(ShowTransactionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowTableStatusStatement(ShowTableStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTableStatement(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCreateTableStatement(ShowCreateTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowIndexStatement(ShowIndexStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropTableStatement(DropTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, C context) {
+        return visitDropTableStatement(statement, context);
+    }
+
+    default R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitRecoverPartitionStatement(RecoverPartitionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDescTableStmt(DescribeStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowAlterStatement(ShowAlterStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowProcStmt(ShowProcStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
     default R visitShowWhiteListStatement(ShowWhiteListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -404,6 +512,26 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCancelLoadStatement(CancelLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelBackupStatement(CancelBackupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCancelExportStatement(CancelExportStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelAlterTableStatement(CancelAlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitBackendClause(BackendClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -460,6 +588,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -469,6 +601,22 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -506,6 +654,18 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitDropStatsStatement(DropStatsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDropHistogramStatement(DropHistogramStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -538,7 +698,15 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitShowCreateFunctionStatement(ShowCreateFunctionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetUserPropertyStatement(SetUserPropertyStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -600,6 +768,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropPartitionColumnClause(DropPartitionColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitReplacePartitionColumnClause(ReplacePartitionColumnClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -719,6 +891,14 @@ public interface AstVisitor<R, C> {
         return visitAlterTableColumnClause(clause, context);
     }
 
+    default R visitAddMVColumnClause(AddMVColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitDropMVColumnClause(DropMVColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
     default R visitAddFieldClause(AddFieldClause clause, C context) {
         return visitAlterTableColumnClause(clause, context);
     }
@@ -778,6 +958,18 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropDbStatement(DropDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -881,6 +1073,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitInstallPluginStatement(InstallPluginStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitDropResourceStatement(DropResourceStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -965,6 +1161,14 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCreateFileStatement(CreateFileStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropFileStatement(DropFileStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -975,6 +1179,18 @@ public interface AstVisitor<R, C> {
 
     default R visitRestoreStatement(RestoreStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitTruncatePartitionClause(TruncatePartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitReplacePartitionClause(ReplacePartitionClause clause, C context) {
+        return visitNode(clause, context);
     }
 
     // ------------------------------------------- Expression ----------------------------------------

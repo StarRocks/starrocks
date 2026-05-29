@@ -161,6 +161,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ---------------------------------------- Partition Statement ----------------------------------------------------
 
     default R visitRecoverPartitionStatement(RecoverPartitionStmt statement, C context) {
@@ -177,7 +181,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, C context) {
+    default R visitCreateSyncMVStmt(CreateSyncMVStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -517,6 +521,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitSplitTabletClause(SplitTabletClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitMergeTabletClause(MergeTabletClause clause, C context) {
         return visitNode(clause, context);
     }
 

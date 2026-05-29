@@ -16,12 +16,13 @@
 
 #include <unordered_map>
 
+#include "base/compression/compression_utils.h"
+#include "base/compression/stream_decompressor.h"
+#include "base/string/utf8_check.h"
 #include "column/column_helper.h"
-#include "exec/exec_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/compression_utils.h"
-#include "util/compression/stream_compression.h"
-#include "util/utf8_check.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -275,7 +276,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            names.insert(column.name());
+            names.emplace(column.name());
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
     }
@@ -315,7 +316,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         // do evaluation.
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(it.second, ck.get()));
         if (ck->num_rows() == 0) {
             break;
         }
@@ -329,7 +330,7 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
     int num_columns = chunk->get()->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get()->get_column_raw_ptr_by_index(i);
         _column_raw_ptrs[i]->reserve(chunk_size);
     }
 

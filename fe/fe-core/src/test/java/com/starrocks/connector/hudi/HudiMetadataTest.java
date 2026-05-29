@@ -18,12 +18,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -35,6 +36,8 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -121,10 +124,26 @@ public class HudiMetadataTest {
     }
 
     @Test
+    public void testGetTableIOError(@Mocked HiveMetastoreOperations hmsOps) throws Exception {
+        new Expectations() {
+            {
+                hmsOps.getTable("db1", "table1");
+                result = new RuntimeException(new java.io.IOException("io failure"));
+            }
+        };
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> hudiMetadata.getTable(new ConnectContext(), "db1", "table1"));
+        String expectedPrefix = "Failed to get hudi table hive_catalog.db1.table1";
+        Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
+        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         Assertions.assertEquals(
                 Lists.newArrayList("col1"),
-                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
+                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadataRequestContext.DEFAULT));
     }
 
     @Test

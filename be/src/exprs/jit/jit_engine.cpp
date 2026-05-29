@@ -30,18 +30,16 @@
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
-#include <llvm/MC/SubtargetFeature.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Passes/PassPlugin.h>
 #include <llvm/Support/Error.h>
-#include <llvm/Support/Host.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/TargetParser/Host.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/GlobalOpt.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
@@ -50,7 +48,6 @@
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
-#include <llvm/Transforms/Vectorize.h>
 #include <llvm/Transforms/Vectorize/LoopVectorize.h>
 #include <llvm/Transforms/Vectorize/SLPVectorizer.h>
 
@@ -58,14 +55,15 @@
 #include <mutex>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_expr_fwd.h"
 #include "common/status.h"
+#include "common/system/mem_info.h"
 #include "exprs/expr.h"
+#include "exprs/jit/expr_jit_codegen.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/defer_op.h"
-#include "util/mem_info.h"
 
 namespace starrocks {
 
@@ -78,9 +76,9 @@ static inline Status generate_scalar_function_ir(ExprContext* context, llvm::Mod
     /// Create function type.
     auto* size_type = b.getInt64Ty();
     // Same with JITColumn.
-    auto* data_type = llvm::StructType::get(b.getInt8PtrTy(), b.getInt8PtrTy());
+    auto* data_type = llvm::StructType::get(b.getPtrTy(), b.getPtrTy());
     // Same with JITScalarFunction.
-    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
+    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, b.getPtrTy()}, false);
 
     /// Create function in module.
     // Pseudo code: void "expr->jit_expr_name"(int64_t rows_count, JITColumn* columns);
@@ -119,7 +117,7 @@ static inline Status generate_scalar_function_ir(ExprContext* context, llvm::Mod
     counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
 
     JITContext jc = {counter_phi, columns, module, b, 0};
-    ASSIGN_OR_RETURN(auto result, expr->generate_ir(context, &jc))
+    ASSIGN_OR_RETURN(auto result, ExprJITCodegen::generate_ir(context, expr, &jc))
 
     // Pseudo code:
     // values_last[counter] = result_value;
@@ -155,15 +153,14 @@ StatusOr<T> as_JIT_result(llvm::Expected<T>& expected, const std::string& error_
 
 StatusOr<llvm::orc::JITTargetMachineBuilder> make_target_machine_builder() {
     llvm::orc::JITTargetMachineBuilder jtmb((llvm::Triple(llvm::sys::getDefaultTargetTriple())));
-    auto const opt_level = llvm::CodeGenOpt::Aggressive; // or llvm::CodeGenOpt::None;
+    auto const opt_level = llvm::CodeGenOptLevel::Aggressive; // or llvm::CodeGenOptLevel::None;
     jtmb.setCodeGenOptLevel(opt_level);
     return jtmb;
 }
 
 void add_absolute_symbol(llvm::orc::LLJIT& lljit, const std::string& name, void* function_ptr) {
     llvm::orc::MangleAndInterner mangle(lljit.getExecutionSession(), lljit.getDataLayout());
-    llvm::JITEvaluatedSymbol symbol(reinterpret_cast<llvm::JITTargetAddress>(function_ptr),
-                                    llvm::JITSymbolFlags::Exported);
+    llvm::orc::ExecutorSymbolDef symbol(llvm::orc::ExecutorAddr::fromPtr(function_ptr), llvm::JITSymbolFlags::Exported);
     auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols({{mangle(name), symbol}}));
     llvm::cantFail(std::move(error));
 }
@@ -234,29 +231,6 @@ Status use_JIT_link(llvm::orc::LLJITBuilder& jit_builder, llvm::jitlink::JITLink
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachineBuilder jtmb,
-                                                      JITObjectCache& object_cache,
-                                                      llvm::jitlink::JITLinkMemoryManager& memory_manager) {
-    llvm::orc::LLJITBuilder jit_builder;
-    RETURN_IF_ERROR(use_JIT_link(jit_builder, memory_manager));
-    jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
-    jit_builder.setCompileFunctionCreator(
-            [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
-                    -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
-                auto target_machine = JTMB.createTargetMachine();
-                if (!target_machine) {
-                    return target_machine.takeError();
-                }
-                // after compilation, the object code will be stored into the given object cache
-                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine), &object_cache);
-            });
-
-    auto maybe_jit = jit_builder.create();
-    ASSIGN_OR_RETURN(auto jit, as_JIT_result(maybe_jit, "Could not create LLJIT instance: "));
-    add_process_symbol(*jit);
-    return std::move(jit);
-}
-
 static inline void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
     llvm::PassBuilder pass_builder;
     llvm::LoopAnalysisManager loop_am;
@@ -280,25 +254,20 @@ static inline void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis 
                 llvm::FunctionPassManager function_pm;
 
                 llvm::InstCombinePass inst_combine_pass;
-                llvm::PromotePass promote_pass;
                 llvm::GVNPass gvn_pass;
-                llvm::NewGVNPass new_gvn_pass;
-                llvm::SimplifyCFGPass simplify_cfg_pass;
-                llvm::LoopVectorizePass loop_vectorize_pass;
                 llvm::SLPVectorizerPass slp_vectorize_pass;
 
                 function_pm.addPass(std::move(inst_combine_pass));
-                function_pm.addPass(std::move(promote_pass));
+                function_pm.addPass(llvm::PromotePass());
                 function_pm.addPass(std::move(gvn_pass));
-                function_pm.addPass(std::move(new_gvn_pass));
-                function_pm.addPass(std::move(simplify_cfg_pass));
-                function_pm.addPass(std::move(loop_vectorize_pass));
+                function_pm.addPass(llvm::NewGVNPass());
+                function_pm.addPass(llvm::SimplifyCFGPass());
+                function_pm.addPass(llvm::LoopVectorizePass());
                 function_pm.addPass(std::move(slp_vectorize_pass));
 
                 module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
 
-                llvm::GlobalOptPass global_opt;
-                module_pm.addPass(std::move(global_opt));
+                module_pm.addPass(llvm::GlobalOptPass());
             });
 
     auto module_pm = pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
@@ -354,6 +323,29 @@ public:
 private:
     ShardedLRUCache _cache;
 };
+
+StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachineBuilder jtmb,
+                                                      JITObjectCache& object_cache,
+                                                      llvm::jitlink::JITLinkMemoryManager& memory_manager) {
+    llvm::orc::LLJITBuilder jit_builder;
+    RETURN_IF_ERROR(use_JIT_link(jit_builder, memory_manager));
+    jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
+    jit_builder.setCompileFunctionCreator(
+            [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
+                    -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
+                auto target_machine = JTMB.createTargetMachine();
+                if (!target_machine) {
+                    return target_machine.takeError();
+                }
+                // after compilation, the object code will be stored into the given object cache
+                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine), &object_cache);
+            });
+
+    auto maybe_jit = jit_builder.create();
+    ASSIGN_OR_RETURN(auto jit, as_JIT_result(maybe_jit, "Could not create LLJIT instance: "));
+    add_process_symbol(*jit);
+    return std::move(jit);
+}
 
 size_t JITCallable::getSize() {
     return _mem_mgr->getSize();
@@ -450,7 +442,7 @@ static inline StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::s
                                        " error: " + llvm::toString(sym.takeError()));
     }
     JITScalarFunction fn_ptr = sym->toPtr<JITScalarFunction>();
-    return std::make_shared<JITCallable>(std::move(mem_mgr), std::move(fn_ptr));
+    return std::make_shared<JITCallable>(std::move(mem_mgr), fn_ptr);
 }
 
 #ifndef BE_TEST

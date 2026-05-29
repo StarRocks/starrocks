@@ -1,0 +1,198 @@
+-- name: test_reverse
+select reverse('hello');
+-- result:
+olleh
+-- !result
+select reverse('abcde');
+-- result:
+edcba
+-- !result
+select reverse('');
+-- result:
+
+-- !result
+select reverse(NULL);
+-- result:
+None
+-- !result
+select reverse('a');
+-- result:
+a
+-- !result
+select reverse('中文字符');
+-- result:
+符字文中
+-- !result
+select reverse('hello世界');
+-- result:
+界世olleh
+-- !result
+select reverse('!@#$%');
+-- result:
+%$#@!
+-- !result
+create table t_reverse(id int, s varchar(65533), ns varchar(65533))
+        DUPLICATE KEY(id)
+        DISTRIBUTED BY HASH(id)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_reverse values
+    (1, 'hello', NULL),
+    (2, 'abcde', 'edcba'),
+    (3, '',      ''),
+    (4, '中文字符', NULL),
+    (5, 'hello世界', NULL);
+-- result:
+-- !result
+select reverse(s) from t_reverse order by id;
+-- result:
+olleh
+edcba
+
+符字文中
+界世olleh
+-- !result
+select reverse(ns) from t_reverse order by id;
+-- result:
+None
+abcde
+
+None
+None
+-- !result
+select s = reverse(reverse(s)) from t_reverse order by id;
+-- result:
+1
+1
+1
+1
+1
+-- !result
+drop table t_reverse;
+-- result:
+-- !result
+-- implicit cast: numeric types
+select reverse(123);
+-- result:
+321
+-- !result
+select reverse(1234567890);
+-- result:
+0987654321
+-- !result
+select reverse(cast(3.14 as float));
+-- result:
+41.3
+-- !result
+select reverse(cast(3.14 as double));
+-- result:
+41.3
+-- !result
+select reverse(cast(12345678901234 as bigint));
+-- result:
+43210987654321
+-- !result
+-- implicit cast: decimal
+select reverse(cast(123.456 as decimal(10,3)));
+-- result:
+654.321
+-- !result
+select reverse(cast(-99.99 as decimal(10,2)));
+-- result:
+99.99-
+-- !result
+select reverse(cast(0.00 as decimal(10,2)));
+-- result:
+00.0
+-- !result
+select reverse(cast(1234567890.12 as decimal(20,2)));
+-- result:
+21.0987654321
+-- !result
+-- implicit cast: boolean
+select reverse(true);
+-- result:
+1
+-- !result
+select reverse(false);
+-- result:
+0
+-- !result
+-- implicit cast: date / datetime
+select reverse(cast('2024-01-15' as date));
+-- result:
+51-10-4202
+-- !result
+select reverse(cast('2024-01-15 12:34:56' as datetime));
+-- result:
+65:43:21 51-10-4202
+-- !result
+-- implicit cast via table columns
+create table t_reverse_types(
+    id int,
+    c_int int,
+    c_bigint bigint,
+    c_boolean boolean,
+    c_date date,
+    c_datetime datetime,
+    c_double double,
+    c_decimal decimal(20,3)
+) DUPLICATE KEY(id)
+  DISTRIBUTED BY HASH(id)
+  BUCKETS 1
+  PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_reverse_types values
+    (1, 123,  1234567890123, true,  '2024-01-15', '2024-01-15 12:34:56', 3.14,  123.456),
+    (2, -456, -9876543210,   false, '1999-12-31', '1999-12-31 23:59:59', -2.71, -99.990),
+    (3, 0,    0,             NULL,  NULL,          NULL,                  NULL,  NULL);
+-- result:
+-- !result
+select reverse(c_int)      from t_reverse_types order by id;
+-- result:
+321
+654-
+0
+-- !result
+select reverse(c_bigint)   from t_reverse_types order by id;
+-- result:
+3210987654321
+0123456789-
+0
+-- !result
+select reverse(c_boolean)  from t_reverse_types order by id;
+-- result:
+1
+0
+None
+-- !result
+select reverse(c_date)     from t_reverse_types order by id;
+-- result:
+51-10-4202
+13-21-9991
+None
+-- !result
+select reverse(c_datetime) from t_reverse_types order by id;
+-- result:
+65:43:21 51-10-4202
+95:95:32 13-21-9991
+None
+-- !result
+select reverse(c_double)   from t_reverse_types order by id;
+-- result:
+41.3
+17.2-
+None
+-- !result
+select reverse(c_decimal)  from t_reverse_types order by id;
+-- result:
+654.321
+099.99-
+None
+-- !result
+drop table t_reverse_types;
+-- result:
+-- !result

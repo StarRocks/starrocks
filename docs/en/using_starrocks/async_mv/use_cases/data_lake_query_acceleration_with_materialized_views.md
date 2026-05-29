@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+description: "How to use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent query rewrite."
 ---
 
 # Data lake query acceleration with materialized views
@@ -88,6 +89,10 @@ In the following scenarios, we recommend prioritizing acceleration through Data 
 ## Create external catalog-based materialized views
 
 Creating a materialized view on tables in external catalogs is similar to creating a materialized view on StarRocks native tables. You only need to set a suitable refresh strategy in accordance with the data source you are using, and manually enable query rewrite for external catalog-based materialized views.
+
+:::note
+External table materialized views do not support automatic refresh **triggered by base table data changes**. They only support asynchronous **fixed-interval** refresh and manual refresh.
+:::
 
 ### Choose a suitable refresh strategy
 

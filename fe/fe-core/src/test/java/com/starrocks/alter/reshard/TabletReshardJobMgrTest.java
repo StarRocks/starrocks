@@ -18,19 +18,23 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
+import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-
 public class TabletReshardJobMgrTest {
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
-        public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType, long dbId, long tableId) {
-            super(jobId, jobType, dbId, tableId, Collections.emptyMap());
+        public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
+            super(jobId, jobType);
+        }
+
+        @Override
+        public long getParallelTablets() {
+            return 10;
         }
 
         @Override
@@ -54,8 +58,18 @@ public class TabletReshardJobMgrTest {
         }
 
         @Override
+        protected void runFinishedJob() {
+
+        }
+
+        @Override
         protected void runAbortingJob() {
             setJobState(JobState.ABORTED);
+        }
+
+        @Override
+        protected void runAbortedJob() {
+
         }
 
         @Override
@@ -64,20 +78,60 @@ public class TabletReshardJobMgrTest {
         }
 
         @Override
-        public long getParallelTablets() {
-            return 10;
+        public void replay() {
+            return;
         }
 
         @Override
-        public void replay() {
-            return;
+        protected void replayPendingJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayPendingJob'");
+        }
+
+        @Override
+        protected void replayPreparingJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayPreparingJob'");
+        }
+
+        @Override
+        protected void replayRunningJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayRunningJob'");
+        }
+
+        @Override
+        protected void replayCleaningJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayCleaningJob'");
+        }
+
+        @Override
+        protected void replayFinishedJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayFinishedJob'");
+        }
+
+        @Override
+        protected void replayAbortingJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayAbortingJob'");
+        }
+
+        @Override
+        protected void replayAbortedJob() {
+            throw new UnsupportedOperationException("Unimplemented method 'replayAbortedJob'");
+        }
+
+        @Override
+        protected void registerReshardingTabletsOnRestart() {
+            throw new UnsupportedOperationException("Unimplemented method 'registerReshardingTabletsOnRestart'");
+        }
+
+        @Override
+        public TTabletReshardJobsItem getInfo() {
+            return new TTabletReshardJobsItem();
         }
     }
 
     public static class TestAbnormalTabletReshardJob extends TestNormalTabletReshardJob {
 
-        public TestAbnormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType, long dbId, long tableId) {
-            super(jobId, jobType, dbId, tableId);
+        public TestAbnormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
+            super(jobId, jobType);
         }
 
         @Override
@@ -105,14 +159,14 @@ public class TabletReshardJobMgrTest {
     public void testTabletReshardJobMgr() throws Exception {
         TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
 
-        TestNormalTabletReshardJob normalJob = new TestNormalTabletReshardJob(1, null, 0, 0);
+        TestNormalTabletReshardJob normalJob = new TestNormalTabletReshardJob(1, null);
         jobMgr.addTabletReshardJob(normalJob);
         Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(normalJob));
 
-        TestAbnormalTabletReshardJob abnormalJob = new TestAbnormalTabletReshardJob(2, null, 0, 1);
+        TestAbnormalTabletReshardJob abnormalJob = new TestAbnormalTabletReshardJob(2, null);
         jobMgr.addTabletReshardJob(abnormalJob);
 
-        TestAbnormalTabletReshardJob abnormalJob2 = new TestAbnormalTabletReshardJob(3, null, 0, 2);
+        TestAbnormalTabletReshardJob abnormalJob2 = new TestAbnormalTabletReshardJob(3, null);
         Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(abnormalJob2));
 
         Assertions.assertEquals(2, jobMgr.getTabletReshardJobs().size());
@@ -142,10 +196,8 @@ public class TabletReshardJobMgrTest {
     public void testGetTabletReshardJobsInfo() throws Exception {
         TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
 
-        TestNormalTabletReshardJob job1 = new TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET, 0,
-                1);
-        TestNormalTabletReshardJob job2 = new TestNormalTabletReshardJob(2, TabletReshardJob.JobType.MERGE_TABLET, 0,
-                2);
+        TestNormalTabletReshardJob job1 = new TestNormalTabletReshardJob(1, null);
+        TestNormalTabletReshardJob job2 = new TestNormalTabletReshardJob(2, null);
         jobMgr.addTabletReshardJob(job1);
         jobMgr.addTabletReshardJob(job2);
 

@@ -89,19 +89,20 @@ void ProbeKeyConstructorForSerialized::build_key(const JoinHashTableItems& table
     NullColumns null_columns;
 
     for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
+        auto& key_column = (*probe_state->key_columns)[i];
         if (table_items.join_keys[i].is_null_safe_equal) {
             // this means build column is a nullable column and join condition is null safe equal
             // we need convert the probe column to a nullable column when it's a non-nullable column
             // to align the type between build and probe columns.
-            data_columns.emplace_back(NullableColumn::wrap_if_necessary((*probe_state->key_columns)[i]));
+            data_columns.emplace_back(NullableColumn::wrap_if_necessary(key_column));
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[i]);
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_column);
             data_columns.emplace_back(nullable_column->data_column());
-            if ((*probe_state->key_columns)[i]->has_null()) {
+            if (key_column->has_null()) {
                 null_columns.emplace_back(nullable_column->null_column());
             }
         } else {
-            data_columns.emplace_back((*probe_state->key_columns)[i]);
+            data_columns.emplace_back(key_column);
         }
     }
 

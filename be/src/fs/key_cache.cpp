@@ -14,17 +14,17 @@
 
 #include "fs/key_cache.h"
 
-#include "agent/master_info.h"
+#include "base/format.h"
+#include "base/metrics.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
-#include "runtime/client_cache.h"
-#include "util/defer_op.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
-#include "util/thrift_rpc_helper.h"
-#include "util/url_coding.h"
+#include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -130,10 +130,20 @@ KeyCache& KeyCache::instance() {
     return g_key_cache;
 }
 
-KeyCache::KeyCache() {
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_unwrapped", &encryption_keys_unwrapped);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_in_cache", &encryption_keys_in_cache);
+KeyCache::KeyCache() = default;
+
+void KeyCache::install_metrics(MetricRegistry* metrics) {
+    if (metrics == nullptr) {
+        return;
+    }
+    if (_metrics_registry != nullptr) {
+        DCHECK_EQ(_metrics_registry, metrics);
+        return;
+    }
+    _metrics_registry = metrics;
+    metrics->register_metric("encryption_keys_created", &encryption_keys_created);
+    metrics->register_metric("encryption_keys_unwrapped", &encryption_keys_unwrapped);
+    metrics->register_metric("encryption_keys_in_cache", &encryption_keys_in_cache);
 }
 
 Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,
@@ -334,6 +344,7 @@ std::string KeyCache::to_string() const {
     std::stringstream ss;
     std::lock_guard lg(_lock);
     std::vector<EncryptionKey*> ordered;
+    ordered.reserve(_identifier_to_keys.size());
     for (const auto& e : _identifier_to_keys) {
         ordered.push_back(e.second.get());
     }

@@ -84,6 +84,7 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("time", TypeValue.TIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("datetime", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimalv2", TypeValue.DECIMALV2);

@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -248,20 +249,26 @@ public class OptOlapPartitionPruner {
             if (null != lowerBound) {
                 lowerBind = false;
                 PartitionKey min = new PartitionKey();
-                min.pushColumn(pcf.getLowerBound(), column.getPrimitiveType());
-                int cmp = minRange.compareTo(min);
-                if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
-                    lowerBind = true;
+                if (lowerBound instanceof MaxLiteral || minRange.getKeys().get(0) instanceof MaxLiteral ||
+                        lowerBound.getType().matchesType(minRange.getKeys().get(0).getType())) {
+                    min.pushColumn(lowerBound, lowerBound.getType().getPrimitiveType());
+                    int cmp = minRange.compareTo(min);
+                    if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
+                        lowerBind = true;
+                    }
                 }
             }
 
             if (null != upperBound) {
                 upperBind = false;
                 PartitionKey max = new PartitionKey();
-                max.pushColumn(upperBound, column.getPrimitiveType());
-                int cmp = maxRange.compareTo(max);
-                if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
-                    upperBind = true;
+                if (upperBound instanceof MaxLiteral || maxRange.getKeys().get(0) instanceof MaxLiteral ||
+                        upperBound.getType().matchesType(maxRange.getKeys().get(0).getType())) {
+                    max.pushColumn(upperBound, upperBound.getType().getPrimitiveType());
+                    int cmp = maxRange.compareTo(max);
+                    if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
+                        upperBind = true;
+                    }
                 }
             }
 

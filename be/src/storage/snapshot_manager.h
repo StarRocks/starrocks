@@ -52,7 +52,6 @@
 #include "storage/snapshot_meta.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

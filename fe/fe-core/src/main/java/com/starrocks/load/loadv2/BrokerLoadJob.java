@@ -36,6 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.BrokerLoadPreSplitHook;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -68,6 +69,7 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -75,6 +77,7 @@ import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.PriorityLeaderTask;
+import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -86,9 +89,11 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -245,13 +250,16 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("database_id", dbId)
                     .add("error_msg", "Failed to divide job into loading task.")
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);
             return;
         }
     }
 
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws StarRocksException {
         // divide job into broker loading task by table
+        BrokerDesc brokerDesc = brokerPersistInfo == null ? null :
+                new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+        List<PreSplitHookInput> preSplitInputs = new ArrayList<>();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
@@ -293,12 +301,12 @@ public class BrokerLoadJob extends BulkLoadJob {
                     mode = TPartialUpdateMode.ROW_MODE;
                 }
                 TUniqueId loadId = UUIDUtil.genTUniqueId();
+                List<List<TBrokerFileStatus>> fileStatuses = attachment.getFileStatusByTable(aggKey);
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
                         .setTable(table)
-                        .setBrokerDesc(brokerPersistInfo == null ? null :
-                                new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()))
+                        .setBrokerDesc(brokerDesc)
                         .setFileGroups(brokerFileGroups)
                         .setJobDeadlineMs(getDeadlineMs())
                         .setExecMemLimit(loadMemLimit)
@@ -316,7 +324,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setOriginStmt(originStmt)
                         .setLoadStmt(stmt)
                         .setPartialUpdateMode(mode)
-                        .setFileStatusList(attachment.getFileStatusByTable(aggKey))
+                        .setFileStatusList(fileStatuses)
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
@@ -333,18 +341,16 @@ public class BrokerLoadJob extends BulkLoadJob {
                 newLoadingTasks.add(task);
                 // load id will be added to loadStatistic when executing this task
 
-                // save all related tables and rollups in transaction state
-                TransactionState txnState =
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
-                if (txnState == null) {
-                    throw new StarRocksException("txn does not exist: " + transactionId);
-                }
-                txnState.addTableIndexes(table);
+                // Snapshot the inputs the Sample-Based Tablet Pre-Split hook needs so the hook
+                // can fire OUTSIDE the database lock — future real samplers will perform remote
+                // sampling/planning work that must not hold metadata read locks.
+                preSplitInputs.add(new PreSplitHookInput(table, brokerFileGroups, fileStatuses));
             }
-
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
+
+        firePreSplitHooks(context, db, brokerDesc, computeResource, preSplitInputs, sessionVariables);
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
@@ -352,11 +358,44 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
-    @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-        if (!txnOperated) {
+    /**
+     * Fire the Sample-Based Tablet Pre-Split hook for each per-table input snapshot.
+     * Pre-split is fire-and-forget; we bind the job's {@link ConnectContext} so the
+     * coordinator's session-var check sees the load's session, not whatever stale
+     * thread-local is set. We also apply the persisted opt-out value so a submit-time
+     * {@code SET enable_tablet_pre_split = false} survives FE failover (the recreated
+     * context otherwise has the default value).
+     *
+     * <p>Package-private so {@code BrokerLoadJobTest} can drive it directly without
+     * standing up the full {@code createLoadingTask} fixture.
+     */
+    static void firePreSplitHooks(
+            ConnectContext context, Database db, BrokerDesc brokerDesc, ComputeResource computeResource,
+            List<PreSplitHookInput> preSplitInputs, Map<String, String> sessionVariables) {
+        if (preSplitInputs.isEmpty()) {
             return;
         }
+        String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
+        if (persistedPreSplitOptOut != null) {
+            context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
+        }
+        try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
+            for (PreSplitHookInput input : preSplitInputs) {
+                BrokerLoadPreSplitHook.maybeRunPreSplit(
+                        db, input.targetTable(), brokerDesc,
+                        input.fileGroups(), input.fileStatuses(), computeResource);
+            }
+        }
+    }
+
+    /** Per-table inputs captured under the DB read lock so the pre-split hook can fire outside it. */
+    record PreSplitHookInput(
+            OlapTable targetTable, List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatuses) {
+    }
+
+    @Override
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
         writeLock();
         try {
             // check if job has been completed
@@ -365,7 +404,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .add("state", state)
                         .add("error_msg", "this task will be ignored when job is: " + state)
                         .build());
-                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, System.currentTimeMillis());
+                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                        "BrokerLoad: jobId[" + id + "] label[" + label + "]");
                 return;
             }
 
@@ -375,7 +415,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // record attachment in load job
                 unprotectUpdateLoadingStatus(txnState);
                 // cancel load job
-                unprotectedExecuteCancel(failMsg, true);
+                unprotectedExecuteCancel(failMsg, true, false);
                 return;
             }
 
@@ -388,7 +428,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 state = JobState.PENDING;
                 unprotectedExecute();
             } catch (Exception e) {
-                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);
             }
         } finally {
             writeUnlock();
@@ -396,9 +436,9 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "BrokerLoad: jobId[" + id + "] label[" + label + "]");
     }
 
     /**
@@ -499,7 +539,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                             DataQualityException.QUALITY_FAIL_MSG +
                                     ". You can find detailed error message from running `TrackingSQL`."),
-                    true, true);
+                    true);
             return;
         }
         Database db = null;
@@ -510,7 +550,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("database_id", dbId)
                     .add("error_msg", "db has been deleted when job is loading")
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
             return;
         }
         while (true) {
@@ -521,7 +561,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
             } catch (StarRocksException e) {
-                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
                 break;
             }
         }

@@ -14,6 +14,21 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
+ADD_BE_LIB(FormatsIO
+        io/async_flush_output_stream.cpp
+        io/formatted_output_stream_file.cpp
+        )
+
+target_link_libraries(FormatsIO PUBLIC
+        RuntimeCore
+        FSCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
 ADD_BE_LIB(Formats
         csv/array_converter.cpp
         csv/array_reader.cpp
@@ -48,6 +63,7 @@ ADD_BE_LIB(Formats
         avro/cpp/column_reader.cpp
         avro/cpp/complex_column_reader.cpp
         avro/cpp/date_column_reader.cpp
+        avro/cpp/direct_column_reader.cpp
         avro/cpp/nullable_column_reader.cpp
         avro/cpp/numeric_column_reader.cpp
         avro/cpp/utils.cpp
@@ -58,6 +74,7 @@ ADD_BE_LIB(Formats
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
         orc/orc_schema_builder.cpp
+        orc/lzo_decompressor_registration.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
@@ -88,10 +105,14 @@ ADD_BE_LIB(Formats
         parquet/column_read_order_ctx.cpp
         parquet/statistics_helper.cpp
         parquet/parquet_block_split_bloom_filter.cpp
-        parquet/variant.h
-        parquet/variant.cpp
         parquet/iceberg_row_id_reader.cpp
+        parquet/row_source_reader.cpp
+        parquet/parquet_pos_reader.cpp
+        column_evaluator.cpp
         disk_range.hpp
+        file_writer.cpp
         )
+
+target_link_libraries(Formats PUBLIC FormatsIO Cache)
 
 add_subdirectory(orc/apache-orc)

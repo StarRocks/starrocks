@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
@@ -299,6 +300,7 @@ public class LoadJobTest {
 
     @Test
     public void testProcessTimeout(@Mocked EditLog editLog) {
+        new FakeEditLog();
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "timeoutSecond", 0);
         new Expectations() {
@@ -372,7 +374,7 @@ public class LoadJobTest {
                 minTimes = 0;
                 result = warehouseManager;
 
-                warehouseManager.getWarehouse(anyLong);
+                warehouseManager.getWarehouseAllowNull(anyLong);
                 minTimes = 0;
                 result = warehouse;
 
@@ -402,6 +404,49 @@ public class LoadJobTest {
     }
 
     @Test
+    public void testGetShowInfoMissingWarehouse() throws DdlException {
+        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return tz;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setWarehouseId(1L);
+
+        List<Comparable> showInfo = loadJob.getShowInfo();
+        Assertions.assertEquals("Warehouse id: 1 not exist.", showInfo.get(showInfo.size() - 1));
+
+        TLoadInfo loadInfo = loadJob.toThrift();
+        Assertions.assertEquals("Warehouse id: 1 not exist.", loadInfo.getWarehouse());
+    }
+
+    @Test
     public void testToThrift() {
         LoadJob loadJob = new BrokerLoadJob();
 
@@ -422,7 +467,7 @@ public class LoadJobTest {
                 minTimes = 0;
                 result = warehouseManager;
 
-                warehouseManager.getWarehouse(anyLong);
+                warehouseManager.getWarehouseAllowNull(anyLong);
                 minTimes = 0;
                 result = warehouse;
 
@@ -444,5 +489,79 @@ public class LoadJobTest {
 
         loadInfo = loadJob.toThrift();
         Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThrift_timestampMsFields() {
+        // Regression coverage: BE materializes information_schema.loads DATETIME
+        // columns from the *_ms fields. If a future change ever drops a setter,
+        // the column silently falls back to the legacy UTC+8 string and loads in
+        // non-Asia/Shanghai sessions go missing again.
+        long createMs = 1_700_000_000_000L;
+        long startMs = createMs + 1_000;
+        long commitMs = createMs + 2_000;
+        long finishMs = createMs + 3_000;
+
+        LoadJob loadJob = new BrokerLoadJob();
+        Deencapsulation.setField(loadJob, "createTimestamp", createMs);
+        Deencapsulation.setField(loadJob, "loadStartTimestamp", startMs);
+        Deencapsulation.setField(loadJob, "loadCommittedTimestamp", commitMs);
+        Deencapsulation.setField(loadJob, "finishTimestamp", finishMs);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        TLoadInfo info = loadJob.toThrift();
+        Assertions.assertEquals(createMs, info.getCreate_time_ms());
+        Assertions.assertEquals(startMs, info.getLoad_start_time_ms());
+        Assertions.assertEquals(commitMs, info.getLoad_commit_time_ms());
+        Assertions.assertEquals(finishMs, info.getLoad_finish_time_ms());
+        // Legacy strings must still be set so old BEs in a rolling upgrade keep working.
+        Assertions.assertEquals(TimeUtils.longToTimeString(createMs), info.getCreate_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(startMs), info.getLoad_start_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(commitMs), info.getLoad_commit_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(finishMs), info.getLoad_finish_time());
+
+        // Sentinel path: unset timestamps must leave both the string and the ms
+        // field unset so BE can fall back to NULL via its !__isset branch
+        // instead of materializing the epoch.
+        LoadJob unset = new BrokerLoadJob();
+        TLoadInfo unsetInfo = unset.toThrift();
+        Assertions.assertFalse(unsetInfo.isSetCreate_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
+    public void testJsonOptionsEnvelope() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setJobProperties(properties);
+        Assertions.assertEquals(LoadStmt.ENVELOPE_DEBEZIUM, loadJob.jsonOptions.envelope);
+
+        // Mutually exclusive: json_root and envelope
+        properties.put(LoadStmt.JSONROOT, "$.root");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
+
+        // Mutually exclusive: strip_outer_array and envelope
+        properties.remove(LoadStmt.JSONROOT);
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
     }
 }

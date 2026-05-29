@@ -64,6 +64,7 @@ public class SelectStmtTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         FeConstants.showFragmentCost = false;
         FeConstants.setLengthForVarchar =false;
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "

@@ -14,6 +14,10 @@
 
 package com.starrocks.alter.reshard;
 
+import com.starrocks.proto.ReshardingTabletInfoPB;
+
+import java.util.List;
+
 /*
  * ReshardingTablet saves the old and new tablets info during tablet splitting or merging
  * ReshardingTablet is the base class of SplittingTablet, MergingTablet and IdenticalTablet.
@@ -28,5 +32,19 @@ public interface ReshardingTablet {
 
     long getFirstOldTabletId();
 
+    /**
+     * Returns the first new tablet id produced by this reshard. New tablet
+     * ids are freshly allocated via GlobalStateMgr.getNextId() and never
+     * reused, so the returned value is globally unique and uniquely
+     * identifies this reshard op. Symmetric with {@link #getFirstOldTabletId()}.
+     */
+    long getFirstNewTabletId();
+
+    List<Long> getOldTabletIds();
+
+    List<Long> getNewTabletIds();
+
     long getParallelTablets();
+
+    ReshardingTabletInfoPB toProto();
 }

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 25
 sidebar_label: "Built-in Roles"
+description: "In a StarRocks cluster, there are FIVE built-in roles:"
 ---
 
 import DBAdmin from '../../../_assets/commonMarkdown/role_db_admin.mdx'

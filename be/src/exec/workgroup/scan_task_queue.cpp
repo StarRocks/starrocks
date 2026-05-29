@@ -14,9 +14,11 @@
 
 #include "exec/workgroup/scan_task_queue.h"
 
+#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
@@ -30,6 +32,10 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
     }
 
     return Status::Cancelled("Shutdown");
+}
+
+bool PriorityScanTaskQueue::try_take(ScanTask* task) {
+    return _queue.non_blocking_get(task);
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {

@@ -15,6 +15,8 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
@@ -23,18 +25,28 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.atn.LexerATNSimulator;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
@@ -43,13 +55,17 @@ import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.parser.AstBuilderUtils.createPos;
+import static com.starrocks.sql.parser.AstBuilderUtils.getIdentifier;
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
@@ -98,26 +114,17 @@ public class SqlParser {
             // In Trino parser AstBuilder, it could throw ParsingException for unexpected exception,
             // use StarRocks parser to parse now.
             LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
-            if (sessionVariable.isEnableDialectDowngrade()) {
-                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
-            }
-            throw e;
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (io.trino.sql.parser.ParsingException e) {
             // This sql does not use Trino syntax，use StarRocks parser to parse now.
             if (sql.toLowerCase().contains("select")) {
                 LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
             }
-            if (sessionVariable.isEnableDialectDowngrade()) {
-                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
-            }
-            throw e;
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (TrinoParserUnsupportedException e) {
             // We only support Trino partial syntax now, and for Trino parser unsupported statement,
             // try to use StarRocks parser to parse
-            if (sessionVariable.isEnableDialectDowngrade()) {
-                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
-            }
-            throw e;
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (UnsupportedException e) {
             // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
             // can not support it now, we just throw the exception here to give user more information
@@ -128,6 +135,17 @@ public class SqlParser {
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         return statements;
+    }
+
+    private static List<StatementBase> rollbackStarRocksDialect(String sql, SessionVariable sessionVariable,
+                                                                RuntimeException exception) {
+        if (ConnectContext.get() != null) {
+            ConnectContext.get().setRelationAliasCaseInSensitive(false);
+        }
+        if (sessionVariable.isEnableDialectDowngrade()) {
+            return tryParseWithStarRocksDialect(sql, sessionVariable, exception);
+        }
+        throw exception;
     }
 
     private static List<StatementBase> tryParseWithStarRocksDialect(String sql, SessionVariable sessionVariable,
@@ -174,6 +192,14 @@ public class SqlParser {
             statements.add(statement);
         }
         return statements;
+    }
+
+    public static Expr parseExpression(String expressionSql, SessionVariable sessionVariable) {
+        ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
+                com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .visit(expressionContext);
     }
 
     /**
@@ -245,12 +271,87 @@ public class SqlParser {
                 .visit(importColumnsContext);
     }
 
+    public static List<Column> parseFilesSchema(String schemaStr) {
+        SessionVariable sv = ConnectContext.get() != null
+                ? ConnectContext.get().getSessionVariable()
+                : new SessionVariable();
+        com.starrocks.sql.parser.StarRocksParser.FilesSchemaContext ctx =
+                (com.starrocks.sql.parser.StarRocksParser.FilesSchemaContext)
+                        invokeParser(schemaStr, sv,
+                                com.starrocks.sql.parser.StarRocksParser::filesSchema).first;
+
+        List<Column> cols = new ArrayList<>(ctx.filesSchemaColumn().size());
+        Set<String> seenNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (com.starrocks.sql.parser.StarRocksParser.FilesSchemaColumnContext colCtx
+                : ctx.filesSchemaColumn()) {
+            String name = getIdentifier(colCtx.identifier()).getValue();
+            if (!seenNames.add(name)) {
+                throw new ParsingException(
+                        "duplicate column in 'schema': " + name,
+                        createPos(colCtx.identifier()));
+            }
+            Type type;
+            try {
+                type = TypeParser.getType(colCtx.type());
+                // Mirror ColumnDefAnalyzer: bare CHAR/VARCHAR (no explicit length) defaults to length 1.
+                if (type.isScalarType()) {
+                    ScalarType st = (ScalarType) type;
+                    if (st.getPrimitiveType().isStringType() && st.getLength() <= 0) {
+                        st.setLength(1);
+                    }
+                }
+                TypeDefAnalyzer.analyze(new TypeDef(type, createPos(colCtx.type())));
+            } catch (SemanticException | IllegalArgumentException e) {
+                throw new ParsingException(
+                        String.format("invalid type for column '%s' in 'schema': %s", name, e.getMessage()),
+                        createPos(colCtx.type()));
+            }
+            rejectMetricTypes(type, name, createPos(colCtx.type()));
+            cols.add(new Column(name, type, /*isNullable=*/ true));
+        }
+        return cols;
+    }
+
+    private static void rejectMetricTypes(Type type, String columnName, NodePosition pos) {
+        if (type.isHllType() || type.isBitmapType() || type.isPercentile()) {
+            throw new ParsingException(
+                    String.format(
+                            "type %s is not supported in 'schema' for column '%s': "
+                                    + "HLL/BITMAP/PERCENTILE have no representation in Parquet/ORC/Avro/CSV",
+                            type.toSql(), columnName),
+                    pos);
+        }
+        if (type instanceof ArrayType) {
+            rejectMetricTypes(((ArrayType) type).getItemType(), columnName, pos);
+        } else if (type instanceof MapType) {
+            MapType mt = (MapType) type;
+            rejectMetricTypes(mt.getKeyType(), columnName, pos);
+            rejectMetricTypes(mt.getValueType(), columnName, pos);
+        } else if (type instanceof StructType) {
+            for (StructField f : ((StructType) type).getFields()) {
+                rejectMetricTypes(f.getType(), columnName, pos);
+            }
+        }
+    }
+
     private static Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> invokeParser(
             String sql, SessionVariable sessionVariable,
             Function<com.starrocks.sql.parser.StarRocksParser, ParserRuleContext> parseFunction) {
         com.starrocks.sql.parser.StarRocksLexer lexer =
                 new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
+        if (Config.enable_concurrent_parse_optimization) {
+            DFA[] lexerDecisionDFA = new DFA[StarRocksLexer._ATN.getNumberOfDecisions()];
+            for (int i = 0; i < StarRocksLexer._ATN.getNumberOfDecisions(); i++) {
+                lexerDecisionDFA[i] = new DFA(StarRocksLexer._ATN.getDecisionState(i), i);
+            }
+            lexer.setInterpreter(new LexerATNSimulator(
+                    lexer,
+                    StarRocksLexer._ATN,
+                    lexerDecisionDFA,
+                    new PredictionContextCache()
+            ));
+        }
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
         int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
@@ -259,7 +360,7 @@ public class SqlParser {
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
         parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
-        if (!Config.enable_parser_context_cache) {
+        if (!Config.enable_parser_context_cache || Config.enable_concurrent_parse_optimization) {
             DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
             for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
                 decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);

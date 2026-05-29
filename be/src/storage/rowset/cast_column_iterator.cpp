@@ -18,6 +18,7 @@
 #include "common/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 
@@ -25,7 +26,7 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
                                        const TypeDescriptor& target_type, bool nullable_source)
         : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
-          _cast_expr(nullptr),
+
           _source_chunk() {
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);
@@ -44,10 +45,10 @@ void CastColumnIterator::do_cast(Column* target) {
     auto cast_result = _cast_expr->evaluate(nullptr, &_source_chunk);
     cast_result = ColumnHelper::unfold_const_column(_cast_expr->type(), _source_chunk.num_rows(), cast_result);
     if ((target->is_nullable() == cast_result->is_nullable()) && (target->size() == 0)) {
-        target->swap_column(*cast_result);
+        target->swap_column(*(cast_result->as_mutable_raw_ptr()));
     } else if (!target->is_nullable() && cast_result->is_nullable()) {
         auto sz = cast_result->size();
-        target->append(*(down_cast<NullableColumn*>(cast_result.get())->data_column()), 0, sz);
+        target->append(*(down_cast<const NullableColumn*>(cast_result.get())->data_column()), 0, sz);
     } else {
         target->append(*cast_result, 0, cast_result->size());
     }
@@ -55,32 +56,32 @@ void CastColumnIterator::do_cast(Column* target) {
 
 Status CastColumnIterator::next_batch(size_t* n, Column* dst) {
     _source_chunk.reset();
-    auto source_column = _source_chunk.get_column_by_index(0);
-    RETURN_IF_ERROR(_parent->next_batch(n, source_column.get()));
+    auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+    RETURN_IF_ERROR(_parent->next_batch(n, source_column));
     do_cast(dst);
     return Status::OK();
 }
 
 Status CastColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     _source_chunk.reset();
-    auto source_column = _source_chunk.get_column_by_index(0);
-    RETURN_IF_ERROR(_parent->next_batch(range, source_column.get()));
+    auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+    RETURN_IF_ERROR(_parent->next_batch(range, source_column));
     do_cast(dst);
     return Status::OK();
 }
 
 Status CastColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
     _source_chunk.reset();
-    auto source_column = _source_chunk.get_column_by_index(0);
-    RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column.get()));
+    auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+    RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column));
     do_cast(values);
     return Status::OK();
 }
 
 StatusOr<std::vector<std::pair<int64_t, int64_t>>> CastColumnIterator::get_io_range_vec(const SparseRange<>& range,
                                                                                         Column* dst) {
-    auto source_column = _source_chunk.get_column_by_index(0);
-    return _parent->get_io_range_vec(range, source_column.get());
+    auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+    return _parent->get_io_range_vec(range, source_column);
 }
 
 } // namespace starrocks

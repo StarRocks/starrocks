@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CHAR() returns the character value of the given integer value according to the ASCII table."
 ---
 
 # char 

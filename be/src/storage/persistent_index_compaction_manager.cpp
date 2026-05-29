@@ -14,11 +14,13 @@
 
 #include "storage/persistent_index_compaction_manager.h"
 
+#include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/thread/threadpool.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -45,7 +47,7 @@ Status PersistentIndexCompactionManager::init() {
                             .set_min_threads(1)
                             .set_max_threads(max_pk_index_compaction_thread_cnt)
                             .build(&_worker_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(pk_index_compaction, _worker_thread_pool);
+    StorageMetrics::instance()->register_thread_pool_metrics("pk_index_compaction", _worker_thread_pool.get());
 
     return Status::OK();
 }

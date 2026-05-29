@@ -43,7 +43,6 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -69,10 +68,10 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -109,6 +108,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static com.starrocks.common.ErrorCode.ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND;
 import static com.starrocks.common.ErrorCode.ERR_MAPPING_EXPR_INVALID;
+import static com.starrocks.common.ErrorCode.ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class Load {
@@ -235,6 +235,15 @@ public class Load {
         return shadowColumnDescs;
     }
 
+    public static ConnectContext createLoadConnectContext(String dbName) {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setDatabase(dbName);
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        return connectContext;
+    }
+
     public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName, boolean analyze) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
@@ -244,10 +253,7 @@ public class Load {
 
             TableName tableName = new TableName(dbName, tbl.getName());
 
-            ConnectContext connectContext = new ConnectContext();
-            connectContext.setDatabase(dbName);
-            connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            ConnectContext connectContext = createLoadConnectContext(dbName);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
             Expr expr = column.getGeneratedColumnExpr(tbl.getIdToColumn());
@@ -266,12 +272,6 @@ public class Load {
         return shadowColumnDescs;
     }
 
-    public static boolean checDictQueryExpr(Expr checkExpr) {
-        List<DictQueryExpr> result = Lists.newArrayList();
-        checkExpr.collect(DictQueryExpr.class, result);
-        return result.size() != 0;
-    }
-
     public static boolean tableSupportOpColumn(Table tbl) {
         return tbl instanceof OlapTable && ((OlapTable) tbl).getKeysType() == KeysType.PRIMARY_KEYS;
     }
@@ -284,7 +284,7 @@ public class Load {
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction)
             throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, null, null,
-                null, null, null, false, false, Lists.newArrayList());
+                null, null, null, false, false, Lists.newArrayList(), false);
     }
 
     /*
@@ -302,10 +302,10 @@ public class Load {
                                    Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath) throws StarRocksException {
+                                   List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, false, false);
+                columnsFromPath, isLoadJson, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -313,7 +313,7 @@ public class Load {
                                    Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath, boolean isStreamLoadJson,
+                                   List<String> columnsFromPath, boolean isLoadJson,
                                    boolean partialUpdate) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
@@ -411,11 +411,11 @@ public class Load {
                 }
             }
             if (!found) {
-                // stream load json will automatically check __op field in json object iff:
-                // 1. streamload using json
+                // stream load and broker load will automatically check __op field in json object if:
+                // 1. stream load and broker load using json
                 // 2. __op is not specified
                 copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
-                        isStreamLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
+                        isLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
             }
         }
 
@@ -595,20 +595,7 @@ public class Load {
         }
 
         if (dbName != null && !dbName.isEmpty()) {
-            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
-                if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
-                    if (ConnectContext.get() == null) {
-                        ConnectContext context = new ConnectContext();
-                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                        context.setCurrentUserIdentity(UserIdentity.ROOT);
-                        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                        context.setQualifiedUser(UserIdentity.ROOT.getUser());
-                        context.setThreadLocalInfo();
-                    }
-                    ConnectContext.get().setDatabase(dbName);
-                    break;
-                }
-            }
+            ConnectContext.get().setDatabase(dbName);
         }
 
         LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);
@@ -772,6 +759,53 @@ public class Load {
         }
     }
 
+    static Expr buildLoadDefaultExpr(Column column) throws StarRocksException {
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.CONST) {
+            if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                Expr expr = column.getDefaultExpr().obtainExpr();
+                if (expr == null) {
+                    throw new StarRocksException("Column(" + column + ") has invalid default expr object");
+                }
+                return expr;
+            }
+            return new StringLiteral(column.calculatedDefaultValue());
+        } else if (defaultValueType == Column.DefaultValueType.VARY) {
+            if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
+                return column.getDefaultExpr().obtainExpr();
+            }
+            throw new StarRocksException("Column(" + column + ") has unsupported default value:"
+                    + column.getDefaultExpr().getExpr());
+        } else if (defaultValueType == Column.DefaultValueType.NULL) {
+            if (column.isAllowNull()) {
+                return NullLiteral.create(column.getType());
+            }
+        }
+        return null;
+    }
+
+    private static Expr resolveGeneratedColumnRefExpr(Table tbl, SlotRef slot, Map<String, Expr> exprsByName,
+                                                      Map<String, SlotDescriptor> slotDescByName)
+            throws StarRocksException {
+        Expr replaceExpr = exprsByName.get(slot.getColumnName());
+        if (replaceExpr != null) {
+            return replaceExpr;
+        }
+
+        SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
+        if (slotDesc != null) {
+            SlotRef slotRef = new SlotRef(slotDesc);
+            slotRef.setColumnName(slot.getColumnName());
+            return slotRef;
+        }
+
+        Column refColumn = tbl.getColumn(slot.getColumnName());
+        if (refColumn == null) {
+            return null;
+        }
+        return buildLoadDefaultExpr(refColumn);
+    }
+
     private static void analyzeMappingExprs(Table tbl, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                             Map<String, Expr> exprsByName, Map<String, Expr> mvDefineExpr,
                                             Map<String, SlotDescriptor> slotDescByName, boolean useVectorizedLoad)
@@ -838,31 +872,17 @@ public class Load {
             List<SlotRef> slots = Lists.newArrayList();
             entry.getValue().collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
-                SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
-                // In this case, generated column ref some mapping column
-                // and the expression should be replace by mapping column expression.
-
-                // Notes that, if slotDesc != null and exprsByName.get(slot.getColumnName()) != null
-                // it means that the ref columns are both in column list and expression list.
-                // In this case, we should rewrite the generated column expression using
-                // the expression in expression list instead of column list.
-                if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
-                    Expr replaceExpr = exprsByName.get(slot.getColumnName());
-                    if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
-                    }
-                    smap.put(slot, replaceExpr);
-                } else {
-                    SlotRef slotRef = new SlotRef(slotDesc);
-                    slotRef.setColumnName(slot.getColumnName());
-                    Expr replaceExpr = slotRef;
-                    if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
-                    }
-                    smap.put(slot, replaceExpr);
+                // Generated columns should prefer the mapping expression when a referenced column
+                // exists in both the input column list and the expression list.
+                Expr replaceExpr = resolveGeneratedColumnRefExpr(tbl, slot, exprsByName, slotDescByName);
+                if (replaceExpr == null) {
+                    ErrorReport.reportAnalysisException(ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN, entry.getKey());
                 }
+                if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
+                        !replaceExpr.getType().matchesType(slot.getType())) {
+                    replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
+                }
+                smap.put(slot, replaceExpr);
             }
             Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
 

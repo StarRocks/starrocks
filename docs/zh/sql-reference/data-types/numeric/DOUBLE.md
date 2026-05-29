@@ -14,10 +14,20 @@ displayed_sidebar: docs
 
 ```sql
 CREATE TABLE doubleDemo (
-    pk BIGINT(20) NOT NULL COMMENT "",
+    pk BIGINT(20) NOT NULL,
     income DOUBLE COMMENT "8 bytes"
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO doubleDemo VALUES (1, 12345.67890123456789);
+```
+
+```Plaintext
+MySQL > SELECT * FROM doubleDemo;
++------+--------------------+
+| pk   | income             |
++------+--------------------+
+|    1 | 12345.678901234567 |
++------+--------------------+
 ```

@@ -33,9 +33,14 @@ public:
     DEFINE_VECTORIZED_FN(sleep);
 
     /**
-     * return last query id 
+     * return last query id
      */
     DEFINE_VECTORIZED_FN(last_query_id);
+
+    /**
+     * return the current query id (uuid string in 8-4-4-4-12 form).
+     */
+    DEFINE_VECTORIZED_FN(query_id);
 
     /**
      * returns uuid.
@@ -48,6 +53,16 @@ public:
      * tid(thread id 32 bit) + i (increment 16 bit)
      */
     DEFINE_VECTORIZED_FN(uuid_numeric);
+
+    /**
+     * returns UUID v7 (time-ordered UUID according to RFC 9562).
+     */
+    DEFINE_VECTORIZED_FN(uuid_v7);
+
+    /**
+     * Returns UUID v7 in numeric form (128-bit integer).
+     */
+    DEFINE_VECTORIZED_FN(uuid_v7_numeric);
 
     /**
      * assert whether input is true
@@ -70,6 +85,11 @@ public:
 
     // Build an order-preserving composite binary key from heterogeneous arguments
     DEFINE_VECTORIZED_FN(encode_sort_key);
+
+    // Identity function that acts as an optimization barrier.
+    // Returns the input value unchanged but prevents FE optimizations
+    // such as constant folding and partition pruning.
+    DEFINE_VECTORIZED_FN(materialize);
 };
 
 } // namespace starrocks

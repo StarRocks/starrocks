@@ -16,17 +16,19 @@
 
 #include <memory>
 
-#include "agent/master_info.h"
+#include "base/failpoint/fail_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/system/master_info.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_metrics.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -81,7 +83,9 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
 }
 
 void GlobalDriverExecutor::_worker_thread() {
-    auto current_thread = Thread::current_thread();
+    // This executor is dedicated to query pipeline drivers.
+    SET_MODULE_TYPE(ThreadModuleType::QUERY);
+    auto* current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
     std::queue<DriverRawPtr> local_driver_queue;
     while (true) {
@@ -105,14 +109,17 @@ void GlobalDriverExecutor::_worker_thread() {
         if (driver == nullptr) {
             continue;
         }
+
+        auto* fragment_ctx = driver->fragment_ctx();
+        auto* runtime_state = fragment_ctx->runtime_state();
+        auto* query_ctx = driver->query_ctx();
+
         DCHECK(!driver->is_in_ready());
         DCHECK(!driver->is_in_blocked());
 
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
         }
-        auto* query_ctx = driver->query_ctx();
-        auto* fragment_ctx = driver->fragment_ctx();
         const TQueryType::type query_type = fragment_ctx->query_type();
 
         driver->increment_schedule_times();
@@ -124,8 +131,8 @@ void GlobalDriverExecutor::_worker_thread() {
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
-        auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
-        auto* runtime_state = runtime_state_ptr.get();
+        // do not remove this writing, it is used to ensure that MemTracker will not be destructed before the SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER
+        auto runtime_state_holder = fragment_ctx->runtime_state_ptr();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
@@ -135,9 +142,6 @@ void GlobalDriverExecutor::_worker_thread() {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
-                    _blocked_driver_poller->add_blocked_driver(driver);
-                } else if (driver->is_still_epoch_finishing()) {
-                    driver->set_driver_state(DriverState::EPOCH_PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
                     _finalize_driver(driver, runtime_state, DriverState::CANCELED);
@@ -225,15 +229,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver_state);
                 break;
             }
-            case EPOCH_FINISH: {
-                _finalize_epoch(driver, runtime_state, driver_state);
-                _blocked_driver_poller->park_driver(driver);
-                break;
-            }
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
-            case EPOCH_PENDING_FINISH:
             case PRECONDITION_BLOCK: {
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
@@ -289,13 +287,8 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 
         // Try to add the driver to poller first.
         if (!driver->source_operator()->is_finished() && !driver->source_operator()->has_output()) {
-            if (typeid(*driver) == typeid(StreamPipelineDriver)) {
-                driver->set_driver_state(DriverState::EPOCH_FINISH);
-                this->_blocked_driver_poller->park_driver(driver);
-            } else {
-                driver->set_driver_state(DriverState::INPUT_EMPTY);
-                this->_blocked_driver_poller->add_blocked_driver(driver);
-            }
+            driver->set_driver_state(DriverState::INPUT_EMPTY);
+            this->_blocked_driver_poller->add_blocked_driver(driver);
         } else {
             this->_driver_queue->put_back(driver);
         }
@@ -311,10 +304,10 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                             const Status& status, bool done, bool attach_profile) {
+                                             const Status& status, bool done) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
     ObjectPool obj_pool;
-    if (attach_profile) {
+    if (query_ctx->enable_profile()) {
         profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
@@ -360,15 +353,14 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         GlobalEnv::GetInstance()->process_mem_tracker()->consume(delta);
     }
 
-    auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto instance_id = fragment_ctx->fragment_instance_id();
     auto query_id = fragment_ctx->query_id();
 
-    auto report_task = [params, exec_env, fe_addr, instance_id, query_id]() {
+    auto report_task = [params, fe_addr, instance_id, query_id]() {
         int retry_times = 0;
         int max_retry_times = config::report_exec_rpc_request_retry_num;
         while (retry_times++ < max_retry_times) {
-            auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
+            auto status = ExecStateReporter::report_exec_status(*params, fe_addr);
 
             FAIL_POINT_TRIGGER_EXECUTE(report_exec_state_failed_status, {
                 if (status.ok()) {
@@ -407,6 +399,10 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
 }
 
 void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
+    if (!query_ctx->mark_audit_statistics_reported()) {
+        return;
+    }
+
     auto query_statistics = query_ctx->final_query_statistic();
 
     TReportAuditStatisticsParams params;
@@ -422,11 +418,10 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
         return;
     }
 
-    auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
     auto report_task = [=]() {
-        auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
+        auto status = AuditStatisticsReporter::report_audit_statistics(params, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
                 LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
@@ -445,44 +440,44 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     }
 }
 
-size_t GlobalDriverExecutor::activate_parked_driver(const ConstDriverPredicator& predicate_func) {
-    return _blocked_driver_poller->activate_parked_driver(predicate_func);
-}
+void GlobalDriverExecutor::report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
+    if (!query_ctx->mark_audit_statistics_reported()) {
+        return;
+    }
 
-size_t GlobalDriverExecutor::calculate_parked_driver(const ConstDriverPredicator& predicate_func) const {
-    return _blocked_driver_poller->calculate_parked_driver(predicate_func);
-}
+    auto query_statistics = query_ctx->snapshot_query_statistic();
 
-void GlobalDriverExecutor::_finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
-    DCHECK(driver);
-    DCHECK(down_cast<StreamPipelineDriver*>(driver));
-    auto* stream_driver = down_cast<StreamPipelineDriver*>(driver);
-    stream_driver->epoch_finalize(runtime_state, state);
-}
+    TReportAuditStatisticsParams params;
+    params.__set_query_id(fragment_ctx->query_id());
+    params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+    params.__set_audit_statistics({});
+    query_statistics->to_params(&params.audit_statistics);
 
-void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
-                                        std::vector<FragmentContext*> fragment_ctxs) {
-    DCHECK_LT(0, fragment_ctxs.size());
-    auto params = ExecStateReporter::create_report_epoch_params(query_ctx, fragment_ctxs);
-    // TODO(lism): Check all fragment_ctx's fe_addr are the same.
-    auto fe_addr = fragment_ctxs[0]->fe_addr();
-    auto query_id = query_ctx->query_id();
+    auto fe_addr = fragment_ctx->fe_addr();
+    if (fe_addr.hostname.empty()) {
+        return;
+    }
+
+    auto fragment_id = fragment_ctx->fragment_instance_id();
+
     auto report_task = [=]() {
-        auto status = ExecStateReporter::report_epoch(params, exec_env, fe_addr);
+        auto status = AuditStatisticsReporter::report_audit_statistics(params, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
-                LOG(INFO) << "[Driver] Fail to report epoch exec state due to query not found: query_id="
-                          << print_id(query_id);
+                LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
+                          << print_id(fragment_id);
             } else {
-                LOG(WARNING) << "[Driver] Fail to report epoch exec state: query_id=" << print_id(query_id)
-                             << ", status: " << status.to_string();
+                LOG(WARNING) << "[Driver] Fail to report audit statistics fragment_instance_id="
+                             << print_id(fragment_id) << ", status: " << status.to_string();
             }
         } else {
-            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+            VLOG(1) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
         }
     };
-
-    this->_exec_state_reporter->submit(std::move(report_task));
+    auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
+    if (!st.ok()) {
+        LOG(ERROR) << "submit audit statistics report fail, " << st.to_string();
+    }
 }
 
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const {
@@ -493,9 +488,6 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
                                                                      FragmentContext* fragment_ctx,
                                                                      ObjectPool* obj_pool) {
     auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
-    if (!query_ctx->enable_profile()) {
-        return instance_profile;
-    }
 
     if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return instance_profile;

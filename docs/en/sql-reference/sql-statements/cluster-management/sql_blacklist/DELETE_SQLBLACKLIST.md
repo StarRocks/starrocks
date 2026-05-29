@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DELETE SQLBLACKLIST deletes an SQL regular expression from the SQL blacklist."
 ---
 
 # DELETE SQLBLACKLIST

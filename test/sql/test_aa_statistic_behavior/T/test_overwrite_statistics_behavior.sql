@@ -351,6 +351,26 @@ function: assert_explain_costs_contains("select * from test_overwrite_statistics
 analyze table expr_range_v2_partitioned_table;
 function: assert_explain_costs_contains("select * from test_overwrite_statistics_behavior.expr_range_v2_partitioned_table;","cardinality: 16","ESTIMATE")
 
+-- test compensate_predicate_column_stats
+drop all analyze job;
+ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect_on_first_load" = "false");
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_auto_collect_statistics" = "true");
+shell: sleep 13
+drop table if exists test_overwrite_statistics_behavior.t3_predicate;
+delete from _statistics_.column_statistics where table_name like '%t3_predicate%';
+create table t3_predicate(k1 int, k2 int, k3 int) properties("replication_num"="1");
+insert into t3_predicate values(1,2,3), (4,5,6);
+[UC] analyze table t3_predicate(k1);
+select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics_behavior.t3_predicate';
+select * from t3_predicate where k2 = 1;
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'test_overwrite_statistics_behavior' and table_name = 't3_predicate' order by column_name;
+create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_overwrite_statistics_behavior).*$");
+shell: sleep 13
+select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics_behavior.t3_predicate';
+
 -- reset fe config
 ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
 ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");

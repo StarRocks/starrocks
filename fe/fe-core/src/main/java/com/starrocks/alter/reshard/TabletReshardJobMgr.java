@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -30,6 +31,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -46,8 +48,14 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     @SerializedName(value = "tabletReshardJobs")
     protected final Map<Long, TabletReshardJob> tabletReshardJobs = Maps.newConcurrentMap();
 
-    // Original tablet id -> resharding tablet context
-    protected final Map<Long, ReshardingTabletContext> reshardingTabletContexts = Maps.newConcurrentMap();
+    // Original tablet id -> resharding tablet info
+    protected final Map<Long, ReshardingTabletInfo> reshardingTabletInfos = Maps.newConcurrentMap();
+
+    // Colocate checker: stateless, invoked from this manager's tick. Owns no
+    // thread of its own — shares this manager's scheduler cadence
+    // ({@code tablet_reshard_job_scheduler_interval_ms}) and self-gates on shared-data-mode,
+    // leader status, and empty unstable-groups before doing any real work.
+    private final ColocateChecker colocateChecker = new ColocateChecker();
 
     public TabletReshardJobMgr() {
         super("tablet-reshard-job-mgr", Config.tablet_reshard_job_scheduler_interval_ms);
@@ -62,21 +70,31 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     }
 
     public ReshardingTablet getReshardingTablet(long tabletId, long visibleVersion) {
-        ReshardingTabletContext reshardingTabletContext = reshardingTabletContexts.get(tabletId);
-        if (reshardingTabletContext == null) {
+        ReshardingTabletInfo reshardingTabletInfo = reshardingTabletInfos.get(tabletId);
+        if (reshardingTabletInfo == null) {
             return null;
         }
 
-        if (visibleVersion < reshardingTabletContext.getVisibleVersion()) {
+        if (visibleVersion < reshardingTabletInfo.getVisibleVersion()) {
             return null;
         }
 
-        return reshardingTabletContext.getReshardingTablet();
+        return reshardingTabletInfo.getReshardingTablet();
     }
 
     public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
             throws StarRocksException {
         TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createTabletReshardJob();
+        addTabletReshardJob(job);
+    }
+
+    public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
+            throws StarRocksException {
+        if (!Config.tablet_reshard_enable_tablet_merge) {
+            throw new StarRocksException("Tablet merge is disabled. " +
+                    "Set tablet_reshard_enable_tablet_merge=true to enable it.");
+        }
+        TabletReshardJob job = new MergeTabletJobFactory(db, table, mergeTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
     }
 
@@ -89,6 +107,14 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(tabletReshardJob);
+
+        if (MetricRepo.hasInit) {
+            if (tabletReshardJob.getJobType() == TabletReshardJob.JobType.SPLIT_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL.increase(1L);
+            } else if (tabletReshardJob.getJobType() == TabletReshardJob.JobType.MERGE_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL.increase(1L);
+            }
+        }
 
         LOG.info("Added tablet reshard job. {}", tabletReshardJob);
     }
@@ -137,15 +163,16 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     }
 
     protected void registerReshardingTablet(long tabletId, ReshardingTablet reshardingTablet, long visibleVersion) {
-        reshardingTabletContexts.put(tabletId, new ReshardingTabletContext(reshardingTablet, visibleVersion));
+        reshardingTabletInfos.put(tabletId, new ReshardingTabletInfo(reshardingTablet, visibleVersion));
     }
 
     protected void unregisterReshardingTablet(long tabletId) {
-        reshardingTabletContexts.remove(tabletId);
+        reshardingTabletInfos.remove(tabletId);
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        colocateChecker.runOneCycle();
         runTabletReshardJobs();
     }
 
@@ -177,8 +204,9 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
             // Job is done, remove expired job
             if (job.isExpired()) {
-                iterator.remove();
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId());
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId(), wal -> {
+                    iterator.remove();
+                });
                 LOG.info("Removed expired tablet reshard job. {}", job);
             }
         }
@@ -204,6 +232,6 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         TabletReshardJobMgr tabletReshardJobMgr = reader.readJson(TabletReshardJobMgr.class);
         tabletReshardJobs.putAll(tabletReshardJobMgr.tabletReshardJobs);
-        reshardingTabletContexts.putAll(tabletReshardJobMgr.reshardingTabletContexts);
+        reshardingTabletInfos.putAll(tabletReshardJobMgr.reshardingTabletInfos);
     }
 }
