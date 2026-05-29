@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/mysql_result_writer.h"
+#include "runtime/mysql_result_writer.h"
 
 #include <gtest/gtest.h>
 
@@ -22,10 +22,10 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
-#include "compute_env/result/buffer_control_block.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/buffer_control_block.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

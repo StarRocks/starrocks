@@ -40,16 +40,11 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
-<<<<<<< HEAD:be/src/runtime/mysql_result_writer.cpp
-=======
-#include "compute_env/result/buffer_control_block.h"
-#include "exec/data_sinks/buffer_control_result_writer.h"
-#include "exec/data_sinks/mysql_column_writer.h"
->>>>>>> 8f41970133 ([Enhancement] mysql result typed writer (#66316)):be/src/exec/data_sinks/mysql_result_writer.cpp
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
+#include "runtime/mysql_column_writer.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"

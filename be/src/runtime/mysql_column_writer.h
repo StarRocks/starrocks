@@ -20,12 +20,12 @@
 #include <vector>
 
 #include "column/column_viewer.h"
-#include "column/mysql_row_buffer.h"
 #include "types/decimalv2_value.h"
 #include "types/decimalv3.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/type_descriptor.h"
+#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
