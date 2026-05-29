@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -32,6 +33,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -200,6 +203,68 @@ public class LakeTableAlterMetaJobTest {
                     pp.getVisibleVersion(),
                     "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
         }
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipSingleDispatch() throws Exception {
+        // file_bundling=false → lakePublishVersionWithSkip uses the per-tablet
+        // (non-aggregate) publish_version path.
+        LakeTable single = createTable(connectContext,
+                "CREATE TABLE t_single(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        runForceCancelNoOpPublishBody(single, /*expectAggregate=*/ false);
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipAggregateDispatch() throws Exception {
+        // file_bundling=true → lakePublishVersionWithSkip uses the aggregate
+        // publish_version path (BE expects a single bundle file per partition).
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_bundled(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='true')");
+        runForceCancelNoOpPublishBody(bundled, /*expectAggregate=*/ true);
+    }
+
+    // Runs the REAL lakePublishVersionWithSkip body (the other force-cancel
+    // tests stub it out) by intercepting Utils.publishVersion, and asserts the
+    // helper builds a TxnInfoPB with noOpPublish=true and dispatches via the
+    // expected single-vs-aggregate path so BE's transactions.cpp short-circuit
+    // fires and writes V-1 content as V.
+    private void runForceCancelNoOpPublishBody(LakeTable tbl, boolean expectAggregate) throws Exception {
+        LakeTableAlterMetaJob localJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), tbl.getId(), tbl.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true,
+                "CLOUD_NATIVE");
+
+        java.util.concurrent.atomic.AtomicInteger publishCalls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean lastNoOp = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicBoolean lastAggregate = new java.util.concurrent.atomic.AtomicBoolean();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+                publishCalls.incrementAndGet();
+                lastNoOp.set(txnInfo.noOpPublish);
+                lastAggregate.set(useAggregatePublish);
+            }
+        };
+
+        localJob.runPendingJob();
+        localJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, localJob.getJobState());
+
+        Assertions.assertTrue(localJob.cancel("force-cancel-meta-publish-body", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, localJob.getJobState());
+        Assertions.assertTrue(publishCalls.get() > 0,
+                "lakePublishVersionWithSkip must invoke Utils.publishVersion at least once");
+        Assertions.assertTrue(lastNoOp.get(),
+                "TxnInfoPB.noOpPublish must be set so BE short-circuits the txn-log apply");
+        Assertions.assertEquals(expectAggregate, lastAggregate.get(),
+                "no-op publish must follow the table's single-vs-aggregate dispatch");
+        Assertions.assertTrue(localJob.isForceSkippedAtCommitted(),
+                "marker must be set after the no-op publish actually ran");
+
+        db.dropTable(tbl.getName());
     }
 
     @Test
