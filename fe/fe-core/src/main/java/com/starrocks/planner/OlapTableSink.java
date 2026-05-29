@@ -61,6 +61,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -289,15 +290,34 @@ public class OlapTableSink extends DataSink {
             return new ArrayList<>(Collections.singletonList(
                     dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
         }
-        if (isFromOverwrite || !enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
-                || partitionIds.size() < Config.max_load_initial_open_partition_number) {
+        if (isFromOverwrite || !enableAutomaticPartition) {
             return partitionIds;
         }
-        // bigger partition id means newer partition
-        // open last max_load_initial_open_partition_number partitions
+
+        // Resolve the initial-open limit:
+        //   1. Table property load_initial_open_partition_number wins when set.
+        //   2. LIST-partitioned tables default to opening all partitions because partition ids
+        //      carry no time/access-locality signal (e.g. tenant_id), so "latest N" degenerates
+        //      to random sampling and causes incremental_open churn.
+        //   3. Everything else falls back to the global Config.max_load_initial_open_partition_number.
+        int limit;
+        int tableLimit = dstTable.getLoadInitialOpenPartitionNumber();
+        if (tableLimit != TableProperty.INVALID) {
+            limit = tableLimit;
+        } else if (dstTable.getPartitionInfo().isListPartition()) {
+            return partitionIds;
+        } else {
+            limit = (int) Config.max_load_initial_open_partition_number;
+        }
+
+        if (limit <= 0 || partitionIds.size() < limit) {
+            return partitionIds;
+        }
+
+        // bigger partition id means newer partition; open the newest `limit` partitions
         Set<Long> openPartitionIds = partitionIds.stream().collect(
                 Collectors.toCollection(() -> new TreeSet<>(Collections.reverseOrder())))
-                .stream().limit(Config.max_load_initial_open_partition_number).collect(Collectors.toSet());;
+                .stream().limit(limit).collect(Collectors.toSet());
         if (!dstTable.getDoubleWritePartitions().isEmpty()) {
             openPartitionIds.addAll(dstTable.getDoubleWritePartitions().keySet());
         }

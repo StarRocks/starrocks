@@ -39,6 +39,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -598,6 +599,88 @@ public class OlapTableSinkTest {
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
 
         Config.max_load_initial_open_partition_number = 32;
+    }
+
+    @Test
+    public void testGetOpenPartitionsListPartitionOpensAll(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "LIST partition table should open all partitions regardless of latest-N config");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyOverrides(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 2;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        List<Long> open = sink.getOpenPartitions();
+        Assertions.assertEquals(2, open.size(),
+                "Table property load_initial_open_partition_number should cap the open set");
+        Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                "When capped, the two newest (largest id) partitions should be opened");
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangePartitionKeepsLatestN(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 3;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(30L, 40L, 50L), Sets.newHashSet(open),
+                    "RANGE partition should preserve the latest-N config behavior");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
     }
 
     @Test
