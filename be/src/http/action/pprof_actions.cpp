@@ -36,6 +36,13 @@
 
 #include <gperftools/profiler.h>
 
+#ifdef __APPLE__
+#include <stdlib.h>
+#endif
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -153,6 +160,14 @@ void IOProfileAction::handle(HttpRequest* req) {
 }
 
 void CmdlineAction::handle(HttpRequest* req) {
+#ifdef __APPLE__
+    const char* prog_name = getprogname();
+    if (prog_name == nullptr || prog_name[0] == '\0') {
+        HttpChannel::send_reply(req, "read cmdline failed");
+        return;
+    }
+    HttpChannel::send_reply(req, prog_name);
+#else
     FILE* fp = fopen("/proc/self/cmdline", "r");
     if (fp == nullptr) {
         std::string str = "Unable to open file: /proc/self/cmdline";
@@ -168,6 +183,7 @@ void CmdlineAction::handle(HttpRequest* req) {
     std::string str = buf;
 
     HttpChannel::send_reply(req, str);
+#endif
 }
 
 void SymbolAction::handle(HttpRequest* req) {
