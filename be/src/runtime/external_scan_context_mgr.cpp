@@ -45,6 +45,7 @@
 #include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_metrics.h"

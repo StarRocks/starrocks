@@ -17,6 +17,7 @@
 
 #include "base/testutil/assert.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
