@@ -342,8 +342,14 @@ set(EXEC_FILES
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/merge_cascade_test.cpp
+<<<<<<< HEAD
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
+=======
+        ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
+        ./exec/data_sinks/memory_scratch_sink_test.cpp
+        ./exec/data_sinks/mysql_result_writer_test.cpp
+>>>>>>> 8f41970133 ([Enhancement] mysql result typed writer (#66316))
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./runtime/exec_sub_process_test.cpp
