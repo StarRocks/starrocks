@@ -10123,7 +10123,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private String generateTableAlias(String columnAlias) {
         // Generate table aliases to avoid conflicts
-        return "t_array" + columnAlias + "_" + System.currentTimeMillis();
+        return "t_array_" + columnAlias + "_" + System.currentTimeMillis();
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {

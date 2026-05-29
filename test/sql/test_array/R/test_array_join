@@ -76,3 +76,25 @@ select id, c1, c2 from student_score array join scores as c1, [1,2] as c2
 -- result:
 E: (1064, 'Sizes of ARRAY-JOIN-ed arrays do not match.')
 -- !result
+
+CREATE TABLE test_mismatch (
+  id int,
+  arr1 array<int>,
+  arr2 array<int>
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+
+INSERT INTO test_mismatch VALUES (1, [1,2,3], [4,5]);
+-- result:
+-- !result
+
+select id, a, b from test_mismatch array join arr1 as a, arr2 as b;
+-- result:
+E: (1064, 'Sizes of ARRAY-JOIN-ed arrays do not match.')
+-- !result

@@ -102,6 +102,8 @@ public class TableFunction extends Function {
         defaultColumnNames = other.defaultColumnNames;
         tableFnReturnTypes = other.tableFnReturnTypes;
         symbolName = other.symbolName;
+        isLeftJoin = other.isLeftJoin;
+        isArrayJoin = other.isArrayJoin;
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
@@ -178,7 +180,9 @@ public class TableFunction extends Function {
         this.isArrayJoin = isArrayJoin;
     }
 
-
+    public boolean isArrayJoin() {
+        return this.isArrayJoin;
+    }
 
     @Override
     public TFunction toThrift() {

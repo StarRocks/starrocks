@@ -1903,7 +1903,7 @@ public class QueryAnalyzer {
                         Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
             }
 
-            TableFunction tableFunction = (TableFunction) fn;
+            TableFunction tableFunction = (TableFunction) fn.copy();
             tableFunction.setIsLeftJoin(node.getIsLeftJoin());
             tableFunction.setIsArrayJoin(node.getIsArrayJoin());
             node.setTableFunction(tableFunction);
