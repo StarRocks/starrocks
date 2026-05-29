@@ -94,9 +94,11 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
 }
 
 // Build a per-aggregator JavaUDAFUniqueContext on top of a (possibly cached) JavaUDAFSharedContext.
-static Status build_udaf_unique_context(std::shared_ptr<JavaUDAFSharedContext> udaf_ctx, FunctionContext* context) {
-    auto agg_ctx = std::make_unique<JavaUDAFUniqueContext>();
-    agg_ctx->ctx = std::move(udaf_ctx);
+// The context is already pre-allocated in FunctionContext::_jvm_udaf_ctxs; we populate it here.
+static Status build_udaf_unique_context(std::shared_ptr<JavaUDAFSharedContext> udaf_shared_ctx,
+                                        FunctionContext* context) {
+    auto* agg_ctx = context->udaf_ctxs();
+    agg_ctx->ctx = std::move(udaf_shared_ctx);
 
     // Create a per-aggregator UDAF object instance
     ASSIGN_OR_RETURN(agg_ctx->handle, agg_ctx->ctx->udaf_class.newInstance());
@@ -121,8 +123,7 @@ static Status build_udaf_unique_context(std::shared_ptr<JavaUDAFSharedContext> u
             JavaGlobalRef(env->NewGlobalRef(agg_ctx->ctx->states_add_method.handle())),
             JavaGlobalRef(env->NewGlobalRef(agg_ctx->ctx->states_remove_method.handle())),
             JavaGlobalRef(env->NewGlobalRef(agg_ctx->ctx->states_clear_method.handle())));
-    agg_ctx->_func = std::make_unique<UDAFFunction>(agg_ctx->handle.handle(), context, agg_ctx.get());
-    attach_java_udaf_context(context, std::move(agg_ctx));
+    agg_ctx->_func = std::make_unique<UDAFFunction>(agg_ctx->handle.handle(), context, agg_ctx);
     return Status::OK();
 }
 
