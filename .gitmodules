@@ -1,5 +1,4 @@
 [submodule "contrib/tantivy"]
 	path = contrib/tantivy
-	# url = git@code.devops.xiaohongshu.com:data/tantivy.git
-	url = ../../data/tantivy.git
-	branch = branch-0.25.0-red
+        url = https://github.com/quickwit-oss/tantivy.git
+	branch = branch-0.25.0
