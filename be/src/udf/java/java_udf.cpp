@@ -108,49 +108,6 @@ static JNINativeMethod java_native_methods[] = {
 };
 #pragma GCC diagnostic pop
 
-JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx) {
-    if (ctx == nullptr) {
-        return nullptr;
-    }
-    return reinterpret_cast<JavaUDAFUniqueContext*>(ctx->get_function_state(FunctionContext::THREAD_LOCAL));
-}
-
-void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx) {
-    DCHECK(ctx != nullptr);
-    DCHECK(udaf_ctx != nullptr);
-    auto* old_ctx = get_java_udaf_context(ctx);
-    DCHECK(old_ctx == nullptr) << "duplicate Java UDAF context attach";
-    if (old_ctx != nullptr) {
-        delete old_ctx;
-    }
-    ctx->set_function_state(FunctionContext::THREAD_LOCAL, udaf_ctx.release());
-}
-
-void clear_java_udaf_states(FunctionContext* ctx) {
-    auto* udaf_ctx = get_java_udaf_context(ctx);
-    if (udaf_ctx == nullptr || udaf_ctx->states == nullptr) {
-        return;
-    }
-
-    auto env = JVMFunctionHelper::getInstance().getEnv();
-    udaf_ctx->states->clear(ctx, env);
-}
-
-void destroy_java_udaf_context(FunctionContext* ctx) {
-    if (ctx == nullptr) {
-        return;
-    }
-
-    auto* udaf_ctx = get_java_udaf_context(ctx);
-    if (udaf_ctx == nullptr) {
-        return;
-    }
-
-    clear_java_udaf_states(ctx);
-    ctx->set_function_state(FunctionContext::THREAD_LOCAL, nullptr);
-    delete udaf_ctx;
-}
-
 StatusOr<jobject> MapMeta::newLocalInstance(jobject keys, jobject values) const {
     JNIEnv* env = getJNIEnv();
     auto res = env->NewObject(immutable_map_class->clazz(), immutable_map_constructor, keys, values);
