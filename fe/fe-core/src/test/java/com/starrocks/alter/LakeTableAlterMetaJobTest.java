@@ -177,13 +177,16 @@ public class LakeTableAlterMetaJobTest {
                 "copyForPersist must propagate forceSkippedAtCommitted");
 
         // Replay regression: simulate FE recovering from a pre-cancel image
-        // by resetting partition.VisibleVersion AND the marker on a fresh
-        // in-memory job, then replay(persistCopy). The copy-block in replay()
-        // must propagate forceSkippedAtCommitted from the persisted entry
-        // onto `this` before the CANCELLED branch reads it — otherwise the
-        // version bump is silently skipped and FE stays stuck at commitVersion-1
-        // against BE metadata already advanced by the no-op publish.
-        LakeTableAlterMetaJob staleInMemory = (LakeTableAlterMetaJob) persistCopy;
+        // by replaying the persisted CANCELLED entry onto a SEPARATE in-memory
+        // job that still looks pre-cancel (state=FINISHED_REWRITING, marker
+        // cleared, VisibleVersion reset to commitVersion-1). The copy-block in
+        // replay() must propagate forceSkippedAtCommitted from the persisted
+        // entry onto `this` before the CANCELLED branch reads it — otherwise
+        // the version bump is silently skipped and FE stays stuck at
+        // commitVersion-1 against BE metadata already advanced by the no-op
+        // publish. (staleInMemory must NOT be the same object as persistCopy,
+        // else replay's `this != other` copy-block is skipped.)
+        LakeTableAlterMetaJob staleInMemory = (LakeTableAlterMetaJob) job.copyForPersist();
         staleInMemory.forceSkippedAtCommitted = false;
         staleInMemory.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
