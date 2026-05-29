@@ -56,4 +56,3 @@ INSERT INTO t1 VALUES
 SELECT * FROM test_mv1 ORDER BY k1;
 
 DROP TABLE t1;
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="true");
