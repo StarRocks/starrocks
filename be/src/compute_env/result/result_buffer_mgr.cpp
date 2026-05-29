@@ -135,6 +135,19 @@ std::shared_ptr<arrow::Schema> ResultBufferMgr::get_arrow_schema(const TUniqueId
     return nullptr;
 }
 
+void ResultBufferMgr::set_arrow_compression(const TUniqueId& query_id, arrow::Compression::type codec) {
+    std::lock_guard<std::mutex> l(_lock);
+    _arrow_compression_map[query_id] = codec;
+}
+
+arrow::Compression::type ResultBufferMgr::get_arrow_compression(const TUniqueId& query_id) {
+    std::lock_guard<std::mutex> l(_lock);
+    if (auto iter = _arrow_compression_map.find(query_id); _arrow_compression_map.end() != iter) {
+        return iter->second;
+    }
+    return arrow::Compression::UNCOMPRESSED;
+}
+
 Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
     std::lock_guard<std::mutex> l(_lock);
 
@@ -144,6 +157,7 @@ Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
     }
 
     _arrow_schema_map.erase(query_id);
+    _arrow_compression_map.erase(query_id);
 
     return Status::OK();
 }
