@@ -313,6 +313,41 @@ class ParserTest {
     }
 
     @Test
+    void testDatetimePrecisionArgumentMysqlCompatibility() {
+        // MySQL ecosystem tools routinely emit DATETIME(p)/TIME(p) with a fractional-seconds
+        // precision argument. StarRocks stores microsecond precision internally, so it accepts
+        // the argument (validated against MySQL's 0-6 range) and ignores its value.
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        sessionVariable.setSqlDialect("sr");
+
+        // CAST positions: precision argument accepted and ignored, resolved type unchanged.
+        QueryStatement datetimeStmt =
+                (QueryStatement) SqlParser.parse("select cast('2020-01-01 00:00:00' as datetime(3))",
+                        sessionVariable).get(0);
+        Analyzer.analyze(datetimeStmt, ctx);
+        Assertions.assertTrue(datetimeStmt.getQueryRelation().getOutputExpression().get(0).getType().isDatetime());
+
+        // TIME(p) is accepted by the parser as well (the precision argument is validated and ignored).
+        SqlParser.parse("select cast('12:00:00' as time(6))", sessionVariable);
+
+        // Boundary values 0 and 6 are accepted.
+        SqlParser.parse("select cast('2020-01-01 00:00:00' as datetime(0))", sessionVariable);
+        SqlParser.parse("select cast('2020-01-01 00:00:00' as datetime(6))", sessionVariable);
+
+        // Column-definition positions also accept the precision argument.
+        SqlParser.parse("create table t (k int, dt datetime(3)) duplicate key(k) "
+                + "distributed by hash(k) buckets 1", sessionVariable);
+
+        // Out-of-range precision is rejected with a clear message.
+        ParsingException e = Assertions.assertThrows(ParsingException.class,
+                () -> SqlParser.parse("select cast('2020-01-01 00:00:00' as datetime(7))", sessionVariable));
+        Assertions.assertTrue(e.getMessage().contains("fractional seconds precision"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    @Test
     void testTypeCast() {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlDialect("sr");

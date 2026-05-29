@@ -14,6 +14,8 @@ import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'
 
 从 v3.3.5 起，DATETIME 支持毫秒和微秒精度。打印形式为 `YYYY-MM-DD HH:MM:SS.fffffff`
 
+为兼容 MySQL，StarRocks 还接受可选的小数秒精度参数 `DATETIME(p)`，其中 `p` 的取值范围为 0 到 6。该语法可用于列定义和 `CAST` 表达式（例如 `CAST(now() AS DATETIME(3))`），使 MySQL 生态工具生成的 SQL 无需修改即可运行。该精度参数会被忽略：数据始终以微秒精度存储。
+
 ## 示例
 
 创建表时指定字段类型为 DATETIME。
