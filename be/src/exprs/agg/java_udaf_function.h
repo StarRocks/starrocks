@@ -57,7 +57,7 @@ public:
             input_column = down_cast<const BinaryColumn*>(column);
         }
         Slice slice = input_column->get_slice(row_num);
-        auto* udaf_ctx = get_java_udaf_context(ctx);
+        auto* udaf_ctx = ctx->udaf_ctxs();
 
         if (udaf_ctx->buffer->capacity() < slice.get_size()) {
             udaf_ctx->buffer_data.resize(slice.get_size());
@@ -83,7 +83,7 @@ public:
         }
 
         size_t old_size = column->get_bytes().size();
-        auto* udaf_ctx = get_java_udaf_context(ctx);
+        auto* udaf_ctx = ctx->udaf_ctxs();
         int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle);
         if (udaf_ctx->buffer->capacity() < serialize_size) {
             udaf_ctx->buffer_data.resize(serialize_size);
@@ -101,7 +101,7 @@ public:
 
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const final {
-        auto* udaf_ctx = get_java_udaf_context(ctx);
+        auto* udaf_ctx = ctx->udaf_ctxs();
         DCHECK(udaf_ctx != nullptr);
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         // STRUCT-bearing return types route through append_jvalue's STRUCT path with the
@@ -117,7 +117,7 @@ public:
                                      ColumnPtr* dst) const final {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
         // 1 convert input as state
         // 1.1 create state list
         auto rets =
@@ -192,12 +192,12 @@ public:
     // jclass
     // newInstance -> handle
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        new (ptr) State(get_java_udaf_context(ctx)->_func->create());
+        new (ptr) State(ctx->udaf_ctxs()->_func->create());
     }
 
     // Call Destroy method
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        get_java_udaf_context(ctx)->_func->destroy(data(ptr).handle);
+        ctx->udaf_ctxs()->_func->destroy(data(ptr).handle);
         data(ptr).~State();
     }
 
@@ -222,7 +222,7 @@ public:
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
@@ -244,7 +244,7 @@ public:
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const Filter& filter) const override {
         auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
@@ -269,7 +269,7 @@ public:
         auto* env = helper.getEnv();
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
         env->PushLocalFrame(num_cols * 3 + 1);
         auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
@@ -279,7 +279,7 @@ public:
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
-            auto* stub = get_java_udaf_context(ctx)->update_batch_call_stub.get();
+            auto* stub = ctx->udaf_ctxs()->update_batch_call_stub.get();
             auto state_handle = this->data(state).handle;
             helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
         }
@@ -320,7 +320,7 @@ public:
         // batch merge
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
 
         auto provider = [&]() {
             auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
@@ -341,7 +341,7 @@ public:
                                  AggDataPtr* states, const Filter& filter) const override {
         // batch merge
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
 
         auto provider = [&]() {
             auto state_id_list = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
@@ -360,7 +360,7 @@ public:
                                   size_t size) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
         auto provider = [&]() {
             auto state_handle = reinterpret_cast<JavaUDAFState*>(state)->handle;
             auto res = helper.convert_handle_to_jobject(ctx, state_handle);
@@ -379,7 +379,7 @@ public:
                          size_t state_offset, Column* to) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
 
         const size_t origin_chunk_size = to->size();
         auto defer = DeferOp([&]() {
@@ -435,7 +435,7 @@ public:
                         size_t state_offset, Column* to) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = get_java_udaf_context(ctx);
+        auto* udf_ctxs = ctx->udaf_ctxs();
 
         const size_t origin_chunk_size = to->size();
         auto defer = DeferOp([&]() {
