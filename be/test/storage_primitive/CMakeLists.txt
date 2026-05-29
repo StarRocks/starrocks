@@ -19,7 +19,9 @@ endif()
 
 set(STORAGE_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    projection_iterator_test.cpp
     range_test.cpp
+    row_source_mask_test.cpp
 )
 
 set(STORAGE_PRIMITIVE_TEST_LINK_LIBS

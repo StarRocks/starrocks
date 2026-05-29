@@ -37,7 +37,7 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"

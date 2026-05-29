@@ -27,10 +27,10 @@
 #include "connector/connector.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "storage/chunk_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {

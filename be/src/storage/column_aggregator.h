@@ -21,7 +21,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
+#include "storage/primitive/chunk_iterator.h"
 
 namespace starrocks {
 

@@ -20,7 +20,7 @@
 #include "common/object_pool.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/chunk_iterator.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/rowid_types.h"
 

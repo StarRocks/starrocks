@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 
 #include <unordered_set>
 
