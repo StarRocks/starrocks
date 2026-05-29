@@ -568,6 +568,64 @@ FROM KAFKA
 
 A metadata function may be nested inside an expression (as with `from_unixtime(kafka_timestamp_ms() / 1000)` above); only payload columns are listed in `jsonpaths`.
 
+### Evolve the Avro schema automatically
+
+When a Kafka producer changes its Avro writer schema — adds a field, adds a subfield to a `record`, or widens a field's type — Routine Load can evolve the destination table to match and keep loading, instead of failing the job. This is opt-in and works only with the native Avro reader.
+
+Enable it per job with `"avro.enable_schema_evolution" = "true"` (default `false`). It additionally requires `"avro.use_native_reader" = "true"` and no `jsonpaths`, because evolution relies on the reader's by-name field-to-column mapping. A plain column list in `COLUMNS` is rejected too: an explicit list pins the loaded column set, so with it you own the column set yourself. Expression mappings in `COLUMNS` (for example metadata functions) are fine.
+
+When a message carries a schema the table does not yet cover, the table is automatically altered to match. Messages already read under the old schema commit normally; the job briefly holds its tasks while the table is altered, then resumes.
+
+#### Changes applied automatically
+
+- A writer field with no matching column → `ADD COLUMN` (nullable, no default).
+- A new subfield in an existing `STRUCT` column, at any nesting depth → `ADD FIELD`.
+- A column whose type no longer holds the writer value, when the change is a safe widening → `MODIFY COLUMN`. For example `INT` → `BIGINT`, `FLOAT` → `DOUBLE`, a `DECIMAL` precision/scale grow, or a scalar type → `VARCHAR`.
+- A value too long for a length-limited `VARCHAR`/`VARBINARY` column → the column is widened to its maximum length.
+
+A field whose type already fits the column (the same or a wider type, or a `VARCHAR`/`STRUCT`/`MAP`/`ARRAY` that already accommodates it) needs no change.
+
+#### Changes that pause the job
+
+Some changes cannot be made safely and automatically. The job is paused, with the field named in `ReasonOfStateChanged`; resolve it by hand and then [RESUME ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md):
+
+- A writer field whose name collides with a metadata column (see [Access source message metadata](#access-source-message-metadata)).
+- A writer field that differs only in letter case from an existing column (StarRocks forbids two columns differing only in case).
+- A key column whose type would have to change to hold the new value. Key columns are not auto-evolved because a key type change affects sorting and distribution. (A key column that the new value still fits needs no change and does not pause the job.)
+- A type change the engine cannot perform — for example, a field that became a `record` over a non-`VARCHAR` column.
+
+#### Heavy schema changes
+
+Most changes on a table that uses fast schema evolution (`ADD COLUMN`, `ADD FIELD`, integer/float widening, `VARCHAR` length increase) are metadata-only and take effect immediately. A few require a full table rewrite (a background schema-change job): a `DECIMAL` precision/scale grow, a type change to `VARCHAR`, or any change on a table created with `fast_schema_evolution = false`.
+
+`"avro.schema_evolution_allow_heavy_alter"` (default `true`) controls these:
+
+- `true`: heavy changes are applied automatically.
+- `false`: only metadata-only changes are applied automatically. A change that needs a rewrite pauses the job and names the exact `ALTER TABLE` to run by hand — run it and then RESUME, or set the property to `true`.
+
+#### Example
+
+Enable evolution on the native-reader job from [Load Avro-format data](#load-avro-format-data):
+
+```SQL
+CREATE ROUTINE LOAD example_db.events_load_job ON events
+PROPERTIES
+(
+    "format" = "avro",
+    "avro.use_native_reader" = "true",
+    "avro.enable_schema_evolution" = "true"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",
+    "kafka_topic" = "topic_events",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+If the producer later adds a field `region` (string) and a subfield `event.severity` (int), the table automatically gains a `region` column and an `event.severity` struct field, and loading continues.
+
 ## Check a load job and task
 
 ### Check a load job
