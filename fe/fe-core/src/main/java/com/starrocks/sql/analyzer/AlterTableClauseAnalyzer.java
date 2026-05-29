@@ -539,6 +539,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     "Random distribution table already supports automatic scaling and does not require optimization");
         }
 
+        if (olapTable.isRangeDistribution()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "OPTIMIZE is not supported on tables with range " +
+                            "distribution, because it redistributes data and would " +
+                            "violate range tablet boundaries.");
+        }
+
         // set the sort keys into OptimizeClause
         List<String> sortKeys = genOptimizeClauseSortKeys(clause);
         clause.setSortKeys(sortKeys);
