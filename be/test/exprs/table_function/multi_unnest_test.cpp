@@ -58,8 +58,7 @@ TFunction create_unnest_function(bool is_array_join, bool is_left_join) {
 class MultiUnnestTest : public testing::Test {};
 
 TEST_F(MultiUnnestTest, array_join_mode_rejects_mismatched_array_sizes) {
-    const TableFunction* func =
-            get_table_function("unnest", {}, {}, TFunctionBinaryType::BUILTIN);
+    const TableFunction* func = get_table_function("unnest", {}, {}, TFunctionBinaryType::BUILTIN);
     ASSERT_NE(nullptr, func);
 
     auto rt_state = std::make_unique<RuntimeState>();
@@ -83,8 +82,7 @@ TEST_F(MultiUnnestTest, array_join_mode_rejects_mismatched_array_sizes) {
 }
 
 TEST_F(MultiUnnestTest, array_join_mode_accepts_matching_array_sizes) {
-    const TableFunction* func =
-            get_table_function("unnest", {}, {}, TFunctionBinaryType::BUILTIN);
+    const TableFunction* func = get_table_function("unnest", {}, {}, TFunctionBinaryType::BUILTIN);
     ASSERT_NE(nullptr, func);
 
     auto rt_state = std::make_unique<RuntimeState>();
@@ -110,8 +108,7 @@ TEST_F(MultiUnnestTest, array_join_mode_accepts_matching_array_sizes) {
 }
 
 TEST_F(MultiUnnestTest, non_array_join_mode_allows_mismatched_array_sizes) {
-    const TableFunction* func =
-            get_table_function("unnest", {}, {}, TFunctionBinaryType::BUILTIN);
+    const TableFunction* func = get_table_function("unnest", {}, {}, TFunctionBinaryType::BUILTIN);
     ASSERT_NE(nullptr, func);
 
     auto rt_state = std::make_unique<RuntimeState>();
