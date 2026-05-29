@@ -2496,8 +2496,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         mockRepository();
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.backup_all_fn_udf");
-        Function function = new ScalarFunction(fn,
-                Arrays.asList(StringType.STRING), StringType.STRING, false);
+        Function function = new Function(fn,
+                Arrays.asList(Type.STRING), Type.STRING, false);
         try {
             db1.addFunction(function);
         } catch (Throwable e) {

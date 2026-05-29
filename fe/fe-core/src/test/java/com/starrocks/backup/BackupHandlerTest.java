@@ -408,7 +408,7 @@ public class BackupHandlerTest {
                 Lists.newArrayList(), Lists.newArrayList(), null,
                 externalAllMarker, false, "", null, NodePosition.ZERO);
         try {
-            handler.process(new ConnectContext(), backupAllCatalogsStmt);
+            handler.process(backupAllCatalogsStmt);
         } catch (DdlException e1) {
             e1.printStackTrace();
             Assertions.fail();
