@@ -73,6 +73,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -276,11 +277,13 @@ public class PartitionUtil {
     }
 
     // partition name such like p1=1/p2=__HIVE_DEFAULT_PARTITION__, this function will convert it to
-    // p1=1/p2=NULL
-    public static String normalizePartitionName(String partitionName, List<String> partitionColumnNames, String nullValue) {
+    // p1=1/p2=NULL. A connector may use more than one placeholder for NULL (e.g. Paimon uses both
+    // "__DEFAULT_PARTITION__" and "null"), so the caller passes all of them and any match is treated as NULL.
+    public static String normalizePartitionName(String partitionName, List<String> partitionColumnNames,
+                                                Collection<String> nullValues) {
         List<String> partitionValues = Lists.newArrayList(toPartitionValues(partitionName));
         for (int i = 0; i < partitionValues.size(); ++i) {
-            if (partitionValues.get(i).equals(nullValue)) {
+            if (nullValues.contains(partitionValues.get(i))) {
                 partitionValues.set(i, "NULL");
             }
         }
