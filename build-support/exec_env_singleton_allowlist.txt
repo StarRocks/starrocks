@@ -11,6 +11,7 @@ src/exec/pipeline/pipeline_driver.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
 src/exec/pipeline/pipeline_driver_queue.cpp
 src/exec/pipeline/query_context.cpp
+src/exec/pipeline/query_context_manager.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 src/exec/workgroup/lock_free_work_group_scan_task_queue.cpp

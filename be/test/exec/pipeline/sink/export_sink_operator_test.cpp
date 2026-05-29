@@ -24,6 +24,7 @@
 #include "column/column_helper.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
