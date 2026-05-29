@@ -497,6 +497,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+### `slow_publish_partition_log_threshold_ms`
+
+- Default: 3000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The threshold above which `PublishVersionDaemon` logs a per-phase breakdown (`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`) of a slow partition publish at the WARN level. Lower this value to capture sub-second jitter when investigating publish latency on a live cluster; raise it to silence routine slow-but-acceptable publishes. There is no behavior change at the default value.
+- Introduced in: v4.2
+
 ### `meta_sync_force_delete_shard_meta`
 
 - Default: false
