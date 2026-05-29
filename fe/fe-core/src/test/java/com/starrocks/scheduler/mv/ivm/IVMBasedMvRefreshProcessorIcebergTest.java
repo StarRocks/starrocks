@@ -75,6 +75,25 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
+    public void testIVMWithGroupByNoAggregate() throws Exception {
+        // Guards the row-id fix: GROUP BY-only refresh used to fail TypeChecker on the
+        // __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        doTestWith3RunsNoCheckRewrite("SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a GROUP BY id;",
+                plan -> {
+                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
+                            "TABLE: unpartitioned_db.t0\n" +
+                                    "     TABLE VERSION: Delta@[0,1]");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
     public void testIVMWithScanProjectFilter() throws Exception {
         doTestWith3Runs("SELECT id * 2 + 1, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` where id > 10;",
                 plan -> {
