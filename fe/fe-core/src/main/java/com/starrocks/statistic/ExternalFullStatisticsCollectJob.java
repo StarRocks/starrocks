@@ -55,6 +55,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -155,19 +157,19 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
 
-        String nullValue;
+        Collection<String> nullValues;
         if (table.isIcebergTable()) {
-            nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+            nullValues = Collections.singleton(IcebergApiConverter.PARTITION_NULL_VALUE);
         } else if (table.isPaimonTable()) {
-            nullValue = PaimonMetadata.PAIMON_PARTITION_NULL_VALUE;
+            nullValues = PaimonMetadata.PARTITION_NULL_VALUES;
         } else {
-            nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
+            nullValues = Collections.singleton(HiveMetaClient.PARTITION_NULL_VALUE);
         }
 
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
         // all table now, partition later
         context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
-                table.getPartitionColumnNames(), nullValue));
+                table.getPartitionColumnNames(), nullValues));
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
         context.put("dbName", db.getOriginName());
@@ -195,7 +197,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             for (int i = 0; i < partitionColumnNames.size(); i++) {
                 String partitionColumnName = partitionColumnNames.get(i);
                 String partitionValue = partitionValues.get(i);
-                if (partitionValue.equals(nullValue)) {
+                if (nullValues.contains(partitionValue)) {
                     partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
                 } else if (isSupportedPartitionTransform(partitionColumnName)) {
                     partitionPredicate.add(IcebergPartitionUtils.convertPartitionFieldToPredicate((IcebergTable) table,
