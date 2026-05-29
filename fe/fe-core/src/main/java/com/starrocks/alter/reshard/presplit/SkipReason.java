@@ -25,6 +25,13 @@ public enum SkipReason {
     DISABLED_BY_CONFIG,
     /** Per-session opt-out ({@code SET enable_tablet_pre_split = false}). */
     DISABLED_BY_SESSION,
+    /**
+     * Target is not a cloud-native (shared-data) table. The reshard substrate
+     * requires cloud-native, so this must be gated at the table level before the
+     * multi-partition path pre-creates any partition that the factory would then
+     * reject.
+     */
+    NOT_CLOUD_NATIVE,
     NOT_RANGE_DISTRIBUTION,
     TABLE_NOT_NORMAL,
     HAS_MATERIALIZED_VIEW_OR_ROLLUP,
@@ -43,4 +50,32 @@ public enum SkipReason {
     SUBMIT_FAILED,
     /** Admitted reshard job entered a terminal-error state (CANCELLED, etc.) before reaching FINISHED. */
     JOB_FAILED_BEFORE_FINISH,
+    /** A partition source column has a type the grouper cannot project into a SQL-parseable string. */
+    UNSUPPORTED_PARTITION_COLUMN_TYPE,
+    /** A sampled partition tuple could not be turned into a usable AddPartitionClause (formatter null or analyzer threw). */
+    INVALID_PARTITION_VALUE,
+    /** Grouping produced no usable target partitions (every row dropped). */
+    GROUPER_EMPTY,
+    /**
+     * Catalog raced under the grouper: an existing partition was found by name
+     * but its physical partition or base index was no longer available between
+     * the {@code getPartition} hit and the index/tablet lookup. Distinct from
+     * {@link #INVALID_PARTITION_VALUE} (which signals bad data); this signals
+     * a stale catalog snapshot the load can retry against.
+     */
+    STALE_CATALOG_STATE,
+    /**
+     * Multi-partition path: {@link com.starrocks.server.LocalMetastore#addPartitions}
+     * threw while pre-creating a target partition. Just this partition is
+     * dropped from the combined submit; sibling partitions continue.
+     */
+    PRE_CREATE_FAILED,
+    /**
+     * Multi-partition path: after pre-create (or for an existing partition
+     * re-resolved under the coordinator's READ lock), the partition no longer
+     * meets per-partition eligibility — physical partition or base index
+     * missing, multiple tablets, or non-empty. Caused by concurrent ALTER /
+     * load between the grouper snapshot and the coordinator's re-resolve.
+     */
+    PARTITION_NOT_ELIGIBLE_POST_CREATE,
 }
