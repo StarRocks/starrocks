@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 80
-description: "Since v3.2.8, StarRocks supports adding labels on BEs. When creating a table or an asynchronous materialized view, you can specify the label of a certain group of BE nodes."
+description: "Since v3.2.8, StarRocks supports adding labels on BEs. When creating a table or an asynchronous materialized view, you can specify the label of a certain..."
 ---
 
 # Add labels on BEs
