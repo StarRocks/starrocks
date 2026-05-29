@@ -64,7 +64,6 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.ScalarType;
-import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -663,31 +662,44 @@ public class StatisticUtils {
             return directMatch.getType();
         }
 
-        // Scan progressively longer prefixes at each "." to find the base column,
-        // mirroring the approach in quoting(Table, String). This handles base
-        // column names that themselves contain dots (e.g. column "customer.profile"
-        // of type STRUCT<city VARCHAR> queried as "customer.profile.city").
-        int start = 0;
-        int end;
-        while ((end = column.indexOf(".", start)) > 0) {
+        // Otherwise the name must be a base column followed by struct subfields.
+        // A base column name may itself contain dots, so we try the candidate
+        // base-column prefixes from the longest to the shortest. A prefix is only
+        // accepted when the remaining suffix fully resolves through struct fields,
+        // which both prefers the most specific base column when several prefixes
+        // exist (e.g. "customer" vs "customer.profile") and avoids returning a
+        // wrong type or NPE-ing when a subfield does not exist.
+        for (int end = column.lastIndexOf('.'); end > 0; end = column.lastIndexOf('.', end - 1)) {
             String prefix = column.substring(0, end);
             Column base = table.getColumn(prefix);
-            if (base != null) {
-                Type type = base.getType();
-                String[] fieldParts = column.substring(end + 1).split("\\.");
-                for (String fieldName : fieldParts) {
-                    if (type.isStructType()) {
-                        StructField field = ((StructType) type).getField(fieldName);
-                        type = field.getType();
-                    }
-                }
-                return type;
+            if (base == null) {
+                continue;
             }
-            start = end + 1;
+            Type resolved = resolveStructFields(base.getType(), column.substring(end + 1));
+            if (resolved != null) {
+                return resolved;
+            }
         }
 
         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
         return null;
+    }
+
+    // Walk a dotted subfield path (e.g. "address.zip") through a struct type.
+    // Returns the resolved leaf type, or null if any segment is not a struct
+    // field, so callers can fall back to trying a different base column.
+    private static Type resolveStructFields(Type type, String fieldPath) {
+        for (String fieldName : fieldPath.split("\\.")) {
+            if (!type.isStructType()) {
+                return null;
+            }
+            StructType structType = (StructType) type;
+            if (!structType.containsField(fieldName)) {
+                return null;
+            }
+            type = structType.getField(fieldName).getType();
+        }
+        return type;
     }
 
     // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
