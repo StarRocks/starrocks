@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This tutorial is based on macOS and has been tested on Apple Chip(M1, M2)."
+description: "How to set up the StarRocks FE development environment in IntelliJ IDEA on macOS Apple Silicon."
 ---
 
 # Setup StarRocks FE development environment on IDEA

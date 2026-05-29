@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function extracts a number of characters from a string with specified length (starting from right)."
+description: "Returns a specified number of characters from the right of a string; alias of right."
 ---
 
 # strright

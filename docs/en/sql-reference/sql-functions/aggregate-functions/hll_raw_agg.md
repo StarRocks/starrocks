@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function is an aggregate function that is used to aggregate HLL fields."
+description: "Aggregate function that combines multiple HLL values into a single HLL for approximate COUNT(DISTINCT)."
 ---
 
 # hll_raw_agg

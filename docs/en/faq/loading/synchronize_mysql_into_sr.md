@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "A Flink job reports the error `Could not execute SQL statement."
+description: "FAQ for synchronizing MySQL data into StarRocks in real time using Flink CDC, including troubleshooting common errors."
 ---
 
 # Synchronize data from MySQL in real time
