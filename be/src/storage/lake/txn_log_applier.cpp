@@ -402,8 +402,10 @@ public:
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         // local persistent index will update index version, so we need to load first
-        // still need prepre primary index even there is an empty compaction
-        if (_index_entry == nullptr && (_has_empty_compaction || _has_empty_publish ||
+        // still need prepare primary index even when this iteration produced no
+        // rowset changes (legacy "empty compaction", admin no-op publish, or
+        // CelerData empty publish from restore)
+        if (_index_entry == nullptr && (_has_no_op_apply || _has_empty_publish ||
                                         (_metadata->enable_persistent_index() &&
                                          _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc
