@@ -365,7 +365,7 @@ public class StarRocksAssert {
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
                 "", "", "", "", !"shared".equalsIgnoreCase(""), null);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
         db.addFunction(function, true, false);
     }
 

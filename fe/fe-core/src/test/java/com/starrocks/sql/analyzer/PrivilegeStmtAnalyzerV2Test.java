@@ -68,6 +68,24 @@ public class PrivilegeStmtAnalyzerV2Test {
         for (int i = 0; i < 2; ++i) {
             starRocksAssert.withTable("create table db1.tbl" + i + createTblStmtStr);
         }
+
+        // Functions registered with explicit sizes for unsized-reference tests (sections 2 & 3).
+        starRocksAssert.withFunction(
+                "CREATE FUNCTION db1.str_udf(VARCHAR(65533)) RETURNS INT PROPERTIES " +
+                        "(\"symbol\" = \"com.example.StrUdf\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        starRocksAssert.withFunction(
+                "CREATE FUNCTION db1.char_udf(CHAR(10)) RETURNS INT PROPERTIES " +
+                        "(\"symbol\" = \"com.example.CharUdf\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        // Nested complex type functions — registered with explicit sizes.
+        starRocksAssert.withFunction(
+                "CREATE FUNCTION db1.array_udf(ARRAY<VARCHAR(65533)>) RETURNS INT PROPERTIES " +
+                        "(\"symbol\" = \"com.example.ArrayUdf\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        starRocksAssert.withFunction(
+                "CREATE FUNCTION db1.map_udf(MAP<VARCHAR(65533), INT>) RETURNS INT PROPERTIES " +
+                        "(\"symbol\" = \"com.example.MapUdf\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        starRocksAssert.withFunction(
+                "CREATE FUNCTION db1.struct_udf(STRUCT<a VARCHAR(65533)>) RETURNS INT PROPERTIES " +
+                        "(\"symbol\" = \"com.example.StructUdf\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
         ctx.getGlobalStateMgr().getAuthorizationMgr().initBuiltinRolesAndUsers();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
@@ -822,6 +840,47 @@ public class PrivilegeStmtAnalyzerV2Test {
         // Grant to the built-in public role with unsized types
         analyzeFail("GRANT usage ON FUNCTION db1.non_existent_func(varchar) TO ROLE public",
                 "cannot find function");
+
+        // str_udf was created with VARCHAR(65533); bare VARCHAR/STRING must resolve it.
+        // char_udf was created with CHAR(10); bare CHAR must resolve it.
+        // matchesType() treats any two string types as equivalent regardless of size.
+        analyzeSuccess("GRANT usage ON FUNCTION db1.str_udf(VARCHAR) TO USER test_user");
+        analyzeSuccess("GRANT usage ON FUNCTION db1.str_udf(STRING) TO USER test_user");
+        analyzeSuccess("GRANT usage ON FUNCTION db1.char_udf(CHAR) TO USER test_user");
+        analyzeSuccess("REVOKE usage ON FUNCTION db1.str_udf(VARCHAR) FROM USER test_user");
+        analyzeSuccess("REVOKE usage ON FUNCTION db1.char_udf(CHAR) FROM USER test_user");
+    }
+
+    @Test
+    public void testGrantFunctionInvalidSizeRejected() {
+        // invalid explicit sizes are rejected even in GRANT/REVOKE
+        // The lenient path only relaxes the unsized form (len == -1).
+        // An explicit size of 0 is always rejected by TypeDefAnalyzer regardless of
+        // requireExplicitSize, so VARCHAR(0)/CHAR(0) must fail even in GRANT/REVOKE.
+        analyzeFail("GRANT usage ON FUNCTION db1.str_udf(VARCHAR(0)) TO USER test_user",
+                "Varchar size must be > 0");
+        analyzeFail("GRANT usage ON FUNCTION db1.char_udf(CHAR(0)) TO USER test_user",
+                "Char size must be > 0");
+        analyzeFail("REVOKE usage ON FUNCTION db1.str_udf(VARCHAR(0)) FROM USER test_user",
+                "Varchar size must be > 0");
+    }
+
+    @Test
+    public void testGrantFunctionNestedTypesUnsizedString() {
+        // unsized string inside container types
+        // TypeDefAnalyzer propagates requireExplicitSize=false into array/map/struct.
+        // matchesType() recurses into element types, so unsized VARCHAR inside a
+        // container resolves against a function registered with sized VARCHAR.
+        analyzeSuccess("GRANT usage ON FUNCTION db1.array_udf(ARRAY<VARCHAR>) TO USER test_user");
+        analyzeSuccess("REVOKE usage ON FUNCTION db1.array_udf(ARRAY<VARCHAR>) FROM USER test_user");
+        analyzeSuccess("GRANT usage ON FUNCTION db1.map_udf(MAP<VARCHAR, INT>) TO USER test_user");
+        analyzeSuccess("GRANT usage ON FUNCTION db1.struct_udf(STRUCT<a VARCHAR>) TO USER test_user");
+
+        // invalid explicit sizes inside containers
+        analyzeFail("GRANT usage ON FUNCTION db1.array_udf(ARRAY<VARCHAR(0)>) TO USER test_user",
+                "Varchar size must be > 0");
+        analyzeFail("GRANT usage ON FUNCTION db1.map_udf(MAP<VARCHAR(0), INT>) TO USER test_user",
+                "Varchar size must be > 0");
     }
 
     @Test
