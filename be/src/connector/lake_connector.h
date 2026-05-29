@@ -188,6 +188,17 @@ private:
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
 
+    // Lake PK rowset-level secondary (sorted) index Statistics
+    RuntimeProfile::Counter* _sidx_total_timer = nullptr;
+    RuntimeProfile::Counter* _sidx_open_timer = nullptr;
+    RuntimeProfile::Counter* _sidx_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _sidx_files_opened_counter = nullptr;
+    RuntimeProfile::Counter* _sidx_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _sidx_cache_miss_counter = nullptr;
+    RuntimeProfile::Counter* _sidx_rows_scanned_counter = nullptr;
+    RuntimeProfile::Counter* _sidx_candidate_rows_counter = nullptr;
+    RuntimeProfile::Counter* _sidx_skipped_by_selectivity_counter = nullptr;
+
     // Gin filter Statistics
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _gin_filtered_counter = nullptr;

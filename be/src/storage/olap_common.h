@@ -274,6 +274,30 @@ struct OlapReaderStatistics {
     int64_t vector_search_timer = 0;
     int64_t process_vector_distance_and_id_timer = 0;
 
+    // ------ lake PK rowset-level secondary (sorted) index ------
+    // Total wall time spent in TabletReader resolving secondary indexes:
+    // open(_cached) + lookup() + per-rowset bitmap merge.
+    int64_t secondary_index_total_ns = 0;
+    // Time spent opening SecondaryIndexReader (footer + column readers),
+    // split into cache hits vs misses for tuning the reader cache.
+    int64_t secondary_index_open_ns = 0;
+    int64_t secondary_index_files_opened = 0;
+    int64_t secondary_index_cache_hits = 0;
+    int64_t secondary_index_cache_misses = 0;
+    // Time scanning the .idx segment(s) (predicate eval on index cols +
+    // decoding the encoded-position column) -- the dominant cost when the
+    // candidate set is large (medium selectivity).
+    int64_t secondary_index_lookup_ns = 0;
+    // Rows decoded out of the .idx during lookup (== entries the predicate
+    // matched inside the index file).
+    int64_t secondary_index_rows_scanned = 0;
+    // Final candidate row count threaded into the base scan as a rowid
+    // filter, summed across rowsets/segments. Large value vs base rows is
+    // the signal that the selectivity gate should drop the index.
+    int64_t secondary_index_candidate_rows = 0;
+    // Set when the selectivity gate dropped the index for a rowset.
+    int64_t secondary_index_skipped_by_selectivity = 0;
+
     int64_t rows_del_vec_filtered = 0;
 
     int64_t gin_index_filter_ns = 0;

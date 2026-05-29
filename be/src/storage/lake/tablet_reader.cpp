@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
@@ -412,6 +413,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // SELECT references columns that any registered index covers, the lookup
     // automatically fires whenever the BE-level read switch is on.
     if (config::enable_secondary_index_read) {
+        // Time the whole secondary-index resolution so the FE profile can
+        // attribute scan time to the index path vs the base-table read.
+        MonotonicStopWatch sidx_watch;
+        sidx_watch.start();
+        DeferOp sidx_total_timer([&] { _stats.secondary_index_total_ns += sidx_watch.elapsed_time(); });
         // Collect the column-ids actually predicated by this query once; an
         // index whose covered columns don't overlap this set cannot narrow
         // the scan and would otherwise pay a full ~25MB OSS download + a
@@ -457,8 +463,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 open_in.tablet_id = rowset->tablet_id();
                 open_in.file_pb = file_pb;
                 open_in.source_schema = _tablet_schema;
-                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open_cached(open_in));
-                ASSIGN_OR_RETURN(auto per_seg, reader->lookup(params.pred_tree, &_obj_pool));
+                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                ASSIGN_OR_RETURN(auto per_seg, reader->lookup(params.pred_tree, &_obj_pool, &_stats));
 
                 if (first_index) {
                     merged = std::move(per_seg);
@@ -479,6 +485,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 }
                 merged = std::move(next);
                 if (merged.empty()) break; // no rows can satisfy all indexes
+            }
+            for (auto& [seg_id, bitmap] : merged) {
+                _stats.secondary_index_candidate_rows += static_cast<int64_t>(bitmap.cardinality());
             }
             sidx_per_rowset[rowset->id()] = std::move(merged);
         }

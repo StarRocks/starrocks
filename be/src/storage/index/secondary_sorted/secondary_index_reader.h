@@ -31,6 +31,7 @@ class Segment;
 class ColumnPredicate;
 class ObjectPool;
 class PredicateTree;
+struct OlapReaderStatistics;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -74,7 +75,9 @@ public:
     // (tablet_id, file_name). Subsequent queries against the same .idx file
     // skip the OSS GET + footer parse + column reader init -- ~100 ms saved
     // on a 355 MB index file at the 100 M-row/1-tablet scale.
-    static StatusOr<std::shared_ptr<SecondaryIndexReader>> open_cached(const OpenInput& input);
+    // |stats| (optional) records open time + cache hit/miss for the profile.
+    static StatusOr<std::shared_ptr<SecondaryIndexReader>> open_cached(const OpenInput& input,
+                                                                       OlapReaderStatistics* stats = nullptr);
 
     // Lookup: scan the index file applying the predicates from
     // |source_pred_tree| that touch index columns. The reader internally
@@ -86,7 +89,8 @@ public:
     //
     // |obj_pool| owns the lifetime of all cloned predicates used during
     // this lookup and must outlive the returned bitmap consumption.
-    StatusOr<PerSegmentRowidBitmap> lookup(const PredicateTree& source_pred_tree, ObjectPool* obj_pool);
+    StatusOr<PerSegmentRowidBitmap> lookup(const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
+                                           OlapReaderStatistics* stats = nullptr);
 
     const SecondaryIndexFilePB& file_pb() const { return _file_pb; }
 

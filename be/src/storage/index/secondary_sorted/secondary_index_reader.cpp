@@ -17,6 +17,8 @@
 #include <list>
 #include <mutex>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -112,7 +114,8 @@ StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open(const
     return reader;
 }
 
-StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open_cached(const OpenInput& input) {
+StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open_cached(const OpenInput& input,
+                                                                                 OlapReaderStatistics* stats) {
     if (input.file_pb.file_name().empty()) {
         // No filename to key on -- fall through to a non-cached open which
         // will surface a clearer error from _init().
@@ -120,9 +123,17 @@ StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open_cache
     }
     const std::string key = make_cache_key(input.tablet_id, input.file_pb.file_name());
     if (auto hit = ReaderCache::instance().get(key); hit != nullptr) {
+        if (stats != nullptr) stats->secondary_index_cache_hits++;
         return hit;
     }
+    MonotonicStopWatch watch;
+    if (stats != nullptr) watch.start();
     ASSIGN_OR_RETURN(auto reader, open(input));
+    if (stats != nullptr) {
+        stats->secondary_index_open_ns += watch.elapsed_time();
+        stats->secondary_index_cache_misses++;
+        stats->secondary_index_files_opened++;
+    }
     ReaderCache::instance().put(key, reader);
     return reader;
 }
@@ -154,19 +165,27 @@ Status SecondaryIndexReader::_init() {
 }
 
 StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(const PredicateTree& source_pred_tree,
-                                                             ObjectPool* obj_pool) {
+                                                            ObjectPool* obj_pool, OlapReaderStatistics* stats) {
     PerSegmentRowidBitmap result;
     if (_segment == nullptr) return result;
+
+    MonotonicStopWatch lookup_watch;
+    if (stats != nullptr) lookup_watch.start();
+    DeferOp lookup_timer([&] {
+        if (stats != nullptr) stats->secondary_index_lookup_ns += lookup_watch.elapsed_time();
+    });
 
     // Build a read schema covering every column in the index file: the
     // index columns get the user's predicates pushed down; the encoded
     // position column is read raw.
     Schema read_schema = ChunkHelper::convert_schema(_index_schema);
 
-    OlapReaderStatistics stats;
+    // Inner stats for the .idx segment scan itself; kept separate from the
+    // caller's |stats| (which aggregates the secondary-index path totals).
+    OlapReaderStatistics idx_scan_stats;
     SegmentReadOptions read_opts;
     read_opts.fs = _fs;
-    read_opts.stats = &stats;
+    read_opts.stats = &idx_scan_stats;
     // Remap source-schema predicates into the synthetic index-file column
     // id space and push them into the inner segment iterator's pred_tree.
     // When obj_pool is null (e.g. tests) we fall back to an empty tree.
@@ -190,6 +209,7 @@ StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(const PredicateTree
         RETURN_IF_ERROR(s);
         const size_t n = chunk->num_rows();
         if (n == 0) continue;
+        if (stats != nullptr) stats->secondary_index_rows_scanned += static_cast<int64_t>(n);
 
         auto pos_col_any = chunk->get_column_by_index(_encoded_pos_col_idx);
         // We constructed __sidx_pos__ as a non-nullable BIGINT, so the
