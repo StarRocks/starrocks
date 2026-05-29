@@ -212,9 +212,10 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {
         _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-        // build `rss_rowid_to_update_rowid`
+        // build `rss_rowid_to_update_rowid`; non-lake update files are read in full, so
+        // physical == logical and the segment base is 0.
         _partial_update_states[idx].read_version = read_version;
-        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid());
+        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid(/*base=*/0));
         _partial_update_states[idx].inited = true;
     }
     int64_t t_end = MonotonicMillis();
@@ -239,8 +240,9 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
         TRY_CATCH_BAD_ALLOC({
             _partial_update_states[idx].src_rss_rowids.clear();
             _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-            // rebuild rss_rowid_to_update_rowid
-            _partial_update_states[idx].build_rss_rowid_to_update_rowid();
+            // rebuild rss_rowid_to_update_rowid; non-lake path reads update files in full,
+            // so physical == logical and the segment base is 0.
+            _partial_update_states[idx].build_rss_rowid_to_update_rowid(/*base=*/0);
         });
     }
     int64_t t_end = MonotonicMillis();
