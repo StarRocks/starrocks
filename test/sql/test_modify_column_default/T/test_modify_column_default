@@ -9,7 +9,7 @@ DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES("fast_schema_evolution" = "true");
 
--- row written before column c exists: physically lacks c, must be backfilled on read
+-- row written before column c exists: physically lacks c, backfilled on read
 insert into t values (1);
 
 -- add c with default 1 (fast schema evolution: metadata-only, no data rewrite)
@@ -19,15 +19,49 @@ function: wait_alter_table_finish()
 -- row written while the default is 1: physically stores c=1
 insert into t (id) values (2);
 
--- change the default to 2
+-- change the default to 2 (now allowed; old rows must keep the add-time default)
 alter table t modify column c INT DEFAULT "2";
 function: wait_alter_table_finish()
 
 -- row written after the change: physically stores c=2
 insert into t (id) values (3);
 
--- id=1 predates the column, so it must keep 1 (the default when c was added),
--- NOT 2 (the current default). Before the fix it read 2. id=2 stays 1, id=3 is 2.
+-- id=1 predates the column, so it keeps 1 (default when c was added), not 2.
+-- id=2 stays 1, id=3 is 2.
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_add_default_keeps_old_rows_null
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- row written before column c exists
+insert into t values (1);
+
+-- add c with NO default (nullable): rows older than c read NULL
+alter table t add column c INT;
+function: wait_alter_table_finish()
+
+-- row written while c has no default: physically stores NULL
+insert into t (id) values (2);
+
+-- add a default where none existed: must NOT retroactively change older rows to 9
+alter table t modify column c INT DEFAULT "9";
+function: wait_alter_table_finish()
+
+-- row written after the default was added: physically stores c=9
+insert into t (id) values (3);
+
+-- id=1 and id=2 had no default when written, so they stay NULL; only id=3 is 9.
 select * from t order by id;
 
 drop database db_${uuid0};

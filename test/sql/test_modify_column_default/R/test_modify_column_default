@@ -45,3 +45,50 @@ select * from t order by id;
 drop database db_${uuid0};
 -- result:
 -- !result
+-- name: test_add_default_keeps_old_rows_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c INT;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+alter table t modify column c INT DEFAULT "9";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	None
+2	None
+3	9
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

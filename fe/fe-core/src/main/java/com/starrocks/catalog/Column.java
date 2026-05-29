@@ -97,6 +97,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private static final Logger LOG = LogManager.getLogger(Column.class);
 
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
+    // Sentinel stored in originDefaultValue meaning the column had no default when it was added,
+    // so rows older than it stay NULL even if a default is added later. Mirrors BE's "NULL"
+    // default_value convention (DefaultValueColumnIterator maps "NULL" to a null fill).
+    public static final String NULL_ORIGIN_DEFAULT_VALUE = "NULL";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
 
     // logical name, rename will change this name.
@@ -142,11 +146,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "defaultValue")
     private String defaultValue;
     // Default used to backfill rows that physically lack this column (added via fast schema
-    // evolution). Frozen when the column is created; ALTER ... MODIFY ... DEFAULT updates
+    // evolution). Frozen once when the column is created; ALTER ... MODIFY ... DEFAULT updates
     // |defaultValue| (the default for new writes) but carries this value over unchanged, so
     // rows older than the column keep the default that was in effect when it was added.
-    // Null for columns created before this field existed; getOriginDefaultValue() then falls
-    // back to |defaultValue|.
+    // Null when not frozen (columns created before this field existed, or expression/VARY
+    // defaults); the read path then falls back to |defaultValue|, preserving prior behavior.
     @SerializedName(value = "originDefaultValue")
     private String originDefaultValue;
     // this handle function like now() or simple expression
@@ -447,13 +451,32 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.originDefaultValue = originDefaultValue;
     }
 
-    // Default used to backfill rows that physically lack this column. Falls back to the raw
-    // |defaultValue| literal when never frozen (columns from before this field, or not yet
-    // modified) so behavior is unchanged until a default is actually changed. Intentionally
-    // uses the raw literal rather than getDefaultValue() so an expression default (now(),
-    // complex types) does not leak its SQL text here.
+    // Add-time backfill default, frozen once by freezeOriginDefaultValue() when the column is
+    // created and carried over unchanged by MODIFY ... DEFAULT. Null means "not frozen" (legacy
+    // column from before this field, or an expression/VARY default); the read path then falls
+    // back to default_value, preserving prior behavior. The NULL_ORIGIN_DEFAULT_VALUE sentinel
+    // means the column had no default when added, so older rows read SQL NULL.
     public String getOriginDefaultValue() {
-        return this.originDefaultValue != null ? this.originDefaultValue : this.defaultValue;
+        return this.originDefaultValue;
+    }
+
+    // Freeze the add-time backfill default exactly once, at column creation (CREATE TABLE /
+    // ALTER ADD COLUMN). MODIFY ... DEFAULT must not call this; it carries the frozen value over
+    // instead, so rows older than the column keep the default that was in effect when it was
+    // added. Skips VARY (uuid()) and expression-object (complex type) defaults, which have no
+    // literal to freeze; such columns keep an unfrozen origin and stay immutable.
+    public void freezeOriginDefaultValue() {
+        if (getDefaultValueType() == DefaultValueType.VARY) {
+            return;
+        }
+        if (defaultExpr != null && defaultExpr.hasExprObject()) {
+            return;
+        }
+        if (defaultValue != null) {
+            this.originDefaultValue = defaultValue;
+        } else if (isAllowNull) {
+            this.originDefaultValue = NULL_ORIGIN_DEFAULT_VALUE;
+        }
     }
 
     public void setComment(String comment) {
@@ -609,8 +632,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             throw new DdlException("Can not change from nullable to non-nullable");
         }
 
-        // Adding a default value to a column without a default value is not supported
-        if (!this.isSameDefaultValue(other)) {
+        // Changing the default is allowed only when this column's add-time default was frozen
+        // (origin recorded, i.e. it was created on a version that supports this) and it is a
+        // non-key value column with a simple aggregation. Rows older than the column keep the
+        // frozen origin default; only new writes see the new default. Legacy columns without a
+        // frozen origin stay immutable, since their add-time value was never recorded and
+        // changing it would retroactively alter those rows.
+        if (!this.isSameDefaultValue(other) && !this.isDefaultValueChangeAllowed()) {
             throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
         }
 
@@ -649,6 +677,19 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         return true;
+    }
+
+    // Whether MODIFY ... DEFAULT may change this column's default. Gated on a frozen add-time
+    // origin (so legacy columns whose add-time value was never recorded stay immutable), a
+    // non-key column, and a simple aggregation (SUM/MIN/MAX/unions are excluded; e.g. SUM
+    // requires a zero default).
+    private boolean isDefaultValueChangeAllowed() {
+        if (originDefaultValue == null || isKey) {
+            return false;
+        }
+        return aggregationType == null || aggregationType == AggregateType.NONE
+                || aggregationType == AggregateType.REPLACE
+                || aggregationType == AggregateType.REPLACE_IF_NOT_NULL;
     }
 
     public boolean nameEquals(String otherColName, boolean ignorePrefix) {

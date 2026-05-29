@@ -1213,6 +1213,9 @@ public class SchemaChangeHandler extends AlterHandler {
             // metadata display is handled in getMetaDefaultValue.
             long startTime = ConnectContext.get().getStartTime();
             newColumn.setDefaultValue(newColumn.calculatedDefaultValueWithTime(startTime));
+            // Re-freeze origin with the ALTER-time value so rows older than this column read the
+            // timestamp captured when it was added, not a later one.
+            newColumn.freezeOriginDefaultValue();
         }
 
         String newColName = newColumn.getName();
