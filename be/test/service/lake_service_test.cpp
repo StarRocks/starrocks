@@ -41,6 +41,7 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "gutil/walltime.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
 #include "service/brpc_service_test_util.h"

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "LIMIT"
+description: "LIMIT clauses are used to limit the maximum number of rows returned."
 ---
 
 # LIMIT

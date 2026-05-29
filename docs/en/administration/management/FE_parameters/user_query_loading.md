@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
+description: "FE configuration parameters for authentication, query execution, and data loading."
 ---
 
 # FE Configuration - Authentication, Query, and Loading

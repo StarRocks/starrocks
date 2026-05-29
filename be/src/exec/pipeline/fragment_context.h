@@ -38,7 +38,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_tree_params.h"
+#include "storage/primitive/predicate_tree_params.h"
 
 namespace starrocks {
 

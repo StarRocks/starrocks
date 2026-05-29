@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Checks whether a JSON document contains a specific value or subdocument."
 ---
 
 # json_contains

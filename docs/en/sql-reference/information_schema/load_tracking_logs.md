@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`load_tracking_logs` provides error logs of load jobs."
 ---
 
 # load_tracking_logs

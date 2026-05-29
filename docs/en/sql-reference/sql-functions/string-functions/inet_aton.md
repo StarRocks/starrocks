@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Takes a string containing an IPv4 address in the format A.B.C.D."
 ---
 
 # inet_aton

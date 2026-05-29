@@ -56,6 +56,7 @@
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
 #include "base/string/faststring.h"
+#include "base/utility/alignment.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"

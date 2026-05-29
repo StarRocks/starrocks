@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Manually refreshes a dictionary object."
 ---
 
 # REFRESH DICTIONARY

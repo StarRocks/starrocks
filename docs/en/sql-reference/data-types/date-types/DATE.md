@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DATE type. The value range is ['0000-01-01', '9999-12-31'] and the default format is `YYYY-MM-DD`."
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

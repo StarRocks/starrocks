@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SSB flat-table benchmark comparing StarRocks, Apache Druid, and ClickHouse performance on single-table star schema datasets."
 ---
 
 # SSB Flat-table Benchmarking

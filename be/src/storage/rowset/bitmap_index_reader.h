@@ -41,8 +41,8 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/indexed_column_reader.h"
 
 namespace starrocks {

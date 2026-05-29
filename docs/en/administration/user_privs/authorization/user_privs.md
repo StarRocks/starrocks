@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+description: "StarRocks adopts two privilege models:"
 ---
 
 # Overview of privileges

@@ -262,6 +262,7 @@ set(EXEC_FILES
         ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/action/pprof_actions_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
@@ -298,6 +299,7 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
         ./exec/data_sinks/memory_scratch_sink_test.cpp
+        ./exec/data_sinks/mysql_result_writer_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./exec/jdbc/type_checker_test.cpp
@@ -327,6 +329,7 @@ set(EXEC_FILES
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
+        ./udf/python/env_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
@@ -367,6 +370,8 @@ add_subdirectory(types)
 add_subdirectory(exec)
 add_subdirectory(connector)
 add_subdirectory(formats)
+add_subdirectory(storage_primitive)
+add_subdirectory(storage_base)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
 add_subdirectory(exprs)
@@ -434,7 +439,6 @@ SET(DW_TEST_FILES
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
-    ./storage/key_coder_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
@@ -443,6 +447,7 @@ SET(DW_TEST_FILES
     ./storage/lake/compaction_scheduler_test.cpp
     ./storage/lake/compaction_task_context_test.cpp
     ./storage/lake/condition_update_test.cpp
+    ./storage/lake/segment_pk_iterator_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/filenames_test.cpp
     ./storage/lake/lake_data_source_test.cpp
@@ -492,7 +497,6 @@ SET(DW_TEST_FILES
     ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
-    ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
     ./storage/non_retryable_load_errors_test.cpp
@@ -504,15 +508,12 @@ SET(DW_TEST_FILES
     ./storage/persistent_index_test.cpp
     ./storage/primary_index_test.cpp
     ./storage/primary_key_encoder_test.cpp
-    ./storage/projection_iterator_test.cpp
     ./storage/protobuf_file_test.cpp
     ./storage/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp
     ./storage/push_handler_test.cpp
-    ./storage/range_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
-    ./storage/roaring2range_test.cpp
     ./storage/rowset/binary_dict_page_test.cpp
     ./storage/rowset/binary_plain_page_test.cpp
     ./storage/rowset/binary_prefix_page_test.cpp
@@ -552,12 +553,11 @@ SET(DW_TEST_FILES
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
     ./storage/rows_mapper_test.cpp
-    ./storage/row_source_mask_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp
     ./storage/segment_flush_executor_test.cpp
     ./storage/segment_stream_converter_test.cpp
-    ./storage/short_key_index_test.cpp
+    ./storage/del_file_stream_converter_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
@@ -576,7 +576,6 @@ SET(DW_TEST_FILES
     ./storage/tablet_test.cpp
     ./storage/tablet_updates_schema_change_test.cpp
     ./storage/tablet_updates_test.cpp
-    ./storage/union_iterator_test.cpp
     ./storage/unique_iterator_test.cpp
     ./storage/update_manager_test.cpp
     ./storage/utils_test.cpp

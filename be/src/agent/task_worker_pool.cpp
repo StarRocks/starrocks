@@ -69,7 +69,7 @@
 #include "runtime/snapshot_loader.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/olap_common.h"
+#include "storage/primitive/storage_ids.h"
 #include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"

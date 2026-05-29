@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "A Flink job reports the error `Could not execute SQL statement."
 ---
 
 # Synchronize data from MySQL in real time

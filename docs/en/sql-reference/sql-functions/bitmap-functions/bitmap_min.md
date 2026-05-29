@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Obtains the minimum value of a bitmap."
 ---
 
 # bitmap_min

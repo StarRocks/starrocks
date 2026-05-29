@@ -901,21 +901,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
-            Locker locker = new Locker();
+            Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+            if (table == null) {
+                return result;
+            }
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
-                Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
-                if (table == null) {
-                    return result;
-                }
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-                } catch (AccessDeniedException e) {
-                    return result;
-                }
+                Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
+            } catch (AccessDeniedException e) {
+                return result;
+            }
+            // Only the target table's schema is read, so an intensive
+            // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
+            // DDL/ALTER on other tables in the same db proceed.
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
         return result;
@@ -937,24 +940,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
             if (db != null) {
-                Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    if (table == null) {
+                        continue;
+                    }
+
                     try {
-                        locker.lockDatabase(db.getId(), LockType.READ);
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-                        if (table == null) {
-                            continue;
-                        }
+                        Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
 
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
-                        } catch (AccessDeniedException e) {
-                            continue;
-                        }
-
+                    // Per-table schema read: lock only this table (IS-on-db + READ-on-table)
+                    // instead of the whole db, so DDL/ALTER on other tables is not blocked.
+                    Locker locker = new Locker();
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    try {
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                     }
                     if (reachLimit) {
                         return;
@@ -2062,13 +2067,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             p.setImmutable(true);
 
             List<PhysicalPartition> mutablePartitions;
+            // Reads sub-partitions of one known table; intensive table READ
+            // (IS-on-db + READ-on-table) is enough. Acquire before try so a
+            // failed acquire does not trigger an unlock of an unheld lock.
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
             if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -2085,8 +2093,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             long mutablePartitionNum = 0;
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2102,7 +2110,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
         }
         result.setPartitions(partitions);

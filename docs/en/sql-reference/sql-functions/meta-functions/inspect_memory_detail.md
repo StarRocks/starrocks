@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the estimated memory usage for a specific class or field within a StarRocks FE module."
 ---
 
 # inspect_memory_detail

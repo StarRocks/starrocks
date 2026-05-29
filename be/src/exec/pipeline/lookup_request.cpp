@@ -39,7 +39,7 @@
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks::pipeline {
 

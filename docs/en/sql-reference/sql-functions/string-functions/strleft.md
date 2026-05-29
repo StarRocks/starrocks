@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function extracts a number of characters from a string with specified length (starting from left)."
 ---
 
 # strleft

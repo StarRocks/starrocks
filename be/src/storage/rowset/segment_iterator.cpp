@@ -46,7 +46,6 @@
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
@@ -58,16 +57,17 @@
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
-#include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
-#include "storage/projection_iterator.h"
-#include "storage/range.h"
-#include "storage/roaring2range.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/roaring2range.h"
+#include "storage/primitive/rowid_types.h"
+#include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
@@ -2216,6 +2216,26 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
     return st;
 }
 
+StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk,
+                                                      ColumnId vec_col_id) {
+    if (chunk != nullptr && chunk->is_cid_exist(vec_col_id)) {
+        return chunk->get_column_by_id(vec_col_id);
+    }
+    if (dict_chunk != nullptr && dict_chunk->is_cid_exist(vec_col_id)) {
+        return dict_chunk->get_column_by_id(vec_col_id);
+    }
+    // Chunk::get_column_by_id with a missing cid default-inserts into the internal index map
+    // and returns _columns[0]. Downcasting that arbitrary column to ArrayColumn in
+    // _compute_brute_force_distances would corrupt memory and crash in a release build. Fail
+    // loudly instead — this indicates that the planner's late-materialization pruning let
+    // through a query without keeping the embedding column eager, despite VectorIndexReadiness
+    // reporting the index as ready.
+    return Status::InternalError(
+            strings::Substitute("brute-force vector fallback: vector column $0 missing in both output chunk "
+                                "and _dict_chunk; late-materialization pruned a column that the BE still needs",
+                                vec_col_id));
+}
+
 Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
@@ -2406,8 +2426,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         // Either way, the distance column is appended to `chunk`, which always has
         // the planner-allocated distance slot.
         auto vec_col_id = _vector_index_ctx->vector_data_column_id;
-        ColumnPtr vector_column = chunk->is_cid_exist(vec_col_id) ? chunk->get_column_by_id(vec_col_id)
-                                                                  : _context->_dict_chunk->get_column_by_id(vec_col_id);
+        ASSIGN_OR_RETURN(ColumnPtr vector_column,
+                         resolve_brute_force_vector_column(chunk, _context->_dict_chunk.get(), vec_col_id));
         DCHECK_EQ(vector_column->size(), chunk->num_rows())
                 << "brute-force vector column row count must match chunk; row alignment was lost";
         if (UNLIKELY(vector_column->size() != chunk->num_rows())) {

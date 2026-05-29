@@ -49,8 +49,8 @@
 #include "gutil/casts.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/primitive/key_coder.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

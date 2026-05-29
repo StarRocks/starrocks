@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`be_cloud_native_compactions` provides information on compaction transactions running on CNs (or BEs for v3.0) of a shared-data cluster."
 ---
 
 # be_cloud_native_compactions

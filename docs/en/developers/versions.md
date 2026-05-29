@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 1
+description: "Version naming is detailed in the [versioning](../introduction/versioning.md) documentation."
 ---
 
 # Version Release Guide

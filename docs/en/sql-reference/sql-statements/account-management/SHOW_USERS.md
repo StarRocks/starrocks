@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW USERS displays all users in the system."
 ---
 
 # SHOW USERS

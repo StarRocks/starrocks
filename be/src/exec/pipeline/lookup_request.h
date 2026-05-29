@@ -22,8 +22,8 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors_fwd.h"
 #include "runtime/runtime_fwd.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 
 namespace starrocks::pipeline {
 

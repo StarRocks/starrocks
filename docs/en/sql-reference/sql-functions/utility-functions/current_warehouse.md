@@ -1,5 +1,7 @@
 ---
 title: CURRENT_WAREHOUSE
+displayed_sidebar: docs
+description: "Returns the effective warehouse name for the current session, reflecting the warehouse set via SET WAREHOUSE or the default warehouse."
 ---
 
 Returns the effective warehouse name for the current session. The result reflects the warehouse set via `SET WAREHOUSE` or the default warehouse if none was explicitly selected.

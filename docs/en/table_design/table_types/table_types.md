@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Overview of StarRocks table types: Duplicate Key, Aggregate, Unique Key, and Primary Key tables, with use case guidance for log analysis, aggregation, and real-time data."
 ---
 
 # Overview of table types

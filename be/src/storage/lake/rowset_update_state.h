@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -22,12 +23,29 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
 class RssidFileInfoContainer;
+
+// One chunk emitted by SegmentPKIterator::current(), carrying chunk[0]'s
+// position in the SOURCE SEGMENT FILE:
+//
+//   physical_rowid_offset — chunk[0]'s row position in the segment file;
+//   chunk[i]'s physical rowid = physical_rowid_offset + i. For shared
+//   (post-split) segments this skips the iterator's range_start; for
+//   non-shared segments it is 0.
+//
+// Used by PK-index upserts, delete-bitmap writers, and any consumer that reads
+// the full segment via Segment::open + fetch_values_by_rowid. The field is
+// by-value so the ref is async-capture safe — lambdas that outlive iter.next()
+// can rely on it without holding the iterator.
+struct SegmentPKChunkRef {
+    ChunkPtr chunk;
+    uint32_t physical_rowid_offset = 0;
+};
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
@@ -97,8 +115,19 @@ public:
     bool done();
     Status status();
     void close();
-    // <Current pk column chunk, begin rowid>
-    std::pair<ChunkPtr, size_t> current();
+    // Returns the most-recently-loaded chunk plus chunk[0]'s physical position
+    // in the source segment (see SegmentPKChunkRef doc). The returned chunk
+    // is moved out — done() will report empty until the next _load().
+    SegmentPKChunkRef current();
+
+    // The segment-wide physical rowid base: the first physical rowid the
+    // underlying iterator emits (= range_start for shared post-split segments,
+    // 0 otherwise, and 0 if the iterator emitted nothing). Constant — set once
+    // on the first non-empty emit and never changed thereafter, in contrast to
+    // the per-chunk SegmentPKChunkRef::physical_rowid_offset which advances by
+    // chunk. Lets callers translate a row's logical emit offset to its physical
+    // position in the segment file.
+    uint32_t physical_rowid_base() const { return _physical_rowid_base.value_or(0); }
 
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
@@ -136,6 +165,12 @@ private:
     ChunkUniquePtr _pk_column_chunk;
     // For no lazy load, we can load whole pk column and encode at once.
     MutableColumnPtr _standalone_pk_column;
+    // First physical rowid emitted by the underlying iterator for this segment
+    // (= iterator's range_start). Set once on the first non-empty emit and never
+    // reset across subsequent _load() / next() calls. std::optional disambiguates
+    // "not yet set" from the legitimate value 0 (non-shared segment iterating from
+    // physical row 0).
+    std::optional<uint32_t> _physical_rowid_base;
     // The encoding type of primary key.
     PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };

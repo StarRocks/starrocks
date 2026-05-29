@@ -26,16 +26,16 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "gutil/stl_util.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
-#include "storage/merge_iterator.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
-#include "storage/union_iterator.h"
 
 namespace starrocks {
 

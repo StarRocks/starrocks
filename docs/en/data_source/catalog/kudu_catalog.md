@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks supports Kudu catalogs from v3.3 onwards."
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 

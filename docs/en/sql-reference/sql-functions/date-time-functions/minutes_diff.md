@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the minute difference between two date expressions (`expr1` − `expr2`), accurate to the minute."
 ---
 
 # minutes_diff

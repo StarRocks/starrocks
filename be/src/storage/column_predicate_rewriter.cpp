@@ -36,7 +36,7 @@
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/datum.h"

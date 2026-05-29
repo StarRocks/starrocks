@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.9
+description: "Converts an input into the specified type."
 ---
 
 # CAST
