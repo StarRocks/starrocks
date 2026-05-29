@@ -141,6 +141,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private boolean isAutoIncrement;
     @SerializedName(value = "defaultValue")
     private String defaultValue;
+    // Default used to backfill rows that physically lack this column (added via fast schema
+    // evolution). Frozen when the column is created; ALTER ... MODIFY ... DEFAULT updates
+    // |defaultValue| (the default for new writes) but carries this value over unchanged, so
+    // rows older than the column keep the default that was in effect when it was added.
+    // Null for columns created before this field existed; getOriginDefaultValue() then falls
+    // back to |defaultValue|.
+    @SerializedName(value = "originDefaultValue")
+    private String originDefaultValue;
     // this handle function like now() or simple expression
     @SerializedName(value = "defaultExpr")
     private DefaultExpr defaultExpr;
@@ -295,6 +303,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isKey = column.isKey();
         this.isAllowNull = column.isAllowNull();
         this.defaultValue = column.getDefaultValue();
+        this.originDefaultValue = column.originDefaultValue;
         this.comment = column.getComment();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
@@ -434,6 +443,19 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.defaultValue;
     }
 
+    public void setOriginDefaultValue(String originDefaultValue) {
+        this.originDefaultValue = originDefaultValue;
+    }
+
+    // Default used to backfill rows that physically lack this column. Falls back to the raw
+    // |defaultValue| literal when never frozen (columns from before this field, or not yet
+    // modified) so behavior is unchanged until a default is actually changed. Intentionally
+    // uses the raw literal rather than getDefaultValue() so an expression default (now(),
+    // complex types) does not leak its SQL text here.
+    public String getOriginDefaultValue() {
+        return this.originDefaultValue != null ? this.originDefaultValue : this.defaultValue;
+    }
+
     public void setComment(String comment) {
         this.comment = comment;
     }
@@ -516,6 +538,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             tColumn.setDefault_expr(ExprToThrift.treeToThrift(this.defaultExpr.getExprObject()));
         } else if (this.defaultValue != null) {
             tColumn.setDefault_value(this.defaultValue);
+        }
+        // Frozen backfill default for rows older than this column. Sent independently of
+        // default_value/default_expr so MODIFY DEFAULT does not retroactively change them.
+        String originDefault = getOriginDefaultValue();
+        if (originDefault != null) {
+            tColumn.setOrigin_default_value(originDefault);
         }
 
         // The define expr does not need to be serialized here for now.

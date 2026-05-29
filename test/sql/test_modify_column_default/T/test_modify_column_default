@@ -1,0 +1,33 @@
+-- name: test_modify_column_default_retroactive
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- row written before column c exists: physically lacks c, must be backfilled on read
+insert into t values (1);
+
+-- add c with default 1 (fast schema evolution: metadata-only, no data rewrite)
+alter table t add column c INT DEFAULT "1";
+function: wait_alter_table_finish()
+
+-- row written while the default is 1: physically stores c=1
+insert into t (id) values (2);
+
+-- change the default to 2
+alter table t modify column c INT DEFAULT "2";
+function: wait_alter_table_finish()
+
+-- row written after the change: physically stores c=2
+insert into t (id) values (3);
+
+-- id=1 predates the column, so it must keep 1 (the default when c was added),
+-- NOT 2 (the current default). Before the fix it read 2. id=2 stays 1, id=3 is 2.
+select * from t order by id;
+
+drop database db_${uuid0};

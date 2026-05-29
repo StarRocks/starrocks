@@ -276,6 +276,11 @@ struct TColumn {
     // If set, BE will evaluate this expression and convert to JSON string for storage.
     // For simple types, use |default_value| (field 6) instead.
     22: optional Exprs.TExpr default_expr
+    // Default value used to backfill rows that physically lack this column (added via fast
+    // schema evolution). Frozen at column-add time; ALTER ... MODIFY ... DEFAULT does not
+    // change it. Distinct from |default_value| (field 6), which is the default for newly
+    // written rows.
+    23: optional string origin_default_value
 }
 
 // Key information for locating a specific table schema version.

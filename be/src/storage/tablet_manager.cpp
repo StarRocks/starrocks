@@ -1552,6 +1552,11 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                 if (old_column.has_default_value()) {
                     new_columns[new_col_idx].__set_default_value(old_column.default_value());
                 }
+                // Preserve the frozen backfill default the same way, so an existing column keeps the
+                // default that was in effect when it was added across the schema change.
+                if (old_column.has_origin_default_value()) {
+                    new_columns[new_col_idx].__set_origin_default_value(old_column.origin_default_value());
+                }
                 col_idx_to_unique_id[new_col_idx] = old_unique_id;
             } else {
                 // Not exist in old tablet, it is a new added column

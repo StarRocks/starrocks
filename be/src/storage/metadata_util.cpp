@@ -233,6 +233,10 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
                          << "': " << converted.status().to_string();
         }
     }
+    // Frozen backfill default for rows older than this column (see Descriptors.thrift / ColumnPB).
+    if (t_column.__isset.origin_default_value) {
+        column_pb->set_origin_default_value(t_column.origin_default_value);
+    }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
     }
