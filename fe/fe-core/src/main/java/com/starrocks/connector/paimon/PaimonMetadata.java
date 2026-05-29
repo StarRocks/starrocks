@@ -98,7 +98,12 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
 
+<<<<<<< HEAD
     public static final String PAIMON_PARTITION_NULL_VALUE = "null";
+=======
+    public static final List<String> PARTITION_NULL_VALUES = ImmutableList.of("__DEFAULT_PARTITION__", "null");
+    private static final String VIEW_DIALECTS_KEY = "starrocks";
+>>>>>>> f424e216af ([BugFix] Fix Paimon DATE partition column with NULL value (#73950))
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
@@ -193,7 +198,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName) {
+            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName
+                    && !PARTITION_NULL_VALUES.contains(value)) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);
