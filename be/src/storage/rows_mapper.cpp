@@ -165,6 +165,16 @@ Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_r
         return Status::Corruption(fmt::format(
                 "RowsMapperIterator: declared segment-row-count sum {} != file row count {}", sum, _row_count));
     }
+
+    // Honor the documented K<=1 escape hatch: stay in sequential fallback mode
+    // (no _pipelined flag, no sub-chunk slicing, no per-chunk RAFs). next_values
+    // will service every call via _rfile->read_at_fully, exactly like the
+    // pre-pipelining behavior.
+    const int32_t K = std::max(1, config::lake_rows_mapper_read_parallelism);
+    if (K <= 1) {
+        return Status::OK();
+    }
+
     _segment_sizes = segment_row_counts;
 
     // Slice each segment into fixed-size sub-chunks that the iterator pipelines
@@ -204,7 +214,6 @@ Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_r
 
     // Submit the first K sub-chunks immediately so the caller's processing of
     // the first segment overlaps with reads of later sub-chunks.
-    const int32_t K = std::max(1, config::lake_rows_mapper_read_parallelism);
     for (int32_t i = 0; i < K; ++i) {
         if (_next_sub_chunk_to_submit >= _sub_chunks.size()) break;
         RETURN_IF_ERROR(_maybe_submit_next());

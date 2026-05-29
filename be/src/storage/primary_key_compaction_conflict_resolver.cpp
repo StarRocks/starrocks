@@ -25,8 +25,8 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
-#include "util/defer_op.h"
-#include "util/time.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks {
 

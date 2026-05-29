@@ -483,6 +483,38 @@ TEST_F(RowsMapperTest, test_pipelined_wrong_zero_fetch_on_nonempty_segment) {
     ASSERT_TRUE(st.is_internal_error()) << st;
 }
 
+TEST_F(RowsMapperTest, test_prepare_segments_parallelism_one_falls_back_to_sequential) {
+    // lake_rows_mapper_read_parallelism=1 is documented as "disables pipelining".
+    // After prepare_segments, the iterator should still answer next_values, but
+    // through the sequential read_at_fully path (no per-sub-chunk RAFs, no
+    // declared-size check on each call).
+    const int32_t saved_parallelism = config::lake_rows_mapper_read_parallelism;
+    config::lake_rows_mapper_read_parallelism = 1;
+    DeferOp restore([&]() { config::lake_rows_mapper_read_parallelism = saved_parallelism; });
+
+    const std::string filename = std::string(kTestDirectory) + "fallback_k1.crm";
+    const std::vector<size_t> seg_rows = {300, 200};
+    FileInfo info = build_rows_mapper_file(filename, seg_rows, /*rssid_base=*/50);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments(seg_rows));
+
+    // Sequential mode does not enforce declared sizes, so an arbitrary chunk
+    // size must read fine — proves we did not stay in pipelined mode.
+    std::vector<uint64_t> values;
+    ASSERT_OK(iterator.next_values(100, &values));
+    ASSERT_EQ(values.size(), 100u);
+    for (uint32_t i = 0; i < 100; ++i) {
+        ASSERT_EQ(values[i] >> 32, 50u);
+        ASSERT_EQ(values[i] & 0xFFFFFFFFULL, i);
+    }
+
+    ASSERT_OK(iterator.next_values(400, &values));
+    ASSERT_EQ(values.size(), 400u);
+    ASSERT_OK(iterator.status());
+}
+
 TEST_F(RowsMapperTest, test_pipelined_destructor_drains_without_consume) {
     // Force tiny sub-chunks so there are several in-flight chunks pending when
     // the iterator goes out of scope without any next_values call. The
