@@ -520,11 +520,16 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // Leave the job at FINISHED_REWRITING so the operator can retry
                 // CANCEL ALTER ... FORCE once whatever made the RPC fail is
-                // resolved (network, BE down, etc). Returning false here also
-                // makes AlterJobV2.cancel() unwind the optimistic
-                // forceSkippedAtCommitted flag.
+                // resolved (network, BE down, etc).
                 return false;
             }
+            // Mark force-skipped ONLY now that the no-op publish actually
+            // advanced the partition version on BE. Set before the
+            // persistStateChange below so copyForPersist captures it for the
+            // edit log and replay re-applies the VisibleVersion bump. A
+            // force-cancel that never reached FINISHED_REWRITING does not get
+            // here, so the marker stays false and replay won't bump versions.
+            forceSkippedAtCommitted = true;
         }
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

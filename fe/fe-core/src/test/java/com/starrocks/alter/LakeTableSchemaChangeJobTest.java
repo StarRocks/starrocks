@@ -440,6 +440,26 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testForceCancelBeforeFinishedRewritingDoesNotMark() throws Exception {
+        // Regression: force-cancelling a job that has NOT reached
+        // FINISHED_REWRITING must behave like a normal cancel — no no-op
+        // publish happens (no version was reserved on BE), so the
+        // forceSkippedAtCommitted marker must stay false. Otherwise replay
+        // would later advance VisibleVersion to a version that was never
+        // published.
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        // Job is still PENDING here (runPendingJob not called).
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel-pending", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertFalse(schemaChangeJob.isForceSkippedAtCommitted(),
+                "force-cancel before FINISHED_REWRITING must NOT set the audit marker");
+        Assertions.assertFalse(schemaChangeJob.copyForPersist().isForceSkippedAtCommitted(),
+                "persisted copy must also carry marker=false so replay skips the version bump");
+    }
+
+    @Test
     public void testForceCancelAtFinishedRewriting() throws Exception {
         // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
         // guard so operators can unblock heavy lake schema-change jobs whose

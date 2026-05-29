@@ -377,23 +377,17 @@ public abstract class AlterJobV2 implements Writable {
      */
     public boolean cancel(String errMsg, boolean force) {
         synchronized (this) {
-            // Set the audit flag BEFORE cancelImpl so persistStateChange
-            // (called from inside cancelImpl) sees it via copyForPersist and
-            // logs it to the edit log. Without this, the flag would only live
-            // on the in-memory job and be lost after FE replay.
-            boolean cancelled = false;
-            try {
-                if (force) {
-                    forceSkippedAtCommitted = true;
-                }
-                cancelled = cancelImpl(errMsg, force);
-            } finally {
-                if (!cancelled && force) {
-                    // cancelImpl refused or threw; unwind the optimistic flag
-                    // so it doesn't lie about history.
-                    forceSkippedAtCommitted = false;
-                }
-            }
+            // NOTE: do NOT set forceSkippedAtCommitted here. The marker drives
+            // the replay-time VisibleVersion bump, so it must be set ONLY when
+            // an actual no-op publish advanced the partition version on BE —
+            // which the lake subclasses do exclusively from the
+            // FINISHED_REWRITING force path inside cancelImpl(force=true),
+            // right before persistStateChange snapshots the job via
+            // copyForPersist. Setting it optimistically here would mark a
+            // force-cancelled PENDING/RUNNING job (no version reserved, no BE
+            // metadata written) and replay would then advance VisibleVersion
+            // to a version that was never published.
+            boolean cancelled = cancelImpl(errMsg, force);
             cancelHook(cancelled);
             return cancelled;
         }

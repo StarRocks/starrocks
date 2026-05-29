@@ -1286,6 +1286,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }
+            // Mark the job force-skipped ONLY now that the no-op publish has
+            // actually advanced the partition version on BE. Set before the
+            // persistStateChange below so copyForPersist snapshots it into the
+            // edit log, and so replay knows to re-apply the VisibleVersion bump.
+            // A force-cancel that did NOT reach FINISHED_REWRITING never gets
+            // here, so the marker stays false and replay won't bump versions.
+            forceSkippedAtCommitted = true;
         }
 
         if (schemaChangeBatchTask != null) {
