@@ -90,12 +90,6 @@ public:
     // submissions are done.
     //
     // Only supported on cloud-native persistent index (returns NotSupported otherwise).
-    //
-    // WHY this takes a compact (rowids, pks) rather than a sliced (idx_begin, idx_end) view:
-    // build_persistent_keys() materializes one Slice per row of the *whole* binary/string PK
-    // column, so a per-range slot would cost chunk_size Slices regardless of range size and
-    // multiplicatively blow up memory when winner ranges are fragmented. Compacting before
-    // submission keeps each slot's per-row buffers proportional to the actual upsert size.
     Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
                   ParallelPublishContext* ctx);
 
