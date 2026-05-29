@@ -1,0 +1,26 @@
+-- name: test_admin_skip_committed_transaction_validation @cloud
+create database db_${uuid0};
+use db_${uuid0};
+create table t_lake (k1 int, v1 string) primary key(k1)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+
+-- 1. Default config is OFF: the SQL must be rejected.
+admin show frontend config like 'enable_admin_skip_committed_txn';
+admin skip committed transaction 999999999;
+
+-- 2. Enable the gate.
+admin set frontend config ('enable_admin_skip_committed_txn' = 'true');
+
+-- 3. Unknown txn id → "not found in any database".
+admin skip committed transaction 999999999;
+
+-- 4. Sanity check that normal INSERT still works while the gate is on (does
+--    NOT exercise the VISIBLE-state rejection — that path is covered by the
+--    FE unit test testRejectsNonCommittedState).
+insert into t_lake values (1, 'a');
+select count(*) from t_lake;
+
+-- Restore config to safe default and clean up.
+admin set frontend config ('enable_admin_skip_committed_txn' = 'false');
+drop database db_${uuid0} force;
