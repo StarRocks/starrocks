@@ -145,12 +145,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private boolean isAutoIncrement;
     @SerializedName(value = "defaultValue")
     private String defaultValue;
-    // Default used to backfill rows that physically lack this column (added via fast schema
-    // evolution). Frozen once when the column is created; ALTER ... MODIFY ... DEFAULT updates
-    // |defaultValue| (the default for new writes) but carries this value over unchanged, so
-    // rows older than the column keep the default that was in effect when it was added.
-    // Null when not frozen (columns created before this field existed, or expression/VARY
-    // defaults); the read path then falls back to |defaultValue|, preserving prior behavior.
+    // Add-time default used to backfill rows that physically lack this column (added via fast
+    // schema evolution). Set when ALTER ... MODIFY ... DEFAULT changes the default: it freezes the
+    // pre-change (add-time) value here while |defaultValue| moves to the new default, so rows older
+    // than the column keep the default that was in effect when it was added. Null until then;
+    // getOriginDefaultValue() derives the add-time value from the current state in that case.
     @SerializedName(value = "originDefaultValue")
     private String originDefaultValue;
     // this handle function like now() or simple expression
@@ -451,37 +450,28 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.originDefaultValue = originDefaultValue;
     }
 
-    // Add-time backfill default, frozen once by freezeOriginDefaultValue() when the column is
-    // created and carried over unchanged by MODIFY ... DEFAULT. Null means "not frozen" (legacy
-    // column from before this field, or an expression/VARY default); the read path then falls
-    // back to default_value, preserving prior behavior. The NULL_ORIGIN_DEFAULT_VALUE sentinel
-    // means the column had no default when added, so older rows read SQL NULL.
+    // Add-time backfill default for rows that physically lack this column. Returns the value
+    // frozen by a prior MODIFY ... DEFAULT once set; otherwise derives it from the current state,
+    // which equals the add-time default because a default can only be changed via MODIFY (which
+    // freezes it here), so an unfrozen column has never had its default changed. A column with no
+    // default maps to the NULL_ORIGIN_DEFAULT_VALUE sentinel (older rows read SQL NULL). VARY
+    // (uuid()) and complex expression defaults have no backfillable literal, so they return null
+    // and stay unchangeable. now()/current_timestamp are frozen into defaultValue at ADD COLUMN,
+    // so they come back through the defaultValue branch.
     public String getOriginDefaultValue() {
-        return this.originDefaultValue;
-    }
-
-    // Freeze the add-time backfill default exactly once, at column creation (CREATE TABLE /
-    // ALTER ADD COLUMN). MODIFY ... DEFAULT must not call this; it carries the frozen value over
-    // instead, so rows older than the column keep the default that was in effect when it was
-    // added. Skips VARY (uuid()) and expression-object (complex type) defaults, which have no
-    // literal to freeze; such columns keep an unfrozen origin and stay immutable.
-    public void freezeOriginDefaultValue() {
+        if (this.originDefaultValue != null) {
+            return this.originDefaultValue;
+        }
         if (getDefaultValueType() == DefaultValueType.VARY) {
-            return;
+            return null;
         }
         if (defaultExpr != null && defaultExpr.hasExprObject()) {
-            return;
+            return null;
         }
-        // calculatedDefaultValue() resolves a time function (now()/current_timestamp) to its literal,
-        // so a column declared DEFAULT CURRENT_TIMESTAMP freezes the same literal whether it came from
-        // CREATE TABLE or ADD COLUMN. Falls back to the "NULL" sentinel only when the column truly has
-        // no default.
-        String frozen = calculatedDefaultValue();
-        if (frozen != null) {
-            this.originDefaultValue = frozen;
-        } else if (isAllowNull) {
-            this.originDefaultValue = NULL_ORIGIN_DEFAULT_VALUE;
+        if (defaultValue != null) {
+            return defaultValue;
         }
+        return isAllowNull ? NULL_ORIGIN_DEFAULT_VALUE : null;
     }
 
     public void setComment(String comment) {
@@ -684,12 +674,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return true;
     }
 
-    // Whether MODIFY ... DEFAULT may change this column's default. Gated on a frozen add-time
-    // origin (so legacy columns whose add-time value was never recorded stay immutable), a
-    // non-key column, and a simple aggregation (SUM/MIN/MAX/unions are excluded; e.g. SUM
-    // requires a zero default).
+    // Whether MODIFY ... DEFAULT may change this column's default. Allowed for a non-key value
+    // column with a simple aggregation whose add-time default is recoverable
+    // (getOriginDefaultValue() != null) — covering literal, no-default (NULL), and ADD-time
+    // now()/current_timestamp columns, including ones created before this feature. VARY (uuid())
+    // and complex expression defaults have no recoverable add-time literal and stay immutable, as
+    // do SUM/MIN/MAX/union aggregations (e.g. SUM requires a zero default).
     private boolean isDefaultValueChangeAllowed() {
-        if (originDefaultValue == null || isKey) {
+        if (isKey || getOriginDefaultValue() == null) {
             return false;
         }
         return aggregationType == null || aggregationType == AggregateType.NONE
