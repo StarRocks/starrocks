@@ -56,6 +56,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -68,7 +69,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 using std::string;

@@ -31,6 +31,7 @@
 #include "storage/delta_writer.h"
 #include "storage/options.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -39,7 +40,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/txn_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {

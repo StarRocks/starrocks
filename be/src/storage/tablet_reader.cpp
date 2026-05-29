@@ -39,6 +39,7 @@
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/seek_range.h"
@@ -46,7 +47,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "util/json_flattener.h"
 

@@ -38,6 +38,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -45,7 +46,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
-#include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 

@@ -30,12 +30,12 @@
 #include "storage/merge_iterator.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
-#include "storage/union_iterator.h"
 
 namespace starrocks {
 

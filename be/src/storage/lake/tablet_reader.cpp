@@ -42,6 +42,7 @@
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -50,7 +51,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
 #include "util/json_flattener.h"
 
 namespace starrocks::lake {

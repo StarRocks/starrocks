@@ -30,12 +30,12 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_options.h"
-#include "storage/union_iterator.h"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
