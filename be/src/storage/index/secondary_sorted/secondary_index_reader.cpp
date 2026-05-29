@@ -29,7 +29,7 @@
 #include "fs/fs.h"
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/column_predicate.h"
 #include "storage/index/secondary_sorted/predicate_remap.h"
 #include "storage/index/secondary_sorted/types.h"
