@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
-description: "This section briefly introduces memory classification and StarRocks’ methods of managing memory."
+description: "Overview of memory classification and memory management strategies in StarRocks."
 ---
 
 # Memory Management

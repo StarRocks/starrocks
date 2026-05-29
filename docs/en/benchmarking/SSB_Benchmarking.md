@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "SSB flat-table benchmark comparing StarRocks, Apache Druid, and ClickHouse performance on single-table star schema datasets."
+description: "SSB flat-table benchmark on 100 GB dataset: StarRocks is 1.87x faster than ClickHouse and 4.75x faster than Apache Druid across 13 queries."
 ---
 
 # SSB Flat-table Benchmarking

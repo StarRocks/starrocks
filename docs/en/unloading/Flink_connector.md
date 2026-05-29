@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a StarRocks cluster by using Flink."
+description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a..."
 ---
 
 # Read data from StarRocks using Flink connector

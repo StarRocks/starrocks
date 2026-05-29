@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes how to compile StarRocks using Docker."
+description: "How to compile StarRocks from source using a Docker development image."
 ---
 
 # Compile StarRocks with Docker

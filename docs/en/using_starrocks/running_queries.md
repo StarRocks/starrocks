@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 9
-description: "How to view and monitor running queries in StarRocks using current_queries and related views, analyze their resource consumption, and cancel long-running queries."
+description: "How to view and monitor running queries in StarRocks using current_queries and related views, analyze their resource consumption, and cancel long-running..."
 ---
 
 # View Running Queries
