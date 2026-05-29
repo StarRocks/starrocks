@@ -274,6 +274,21 @@ void RowsMapperIterator::_drain_in_flight() {
 }
 
 Status RowsMapperIterator::next_values(size_t fetch_cnt, std::vector<uint64_t>* rssid_rowids) {
+    if (_pipelined && fetch_cnt == 0) {
+        // Empty segment in pipelined mode: prepare_segments recorded a 0-row
+        // entry, but no sub-chunks were submitted for it. Advance the cursor so
+        // the next non-empty segment doesn't trip the consume-mismatch guard
+        // against this stale zero. The caller's declared sizes must still match
+        // segment-by-segment, so reject if the next declared size is non-zero.
+        if (_next_segment_to_serve >= _segment_sizes.size() || _segment_sizes[_next_segment_to_serve] != 0) {
+            return Status::InternalError(fmt::format(
+                    "RowsMapperIterator pipelined consume mismatch: next_segment_to_serve={} fetch_cnt=0 expected={}",
+                    _next_segment_to_serve,
+                    _next_segment_to_serve < _segment_sizes.size() ? _segment_sizes[_next_segment_to_serve] : 0));
+        }
+        ++_next_segment_to_serve;
+        return Status::OK();
+    }
     if (fetch_cnt == 0) {
         // No need to fetch
         return Status::OK();

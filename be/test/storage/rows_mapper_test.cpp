@@ -420,6 +420,69 @@ TEST_F(RowsMapperTest, test_pipelined_wrong_fetch_size) {
     ASSERT_TRUE(st.is_internal_error()) << st;
 }
 
+TEST_F(RowsMapperTest, test_pipelined_empty_segment_in_middle) {
+    // Output rowsets can contain zero-row segments between non-empty ones.
+    // prepare_segments must accept this layout and next_values(0) must advance
+    // the segment cursor so the next non-empty segment doesn't trip the
+    // consume-mismatch guard.
+    const std::string filename = std::string(kTestDirectory) + "pipelined_empty_middle.crm";
+    const std::vector<size_t> seg_rows = {300, 0, 200};
+    FileInfo info = build_rows_mapper_file(filename, seg_rows, /*rssid_base=*/20);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments(seg_rows));
+
+    std::vector<uint64_t> values;
+    ASSERT_OK(iterator.next_values(300, &values));
+    verify_segment(values, 300, /*rssid=*/20, /*rowid_start=*/0);
+
+    // Empty segment — pure cursor advance.
+    values.clear();
+    ASSERT_OK(iterator.next_values(0, &values));
+    ASSERT_TRUE(values.empty());
+
+    ASSERT_OK(iterator.next_values(200, &values));
+    verify_segment(values, 200, /*rssid=*/22, /*rowid_start=*/300);
+
+    ASSERT_OK(iterator.status());
+}
+
+TEST_F(RowsMapperTest, test_pipelined_empty_segments_at_boundaries) {
+    // Empty segments at the head and tail of the sequence.
+    const std::string filename = std::string(kTestDirectory) + "pipelined_empty_boundaries.crm";
+    const std::vector<size_t> seg_rows = {0, 0, 250, 0};
+    FileInfo info = build_rows_mapper_file(filename, seg_rows, /*rssid_base=*/30);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments(seg_rows));
+
+    std::vector<uint64_t> values;
+    ASSERT_OK(iterator.next_values(0, &values));
+    ASSERT_OK(iterator.next_values(0, &values));
+    ASSERT_OK(iterator.next_values(250, &values));
+    verify_segment(values, 250, /*rssid=*/32, /*rowid_start=*/0);
+    ASSERT_OK(iterator.next_values(0, &values));
+
+    ASSERT_OK(iterator.status());
+}
+
+TEST_F(RowsMapperTest, test_pipelined_wrong_zero_fetch_on_nonempty_segment) {
+    // next_values(0) on a segment that was declared with rows must fail —
+    // otherwise we'd silently skip that segment's data.
+    const std::string filename = std::string(kTestDirectory) + "pipelined_wrong_zero.crm";
+    FileInfo info = build_rows_mapper_file(filename, {100}, /*rssid_base=*/40);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments({100}));
+
+    std::vector<uint64_t> values;
+    auto st = iterator.next_values(0, &values);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+}
+
 TEST_F(RowsMapperTest, test_pipelined_destructor_drains_without_consume) {
     // Force tiny sub-chunks so there are several in-flight chunks pending when
     // the iterator goes out of scope without any next_values call. The
