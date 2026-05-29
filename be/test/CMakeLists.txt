@@ -344,6 +344,7 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
+        ./exec/mysql_result_writer_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./runtime/exec_sub_process_test.cpp
