@@ -123,15 +123,15 @@ static Status prepare_segment_pruned_scan_range_for_split(
     }
     ASSIGN_OR_RETURN(auto resolved_ranges, segment_seek_ranges_to_rowid_ranges(segment, ranges_to_resolve,
                                                                                segment_read_options.lake_io_opts));
-    segment_state->seek_range_rowid_ranges.assign(resolved_ranges.begin(),
-                                                  resolved_ranges.begin() + segment_read_options.ranges.size());
+    segment_state->seek_ranges_rowid_bounds.assign(resolved_ranges.begin(),
+                                                   resolved_ranges.begin() + segment_read_options.ranges.size());
     if (tablet_range_offset.has_value()) {
-        segment_state->tablet_rowid_range = resolved_ranges[*tablet_range_offset];
+        segment_state->tablet_range_rowid_bounds = resolved_ranges[*tablet_range_offset];
     } else {
-        segment_state->tablet_rowid_range.reset();
+        segment_state->tablet_range_rowid_bounds.reset();
     }
-    segment_read_options.read_state_cache.seek_range_rowid_ranges = &segment_state->seek_range_rowid_ranges;
-    segment_read_options.read_state_cache.tablet_rowid_range = &segment_state->tablet_rowid_range;
+    segment_read_options.read_state_cache.seek_range_rowid_ranges = &segment_state->seek_ranges_rowid_bounds;
+    segment_read_options.read_state_cache.tablet_rowid_range = &segment_state->tablet_range_rowid_bounds;
     auto prepare_schema = rowset->build_segment_schema(read_schema, rowset_read_options, delete_predicates);
     return prepare_segment_pruned_scan_range(segment, prepare_schema, segment_read_options, segment_state);
 }

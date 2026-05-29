@@ -60,8 +60,8 @@ static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegment
     SegmentReadStateCache cache;
     cache.scan_range = state.pruned_scan_range;
     cache.scan_range_includes_page_filters = state.pruned_scan_range_includes_page_filters;
-    cache.seek_range_rowid_ranges = &state.seek_range_rowid_ranges;
-    cache.tablet_rowid_range = &state.tablet_rowid_range;
+    cache.seek_range_rowid_ranges = &state.seek_ranges_rowid_bounds;
+    cache.tablet_rowid_range = &state.tablet_range_rowid_bounds;
     return cache;
 }
 

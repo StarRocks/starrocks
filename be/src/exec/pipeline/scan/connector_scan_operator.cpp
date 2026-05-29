@@ -340,7 +340,7 @@ bool ConnectorScanOperator::_can_reuse_chunk_source_for(Morsel& morsel) const {
         return false;
     }
     const auto* split_context = dynamic_cast<const LakeSplitContext*>(morsel.get_split_context());
-    return split_context != nullptr && split_context->is_prepared_physical_child();
+    return split_context != nullptr && split_context->is_prepared_physical_split();
 }
 
 void ConnectorScanOperator::_record_reusable_chunk_source_event(ReusableChunkSourceEvent event) {
