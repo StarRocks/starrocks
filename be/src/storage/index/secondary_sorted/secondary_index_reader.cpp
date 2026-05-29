@@ -115,7 +115,7 @@ StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open(const
 }
 
 StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open_cached(const OpenInput& input,
-                                                                                 OlapReaderStatistics* stats) {
+                                                                                  OlapReaderStatistics* stats) {
     if (input.file_pb.file_name().empty()) {
         // No filename to key on -- fall through to a non-cached open which
         // will surface a clearer error from _init().
@@ -165,7 +165,7 @@ Status SecondaryIndexReader::_init() {
 }
 
 StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(const PredicateTree& source_pred_tree,
-                                                            ObjectPool* obj_pool, OlapReaderStatistics* stats) {
+                                                             ObjectPool* obj_pool, OlapReaderStatistics* stats) {
     PerSegmentRowidBitmap result;
     if (_segment == nullptr) return result;
 
