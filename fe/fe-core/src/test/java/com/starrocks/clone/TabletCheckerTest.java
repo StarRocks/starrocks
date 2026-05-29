@@ -162,19 +162,19 @@ public class TabletCheckerTest {
         Mockito.when(infoService.getBackend(be2)).thenReturn(aliveBackend(be2));
         Mockito.when(infoService.getBackend(be3)).thenReturn(aliveBackend(be3));
 
-        Assertions.assertTrue(
-                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 3, infoService),
-                "all alive — bucket seq satisfies replication");
+        Assert.assertTrue(
+                "all alive — bucket seq satisfies replication",
+                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 3, infoService));
 
         // Mark be2 dead; survivors no longer cover replicationNum=3.
         Mockito.when(infoService.getBackend(be2)).thenReturn(deadBackend(be2));
-        Assertions.assertFalse(
-                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 3, infoService),
-                "one dead — should fall below the replication threshold");
+        Assert.assertFalse(
+                "one dead — should fall below the replication threshold",
+                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 3, infoService));
 
         // With a relaxed threshold the survivors are still enough.
-        Assertions.assertTrue(
-                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 2, infoService),
-                "two survivors cover replicationNum=2");
+        Assert.assertTrue(
+                "two survivors cover replicationNum=2",
+                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 2, infoService));
     }
 }
