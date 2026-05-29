@@ -30,6 +30,9 @@ insert into t (id) values (3);
 -- id=2 stays 1, id=3 is 2.
 select * from t order by id;
 
+-- count must agree with the read path (all three rows are non-null)
+select count(c) from t;
+
 drop database db_${uuid0};
 
 
@@ -63,5 +66,8 @@ insert into t (id) values (3);
 
 -- id=1 and id=2 had no default when written, so they stay NULL; only id=3 is 9.
 select * from t order by id;
+
+-- count(c) must match: only id=3 is non-null (regression guard for the meta count fast path)
+select count(c) from t;
 
 drop database db_${uuid0};

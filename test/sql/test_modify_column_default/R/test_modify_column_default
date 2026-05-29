@@ -42,6 +42,10 @@ select * from t order by id;
 2	1
 3	2
 -- !result
+select count(c) from t;
+-- result:
+3
+-- !result
 drop database db_${uuid0};
 -- result:
 -- !result
@@ -88,6 +92,10 @@ select * from t order by id;
 1	None
 2	None
 3	9
+-- !result
+select count(c) from t;
+-- result:
+1
 -- !result
 drop database db_${uuid0};
 -- result:
