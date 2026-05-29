@@ -551,6 +551,11 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 
 CONF_Int32(arrow_flight_port, "-1");
 
+// Cluster-wide default Arrow IPC compression codec for Arrow Flight SQL DoGet
+// responses: "none" (default, off), "lz4" (Arrow LZ4_FRAME), or "zstd". A non-empty
+// session variable `arrow_flight_compression` overrides this per connection.
+CONF_mString(arrow_flight_ipc_compression, "none");
+
 // Used for mini Load. mini load data file will be removed after this time.
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time

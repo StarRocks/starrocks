@@ -82,6 +82,11 @@ CONF_Alias(be_http_port, webserver_port);
 
 CONF_Int32(arrow_flight_port, "-1");
 
+// Cluster-wide default Arrow IPC compression codec for Arrow Flight SQL DoGet
+// responses: "none" (default, off), "lz4" (Arrow LZ4_FRAME), or "zstd". A non-empty
+// session variable `arrow_flight_compression` overrides this per connection.
+CONF_mString(arrow_flight_ipc_compression, "none");
+
 // Maximum size of a single message body in all protocols.
 CONF_Int64(brpc_max_body_size, "2147483648");
 

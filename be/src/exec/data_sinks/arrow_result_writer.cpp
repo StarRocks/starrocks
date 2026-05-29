@@ -17,10 +17,12 @@
 #include <arrow/record_batch.h>
 #include <bvar/recorder.h>
 #include <column/column_helper.h>
+#include <util/arrow/arrow_flight_compression.h>
 #include <util/arrow/row_batch.h>
 #include <util/arrow/starrocks_column_to_arrow.h>
 
 #include "column/const_column.h"
+#include "common/config_network_fwd.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "exprs/cast_expr.h"
@@ -69,7 +71,15 @@ Status ArrowResultWriter::init(RuntimeState* state) {
                                             &_output_column_names, state->arrow_flight_sql_version()));
 
     auto* query_execution_services = state->query_execution_services();
-    query_execution_services->runtime->result_mgr->set_arrow_schema(state->fragment_instance_id(), _arrow_schema);
+    auto* result_mgr = query_execution_services->runtime->result_mgr;
+    result_mgr->set_arrow_schema(state->fragment_instance_id(), _arrow_schema);
+
+    // Resolve the effective Arrow IPC compression codec (per-connection session variable,
+    // else the cluster-wide BE config) and stash it so DoGetStatement can apply it when
+    // serializing the result stream. An unset session value ("") inherits the BE config.
+    const std::string config_codec = config::arrow_flight_ipc_compression.value();
+    const auto codec = resolve_arrow_flight_compression(state->query_options().arrow_flight_compression, config_codec);
+    result_mgr->set_arrow_compression(state->fragment_instance_id(), codec);
 
     return Status::OK();
 }

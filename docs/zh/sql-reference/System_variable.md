@@ -192,6 +192,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.3.0, v3.4.0, v3.5.0
 
+### arrow_flight_compression
+
+* **作用域**: Session
+* **描述**: BE 通过 Arrow Flight SQL（`DoGet`）返回的 Arrow IPC record batch 所使用的压缩编码。有效值：`lz4`（对应 Arrow `LZ4_FRAME`）、`zstd`、`none` 或空值。为空时使用集群级 BE 配置项 `arrow_flight_ipc_compression`；非空值（包括 `none`）会针对当前连接覆盖该配置。该变量仅影响由 BE 流式返回的大结果集；由 FE 直接返回的小结果集不受影响。当启用 Arrow Flight 代理模式时，仅在直连 BE 的情况下客户端才能获得压缩效果。
+* **默认值**: 空
+* **数据类型**: String
+* **引入版本**: -
+
 ### auto_increment_increment
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。

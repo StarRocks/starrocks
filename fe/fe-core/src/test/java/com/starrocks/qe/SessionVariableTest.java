@@ -175,4 +175,32 @@ public class SessionVariableTest {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> sessionVariable.setBinaryEncodingLevel("invalid"));
     }
+    @Test
+    public void testArrowFlightCompressionDefaultsAndToThrift() {
+        SessionVariable sv = new SessionVariable();
+        Assertions.assertEquals("", sv.getArrowFlightCompression());
+        TQueryOptions opts = sv.toThrift();
+        Assertions.assertEquals("", opts.getArrow_flight_compression());
+    }
+
+    @Test
+    public void testArrowFlightCompressionSettersNormalizeAndValidate() {
+        SessionVariable sv = new SessionVariable();
+
+        sv.setArrowFlightCompression("LZ4");
+        Assertions.assertEquals("lz4", sv.getArrowFlightCompression());
+        Assertions.assertEquals("lz4", sv.toThrift().getArrow_flight_compression());
+
+        sv.setArrowFlightCompression("ZSTD");
+        Assertions.assertEquals("zstd", sv.getArrowFlightCompression());
+
+        sv.setArrowFlightCompression("none");
+        Assertions.assertEquals("none", sv.getArrowFlightCompression());
+
+        sv.setArrowFlightCompression("");
+        Assertions.assertEquals("", sv.getArrowFlightCompression());
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sv.setArrowFlightCompression("gzip"));
+    }
 }

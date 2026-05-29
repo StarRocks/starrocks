@@ -242,6 +242,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PROFILE = "enable_profile";
     public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
+    public static final String ARROW_FLIGHT_COMPRESSION = "arrow_flight_compression";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
@@ -1357,6 +1358,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
     private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
+
+    @VariableMgr.VarAttr(name = ARROW_FLIGHT_COMPRESSION)
+    private String arrowFlightCompression = "";
 
     @VariableMgr.VarAttr(name = BINARY_ENCODING_LEVEL)
     private String binaryEncodingLevel = BinaryEncodingLevel.NESTED.sessionValue();
@@ -4770,6 +4774,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.binaryEncodingLevel = level.sessionValue();
     }
 
+    public String getArrowFlightCompression() {
+        return arrowFlightCompression;
+    }
+
+    public void setArrowFlightCompression(String mode) {
+        if (mode == null || mode.isEmpty()
+                || mode.equalsIgnoreCase("lz4")
+                || mode.equalsIgnoreCase("zstd")
+                || mode.equalsIgnoreCase("none")) {
+            arrowFlightCompression = (mode == null) ? "" : mode.toLowerCase();
+        } else {
+            throw new IllegalArgumentException(
+                    "Legal values of arrow_flight_compression are lz4|zstd|none");
+        }
+    }
+
     public void setEnableAsyncProfile(boolean enableAsyncProfile) {
         this.enableAsyncProfile = enableAsyncProfile;
     }
@@ -6334,6 +6354,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         tResult.setEnable_profile(enableProfile);
         tResult.setBinary_encoding_format(BinaryEncodingFormat.fromString(binaryEncodingFormat).thriftValue());
+        tResult.setArrow_flight_compression(arrowFlightCompression);
         tResult.setBinary_encoding_level(BinaryEncodingLevel.fromString(binaryEncodingLevel).thriftValue());
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);

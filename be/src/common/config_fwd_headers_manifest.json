@@ -552,6 +552,7 @@
         "heartbeat_service_port",
         "heartbeat_service_thread_count",
         "arrow_flight_port",
+        "arrow_flight_ipc_compression",
         "be_service_threads",
         "brpc_num_threads",
         "enable_https",
