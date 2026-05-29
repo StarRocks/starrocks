@@ -1365,7 +1365,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
 
     (void)update_master_info(original_master_info);
 
-    // Parallel copy should fail because download_lake_segment_file fails with mock FS
+    // Parallel copy should fail because download_lake_file_with_converter fails with mock FS
     EXPECT_FALSE(status.ok());
     pool->shutdown();
 }
