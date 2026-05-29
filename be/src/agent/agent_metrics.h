@@ -99,6 +99,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
     METRICS_DEFINE_THREAD_POOL(cluster_snapshot);
+    METRICS_DEFINE_THREAD_POOL(replicate_file);
 
 private:
     struct PendingThreadPoolMetrics {

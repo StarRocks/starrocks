@@ -203,6 +203,7 @@ void AgentMetrics::_register_thread_pool_metrics(const std::string& name, Thread
     REGISTER_AGENT_THREAD_POOL_METRICS(remote_snapshot);
     REGISTER_AGENT_THREAD_POOL_METRICS(replicate_snapshot);
     REGISTER_AGENT_THREAD_POOL_METRICS(cluster_snapshot);
+    REGISTER_AGENT_THREAD_POOL_METRICS(replicate_file);
 
 #undef REGISTER_AGENT_THREAD_POOL_METRICS
 
