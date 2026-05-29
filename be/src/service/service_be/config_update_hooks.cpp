@@ -95,6 +95,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         cache->set_capacity(cache_limit);
         return Status::OK();
     });
+#ifdef WITH_TENANN
     registry->register_callback("vector_query_cache_capacity", [=]() -> Status {
         if (exec_env == nullptr || exec_env->vector_index_cache() == nullptr) {
             return Status::InternalError("Vector index cache is not initialized");
@@ -111,6 +112,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
                   << " bytes";
         return Status::OK();
     });
+#endif // WITH_TENANN
 #endif
 #ifndef __APPLE__
     registry->register_callback("disable_storage_page_cache", [=]() -> Status {

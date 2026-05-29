@@ -1,4 +1,4 @@
--- name: test_vector_index_cache @sequential @native
+-- name: test_vector_index_cache @sequential
 
 -- Exercise the SR-owned VectorIndexCache integration:
 --   * vector_query_cache_capacity config callback (config_update_hooks.cpp happy path)
