@@ -221,3 +221,124 @@ PROPERTIES("fast_schema_evolution" = "true");
 alter table ta modify column s INT SUM DEFAULT "5";
 
 drop database db_${uuid0};
+
+
+-- name: test_modify_map_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c MAP<VARCHAR(10), INT> DEFAULT map{'a':1};
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+alter table t modify column c MAP<VARCHAR(10), INT> DEFAULT map{'b':2};
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time map; only id=3 is the new map
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_struct_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(1, 'a');
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+alter table t modify column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(2, 'b');
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time struct; only id=3 is the new struct
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_default_literal_to_current_timestamp
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c DATETIME DEFAULT "2020-01-01 00:00:00";
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+-- changing a literal default to now()/current_timestamp must be allowed
+alter table t modify column c DATETIME DEFAULT CURRENT_TIMESTAMP;
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- older rows keep the add-time literal (deterministic); the new now() value is not asserted
+select c from t where id in (1, 2) order by id;
+
+-- all three rows are non-null (id=3 got a now() value)
+select count(c) from t;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_remove_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c INT NULL DEFAULT "5";
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+-- removing the default (MODIFY without DEFAULT) must keep older rows and only drop it for new writes
+alter table t modify column c INT NULL;
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time 5; id=3 has no default now, so it is NULL
+select * from t order by id;
+
+drop database db_${uuid0};
