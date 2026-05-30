@@ -234,6 +234,8 @@ HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(
           _distribution_mode(distribution_mode),
           _spill_channel_factory(std::move(spill_channel_factory)) {}
 
+HashJoinBuildOperatorFactory::~HashJoinBuildOperatorFactory() = default;
+
 Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     return _hash_joiner_factory->prepare(state);

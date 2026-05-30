@@ -19,7 +19,7 @@
 #include <numeric>
 
 #include "exec/cross_join_node.h"
-#include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/spill_components.h"

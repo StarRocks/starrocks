@@ -31,7 +31,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
-#include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_registry.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId

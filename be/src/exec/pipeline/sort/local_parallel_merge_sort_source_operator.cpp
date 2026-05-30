@@ -17,8 +17,8 @@
 #include <algorithm>
 #include <sstream>
 
-#include "compute_env/pipeline/observer.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"

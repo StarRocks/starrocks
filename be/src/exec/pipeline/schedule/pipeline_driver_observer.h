@@ -17,8 +17,8 @@
 #include <atomic>
 
 #include "base/concurrency/race_detect.h"
-#include "compute_env/pipeline/observer.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "gutil/macros.h"
 
 namespace starrocks::pipeline {

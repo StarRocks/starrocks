@@ -22,7 +22,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
-#include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"

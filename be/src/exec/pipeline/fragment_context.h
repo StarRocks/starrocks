@@ -26,7 +26,7 @@
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
