@@ -31,11 +31,11 @@
 
 use std::path::Path;
 
-use tantivy::collector::DocSetCollector;
+use tantivy::collector::{Collector, SegmentCollector};
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption};
-use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Term};
+use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader, Term};
 
 use crate::error::{Result, TantivyBindingError};
 
@@ -136,26 +136,60 @@ impl IndexReaderWrapper {
 
     fn collect_doc_ids(&self, query: &dyn Query) -> Result<Vec<u32>> {
         let searcher = self.reader.searcher();
-        let doc_set = searcher.search(query, &DocSetCollector)?;
-
-        let segment_readers = searcher.segment_readers();
-        let mut offsets: Vec<u32> = Vec::with_capacity(segment_readers.len());
+        let mut offsets: Vec<u32> = Vec::with_capacity(searcher.segment_readers().len());
         let mut acc: u32 = 0;
-        for sr in segment_readers {
+        for sr in searcher.segment_readers() {
             offsets.push(acc);
             acc = acc.checked_add(sr.max_doc()).ok_or_else(|| {
                 TantivyBindingError::Internal("doc id overflow (segment too large)".into())
             })?;
         }
+        Ok(searcher.search(query, &OffsetDocCollector { offsets })?)
+    }
+}
 
-        let mut out: Vec<u32> = Vec::with_capacity(doc_set.len());
-        for addr in &doc_set {
-            let off = *offsets
-                .get(addr.segment_ord as usize)
-                .ok_or_else(|| TantivyBindingError::Internal("segment_ord out of range".into()))?;
-            out.push(off + addr.doc_id);
+// Stream matching docs straight into per-segment buffers (no DocSetCollector
+// HashSet, no global sort): each segment's ids are ascending after adding its
+// offset, and segments are concatenated in offset order -> globally sorted.
+struct OffsetDocCollector {
+    offsets: Vec<u32>,
+}
+
+struct OffsetSegmentCollector {
+    offset: u32,
+    ids: Vec<u32>,
+}
+
+impl Collector for OffsetDocCollector {
+    type Fruit = Vec<u32>;
+    type Child = OffsetSegmentCollector;
+
+    fn for_segment(&self, ord: SegmentOrdinal, _r: &SegmentReader) -> tantivy::Result<OffsetSegmentCollector> {
+        Ok(OffsetSegmentCollector { offset: self.offsets[ord as usize], ids: Vec::new() })
+    }
+
+    fn requires_scoring(&self) -> bool {
+        false
+    }
+
+    fn merge_fruits(&self, mut segs: Vec<(u32, Vec<u32>)>) -> tantivy::Result<Vec<u32>> {
+        segs.sort_by_key(|(off, _)| *off);
+        let mut out: Vec<u32> = Vec::with_capacity(segs.iter().map(|(_, v)| v.len()).sum());
+        for (_, v) in segs {
+            out.extend_from_slice(&v);
         }
-        out.sort_unstable();
         Ok(out)
+    }
+}
+
+impl SegmentCollector for OffsetSegmentCollector {
+    type Fruit = (u32, Vec<u32>);
+
+    fn collect(&mut self, doc: u32, _score: Score) {
+        self.ids.push(self.offset + doc);
+    }
+
+    fn harvest(self) -> (u32, Vec<u32>) {
+        (self.offset, self.ids)
     }
 }
