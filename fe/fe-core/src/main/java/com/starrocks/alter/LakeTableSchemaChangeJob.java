@@ -571,6 +571,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                     boolean hasNewGeneratedColumn = false;
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
+                    // New columns whose default is volatile (uuid()/uuid_numeric()): BE materializes them per
+                    // pre-existing row during the rewrite, reusing the generated-column expr machinery.
+                    List<Column> diffDefaultExprColumns = Lists.newArrayList();
                     if (originIndexMetaId == table.getBaseIndexMetaId()) {
                         List<String> originSchema = table.getSchemaByIndexMetaId(originIndexMetaId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
@@ -579,9 +582,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
                             for (String colNameInNewSchema : newSchema) {
-                                if (!originSchema.contains(colNameInNewSchema) &&
-                                        table.getColumn(colNameInNewSchema).isGeneratedColumn()) {
-                                    diffGeneratedColumnSchema.add(table.getColumn(colNameInNewSchema));
+                                if (originSchema.contains(colNameInNewSchema)) {
+                                    continue;
+                                }
+                                Column newCol = table.getColumn(colNameInNewSchema);
+                                if (newCol.isGeneratedColumn()) {
+                                    diffGeneratedColumnSchema.add(newCol);
+                                } else if (newCol.getDefaultValueType() == Column.DefaultValueType.VARY) {
+                                    diffDefaultExprColumns.add(newCol);
                                 }
                             }
                         }
@@ -658,7 +666,21 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                             mcExprs.put(columnIndex, ExprToThrift.treeToThrift(generatedColumnExpr));
                         }
-                        // we need this thing, otherwise some expr evalution will fail in BE
+                    }
+                    // A volatile default has no column references, so it skips the slot-ref rewriting above and
+                    // goes straight to its materialization expr, keyed by the same full-schema column index.
+                    for (Column defaultExprColumn : diffDefaultExprColumns) {
+                        int columnIndex;
+                        if (defaultExprColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                            String originName = Column.removeNamePrefix(defaultExprColumn.getName());
+                            columnIndex = table.getFullSchema().indexOf(table.getColumn(originName));
+                        } else {
+                            columnIndex = table.getFullSchema().indexOf(defaultExprColumn);
+                        }
+                        mcExprs.put(columnIndex, defaultExprColumn.getMaterializedDefaultThriftExpr());
+                    }
+                    if (!mcExprs.isEmpty()) {
+                        // BE needs the query globals/options to evaluate the materialization exprs in the rewrite.
                         TQueryGlobals queryGlobals = new TQueryGlobals();
                         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
                         queryGlobals.setNow_string(dateFormat.format(new Date()));

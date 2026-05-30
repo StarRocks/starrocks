@@ -638,6 +638,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     boolean hasNewGeneratedColumn = false;
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
+                    // New columns whose default is volatile (uuid()/uuid_numeric()): BE materializes them per
+                    // pre-existing row during the rewrite, reusing the generated-column expr machinery.
+                    List<Column> diffDefaultExprColumns = Lists.newArrayList();
                     if (originIdxMetaId == tbl.getBaseIndexMetaId()) {
                         List<String> originSchema = tbl.getSchemaByIndexMetaId(originIdxMetaId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
@@ -646,9 +649,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
                             for (String colNameInNewSchema : newSchema) {
-                                if (!originSchema.contains(colNameInNewSchema) &&
-                                        tbl.getColumn(colNameInNewSchema).isGeneratedColumn()) {
-                                    diffGeneratedColumnSchema.add(tbl.getColumn(colNameInNewSchema));
+                                if (originSchema.contains(colNameInNewSchema)) {
+                                    continue;
+                                }
+                                Column newCol = tbl.getColumn(colNameInNewSchema);
+                                if (newCol.isGeneratedColumn()) {
+                                    diffGeneratedColumnSchema.add(newCol);
+                                } else if (newCol.getDefaultValueType() == Column.DefaultValueType.VARY) {
+                                    diffDefaultExprColumns.add(newCol);
                                 }
                             }
                         }
@@ -726,7 +734,21 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                             mcExprs.put(columnIndex, ExprToThrift.treeToThrift(generatedColumnExpr));
                         }
-                        // we need this thing, otherwise some expr evalution will fail in BE
+                    }
+                    // A volatile default has no column references, so it skips the slot-ref rewriting above and
+                    // goes straight to its materialization expr, keyed by the same full-schema column index.
+                    for (Column defaultExprColumn : diffDefaultExprColumns) {
+                        int columnIndex;
+                        if (defaultExprColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                            String originName = Column.removeNamePrefix(defaultExprColumn.getName());
+                            columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
+                        } else {
+                            columnIndex = tbl.getFullSchema().indexOf(defaultExprColumn);
+                        }
+                        mcExprs.put(columnIndex, defaultExprColumn.getMaterializedDefaultThriftExpr());
+                    }
+                    if (!mcExprs.isEmpty()) {
+                        // BE needs the query globals/options to evaluate the materialization exprs in the rewrite.
                         TQueryGlobals queryGlobals = new TQueryGlobals();
                         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
                         queryGlobals.setNow_string(dateFormat.format(new Date()));
