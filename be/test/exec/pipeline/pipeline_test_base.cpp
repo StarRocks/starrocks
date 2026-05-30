@@ -25,6 +25,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "exprs/function_context.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"

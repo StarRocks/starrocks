@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exec/workgroup/work_group_manager.h"
+
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"

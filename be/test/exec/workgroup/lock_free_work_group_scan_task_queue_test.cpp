@@ -23,6 +23,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "common/thread/thread.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {

@@ -23,6 +23,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 
 namespace starrocks::workgroup {
 

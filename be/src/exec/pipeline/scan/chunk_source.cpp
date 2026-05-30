@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/chunk_source.h"
 
 #include "base/failpoint/fail_point.h"
+#include "base/time/monotime.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"

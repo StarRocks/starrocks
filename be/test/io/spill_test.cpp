@@ -58,6 +58,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"

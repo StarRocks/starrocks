@@ -14,6 +14,7 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "compute_env/sorting/merge.h"

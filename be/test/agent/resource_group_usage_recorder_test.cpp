@@ -19,6 +19,7 @@
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 

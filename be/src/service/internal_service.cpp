@@ -69,6 +69,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/short_circuit.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"

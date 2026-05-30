@@ -22,6 +22,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"

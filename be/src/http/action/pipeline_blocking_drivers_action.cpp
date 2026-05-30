@@ -26,6 +26,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
