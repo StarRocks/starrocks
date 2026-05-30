@@ -462,12 +462,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.originDefaultValue != null) {
             return this.originDefaultValue;
         }
-        if (getDefaultValueType() == DefaultValueType.VARY) {
-            return null;
-        }
+        // Complex (ARRAY/MAP/STRUCT) expression defaults are materialized to a JSON value that older
+        // rows read; it is not recoverable here, so return null and let the read path keep using
+        // default_value.
         if (defaultExpr != null && defaultExpr.hasExprObject()) {
             return null;
         }
+        // A frozen literal (a literal default, or an ADD-time now()/current_timestamp) is what older
+        // rows read; anything not materialized into a literal (uuid(), current_timestamp(N), no
+        // default) leaves older rows reading SQL NULL.
         if (defaultValue != null) {
             return defaultValue;
         }
@@ -684,14 +687,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (isKey) {
             return false;
         }
-        // A now()/current_timestamp column is always changeable: ADD COLUMN freezes the ALTER-time
-        // literal into defaultValue (so the origin is recoverable), and a CREATE-time one is
-        // materialized in every segment, so it is never backfilled. Otherwise require a recoverable
-        // add-time literal.
-        boolean isCurrentTimestamp = defaultExpr != null && isEmptyDefaultTimeFunction(defaultExpr);
-        if (getOriginDefaultValue() == null && !isCurrentTimestamp) {
+        // Complex (ARRAY/MAP/STRUCT) expression defaults can't be preserved for rows older than the
+        // column — their materialized value isn't recoverable here — so they stay immutable.
+        if (defaultExpr != null && defaultExpr.hasExprObject()) {
             return false;
         }
+        // SUM/MIN/MAX/union aggregations have constrained defaults (e.g. SUM must be 0).
         return aggregationType == null || aggregationType == AggregateType.NONE
                 || aggregationType == AggregateType.REPLACE
                 || aggregationType == AggregateType.REPLACE_IF_NOT_NULL;
