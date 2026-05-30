@@ -681,7 +681,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // and complex expression defaults have no recoverable add-time literal and stay immutable, as
     // do SUM/MIN/MAX/union aggregations (e.g. SUM requires a zero default).
     private boolean isDefaultValueChangeAllowed() {
-        if (isKey || getOriginDefaultValue() == null) {
+        if (isKey) {
+            return false;
+        }
+        // A now()/current_timestamp column is always changeable: ADD COLUMN freezes the ALTER-time
+        // literal into defaultValue (so the origin is recoverable), and a CREATE-time one is
+        // materialized in every segment, so it is never backfilled. Otherwise require a recoverable
+        // add-time literal.
+        boolean isCurrentTimestamp = defaultExpr != null && isEmptyDefaultTimeFunction(defaultExpr);
+        if (getOriginDefaultValue() == null && !isCurrentTimestamp) {
             return false;
         }
         return aggregationType == null || aggregationType == AggregateType.NONE
