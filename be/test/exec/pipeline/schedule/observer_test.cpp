@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/pipeline/observer.h"
-
 #include <unistd.h>
 
 #include <atomic>
@@ -35,6 +33,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/utils.h"

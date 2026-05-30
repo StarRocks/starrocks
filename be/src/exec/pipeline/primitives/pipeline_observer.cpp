@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/pipeline/observer.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 
 #include "runtime/runtime_state.h"
 

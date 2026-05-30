@@ -21,6 +21,7 @@ set(EXEC_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     exec_node_exec_primitive_test.cpp
     morsel_primitive_test.cpp
+    pipeline_observer_exec_primitive_test.cpp
     runtime_filter_exec_primitive_test.cpp
 )
 
