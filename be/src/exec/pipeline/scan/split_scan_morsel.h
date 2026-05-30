@@ -43,7 +43,7 @@ struct LakeSplitContext : public ScanSplitContext {
         // First coarse range used to start scanning before refined ranges exist.
         INITIAL_COARSE,
         // Additional coarse range issued before segment-level refinement finishes.
-        COARSE_BEFORE_REFINEMENT_DONE,
+        PRE_REFINEMENT_COARSE,
         // Range backed by final refined/pruned segment ranges.
         REFINED,
     };

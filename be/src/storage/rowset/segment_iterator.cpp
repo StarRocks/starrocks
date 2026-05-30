@@ -1000,7 +1000,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     if (_opts.read_state_cache.scan_range != nullptr) {
         RETURN_IF_ERROR(_apply_precomputed_scan_range());
-        if (_opts.read_state_cache.scan_range_includes_page_filters) {
+        if (!_opts.read_state_cache.scan_range_includes_page_filters) {
             RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
             RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
         }
@@ -4317,15 +4317,71 @@ StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<S
     return maybe_project_iterator(output_schema, new_non_closing_chunk_iterator(*reusable_slot));
 }
 
-StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
-                                                                 const Schema& schema,
-                                                                 const SegmentReadOptions& options) {
+StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                                       const SegmentReadOptions& options) {
     Schema iterator_schema = schema;
     if (!options.pred_tree.empty() && options.pred_tree.num_columns() < schema.num_fields()) {
         iterator_schema = reorder_schema(schema, options.pred_tree);
     }
     SegmentIterator iter(segment, std::move(iterator_schema), options);
     return iter.prepared_pruned_row_ranges();
+}
+
+static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower) {
+    std::string index_key =
+            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    auto start_iter = segment->lower_bound(index_key);
+    uint32_t start_block_id = 0;
+    if (start_iter.valid()) {
+        // Previous block may contain this key, so start from its first row.
+        start_block_id = start_iter.ordinal();
+        if (start_block_id > 0) {
+            --start_block_id;
+        }
+    } else {
+        // If all short keys are smaller, the key may exist in the last block.
+        start_block_id = segment->last_block();
+    }
+    return start_block_id * segment->num_rows_per_block();
+}
+
+static rowid_t upper_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) {
+    std::string index_key =
+            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    auto end_iter = segment->upper_bound(index_key);
+    if (end_iter.valid()) {
+        end = end_iter.ordinal() * segment->num_rows_per_block();
+    }
+    return end;
+}
+
+StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segment,
+                                                                   const std::vector<SeekRange>& ranges) {
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+
+    SparseRange<> scan_range;
+    if (ranges.empty()) {
+        scan_range.add(Range<>(0, segment->num_rows()));
+        return scan_range;
+    }
+
+    for (const auto& range : ranges) {
+        rowid_t lower_rowid = 0;
+        rowid_t upper_rowid = segment->num_rows();
+        if (!range.upper().empty()) {
+            upper_rowid = upper_bound_block_aligned_rowid(segment, range.upper(), !range.inclusive_upper(),
+                                                         segment->num_rows());
+        }
+        if (!range.lower().empty() && upper_rowid > 0) {
+            lower_rowid = lower_bound_block_aligned_rowid(segment, range.lower(), range.inclusive_lower());
+        }
+        if (lower_rowid <= upper_rowid) {
+            scan_range.add(Range<>(lower_rowid, upper_rowid));
+        }
+    }
+    return scan_range;
 }
 
 static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iterator_schema) {

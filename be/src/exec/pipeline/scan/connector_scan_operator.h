@@ -183,6 +183,8 @@ protected:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
     Status _report_split_source_morsel_finished_once();
+    Status _publish_generated_split_tasks(RuntimeState* state);
+    bool _should_publish_generated_split_tasks_after_open() const;
     void _reset_reuse_state(RuntimeState* state, MorselPtr&& morsel);
     void _update_catalog_metrics();
 

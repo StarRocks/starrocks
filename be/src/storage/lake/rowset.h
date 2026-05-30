@@ -47,39 +47,91 @@ class TabletManager;
 class TabletWriter;
 
 struct PreparedSegmentReadState {
-    // Prepared by the root scan before child split tasks are published. The
-    // lifecycle still records failures explicitly so children can fail fast if
-    // the prepare phase did not finish successfully.
-    enum class Lifecycle : uint32_t {
-        UNPREPARED = 0,
-        PREPARING = 1,
-        PREPARED = 2,
-        FAILED = 3,
-    };
-
-    std::atomic<uint32_t> lifecycle{static_cast<uint32_t>(Lifecycle::UNPREPARED)};
-    Status prepare_status;
-
     SparseRangePtr pruned_scan_range;
     bool pruned_scan_range_includes_page_filters = false;
+    std::atomic<bool> pruned_scan_range_cache_disabled{false};
+    std::atomic<bool> pruned_scan_range_ready{false};
+
+    bool has_pruned_scan_range() const {
+        return !pruned_scan_range_cache_disabled.load(std::memory_order_acquire) &&
+               pruned_scan_range_ready.load(std::memory_order_acquire) && pruned_scan_range != nullptr;
+    }
+
+    void publish_pruned_scan_range(SparseRangePtr range, bool includes_page_filters) {
+        pruned_scan_range = std::move(range);
+        pruned_scan_range_includes_page_filters = includes_page_filters;
+        pruned_scan_range_ready.store(true, std::memory_order_release);
+    }
+
+    void clear_pruned_scan_range() {
+        pruned_scan_range_ready.store(false, std::memory_order_release);
+        pruned_scan_range.reset();
+        pruned_scan_range_includes_page_filters = false;
+    }
+
+    void disable_pruned_scan_range_cache() {
+        pruned_scan_range_cache_disabled.store(true, std::memory_order_release);
+        clear_pruned_scan_range();
+    }
 
     // Rowid equivalents of RowsetReadOptions::ranges and Rowset::tablet_range.
     // Children reuse them to avoid repeating short-key index lookups.
     std::vector<std::optional<Range<rowid_t>>> seek_ranges_rowid_bounds;
     std::optional<Range<rowid_t>> tablet_range_rowid_bounds;
+    std::atomic<bool> rowid_bounds_cache_disabled{false};
+    std::atomic<bool> rowid_bounds_cache_ready{false};
+
+    bool has_rowid_bounds_cache() const {
+        return !rowid_bounds_cache_disabled.load(std::memory_order_acquire) &&
+               rowid_bounds_cache_ready.load(std::memory_order_acquire);
+    }
+
+    void publish_rowid_bounds_cache(std::vector<std::optional<Range<rowid_t>>>&& seek_range_bounds,
+                                    std::optional<Range<rowid_t>> tablet_range_bound) {
+        seek_ranges_rowid_bounds = std::move(seek_range_bounds);
+        tablet_range_rowid_bounds = std::move(tablet_range_bound);
+        rowid_bounds_cache_ready.store(true, std::memory_order_release);
+    }
+
+    void clear_rowid_bounds_cache() {
+        rowid_bounds_cache_ready.store(false, std::memory_order_release);
+        seek_ranges_rowid_bounds.clear();
+        tablet_range_rowid_bounds.reset();
+    }
+
+    void disable_rowid_bounds_cache() {
+        rowid_bounds_cache_disabled.store(true, std::memory_order_release);
+        clear_rowid_bounds_cache();
+    }
+
+    void disable_runtime_filter_dependent_cache() {
+        disable_pruned_scan_range_cache();
+        disable_rowid_bounds_cache();
+    }
 
     // State shared by coarse rowid range tasks and refined rowid range tasks.
     // Coarse range issuing fields are protected by |coarse_range_lock|.
     std::mutex coarse_range_lock;
     SparseRange<> coarse_scan_range;
     SparseRangeIterator<> coarse_scan_range_iter;
-    SparseRange<> issued_coarse_ranges;
+    SparseRange<> allocated_coarse_ranges;
+    bool coarse_split_allocation_closed = false;
 };
 
 struct PreparedTabletReadState {
     std::vector<RowsetPtr> rowsets;
     std::vector<std::vector<SegmentPtr>> rowset_segments;
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+
+    void disable_runtime_filter_dependent_cache() {
+        for (const auto& prepared_states : rowset_prepared_states) {
+            for (const auto& segment_state : prepared_states) {
+                if (segment_state != nullptr) {
+                    segment_state->disable_runtime_filter_dependent_cache();
+                }
+            }
+        }
+    }
 };
 
 class Rowset : public BaseRowset {

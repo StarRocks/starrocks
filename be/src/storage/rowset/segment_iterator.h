@@ -40,9 +40,13 @@ StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<S
                                                          const Schema& iterator_schema, const Schema& output_schema,
                                                          const SegmentReadOptions& options,
                                                          ChunkIteratorPtr* reusable_slot);
-StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
-                                                                 const Schema& schema,
-                                                                 const SegmentReadOptions& options);
+StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                                       const SegmentReadOptions& options);
+
+// Build a block-aligned rowid range from key-space SeekRanges. The segment's
+// short-key index must be loaded before calling this when |ranges| is non-empty.
+StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segment,
+                                                                   const std::vector<SeekRange>& ranges);
 
 // Resolve key-space SeekRanges to corresponding rowid ranges within |segment|.
 // This wraps SegmentIterator's lookup machinery so callers outside the scan
