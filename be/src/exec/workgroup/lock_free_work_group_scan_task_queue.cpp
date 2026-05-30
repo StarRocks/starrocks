@@ -17,6 +17,7 @@
 #include <limits>
 
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
 

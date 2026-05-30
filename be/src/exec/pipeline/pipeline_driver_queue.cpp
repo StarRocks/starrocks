@@ -19,6 +19,7 @@
 #include "exec/pipeline/schedule/utils.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 

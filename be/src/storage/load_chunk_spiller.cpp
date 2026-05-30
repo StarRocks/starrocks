@@ -21,6 +21,7 @@
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"

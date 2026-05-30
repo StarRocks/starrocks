@@ -44,6 +44,7 @@
 
 namespace starrocks {
 class RuntimeFilter;
+class RuntimeFilterBuildDescriptor;
 class AggTopNRuntimeFilterBuilder;
 class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;

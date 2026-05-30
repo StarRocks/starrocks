@@ -479,6 +479,7 @@ set(EXEC_NON_PIPELINE_FILES
     jdbc/type_checker_xml_loader.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp
+    workgroup/work_group_manager.cpp
     workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
