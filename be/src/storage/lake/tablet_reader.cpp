@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_reader.h"
 
 #include <future>
+#include <map>
 #include <unordered_set>
 #include <utility>
 
@@ -39,6 +40,7 @@
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/index/secondary_sorted/index_registry.h"
@@ -427,6 +429,24 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             queried_col_ids.insert(cid);
         }
 
+        // Build a deterministic signature of the query's column predicates so
+        // morsels of the SAME query (identical predicate) share one cached
+        // lookup result, while different queries (e.g. user_id=5 vs =10) on
+        // the same .idx file get distinct cache keys. Sort by column id so
+        // unordered_map iteration order doesn't perturb the signature.
+        std::string pred_signature;
+        {
+            std::map<ColumnId, std::string> sig_by_col;
+            for (auto& [cid, preds] : params.pred_tree.get_immediate_column_predicate_map()) {
+                std::string s;
+                for (const auto* p : preds) s += p->debug_string();
+                sig_by_col.emplace(cid, std::move(s));
+            }
+            for (auto& [cid, s] : sig_by_col) {
+                pred_signature += fmt::format("c{}:{};", cid, s);
+            }
+        }
+
         // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
         // reuse it across all index files for this query.
         const std::string root = _tablet_mgr->tablet_root_location(_tablet_metadata->id());
@@ -464,10 +484,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 open_in.file_pb = file_pb;
                 open_in.source_schema = _tablet_schema;
                 ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
-                ASSIGN_OR_RETURN(auto per_seg, reader->lookup(params.pred_tree, &_obj_pool, &_stats));
+                // Cache the lookup result across morsels: key by .idx file
+                // (unique per rowset+index) + the query's predicate signature.
+                const std::string lookup_key = file_pb.file_name() + "|" + pred_signature;
+                ASSIGN_OR_RETURN(auto per_seg_ptr,
+                                 reader->lookup_cached(lookup_key, params.pred_tree, &_obj_pool, &_stats));
+                const auto& per_seg = *per_seg_ptr;
 
                 if (first_index) {
-                    merged = std::move(per_seg);
+                    merged = per_seg; // copy: the cached bitmap is shared+immutable
                     first_index = false;
                     continue;
                 }

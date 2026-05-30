@@ -93,6 +93,51 @@ std::string make_cache_key(int64_t tablet_id, const std::string& file_name) {
     return fmt::format("{}|{}", tablet_id, file_name);
 }
 
+// Process-wide cache of LOOKUP RESULTS (not just opened readers). Keyed by
+// (.idx file_name | predicate signature). A single tablet's scan fans out
+// into many morsels, each with its own TabletReader running the identical
+// lookup; this memoizes the per-segment candidate bitmap so the .idx scan
+// runs once instead of once-per-morsel.
+//
+// Each entry carries a std::once_flag so that the first morsel computes the
+// bitmap while the rest block on it, rather than all racing to compute.
+struct LookupCacheEntry {
+    std::once_flag once;
+    StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> result{nullptr};
+};
+
+class LookupResultCache {
+public:
+    static LookupResultCache& instance() {
+        static LookupResultCache c;
+        return c;
+    }
+
+    // Returns the entry for |key|, creating an empty one if absent. The
+    // caller drives computation via std::call_once on the returned entry.
+    std::shared_ptr<LookupCacheEntry> get_or_create(const std::string& key) {
+        std::lock_guard<std::mutex> l(_mu);
+        if (auto it = _index.find(key); it != _index.end()) {
+            _entries.splice(_entries.begin(), _entries, it->second);
+            return it->second->second;
+        }
+        auto entry = std::make_shared<LookupCacheEntry>();
+        _entries.emplace_front(key, entry);
+        _index[key] = _entries.begin();
+        const size_t cap = static_cast<size_t>(std::max<int64_t>(1, config::secondary_index_reader_cache_capacity));
+        while (_entries.size() > cap) {
+            _index.erase(_entries.back().first);
+            _entries.pop_back();
+        }
+        return entry;
+    }
+
+private:
+    std::mutex _mu;
+    std::list<std::pair<std::string, std::shared_ptr<LookupCacheEntry>>> _entries;
+    std::unordered_map<std::string, decltype(_entries)::iterator> _index;
+};
+
 } // namespace
 
 SecondaryIndexReader::SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr,
@@ -225,6 +270,24 @@ StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(const PredicateTree
         }
     }
     return result;
+}
+
+StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> SecondaryIndexReader::lookup_cached(
+        const std::string& cache_key, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
+        OlapReaderStatistics* stats) {
+    auto entry = LookupResultCache::instance().get_or_create(cache_key);
+    // Exactly one caller computes; the rest block here and then share the
+    // result. The computing caller pays the lookup cost in |stats|; waiters
+    // record nothing, which correctly reflects that they did no .idx work.
+    std::call_once(entry->once, [&] {
+        auto res = lookup(source_pred_tree, obj_pool, stats);
+        if (res.ok()) {
+            entry->result = std::make_shared<const PerSegmentRowidBitmap>(std::move(res).value());
+        } else {
+            entry->result = res.status();
+        }
+    });
+    return entry->result;
 }
 
 } // namespace starrocks::secondary_sorted

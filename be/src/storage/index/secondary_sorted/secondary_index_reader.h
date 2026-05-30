@@ -92,6 +92,21 @@ public:
     StatusOr<PerSegmentRowidBitmap> lookup(const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
                                            OlapReaderStatistics* stats = nullptr);
 
+    // Like lookup(), but memoizes the per-segment candidate bitmap in a
+    // process-wide cache keyed by |cache_key|. A single tablet's scan is
+    // split into many morsels (tablet-internal parallelism) and each morsel
+    // builds its own TabletReader; without this, the identical .idx scan runs
+    // once per morsel (e.g. 72x for a 100M-row tablet). The first caller
+    // computes via lookup(); the rest share the result via std::call_once.
+    // The returned bitmap is shared+immutable -- callers must copy if they
+    // need to mutate (e.g. AND-merge across multiple indexes).
+    // |cache_key| must uniquely identify (.idx file, predicate); the caller
+    // builds it from file_name + a predicate signature.
+    StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> lookup_cached(const std::string& cache_key,
+                                                                        const PredicateTree& source_pred_tree,
+                                                                        ObjectPool* obj_pool,
+                                                                        OlapReaderStatistics* stats = nullptr);
+
     const SecondaryIndexFilePB& file_pb() const { return _file_pb; }
 
 private:
