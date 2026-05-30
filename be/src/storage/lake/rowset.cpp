@@ -58,10 +58,14 @@ namespace starrocks::lake {
 
 static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
     SegmentReadStateCache cache;
-    cache.scan_range = state.pruned_scan_range;
-    cache.scan_range_includes_page_filters = state.pruned_scan_range_includes_page_filters;
-    cache.seek_range_rowid_ranges = &state.seek_ranges_rowid_bounds;
-    cache.tablet_rowid_range = &state.tablet_range_rowid_bounds;
+    if (state.has_pruned_scan_range()) {
+        cache.scan_range = state.pruned_scan_range;
+        cache.scan_range_includes_page_filters = state.pruned_scan_range_includes_page_filters;
+    }
+    if (state.has_rowid_bounds_cache()) {
+        cache.seek_range_rowid_ranges = &state.seek_ranges_rowid_bounds;
+        cache.tablet_rowid_range = &state.tablet_range_rowid_bounds;
+    }
     return cache;
 }
 
@@ -472,8 +476,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                 context.reusable_segment_iterators->resize(i + 1);
             }
             const bool reuse_segment_iter = (*context.reusable_segment_iterators)[i] != nullptr;
-            ASSIGN_OR_RETURN(auto iter, seg_ptr->new_reusable_iterator(segment_schema, schema, seg_options,
-                                                                       &(*context.reusable_segment_iterators)[i]));
+            auto res =
+                    seg_ptr->new_reusable_iterator(segment_schema, schema, seg_options,
+                                                   &(*context.reusable_segment_iterators)[i]);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
             if (options.stats != nullptr) {
                 if (reuse_segment_iter) {
                     options.stats->lake_reusable_segment_iter_reused++;
@@ -481,7 +492,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                     options.stats->lake_reusable_segment_iter_created++;
                 }
             }
-            segment_iterators.emplace_back(std::move(iter));
+            segment_iterators.emplace_back(std::move(res).value());
         } else {
             auto res = seg_ptr->new_iterator(segment_schema, seg_options);
             if (res.status().is_end_of_file()) {

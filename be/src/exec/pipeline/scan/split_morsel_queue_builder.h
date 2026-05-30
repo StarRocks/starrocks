@@ -24,5 +24,7 @@ MorselQueueBuilderPtr make_physical_split_morsel_queue_builder(Morsels&& morsels
                                                                int64_t splitted_scan_rows);
 MorselQueueBuilderPtr make_logical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
                                                               int64_t splitted_scan_rows);
+MorselQueueBuilderPtr make_lake_prepared_physical_split_morsel_queue_builder(MorselQueueBuilderPtr builder,
+                                                                             int64_t splitted_scan_rows);
 
 } // namespace starrocks::pipeline

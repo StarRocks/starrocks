@@ -340,7 +340,8 @@ bool ConnectorScanOperator::_can_reuse_chunk_source_for(Morsel& morsel) const {
         return false;
     }
     const auto* split_context = dynamic_cast<const LakeSplitContext*>(morsel.get_split_context());
-    return split_context != nullptr && split_context->is_prepared_physical_split();
+    return split_context != nullptr && split_context->is_prepared_physical_split() &&
+           split_context->rowid_range_source == LakeSplitContext::RowidRangeSource::REFINED;
 }
 
 void ConnectorScanOperator::_record_reusable_chunk_source_event(ReusableChunkSourceEvent event) {
@@ -833,6 +834,44 @@ Status ConnectorChunkSource::_report_split_source_morsel_finished_once() {
     return Status::OK();
 }
 
+Status ConnectorChunkSource::_publish_generated_split_tasks(RuntimeState* state) {
+    std::vector<ScanSplitContextPtr> split_tasks;
+    _data_source->get_split_tasks(&split_tasks);
+    if (split_tasks.empty()) {
+        return Status::OK();
+    }
+
+    auto* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
+    auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
+    VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
+                  << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+                  << ", split_tasks = " << split_tasks.size();
+
+    std::vector<MorselPtr> split_morsels;
+    if (current_morsel->is_last_split()) {
+        split_tasks.back()->set_last_split(true);
+    }
+
+    for (auto& t : split_tasks) {
+        std::unique_ptr<ScanMorsel> m =
+                std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(), *current_morsel->get_scan_range());
+        m->set_split_context(std::move(t));
+        split_morsels.emplace_back(std::move(m));
+    }
+
+    return scan_op->append_morsels(std::move(split_morsels));
+}
+
+bool ConnectorChunkSource::_should_publish_generated_split_tasks_after_open() const {
+    auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
+    if (current_morsel == nullptr) {
+        return false;
+    }
+    const auto* split_context = dynamic_cast<const LakeSplitContext*>(current_morsel->get_split_context());
+    return split_context != nullptr && split_context->is_prepared_physical_split() &&
+           split_context->rowid_range_source == LakeSplitContext::RowidRangeSource::INITIAL_COARSE;
+}
+
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
@@ -945,6 +984,9 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         VLOG_OPERATOR << build_debug_string("consume");
     }
     RETURN_IF_ERROR(_data_source->open(state));
+    if (_should_publish_generated_split_tasks_after_open()) {
+        RETURN_IF_ERROR(_publish_generated_split_tasks(state));
+    }
     if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
         _ck_acc.set_max_size(_limit);
     } else {
@@ -1032,30 +1074,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         }
         _ck_acc.reset();
 
-        // before returning eof, we can check if this chunk source generates splits.
-        std::vector<ScanSplitContextPtr> split_tasks;
-        _data_source->get_split_tasks(&split_tasks);
-        auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
-        if (split_tasks.size() != 0) {
-            VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
-                          << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
-                          << ", split_tasks = " << split_tasks.size();
-
-            std::vector<MorselPtr> split_morsels;
-
-            if (current_morsel->is_last_split()) {
-                split_tasks.back()->set_last_split(true);
-            }
-
-            for (auto& t : split_tasks) {
-                std::unique_ptr<ScanMorsel> m = std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(),
-                                                                             *current_morsel->get_scan_range());
-                m->set_split_context(std::move(t));
-                split_morsels.emplace_back(std::move(m));
-            }
-
-            RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
-        }
+        RETURN_IF_ERROR(_publish_generated_split_tasks(state));
         return Status::EndOfFile("");
     }();
 

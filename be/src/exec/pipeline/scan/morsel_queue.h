@@ -38,6 +38,7 @@ public:
         SPLIT,
         LOGICAL_SPLIT,
         PHYSICAL_SPLIT,
+        LAKE_PREPARED_PHYSICAL_SPLIT,
         BUCKET_SEQUENCE,
     };
     MorselQueue() = default;

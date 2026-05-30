@@ -14,6 +14,7 @@
 
 #include "connector/lake_connector.h"
 
+#include <atomic>
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -37,6 +38,7 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_morsel_queue_builder.h"
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -53,11 +55,13 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/vector_search_option.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/virtual_column_utils.h"
 
@@ -70,6 +74,78 @@ lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
     return query_execution_services != nullptr && query_execution_services->lake != nullptr
                    ? query_execution_services->lake->lake_tablet_manager
                    : nullptr;
+}
+
+RowidRangeOptionPtr trim_coarse_split_by_pruned_range(const pipeline::LakeSplitContext& split_context) {
+    if (split_context.rowid_range == nullptr || split_context.prepared_tablet_read_state == nullptr ||
+        split_context.prepared_segment_read_state == nullptr ||
+        !split_context.prepared_segment_read_state->has_pruned_scan_range() ||
+        split_context.rowset_index >= split_context.prepared_tablet_read_state->rowsets.size() ||
+        split_context.rowset_index >= split_context.prepared_tablet_read_state->rowset_segments.size() ||
+        split_context.segment_index >=
+                split_context.prepared_tablet_read_state->rowset_segments[split_context.rowset_index].size()) {
+        return split_context.rowid_range;
+    }
+
+    const auto& rowset = split_context.prepared_tablet_read_state->rowsets[split_context.rowset_index];
+    const auto& segment =
+            split_context.prepared_tablet_read_state
+                    ->rowset_segments[split_context.rowset_index][split_context.segment_index];
+    if (rowset == nullptr || segment == nullptr) {
+        return split_context.rowid_range;
+    }
+
+    auto split = split_context.rowid_range->get_segment_rowid_range(rowset.get(), segment.get());
+    if (split.row_id_range == nullptr) {
+        return split_context.rowid_range;
+    }
+
+    SparseRange<> trimmed_scan_range = *split.row_id_range;
+    trimmed_scan_range &= *split_context.prepared_segment_read_state->pruned_scan_range;
+    auto trimmed_rowid_range = std::make_shared<RowidRangeOption>();
+    if (trimmed_scan_range.span_size() > 0) {
+        trimmed_rowid_range->add(rowset.get(), segment.get(),
+                                 std::make_shared<SparseRange<>>(std::move(trimmed_scan_range)),
+                                 split.is_first_split_of_segment);
+    }
+    return trimmed_rowid_range;
+}
+
+bool is_pre_refinement_coarse_split(const pipeline::LakeSplitContext& split_context) {
+    return split_context.rowid_range_source == pipeline::LakeSplitContext::RowidRangeSource::PRE_REFINEMENT_COARSE;
+}
+
+bool is_initial_coarse_split(const pipeline::LakeSplitContext& split_context) {
+    return split_context.rowid_range_source == pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE;
+}
+
+bool has_prepared_segment_context(const pipeline::LakeSplitContext& split_context) {
+    return split_context.prepared_tablet_read_state != nullptr && split_context.prepared_segment_read_state != nullptr;
+}
+
+bool can_reuse_prepared_segment_for_child_split(const pipeline::LakeSplitContext& split_context) {
+    if (!has_prepared_segment_context(split_context)) {
+        return false;
+    }
+    if (!is_pre_refinement_coarse_split(split_context)) {
+        return true;
+    }
+    return split_context.prepared_segment_read_state->has_rowid_bounds_cache();
+}
+
+RowidRangeOptionPtr rowid_range_for_child_split(const pipeline::LakeSplitContext& split_context,
+                                                bool use_prepared_state) {
+    return use_prepared_state && is_pre_refinement_coarse_split(split_context)
+                   ? trim_coarse_split_by_pruned_range(split_context)
+                   : split_context.rowid_range;
+}
+
+void disable_prepared_runtime_filter_dependent_cache(const pipeline::ScanSplitContext* split_context) {
+    const auto* lake_split_context = dynamic_cast<const pipeline::LakeSplitContext*>(split_context);
+    if (lake_split_context == nullptr || lake_split_context->prepared_tablet_read_state == nullptr) {
+        return;
+    }
+    lake_split_context->prepared_tablet_read_state->disable_runtime_filter_dependent_cache();
 }
 
 } // namespace
@@ -619,10 +695,13 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
 
 void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context,
                                                bool use_prepared_state) {
+    _params.refine_initial_coarse_split_and_append_refined_tasks = false;
     if (_provider->could_split_physically()) {
-        _params.rowid_range_option = split_context.rowid_range;
+        _params.rowid_range_option = rowid_range_for_child_split(split_context, use_prepared_state);
         _params.short_key_ranges_option = nullptr;
-        if (!use_prepared_state) {
+        const bool use_prepared_segment_read =
+                use_prepared_state && can_reuse_prepared_segment_for_child_split(split_context);
+        if (!use_prepared_segment_read) {
             _params.prepared_tablet_read_state = nullptr;
             _params.prepared_segment_read_state = nullptr;
             _params.prepared_rowset_index = 0;
@@ -633,6 +712,8 @@ void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext&
             _params.prepared_rowset_index = split_context.rowset_index;
             _params.prepared_segment_index = split_context.segment_index;
         }
+        _params.refine_initial_coarse_split_and_append_refined_tasks =
+                use_prepared_segment_read && is_initial_coarse_split(split_context);
     } else {
         _params.rowid_range_option = nullptr;
         _params.short_key_ranges_option = split_context.short_key_range;
@@ -771,6 +852,7 @@ void LakeDataSource::reset_reader_before_runtime_filter_reinit(RuntimeState* sta
 
 Status LakeDataSource::reinit_reader_with_late_runtime_filters(RuntimeState* state,
                                                                RuntimeFilterSnapshots runtime_filter_snapshots) {
+    disable_prepared_runtime_filter_dependent_cache(_split_context);
     reset_reader_before_runtime_filter_reinit(state);
     RETURN_IF_ERROR(rebuild_scan_conjuncts(state));
     RETURN_IF_ERROR(init_tablet_reader(state, false /* use_prepared_state */));
@@ -799,6 +881,9 @@ const pipeline::LakeSplitContext* LakeDataSource::reusable_child_context(pipelin
 
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
     if (split_context == nullptr || !split_context->is_prepared_physical_split()) {
+        return nullptr;
+    }
+    if (split_context->rowid_range_source != pipeline::LakeSplitContext::RowidRangeSource::REFINED) {
         return nullptr;
     }
     return split_context;
@@ -1620,6 +1705,10 @@ StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_r
     builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
     if (_could_split) {
         builder->set_has_more_from_split(true);
+    }
+    if (_could_split && _could_split_physically && _enable_lake_prepared_physical_split_scan) {
+        builder = pipeline::make_lake_prepared_physical_split_morsel_queue_builder(std::move(builder),
+                                                                                  splitted_scan_rows);
     }
     return builder;
 }

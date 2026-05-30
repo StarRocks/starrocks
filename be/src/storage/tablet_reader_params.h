@@ -100,6 +100,7 @@ struct TabletReaderParams {
     std::shared_ptr<lake::PreparedSegmentReadState> prepared_segment_read_state = nullptr;
     size_t prepared_rowset_index = std::numeric_limits<size_t>::max();
     size_t prepared_segment_index = std::numeric_limits<size_t>::max();
+    bool refine_initial_coarse_split_and_append_refined_tasks = false;
 
     bool sorted_by_keys_per_tablet = false;
     RuntimeScanRangePruner runtime_range_pruner;

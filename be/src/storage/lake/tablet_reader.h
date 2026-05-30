@@ -112,10 +112,14 @@ private:
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
     Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
-    Status build_prepared_physical_split_tasks(const TabletReaderParams& params,
-                                               const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+    Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
+                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+    Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
+                                                               RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
+    Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
+                                              LakeIOOptions* lake_io_opts);
 
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
