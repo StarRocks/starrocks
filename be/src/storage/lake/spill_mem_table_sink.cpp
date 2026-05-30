@@ -150,7 +150,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
 
     // Lazy token creation: may already exist from eager merge in flush_chunk()
     if (config::enable_load_spill_parallel_merge) {
-        _pipeline_merge_context->init_parallel_merge();
+        _pipeline_merge_context->create_thread_pool_token();
     }
 
     // FINAL MERGE PHASE: Merge all remaining spilled blocks to final tablet segments.
