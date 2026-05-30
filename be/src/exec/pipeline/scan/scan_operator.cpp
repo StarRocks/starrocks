@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
+#include <fmt/printf.h>
+
 #include "base/concurrency/race_detect.h"
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"

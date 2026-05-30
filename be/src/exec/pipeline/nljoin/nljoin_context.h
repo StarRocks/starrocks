@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/serde.h"

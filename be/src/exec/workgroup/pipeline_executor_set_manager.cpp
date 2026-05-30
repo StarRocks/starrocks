@@ -14,7 +14,8 @@
 
 #include "exec/workgroup/pipeline_executor_set_manager.h"
 
-#include "work_group.h"
+#include "common/thread/thread.h"
+#include "exec/workgroup/work_group_manager.h"
 
 namespace starrocks::workgroup {
 

@@ -35,6 +35,7 @@ using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
 using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 
 class WorkGroupManager;
+class DefaultWorkGroupInitialization;
 class ScanExecutor;
 
 struct RunningQueryToken;

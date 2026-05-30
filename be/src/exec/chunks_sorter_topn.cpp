@@ -15,6 +15,7 @@
 #include "chunks_sorter_topn.h"
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
 #include "base/orlp/pdqsort.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"

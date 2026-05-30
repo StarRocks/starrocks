@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <fmt/printf.h>
+
 #include <algorithm>
 #include <memory>
 #include <random>

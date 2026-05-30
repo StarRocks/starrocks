@@ -29,6 +29,7 @@
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"

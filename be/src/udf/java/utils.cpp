@@ -23,6 +23,7 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
