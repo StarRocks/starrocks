@@ -10,6 +10,16 @@ index cb7b82c..a82cf95 100644
  
  struct CompactionIterationStats {
    // Compaction statistics
+diff --git a/db/blob/blob_file_meta.h b/db/blob/blob_file_meta.h
+index 247f490..3a2a1e2 100644
+--- a/db/blob/blob_file_meta.h
++++ b/db/blob/blob_file_meta.h
+@@ -8,4 +8,5 @@
+ #include <cassert>
++#include <cstdint>
+ #include <iosfwd>
+ #include <memory>
+ #include <string>
 diff --git a/db/kv_checksum.h b/db/kv_checksum.h
 index ba15dca..5372f61 100644
 --- a/db/kv_checksum.h
@@ -100,6 +110,14 @@ index df2a744..30e3d88 100644
  #include "rocksdb/status.h"
  
  namespace ROCKSDB_NAMESPACE {
+diff --git a/include/rocksdb/sst_partitioner.h b/include/rocksdb/sst_partitioner.h
+index 33e9062..080f0c6 100644
+--- a/include/rocksdb/sst_partitioner.h
++++ b/include/rocksdb/sst_partitioner.h
+@@ -8,2 +8,3 @@
+ #include <memory>
++#include <cstdint>
+ #include <string>
 diff --git a/table/block_based/data_block_hash_index.h b/table/block_based/data_block_hash_index.h
 index f356395..6eaf717 100644
 --- a/table/block_based/data_block_hash_index.h
@@ -137,6 +155,15 @@ index 5fd5295..8fd5bf3 100644
      Slice tmp_key;
      GetFixed32(&cfids_payload, &tmp_cfid);
      GetLengthPrefixedSlice(&keys_payload, &tmp_key);
+diff --git a/util/string_util.cc b/util/string_util.cc
+index 6acb9de..8e6b6f5 100644
+--- a/util/string_util.cc
++++ b/util/string_util.cc
+@@ -121,3 +121,3 @@ std::string NumberToString(uint64_t num) {
+ std::string NumberToHumanString(int64_t num) {
+-  char buf[19];
++  char buf[32];
+   int64_t absnum = num < 0 ? -num : num;
 diff --git a/util/string_util.h b/util/string_util.h
 index 195ae8b..8af0180 100644
 --- a/util/string_util.h

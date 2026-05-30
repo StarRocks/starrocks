@@ -187,8 +187,10 @@ starrocks_validate_darwin_thirdparty() {
         "libk5crypto.dylib"
         "libgssapi_krb5.dylib"
         "libsasl2.dylib"
-        "libxml2.dylib"
     )
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" != "1" ]]; then
+        required_darwin_dylibs+=("libxml2.dylib")
+    fi
     local required_darwin_dylib=""
     for required_darwin_dylib in "${required_darwin_dylibs[@]}"; do
         if [[ ! -e "${tp_installed}/lib/${required_darwin_dylib}" &&

@@ -2,43 +2,55 @@ name: Nix Flake
 
 on:
   workflow_dispatch:
+    inputs:
+      full-build:
+        description: Build the full .#starrocks package derivation
+        required: false
+        type: boolean
+        default: false
+      publish-cache:
+        description: Build .#starrocks and publish it to Cachix using the publish-nix environment
+        required: false
+        type: boolean
+        default: false
   pull_request:
     paths:
+      - ".envrc"
       - ".github/workflows/nix-flake.yml"
-      - "build-support/build_helpers.sh"
-      - "build-support/darwin_build_env.sh"
+      - "be/cmake_modules/ThirdParty.cmake"
+      - "build-support/**"
       - "flake.lock"
       - "flake.nix"
       - "nix/**"
+      - "thirdparty/**"
   push:
     branches:
       - main
+      - 2026-05-28-nix-flake-devshell
     paths:
+      - ".envrc"
       - ".github/workflows/nix-flake.yml"
-      - "build-support/build_helpers.sh"
-      - "build-support/darwin_build_env.sh"
+      - "be/cmake_modules/ThirdParty.cmake"
+      - "build-support/**"
       - "flake.lock"
       - "flake.nix"
       - "nix/**"
+      - "thirdparty/**"
 
 permissions:
   contents: read
 
+env:
+  NIX_BUILD_FLAGS: --print-build-logs --cores 0 --max-jobs 1
+
 jobs:
   check:
-    name: ${{ matrix.system }}
+    name: check ${{ matrix.system }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - system: x86_64-linux
-            runner: ubuntu-24.04
-          - system: aarch64-linux
-            runner: ubuntu-24.04-arm
-          - system: aarch64-darwin
-            runner: macos-14
+      matrix: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-latest"}]}' || '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"}]}') }}
 
     steps:
       - uses: actions/checkout@v6
@@ -53,5 +65,140 @@ jobs:
       - name: Check flake
         run: nix flake check --print-build-logs
 
+      - name: Check package derivation
+        run: nix eval --raw ".#packages.${{ matrix.system }}.starrocks.name"
+
+      - name: Check third-party layer derivations
+        run: |
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-foundation.name"
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-rpc.name"
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-formats.name"
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-leaf.name"
+
+      - name: Check Maven dependency derivation
+        run: nix eval --raw ".#packages.${{ matrix.system }}.starrocks-maven-deps.name"
+
       - name: Check development shell
         run: nix develop --command starrocks-build-env --print
+
+      - name: Check backend development shell derivation
+        run: nix eval --raw ".#devShells.${{ matrix.system }}.be.name"
+
+  build-package:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs['full-build'])
+      || (github.event_name == 'pull_request' && github.head_ref == '2026-05-28-nix-flake-devshell')
+    name: build ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-latest"}]}' || '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"}]}') }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          determinate: false
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Build package
+        run: |
+          read -r -a nix_build_flags <<< "$NIX_BUILD_FLAGS"
+          nix build .#starrocks-thirdparty "${nix_build_flags[@]}"
+          nix build .#starrocks "${nix_build_flags[@]}"
+
+  publish-cache:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs['publish-cache'])
+    name: publish ${{ matrix.system }}
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    environment: publish-nix
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-latest"}]}' || '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"}]}') }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          determinate: false
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Check Cachix configuration
+        id: cache
+        env:
+          CACHIX_CACHE_NAME: ${{ secrets.CACHIX_CACHE_NAME }}
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          PUBLISH_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish-cache || false }}
+        run: |
+          if [[ -n "$CACHIX_CACHE_NAME" && -n "$CACHIX_AUTH_TOKEN" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$PUBLISH_CACHE" == "true" ]]; then
+            echo "::error::CACHIX_CACHE_NAME and CACHIX_AUTH_TOKEN are required for manual cache publishing"
+            exit 1
+          fi
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            echo "::error::CACHIX_CACHE_NAME and CACHIX_AUTH_TOKEN are required for push cache publishing"
+            exit 1
+          fi
+
+          echo "::notice::Skipping Cachix publish because cache credentials are not configured"
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Cachix
+        if: steps.cache.outputs.enabled == 'true'
+        uses: cachix/cachix-action@v17
+        with:
+          name: ${{ secrets.CACHIX_CACHE_NAME }}
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build and push third-party layers
+        if: steps.cache.outputs.enabled == 'true'
+        env:
+          CACHIX_CACHE_NAME: ${{ secrets.CACHIX_CACHE_NAME }}
+        run: |
+          read -r -a nix_build_flags <<< "$NIX_BUILD_FLAGS"
+          for package in \
+            starrocks-thirdparty-foundation \
+            starrocks-thirdparty-rpc \
+            starrocks-thirdparty-formats \
+            starrocks-thirdparty-leaf \
+            starrocks-thirdparty
+          do
+            out_link="result-${{ matrix.system }}-${package}"
+            nix build ".#packages.${{ matrix.system }}.${package}" \
+              "${nix_build_flags[@]}" \
+              --out-link "$out_link"
+            nix path-info --recursive "$(readlink "$out_link")" \
+              | xargs cachix push "$CACHIX_CACHE_NAME"
+          done
+
+      - name: Build package
+        if: steps.cache.outputs.enabled == 'true'
+        run: |
+          read -r -a nix_build_flags <<< "$NIX_BUILD_FLAGS"
+          nix build ".#packages.${{ matrix.system }}.starrocks" \
+            "${nix_build_flags[@]}" \
+            --out-link "result-${{ matrix.system }}"
+
+      - name: Push package output
+        if: steps.cache.outputs.enabled == 'true'
+        env:
+          CACHIX_CACHE_NAME: ${{ secrets.CACHIX_CACHE_NAME }}
+        run: |
+          nix path-info --recursive "$(readlink "result-${{ matrix.system }}")" \
+            | xargs cachix push "$CACHIX_CACHE_NAME"

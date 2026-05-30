@@ -299,7 +299,11 @@ verify_env() {
 
     # Check key libraries
     if [[ ! -d "$OPENSSL_ROOT_DIR" ]]; then
-        log_error "OpenSSL not found. Please run: brew install openssl@3"
+        if [[ "${STARROCKS_USE_NIX_DEPS}" == "1" ]]; then
+            log_error "OPENSSL_ROOT_DIR points to a missing Nix directory: $OPENSSL_ROOT_DIR"
+        else
+            log_error "OpenSSL not found. Please run: brew install openssl@3"
+        fi
         ((errors++))
     fi
 

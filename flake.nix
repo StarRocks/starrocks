@@ -9,6 +9,8 @@
     { self, nixpkgs }:
     let
       lib = nixpkgs.lib;
+      revision = self.shortRev or self.dirtyShortRev or "unknown";
+      version = "main-${revision}";
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -24,35 +26,47 @@
             }
           )
         );
+      mkEnv =
+        pkgs:
+        import ./nix/dev-env.nix {
+          inherit pkgs version;
+          src = self.outPath;
+          commitHash = revision;
+        };
+      forAllSystemsWithEnv =
+        f:
+        forAllSystems (
+          pkgs:
+          let
+            env = mkEnv pkgs;
+          in
+          f pkgs env
+        );
     in
     {
-      packages = forAllSystems (
-        pkgs:
-        let
-          env = import ./nix/dev-env.nix { inherit pkgs; };
-        in
-        {
-          default = env.buildWrapper;
+      packages = forAllSystemsWithEnv (
+        pkgs: env: {
+          default = env.starrocks;
+          starrocks = env.starrocks;
           starrocks-build-env = env.buildWrapper;
+          starrocks-maven-deps = env.mavenDeps;
+          starrocks-thirdparty = env.starrocksThirdparty;
+          starrocks-thirdparty-foundation = env.starrocksThirdpartyFoundation;
+          starrocks-thirdparty-rpc = env.starrocksThirdpartyRpc;
+          starrocks-thirdparty-formats = env.starrocksThirdpartyFormats;
+          starrocks-thirdparty-leaf = env.starrocksThirdpartyLeaf;
         }
       );
 
-      devShells = forAllSystems (
-        pkgs:
-        let
-          env = import ./nix/dev-env.nix { inherit pkgs; };
-        in
-        {
+      devShells = forAllSystemsWithEnv (
+        pkgs: env: {
           default = env.devShell;
+          be = env.beDevShell;
         }
       );
 
-      checks = forAllSystems (
-        pkgs:
-        let
-          env = import ./nix/dev-env.nix { inherit pkgs; };
-        in
-        {
+      checks = forAllSystemsWithEnv (
+        pkgs: env: {
           starrocks-nix-env =
             pkgs.runCommand "starrocks-nix-env-check"
               {
