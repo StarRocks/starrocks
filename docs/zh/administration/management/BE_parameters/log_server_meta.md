@@ -30,7 +30,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [日志](#日志)
 - [服务器](#服务器)
 - [元数据和集群管理](#元数据和集群管理)

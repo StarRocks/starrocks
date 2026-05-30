@@ -234,6 +234,7 @@ public:
     DEFINE_VECTORIZED_FN(iceberg_bucket_string);
     DEFINE_VECTORIZED_FN(iceberg_bucket_date);
     DEFINE_VECTORIZED_FN(iceberg_bucket_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_timestamptz_datetime);
     template <typename T>
     static vector<uint8_t> int_to_byte_array(T value);
     DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_bucket_decimal);

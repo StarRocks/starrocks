@@ -26,7 +26,7 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -37,7 +37,8 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -45,7 +46,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
-#include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -462,6 +462,23 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
+    // Contract: callers downstream (SegmentPKIterator + LakePrimaryIndex
+    // publish) require each emitted chunk's physical rowids to form a single
+    // contiguous run. The only filter applied below is the optional
+    // tablet_range over a PK-sorted segment, which preserves contiguity. Any
+    // future change adding delete vector, row predicates, runtime filters,
+    // rowid_range_option, or sparse ranges/short_key_ranges would silently
+    // break the downstream `base + i` arithmetic. For delvec-aware reads,
+    // use get_each_segment_iterator_with_delvec instead.
+    DCHECK(seg_options.delvec_loader == nullptr);
+    DCHECK(seg_options.delete_predicates.empty());
+    DCHECK(seg_options.pred_tree.empty());
+    DCHECK(seg_options.pred_tree_for_zone_map.empty());
+    DCHECK(seg_options.runtime_filter_preds.empty());
+    DCHECK(seg_options.rowid_range_option == nullptr);
+    DCHECK(seg_options.ranges.empty());
+    DCHECK(seg_options.short_key_ranges.empty());
+
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
         seg_options.tablet_range = std::nullopt;
@@ -486,7 +503,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_for_iter_with_delvec_us");
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
@@ -713,7 +733,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = GlobalEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load segment serially
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

@@ -30,9 +30,13 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "fs/fs_util.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
@@ -62,6 +66,9 @@ ObjectPool* RuntimeStateHelper::global_obj_pool(const RuntimeState* state) {
 }
 
 Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
+    if (state->_exec_env == nullptr || state->_exec_env->load_path_mgr() == nullptr) {
+        return Status::InternalError("ExecEnv or load_path_mgr is not initialized");
+    }
     RETURN_IF_ERROR(state->_exec_env->load_path_mgr()->get_load_error_file_name(state->_fragment_instance_id,
                                                                                 &state->_error_log_file_path));
     std::string error_log_absolute_path =
@@ -73,23 +80,6 @@ Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
         LOG(WARNING) << error_msg.str();
         return Status::InternalError(error_msg.str());
     }
-    return Status::OK();
-}
-
-Status RuntimeStateHelper::create_rejected_record_file(RuntimeState* state) {
-    auto rejected_record_absolute_path = state->_exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
-            "", state->_db, state->_load_label, state->_txn_id, state->_fragment_instance_id);
-    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
-
-    state->_rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
-    if (!state->_rejected_record_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
-    }
-    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
-    state->_rejected_record_file_path = rejected_record_absolute_path;
     return Status::OK();
 }
 
@@ -135,28 +125,72 @@ void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std
 
 void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, const std::string& record,
                                                         const std::string& error_msg, const std::string& source) {
-    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
-    // Only load job need to write rejected record
+    // Only load jobs produce rejected records. The legacy tab-delimited
+    // BE-local file is gone; this helper now routes every call site
+    // directly at the Phase 2 RejectedRecordWriter, which the Phase 3
+    // sync daemon ships to _statistics_.rejected_records.
     if (state->_query_options.query_type != TQueryType::LOAD) {
         return;
     }
-
-    // If file havn't been opened, open it here
-    if (state->_rejected_record_file == nullptr) {
-        Status status = RuntimeStateHelper::create_rejected_record_file(state);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-            if (state->_rejected_record_file != nullptr) {
-                state->_rejected_record_file->close();
-                state->_rejected_record_file.reset();
-            }
-            return;
-        }
+    auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+    if (writer == nullptr) {
+        return;
     }
-    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+    // The per-load rejected-row counter is now maintained inside the
+    // writer (RejectedRecordWriter::append_serialized). That keeps
+    // counting consistent across every entry point: legacy helper,
+    // ORC's capture_rejected_rows_before_filter, Parquet's
+    // ArrowConvertContext, and future direct callers all advance the
+    // same counter. Double-counting from the helper would make the
+    // `log_rejected_record_num` cap fire at half the configured limit
+    // for legacy call sites while leaving ORC unbounded.
 
-    // TODO(meegoo): custom delimiter
-    (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+    std::string source_info_json = build_rejected_record_source_info(state->_query_options, source);
+    writer->append_raw(record, /*error_code=*/"REJECTED", error_msg, /*error_column=*/"", source_info_json);
+}
+
+std::string RuntimeStateHelper::build_rejected_record_source_info(const TQueryOptions& query_options,
+                                                                  const std::string& source) {
+    // Routine load tasks pre-populate the kafka anchor at submit_task
+    // time -- prefer it because `source` here would otherwise be the
+    // SequentialFile placeholder name ("stream-load-pipe") which is
+    // useless to operators. The thrift field carries pre-serialized JSON
+    // built by RoutineLoadTaskExecutor; we forward it verbatim.
+    if (query_options.__isset.routine_load_source_info && !query_options.routine_load_source_info.empty()) {
+        return query_options.routine_load_source_info;
+    }
+    if (source.empty()) {
+        return std::string();
+    }
+    // Wrap the free-form `source` string (typically a file path) in JSON
+    // so the system table column always carries valid JSON; rapidjson
+    // escapes embedded quotes / backslashes correctly.
+    rapidjson::Document d;
+    d.SetObject();
+    auto& alloc = d.GetAllocator();
+    d.AddMember("source", rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
+                alloc);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+    d.Accept(w);
+    return std::string(buf.GetString(), buf.GetSize());
+}
+
+RejectedRecordWriter* RuntimeStateHelper::rejected_record_writer(RuntimeState* state) {
+    if (state == nullptr) {
+        return nullptr;
+    }
+    // Only LOAD queries produce rejected records; short-circuit to avoid
+    // allocating a writer for pure SELECT queries that happen to set
+    // log_rejected_record_num.
+    if (state->_query_options.query_type != TQueryType::LOAD) {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
+    if (state->_rejected_record_writer == nullptr) {
+        state->_rejected_record_writer = std::make_shared<RejectedRecordWriter>(state);
+    }
+    return state->_rejected_record_writer.get();
 }
 
 void RuntimeStateHelper::update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params) {

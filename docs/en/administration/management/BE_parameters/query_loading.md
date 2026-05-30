@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Query and Loading"
+description: "BE configuration parameters for query execution and data loading."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -33,7 +34,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Query](#query)
 - [Loading and unloading](#loading-and-unloading)
 
@@ -610,6 +611,15 @@ This topic introduces the following types of FE configurations:
 - Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
 - Introduced in: -
 
+### jvm_call_thread_pool_size
+
+- Default: 1
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Introduced in: -
+
 ### udf_thread_pool_size
 
 - Default: 1
@@ -627,6 +637,42 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
+
+### enable_vector_adaptive_search
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for adaptive `ef_search` scaling on HNSW vector indexes. When enabled, BE scales the effective `ef_search` per segment based on its row count, so recall is preserved when compaction enlarges segments without forcing manual `ef_search` retuning. Set to `false` to disable scaling and use the user-supplied `ef_search` literally.
+- Introduced in: -
+
+### vector_adaptive_ef_alpha
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Growth slope for adaptive `ef_search`. The scaling factor is `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)`. Higher values raise recall more aggressively at the cost of higher CPU per query; lower values trim CPU at the cost of recall on large segments. Effective only when `enable_vector_adaptive_search` is true and `segment_rows > vector_adaptive_ef_baseline_rows`.
+- Introduced in: -
+
+### vector_adaptive_ef_baseline_rows
+
+- Default: 300000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Segment row count below which adaptive `ef_search` does not scale. Segments with fewer rows than this threshold use the user-supplied `ef_search` directly; segments above this threshold receive a higher effective `ef_search` to compensate for the larger HNSW graph. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
+### vector_adaptive_ef_cap
+
+- Default: 8.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Upper bound on the adaptive `ef_search` multiplier. Caps the worst-case CPU and latency cost of the scaling formula even on extremely large segments. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
 
 ### vector_chunk_size
 
@@ -738,6 +784,69 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Hours
 - Is mutable: Yes
 - Description: The time for which data loading logs are reserved.
+- Introduced in: -
+
+### enable_rejected_record_sync
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Feature flag for the rejected records sync daemon. When true, the BE-resident `RejectedRecordSyncDaemon` scans per-fragment JSON Lines files produced by `RejectedRecordWriter` and batch-ships them to the `_statistics_.rejected_records` system table via merge-commit Stream Load. Defaults to false during the phased rollout so a cluster upgrading to a binary that contains the daemon does not start writing to the new system table until the operator explicitly opts in.
+- Introduced in: -
+
+### rejected_record_sync_interval_sec
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How often the `RejectedRecordSyncDaemon` wakes to scan local JSON Lines files. A tick with no new files is a no-op. Smaller values reduce the latency with which rejected rows become queryable in `_statistics_.rejected_records`; larger values reduce filesystem pressure.
+- Introduced in: -
+
+### rejected_record_sync_max_batch_rows
+
+- Default: 10000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Row cap on a single merge-commit Stream Load batch. Enforced per-line while the daemon concatenates files, so a single giant file still obeys the cap; larger backlogs are split across consecutive ticks. The cap bounds Stream Load transaction size so one oversized flush cannot back-pressure unrelated loads.
+- Introduced in: -
+
+### rejected_record_sync_max_batch_bytes
+
+- Default: 33554432 (32 MiB)
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Byte cap on the Stream Load payload the daemon assembles per post. Enforced together with `rejected_record_sync_max_batch_rows` so loads with very wide rows or very long error messages cannot build a multi-gigabyte payload in memory. When the cap is hit mid-file the daemon commits the current batch and starts a fresh payload; the file is retained until all of its rows have shipped. Keep at or below the FE's `streaming_load_max_mb` to avoid FE-side rejection.
+- Introduced in: -
+
+### rejected_record_sync_max_backoff_sec
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Upper bound on the tick interval when `post_to_stream_load` has been failing persistently. The daemon doubles its sleep after every failed tick (`rejected_record_sync_interval_sec << consecutive_failures`) until this cap is reached, then holds there until a tick succeeds. Prevents a multi-hour FE outage from producing one log line + one `_sync_failures` increment every `rejected_record_sync_interval_sec` seconds. A `Uninitialized` status ("master FE not yet known") never advances the backoff counter.
+- Introduced in: -
+
+### rejected_record_local_retention_hours
+
+- Default: 24
+- Type: Int
+- Unit: Hours
+- Is mutable: Yes
+- Description: Maximum age for per-fragment JSON Lines files before the daemon garbage-collects them. Intended as a last-resort cap: sync failures normally retry on every tick, but a misconfigured cluster (FE unreachable, system table dropped, auth broken) cannot slowly fill the store path when this setting is in effect.
+- Introduced in: -
+
+### rejected_record_sync_post_timeout_sec
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Per-request timeout for the daemon's Stream Load PUT to the FE. Merge-commit batches can briefly sit in the FE-side commit queue while other BEs' concurrent posts coalesce into the same transaction, so this is intentionally set looser than the default query timeout.
 - Introduced in: -
 
 ### load_process_max_memory_limit_bytes

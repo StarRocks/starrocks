@@ -73,6 +73,8 @@ public:
         }
     }
 
+    bool only_nulls() const override { return _is_default_value_null; }
+
     Status init(const ColumnIteratorOptions& opts) override;
 
     Status seek_to_first() override {

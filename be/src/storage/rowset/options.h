@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include "io/core/seekable_input_stream.h"
+#include "io/seekable_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/page_handle.h"

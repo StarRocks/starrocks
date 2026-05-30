@@ -14,7 +14,7 @@ displayed_sidebar: docs
 | TASK_NAME     | 任务的名称。                                                 |
 | CREATE_TIME   | 任务创建的时间。                                             |
 | FINISH_TIME   | 任务完成的时间。                                             |
-| STATE         | 任务的状态，包括 `PENDING`（待处理）、`RUNNING`（运行中）、`FAILED`（失败）和 `SUCCESS`（成功）。从 v3.1.12 开始，新增了一个专门用于物化视图刷新任务的状态 `MERGED`。当提交新的刷新任务时，如果旧任务仍在 PENDING 队列中，这些任务将被合并，并保持其优先级属性。 |
+| STATE         | 任务的状态，包括 `PENDING`（待处理）、`RUNNING`（运行中）、`FAILED`（失败）、`SUCCESS`（成功）、`MERGED`（合并）和 `SKIPPED`（跳过）。从 v3.1.12 开始，新增了一个专门用于物化视图刷新任务的状态 `MERGED`。当提交新的刷新任务时，如果旧任务仍在 PENDING 队列中，这些任务将被合并，并保持其优先级属性。`MERGED` 用于物化视图刷新任务。当提交新的刷新任务时，如果旧任务仍处于待处理队列中，这些任务将被合并，且其优先级将得以保留。`SKIPPED` 用于物化视图刷新任务。如果未检测到基表分区上的数据发生变化，则会跳过对应物化视图分区的刷新操作。 |
 | CATALOG       | 任务所属的 Catalog。                                         |
 | DATABASE      | 任务所属的数据库。                                           |
 | DEFINITION    | 任务的 SQL 定义。                                            |

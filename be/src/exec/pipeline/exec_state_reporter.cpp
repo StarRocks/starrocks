@@ -25,13 +25,13 @@
 #include "common/config_rpc_client_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -119,9 +119,10 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
-        if (!runtime_state->get_rejected_record_file_path().empty()) {
-            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
-        }
+        // Legacy rejected-record file removed; see
+        // RuntimeStateHelper::append_rejected_record_to_file for the
+        // writer-based replacement. The `rejected_record_path` Thrift
+        // field is kept for wire-compat but is no longer populated.
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();

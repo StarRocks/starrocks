@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/observer.h"
+#include "compute_env/pipeline/observer.h"
 
 #include <unistd.h>
 
@@ -26,6 +26,7 @@
 #include "butil/time.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/pipeline/pipeline_timer.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
@@ -36,7 +37,6 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
@@ -126,7 +126,7 @@ TEST(TimerThreadTest, test) {
         // schedule a expired task
         ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
-        noop->unschedule(&timer);
+        noop->unschedule_and_join(&timer);
         ASSERT_TRUE(changed);
 
         timespec s2 = abstime;
@@ -135,7 +135,7 @@ TEST(TimerThreadTest, test) {
         changed = false;
         ASSERT_OK(timer.schedule(noop.get(), s2));
         sleep(1);
-        noop->unschedule(&timer);
+        noop->unschedule_and_join(&timer);
         ASSERT_FALSE(changed);
     }
     {
@@ -160,7 +160,7 @@ TEST(TimerThreadTest, test) {
         ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
         // will wait util timer finished
-        noop->unschedule(&timer);
+        noop->unschedule_and_join(&timer);
         ASSERT_TRUE(changed);
     }
 }

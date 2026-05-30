@@ -17,7 +17,6 @@
 #include <atomic>
 #include <mutex>
 
-#include "agent/agent_server.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
@@ -28,17 +27,19 @@
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "gen_cpp/Types_constants.h"
-#include "gen_cpp/Types_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
 #include "replication_txn_manager.h"
-#include "runtime/exec_env.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
+#include "storage/tablet_schema.h"
+#include "types/logical_type.h"
 #include "util/dynamic_cache.h"
 #include "vacuum.h"
 
@@ -109,7 +110,8 @@ std::string remove_db_id_component(const std::string& path, int64_t db_id) {
     return path.substr(0, pos + 1) + path.substr(pos + db_pattern.length());
 }
 
-Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
+Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
+                                                                ThreadPool* replicate_file_thread_pool) {
     auto src_tablet_id = request.src_tablet_id;
     auto src_visible_version = request.src_visible_version;
     auto src_db_id = request.src_db_id;
@@ -251,8 +253,16 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = lake::ReplicationTxnManager::build_file_converters(_tablet_manager, request, filename_map,
-                                                                              column_unique_id_map, files_to_delete);
+    // Compute PK encoding transcode context for .del files. prepare_del_transcode_context
+    // validates PK column count/type match and rejects V2→V1 on byte-incompatible PK shapes.
+    // For V1→V2, it returns the transcode context so build_file_converters can wire up
+    // DelFileStreamConverter for .del files.
+    ASSIGN_OR_RETURN(auto del_transcode_ctx,
+                     lake::ReplicationTxnManager::prepare_del_transcode_context(*target_tablet_meta, source_schema_pb));
+
+    auto file_converters = lake::ReplicationTxnManager::build_file_converters(
+            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
+            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
 
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;
@@ -262,7 +272,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     watch.start();
     std::atomic<size_t> total_file_size{0};
 
-    ThreadPool* repl_pool = get_replicate_file_thread_pool();
+    ThreadPool* repl_pool = replicate_file_thread_pool;
     bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
     std::mutex mu;
     std::mutex* shared_mutex = nullptr;
@@ -297,6 +307,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             src_file_size = size_it->second;
         }
         bool is_seg = is_segment(src_file_name);
+        // Segments and .del files go through download_lake_file_with_converter + file_converters,
+        // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
+        bool use_converter = is_seg || is_del(src_file_name);
         const auto& target_file_name = pair.second.first;
         FileEncryptionInfo encryption_info;
         if (config::enable_transparent_data_encryption) {
@@ -304,7 +317,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
 
         tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
-                            is_seg, encryption_info]() -> Status {
+                            is_seg, use_converter, encryption_info]() -> Status {
             // Fast cancel: check right before each file copy starts.
             if (txn_id < get_master_info().min_active_txn_id) {
                 LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
@@ -320,15 +333,15 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
             size_t final_file_size = 0;
             auto start_ts = butil::gettimeofday_us();
-            if (is_seg) {
+            if (use_converter) {
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
-                    RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
+                    RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
                             src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
                             &final_file_size));
                 }
-                if (final_file_size > 0 && final_file_size != src_file_size) {
+                if (is_seg && final_file_size > 0 && final_file_size != src_file_size) {
                     if (shared_mutex != nullptr) {
                         std::lock_guard lock(*shared_mutex);
                         segment_size_changes[target_file_name] = final_file_size;
@@ -436,18 +449,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     clean_files.cancel();
     return Status::OK();
-}
-
-ThreadPool* LakeReplicationTxnManager::get_replicate_file_thread_pool() {
-    if (_replicate_file_thread_pool != nullptr) {
-        return _replicate_file_thread_pool;
-    }
-    auto* agent_srv = ExecEnv::GetInstance()->agent_server();
-    if (agent_srv == nullptr) {
-        return nullptr;
-    }
-    _replicate_file_thread_pool = agent_srv->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
-    return _replicate_file_thread_pool;
 }
 
 bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool) {

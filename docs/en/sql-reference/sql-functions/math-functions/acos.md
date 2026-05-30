@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Computes the arc cosine of an argument."
 ---
 
 # acos

@@ -14,8 +14,12 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
+import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
@@ -28,6 +32,8 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
@@ -416,8 +422,8 @@ public class CloudConfigurationFactoryTest {
     public void testHDFSCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
-                put(CloudConfigurationConstants.HDFS_AUTHENTICATION, "simple");
-                put(CloudConfigurationConstants.HDFS_USERNAME, "XX");
+                put(HDFS_AUTHENTICATION, "simple");
+                put(HDFS_USERNAME, "XX");
                 put(CloudConfigurationConstants.HDFS_PASSWORD, "XX");
             }
         };
@@ -438,6 +444,112 @@ public class CloudConfigurationFactoryTest {
 
         cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map, true);
         Assertions.assertEquals(CloudType.HDFS, cc.getCloudType());
+    }
+
+    @Test
+    public void testHDFSInvalidAuthenticationValidate() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, "invalid_auth");
+
+        HDFSCloudConfigurationProvider provider = new HDFSCloudConfigurationProvider();
+        CloudConfiguration cloudConfiguration = provider.build(storageParams);
+        Assertions.assertNull(cloudConfiguration);
+    }
+
+    @Test
+    public void testHDFSApplyToConfiguration() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
+        storageParams.put("dfs.nameservices", "HDFS1002060");
+        storageParams.put("dfs.ha.namenodes.HDFS1002060", "nn1,nn2");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn1", "host1:4007");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn2", "host2:4007");
+        storageParams.put("dfs.client.failover.proxy.provider.HDFS1002060",
+                "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+        storageParams.put("fs.defaultFS", "hdfs://HDFS1002060");
+
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(storageParams);
+        Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+
+        // Verify that applyToConfiguration can write the configuration into Hadoop Configuration
+        Configuration conf = new Configuration();
+        hdfsCloudConfiguration.applyToConfiguration(conf);
+        Assertions.assertEquals("HDFS1002060", conf.get("dfs.nameservices"));
+        Assertions.assertEquals("nn1,nn2", conf.get("dfs.ha.namenodes.HDFS1002060"));
+        Assertions.assertEquals("host1:4007", conf.get("dfs.namenode.rpc-address.HDFS1002060.nn1"));
+        Assertions.assertEquals("host2:4007", conf.get("dfs.namenode.rpc-address.HDFS1002060.nn2"));
+        Assertions.assertEquals("org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+                conf.get("dfs.client.failover.proxy.provider.HDFS1002060"));
+        Assertions.assertEquals("hdfs://HDFS1002060", conf.get("fs.defaultFS"));
+
+        Map<String, String> hadoopConf = hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration();
+        Assertions.assertEquals(6, hadoopConf.size());
+        Assertions.assertEquals("HDFS1002060", hadoopConf.get("dfs.nameservices"));
+    }
+
+    @Test
+    public void testHDFSToThrift() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
+        storageParams.put(HDFS_USERNAME, "username");
+        storageParams.put("dfs.nameservices", "HDFS1002060");
+        storageParams.put("dfs.ha.namenodes.HDFS1002060", "nn1,nn2");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn1", "host1:4007");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn2", "host2:4007");
+        storageParams.put("dfs.client.failover.proxy.provider.HDFS1002060",
+                "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+        storageParams.put("fs.defaultFS", "hdfs://HDFS1002060");
+
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(storageParams);
+        Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        HDFSCloudCredential credential = hdfsCloudConfiguration.getHdfsCloudCredential();
+
+        // Verify that toThrift can write the HA configuration into the properties map
+        Map<String, String> thriftProperties = new HashMap<>();
+        credential.toThrift(thriftProperties);
+        Assertions.assertEquals("HDFS1002060", thriftProperties.get("dfs.nameservices"));
+        Assertions.assertEquals("nn1,nn2", thriftProperties.get("dfs.ha.namenodes.HDFS1002060"));
+        Assertions.assertEquals("host1:4007", thriftProperties.get("dfs.namenode.rpc-address.HDFS1002060.nn1"));
+        Assertions.assertEquals("host2:4007", thriftProperties.get("dfs.namenode.rpc-address.HDFS1002060.nn2"));
+        Assertions.assertEquals("org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+                thriftProperties.get("dfs.client.failover.proxy.provider.HDFS1002060"));
+        Assertions.assertEquals("hdfs://HDFS1002060", thriftProperties.get("fs.defaultFS"));
+        // Verify that known keys such as HDFS_AUTHENTICATION are removed by preprocessProperties and not present in hadoopConfiguration
+        Assertions.assertNull(thriftProperties.get(HDFS_AUTHENTICATION));
+        Assertions.assertNull(thriftProperties.get(HDFS_USERNAME));
+    }
+
+    @Test
+    public void testHDFSToThriftDoesNotOverrideReservedHadoopExtKeys() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
+        storageParams.put(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, "evil-cache-key");
+        storageParams.put("dfs.nameservices", "HDFS1002060");
+
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(storageParams);
+        Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        HDFSCloudCredential credential = hdfsCloudConfiguration.getHdfsCloudCredential();
+
+        Map<String, String> hadoopConf = credential.getHadoopConfiguration();
+        Assertions.assertEquals("evil-cache-key", hadoopConf.get(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING));
+
+        Map<String, String> credOnly = new HashMap<>();
+        credential.toThrift(credOnly);
+        Assertions.assertFalse(credOnly.containsKey(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING));
+        Assertions.assertEquals("HDFS1002060", credOnly.get("dfs.nameservices"));
+
+        TCloudConfiguration tc = new TCloudConfiguration();
+        hdfsCloudConfiguration.toThrift(tc);
+        Map<String, String> cloudProps = tc.getCloud_properties();
+
+        Assertions.assertEquals(hdfsCloudConfiguration.toConfString(),
+                cloudProps.get(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING));
+
+        Assertions.assertTrue(cloudProps.containsKey(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING));
+        Assertions.assertEquals("HDFS1002060", cloudProps.get("dfs.nameservices"));
     }
 
     @Test

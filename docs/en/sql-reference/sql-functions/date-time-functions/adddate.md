@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Synonym of date_add; adds a specified time interval to a date or datetime value."
 ---
 
 # adddate,date_add

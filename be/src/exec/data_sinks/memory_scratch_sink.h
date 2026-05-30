@@ -37,10 +37,10 @@
 #include "base/concurrency/blocking_queue.hpp"
 #include "common/global_types.h"
 #include "common/status.h"
+#include "compute_env/result/result_queue_mgr.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
-#include "runtime/result_queue_mgr.h"
 
 namespace arrow {
 

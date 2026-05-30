@@ -1157,6 +1157,26 @@ starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
 - 单位：Byte
 - 描述：Storage Page Cache 使用的内存。
 
+### spm_baseline_count
+
+- 单位：个
+- 类型：瞬时值
+- 描述：FE Leader 上当前全局 SQL Plan Management（SPM）基线的数量。
+
+### spm_capture_candidate_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`result`（`captured`、`skipped_duplicate`、`skipped_table_count`、`skipped_table_missing`、`skipped_db_missing`、`skipped_pattern_mismatch` 或 `failed`）
+- 描述：SPM Auto-Capture 候选处理结果的总次数。不同标签值表示查询历史中的候选 SQL 在自动捕获流程中的不同归类结果。
+
+### spm_rewrite_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`result`（`hit`、`miss` 或 `error`）
+- 描述：SPM 改写尝试结果的总次数。`hit` 表示成功匹配并应用了基线，`miss` 表示执行了改写流程但没有命中可用基线，`error` 表示 SPM 改写过程中发生异常并回退到原始查询。
+
 ### jit_cache_mem_bytes
 
 - 单位：Byte

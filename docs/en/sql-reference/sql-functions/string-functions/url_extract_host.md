@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Extracts the host section from a URL."
 ---
 
 # url_extract_host

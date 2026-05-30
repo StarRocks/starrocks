@@ -339,7 +339,7 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     ASSERT_TRUE(st.ok()) << st.status().to_string();
     ASSERT_NE(st.value(), nullptr);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     // metadata/value plus shredded typed/fallback readers should contribute extra ranges.
@@ -361,7 +361,7 @@ TEST(ColumnReaderFactoryTest, VariantShreddedAllNullFallbackSkipsIoRange) {
             return size_t{0};
         }
 
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
         return ranges.size();
@@ -385,6 +385,39 @@ TEST(ColumnReaderFactoryTest, VariantShreddedAllNullFallbackSkipsIoRange) {
     const size_t skipped_ranges = collect_range_count(all_null_opts);
     ASSERT_GT(baseline_ranges, skipped_ranges);
     ASSERT_EQ(baseline_ranges - 2, skipped_ranges);
+}
+
+TEST(ColumnReaderFactoryTest, VariantShreddedTypedLeafSkipsTopLevelBinaryIoRange) {
+    auto obj = make_shredded_object_node_with_nested_scalar("obj", 2, 3, 4, tparquet::Type::INT32);
+    ParquetField variant = make_variant_field_with_typed_group({obj});
+    auto opts = make_opts_with_num_cols(5);
+    auto* row_group_meta = const_cast<tparquet::RowGroup*>(opts.row_group_meta);
+    row_group_meta->__set_num_rows(8);
+
+    auto set_null_count = [&](int idx, int64_t null_count, int64_t num_values) {
+        auto& meta = row_group_meta->columns[idx].meta_data;
+        meta.__set_num_values(num_values);
+        tparquet::Statistics statistics;
+        statistics.__set_null_count(null_count);
+        meta.__set_statistics(statistics);
+    };
+    // Top-level metadata has no nulls, so the fast path can synthesize the outer null mask.
+    set_null_count(0, 0, 8);
+    // Requested leaf fallback is all null, so the fast path will not fall back to top-level value.
+    set_null_count(3, 8, 8);
+
+    VariantShreddedReadHints hints;
+    ASSERT_OK(hints.add_path("obj.k"));
+    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, hints);
+    ASSERT_TRUE(st.ok()) << st.status().to_string();
+
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+
+    // Only the requested INT32 typed_value leaf should need page IO. Top-level metadata/value
+    // and the all-null leaf fallback value are all skipped.
+    ASSERT_EQ(1, ranges.size());
 }
 
 TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByName) {
@@ -505,7 +538,7 @@ public:
     Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
     void get_levels(level_t**, level_t**, size_t*) override {}
     void set_need_parse_levels(bool) override {}
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
                                  bool) override {}
     void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
 };

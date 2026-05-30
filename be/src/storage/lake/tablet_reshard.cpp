@@ -41,6 +41,8 @@ bvar::Adder<int64_t> g_tablet_reshard_split_failed("tablet_reshard_split_failed"
 bvar::LatencyRecorder g_tablet_reshard_split_latency("tablet_reshard_split");
 bvar::Adder<int64_t> g_tablet_reshard_split_output_tablet_count("tablet_reshard_split_output_tablet_count");
 bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total("tablet_reshard_split_fallback_total");
+bvar::Adder<int64_t> g_tablet_reshard_split_external_boundaries_fallback_total(
+        "tablet_reshard_split_external_boundaries_fallback_total");
 
 // Layer 2: Merge metrics
 bvar::Adder<int64_t> g_tablet_reshard_merge_total("tablet_reshard_merge_total");

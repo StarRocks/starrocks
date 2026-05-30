@@ -255,7 +255,7 @@ Azure Data Lake Storage Gen1 はサポートされていません。
 - IAM ユーザーベース認証で S3 プロトコルを使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
 
   :::tip 
-  Google Storage は [XML API](https://cloud.google.com/storage/docs/interoperability) を使用してサポートされており、設定は AWS S3 の構文を使用する。この場合、`TYPE` を `S3` に、`LOCATIONS` を S3 プロトコルと互換性のあるストレージのロケーションに設定する必要がある。
+  Google Storage は [XML API](https://docs.cloud.google.com/storage/docs/interoperability) を使用してサポートされており、設定は AWS S3 の構文を使用する。この場合、`TYPE` を `S3` に、`LOCATIONS` を S3 プロトコルと互換性のあるストレージのロケーションに設定する必要がある。
   :::
 
   ```SQL

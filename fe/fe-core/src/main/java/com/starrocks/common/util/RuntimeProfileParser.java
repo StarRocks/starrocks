@@ -51,6 +51,7 @@ public class RuntimeProfileParser {
             Pattern.compile("^- (.*?): (.*?)$");
     private static final Pattern INFO_KEY_STRING_PATTERN =
             Pattern.compile("^- (.*?)$");
+    private static final BigDecimal UNIT_COUNTER_VALUE_LIMIT = BigDecimal.valueOf(1000);
 
     public static RuntimeProfile parseFrom(String content) {
         LOG.debug("Parse runtime profile from content: {}", content);
@@ -233,20 +234,7 @@ public class RuntimeProfileParser {
         if (!matcher.matches()) {
             return null;
         }
-
-        String name = matcher.group(1);
-        String value = matcher.group(2);
-        String preciseValue = matcher.group(6);
-
-        if (StringUtils.isNotBlank(preciseValue)) {
-            return new CounterTuple(name, TUnit.UNIT, Long.parseLong(preciseValue));
-        } else {
-            long lValue = Long.parseLong(value);
-            if (lValue > 1000) {
-                return null;
-            }
-            return new CounterTuple(name, TUnit.UNIT, lValue);
-        }
+        return buildUnitCounter(matcher, TUnit.UNIT);
     }
 
     private static CounterTuple tryParseUnitPerSecCounter(String item) {
@@ -254,20 +242,21 @@ public class RuntimeProfileParser {
         if (!matcher.matches()) {
             return null;
         }
+        return buildUnitCounter(matcher, TUnit.UNIT_PER_SECOND);
+    }
 
+    private static CounterTuple buildUnitCounter(Matcher matcher, TUnit unit) {
         String name = matcher.group(1);
-        String value = matcher.group(2);
         String preciseValue = matcher.group(6);
-
+        // Both regex groups admit decimals; use BigDecimal so Long.parseLong won't throw.
         if (StringUtils.isNotBlank(preciseValue)) {
-            return new CounterTuple(name, TUnit.UNIT_PER_SECOND, Long.parseLong(preciseValue));
-        } else {
-            long lValue = Long.parseLong(value);
-            if (lValue > 1000) {
-                return null;
-            }
-            return new CounterTuple(name, TUnit.UNIT_PER_SECOND, lValue);
+            return new CounterTuple(name, unit, new BigDecimal(preciseValue).longValue());
         }
+        BigDecimal value = new BigDecimal(matcher.group(2));
+        if (value.compareTo(UNIT_COUNTER_VALUE_LIMIT) > 0) {
+            return null;
+        }
+        return new CounterTuple(name, unit, value.longValue());
     }
 
     private static CounterTuple tryParseTimer(String item) {

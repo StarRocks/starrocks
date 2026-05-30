@@ -6,9 +6,16 @@ displayed_sidebar: docs
 
 本文档介绍如何在 StarRocks 中管理查询队列。
 
-自 v2.5 版本起，StarRocks 支持查询队列功能。启用查询队列后，StarRocks 会在并发查询数量或资源使用率达到一定阈值时自动对查询进行排队，从而避免过载加剧。待执行查询将在队列中等待直至有足够的计算资源时开始执行。自 v3.1.4 版本起，StarRocks 支持设置资源组粒度的查询队列功能。
+自 v2.5 版本起，StarRocks 支持查询队列功能。启用查询队列后，StarRocks 会在并发查询数量或资源使用率达到一定阈值时自动对查询进行排队，从而避免过载加剧。待执行查询将在队列中等待直至有足够的计算资源时开始执行。
 
-您可以为 CPU 使用率、内存使用率和查询并发度设置阈值以触发查询队列。
+查询队列分为两个版本：
+
+- **Query Queue v1**：基于并发查询数量、BE 内存使用率和 BE CPU 使用率触发排队。本文档中原有的查询队列配置和行为均属于 v1。自 v3.1.4 版本起，v1 支持设置资源组粒度的查询队列。
+- **Query Queue v2**：自 v3.3 版本起支持。v2 会估算每个 Query 消耗的 BE 资源，并将 BE 资源抽象为逻辑 slot，根据 Query 需要的 slot 数量进行排队和调度。
+
+## Query Queue v1
+
+Query Queue v1 支持为 CPU 使用率、内存使用率和查询并发度设置阈值以触发查询队列。
 
 **Roadmap**:
 
@@ -17,11 +24,11 @@ displayed_sidebar: docs
 | v2.5   | ✅        | ❌               | ❌            | ❌           |
 | v3.1.4 | ✅        | ✅               | ✅            | ✅           |
 
-## 启用查询队列
+### 启用 Query Queue v1
 
 StarRocks 默认关闭查询队列。您可以通过设置相应的全局会话变量（Global session variable）来为 INSERT 导入、SELECT 查询和统计信息查询启用全局或资源组粒度的查询队列。
 
-### 启用全局查询队列
+#### 启用全局查询队列
 
 设置以下全局会话变量来为导入任务、SELECT 查询或统计信息查询启用全局查询队列管理。
 
@@ -43,7 +50,7 @@ SET GLOBAL enable_query_queue_select = true;
 SET GLOBAL enable_query_queue_statistic = true;
 ```
 
-### 启用资源组粒度查询队列
+#### 启用资源组粒度查询队列
 
 从 v3.1.4 开始，StarRocks 支持资源组粒度查询队列。
 
@@ -53,9 +60,9 @@ SET GLOBAL enable_query_queue_statistic = true;
 SET GLOBAL enable_group_level_query_queue = true;
 ```
 
-## 指定资源阈值
+### 指定资源阈值
 
-### 全局粒度的资源阈值
+#### 全局粒度的资源阈值
 
 您可以通过以下全局会话变量设置触发查询队列的阈值：
 
@@ -65,11 +72,17 @@ SET GLOBAL enable_group_level_query_queue = true;
 | query_queue_mem_used_pct_limit      | 0          | 单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1] |
 | query_queue_cpu_used_permille_limit | 0          | 单个 BE 节点中 CPU 使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1000] |
 
+:::note
+
+上述三个阈值参数仅适用于 Query Queue v1。启用 Query Queue v2 后，不再支持通过 `query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 触发排队。
+
+:::
+
 > **说明**
 >
 > 默认设置下，BE 每隔一秒向 FE 报告资源使用情况。您可以通过设置 BE 配置项 `report_resource_usage_interval_ms` 来更改此间隔时间。
 
-### 资源组粒度的资源阈值
+#### 资源组粒度的资源阈值
 
 从 v3.1.4 开始，您可以在创建资源组时为其设置各自的并发查询上限 `concurrency_limit` 和 CPU 核数上限 `max_cpu_cores`。当发起一个查询时，如果任意一项资源占用超过了全局粒度或资源组粒度的资源阈值，那么查询会进行排队，直到所有资源都没有超过阈值，再执行该查询。
 
@@ -78,9 +91,9 @@ SET GLOBAL enable_group_level_query_queue = true;
 | concurrency_limit | 0          | 该资源组在单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。 |
 | max_cpu_cores     | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
 
-您可以通过 SHOW USAGE RESOURECE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_group.md#查看资源组的使用信息)。
+您可以通过 SHOW USAGE RESOURCE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_group.md#查看资源组的使用信息)。
 
-### 管理查询并发数量
+#### 管理查询并发数量
 
 当正在运行的查询数量 `num_running_queries` 超过全局粒度或资源组粒度的 `concurrency_limit`  时，新到来的查询会进行排队。在 &lt; v3.1.4  和 &ge; v3.1.4 版本中，获取 `num_running_queries` 的方式不同。
 
@@ -88,7 +101,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 - &ge; v3.1.4 版本，所有 FE 正在运行的查询数量 `num_running_queries` 由 Leader FE 集中管理。每个 Follower FE 在发起和结束一个查询时，会通知 Leader FE，从而可以应对短时间内查询激增超过了 `concurrency_limit` 的场景。
 
-## 配置查询队列
+### 配置 Query Queue v1
 
 您可以通过以下全局会话变量设置查询队列的容量和队列中查询的最大超时时间：
 
@@ -97,7 +110,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 | query_queue_max_queued_queries     | 1024       | 队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。 |
 | query_queue_pending_timeout_second | 300        | 队列中单个查询的最大超时时间。当达到此阈值时，该查询将被拒绝执行。单位：秒。 |
 
-## 根据查询并发数量动态调整查询并发度
+### 根据查询并发数量动态调整查询并发度
 
 从 v3.1.4 版本起，对于被查询队列管理的由 Pipeline Engine 运行的查询，StarRocks 可以根据当前正在运行的查询数量 `num_running_queries`、Fragment 数量 `num_fragments`、查询并发度 `pipeline_dop` 动态调整新到来查询的并发度 `pipeline_dop`。您可以通过这种方式动态控制查询并发数量，在保证 BE 资源充分利用的基础上，降低调度的开销。关于 Fragment 和查询并发度 `pipeline_dop`，参见[查询管理-调整查询并发度](./Query_management.md#调整查询并发度)。
 
@@ -112,6 +125,38 @@ SET GLOBAL enable_group_level_query_queue = true;
 | ----------------------------- | ---------- | ------------------------------------------------------------ |
 | query_queue_driver_high_water | -1         | 查询并发 Driver 高位上限。仅在设置为大于 `0` 后生效。等于 `0` 时，会设置为 `avg_be_cpu_cores*16`，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。大于 `0` 时，会直接使用该值。 |
 | query_queue_driver_low_water  | -1         | 查询并发 Driver 低位上限。仅在设置为大于 `0` 后生效。等于 `0` 时，会设置为 `avg_be_cpu_cores*8`。大于 `0` 时，会直接使用该值。 |
+
+## Query Queue v2
+
+自 v3.3 版本起，StarRocks 支持 Query Queue v2。v2 不再基于并发查询数量、BE 内存使用率或 BE CPU 使用率的固定阈值触发排队，而是估算每个 Query 需要消耗的 BE 资源，并基于逻辑 slot 进行排队和调度。
+
+### 配置 Query Queue v2
+
+Query Queue v2 通过 FE 配置项启用和调整。其中，修改 `enable_query_queue_v2` 后，需要重启 FE 节点才能生效。
+
+| 配置项 | 默认值 | 含义 |
+| ------ | ------ | ---- |
+| `enable_query_queue_v2` | `false`（v3.3 至 v4.0）<br />`true`（自 v4.1 起） | 是否启用 Query Queue v2。设置为 `true` 后，StarRocks 使用 v2 基于 slot 的查询调度机制。 |
+| `query_queue_v2_concurrency_level` | `4` | Query Queue v2 计算集群总 slot 数量时使用的逻辑并发层数。值越大，系统可放行的 Query 越多，是一个相对调节参数。 |
+
+:::note
+
+`query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 仅适用于 Query Queue v1。启用 Query Queue v2 后，上述参数不再生效。
+
+:::
+
+### 资源 slot
+
+Query Queue v2 将 BE 资源表示为逻辑 slot：
+
+- **集群总 slot 数量**：StarRocks 会为整个集群设置一个逻辑上的 slot 总量。该总量与 BE 数量和 BE CPU Core 数量成正相关，也会受 `query_queue_v2_concurrency_level` 影响。
+- **Query 需要的 slot 数量**：StarRocks 会为每个 Query 估算需要消耗的 slot 数量。估算依据包括统计信息、查询复杂度、Fragment 数量、复杂算子的输入和输出数据量估计，以及 DOP 等因素。
+
+### 排队逻辑
+
+当一个 Query 需要的 slot 数量超过当前剩余的 slot 数量时，该 Query 会进入队列等待。Query Queue v2 会优先满足 slot 需求量较小的 Query，使小查询可以先获得资源，避免大查询长期占用队首导致后续小查询被阻塞，即队头阻塞（Head-of-line blocking）问题。
+
+整个排队逻辑都在 FE 上完成，包括设置集群总 slot 数量、估算 Query 需要的 slot 数量，以及决定优先满足哪个 Query 的 slot 需求。Query Queue v2 不会根据 BE 的实际资源使用情况进行调度。
 
 ## 观测查询队列
 
@@ -170,7 +215,7 @@ MySQL [(none)]> SHOW PROCESSLIST;
 - `PendingTimeout`：PENDING 状态下查询在队列中超时的时间。
 - `QueryTimeout`：该查询超时的时间。
 - `State`：该查询的排队状态。其中，PENDING 表示在队列中；RUNNING 表示正在执行。
-- `Slots`：该查询申请的逻辑资源数量，目前固定为 `1`。
+- `Slots`：该查询申请的逻辑资源数量。在 Query Queue v1 中通常为 `1`；在 Query Queue v2 中为该查询估算出的 slot 数量。
 - `Frontend`：发起该查询的 FE 节点。
 - `FeStartTime`：发起该查询的 FE 节点的启动时间。
 

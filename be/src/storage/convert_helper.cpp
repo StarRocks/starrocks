@@ -19,6 +19,7 @@
 #include "base/hash/unaligned_access.h"
 #include "base/utility/pred_guard.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
@@ -26,13 +27,13 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "types/bitmap_value.h"
 #include "types/datetime_value.h"
 #include "types/decimalv2_value.h"
 #include "types/hll.h"
 #include "types/json_value.h"
+#include "types/olap_type_infra.h"
 #include "types/percentile_value.h"
 #include "types/storage_type_traits.h"
 #include "types/timestamp_value.h"
@@ -1315,7 +1316,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(TYPE_DATE, nullable);
+        auto dst = ChunkFactory::column_from_field_type(TYPE_DATE, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1349,7 +1350,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(TYPE_DATE_V1, nullable);
+        auto dst = ChunkFactory::column_from_field_type(TYPE_DATE_V1, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1387,7 +1388,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(TYPE_DATETIME, nullable);
+        auto dst = ChunkFactory::column_from_field_type(TYPE_DATETIME, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1422,7 +1423,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(TYPE_DATETIME_V1, nullable);
+        auto dst = ChunkFactory::column_from_field_type(TYPE_DATETIME_V1, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1461,7 +1462,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(TYPE_DECIMALV2, nullable);
+        auto dst = ChunkFactory::column_from_field_type(TYPE_DECIMALV2, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1500,7 +1501,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(TYPE_DECIMAL, nullable);
+        auto dst = ChunkFactory::column_from_field_type(TYPE_DECIMAL, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {

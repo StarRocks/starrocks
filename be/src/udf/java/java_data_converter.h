@@ -55,19 +55,56 @@ public:
 // promotes to a JavaGlobalRef for storage on the UDF context.
 StatusOr<jobject> build_udf_type_desc(JNIEnv* env, const TypeDescriptor& td, jobject formal_type);
 
+// Per-arg / per-return UdfTypeDesc tree built from a Java reflective Method object.
+// Slots whose SQL type subtree contains no STRUCT are stored as null-handle JavaGlobalRef
+// so callers can pass the vector verbatim to the boxer / writer (which fall back to the
+// non-STRUCT path when a slot is null).
+struct JavaUdfMethodTypeDescs {
+    std::vector<JavaGlobalRef> args;
+    JavaGlobalRef ret = JavaGlobalRef(nullptr);
+};
+
+// Walk Method.getGenericParameterTypes() / getGenericReturnType() in lockstep with the SQL
+// type tree, and produce one UdfTypeDesc Java object per arg / return slot whose subtree
+// contains a STRUCT. Slots with no STRUCT remain null-handle in the result vector.
+//
+// `state_offset` is the number of Java-method parameters that come BEFORE the SQL args.
+// Scalar UDF and UDTF use 0; UDAF `update` has `State` as parameter 0, so state_offset = 1.
+// Varargs handling unwraps the trailing array layer once per overflowing SQL arg.
+//
+// `unwrap_return_array_layer` strips one array layer off the Java reflective return type
+// before pairing it with `sql_return_type`. UDTF needs this because the SQL return type
+// is the per-row element while the Java method returns `T[]` (zero or more rows per call).
+// Scalar UDF and UDAF return types match 1:1 and pass false.
+//
+// The result entries are global refs owned by the caller; null-handle entries are normal
+// (built via JavaGlobalRef(nullptr)) and consume no JVM resources.
+StatusOr<JavaUdfMethodTypeDescs> build_method_udf_type_descs(JNIEnv* env, jobject method_obj,
+                                                             const std::vector<TypeDescriptor>& sql_arg_types,
+                                                             const TypeDescriptor& sql_return_type, int state_offset,
+                                                             bool unwrap_return_array_layer = false);
+
 #define SET_FUNCTION_CONTEXT_ERR(status, context)       \
     if (UNLIKELY(!status.ok())) {                       \
         context->set_error(status.to_string().c_str()); \
     }
 
-StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num);
+// Build a jvalue for a single-row cell of `col` at `row_num` according to `type_desc`.
+// `type_desc_obj` is an optional UdfTypeDesc Java object (held by caller as a non-owning
+// jobject local/global handle). It is required when `type_desc` contains STRUCT in any
+// position (the formal record class lives in there); when the subtree has no STRUCT it
+// may be null and the existing scalar/array/map paths are used unchanged.
+StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num,
+                                jobject type_desc_obj = nullptr);
 
 void release_jvalue(bool is_boxed, jvalue val);
 
 // Append a Java-side jvalue to `col`, converting DECIMAL via the column's declared
 // precision/scale. When the value overflows, `error_if_overflow == true` (default)
 // returns an error Status (REPORT_ERROR), `false` appends NULL (OUTPUT_NULL).
+//
+// `type_desc_obj` is an optional UdfTypeDesc Java object; same contract as cast_to_jvalue.
 Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val,
-                     bool error_if_overflow = true);
-Status check_type_matched(const TypeDescriptor& type_desc, jobject val);
+                     bool error_if_overflow = true, jobject type_desc_obj = nullptr);
+Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject type_desc_obj = nullptr);
 } // namespace starrocks

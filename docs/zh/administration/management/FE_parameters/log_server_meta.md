@@ -252,7 +252,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: true
 - 类型: Boolean
 - 单位: -
-- 是否可变: No
+- 是否可变: Yes
 - 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
@@ -271,7 +271,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志和查询详细记录之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）和 SimpleExecutor.formatSQL（内部执行器日志）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。这减少了审计/内部日志中敏感文字和凭据的泄露，但也意味着日志和查询详细信息不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
+- 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志、查询详细记录以及查询 profile 之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）、SimpleExecutor.formatSQL（内部执行器日志），以及 StmtExecutor.buildTopLevelProfile / processProfileAsync（profile 的 `Summary` 段中的 `Sql Statement` 与 `ExplainPlan` info-string）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。对于通过会话变量 `enable_explain_in_profile` 加入的 `ExplainPlan` 字段，此配置还会强制对嵌入的 `EXPLAIN COSTS` 文本启用文字（literal）摘要渲染，从而避免 profile 中的 `Sql Statement` 已被脱敏但 `ExplainPlan` 仍然暴露原始字面量。这减少了审计/内部日志和 profile 中敏感字面量和凭据的泄露，但也意味着日志、查询详细信息和 profile 不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
 - 引入版本: -
 
 ### `internal_log_delete_age`
@@ -838,6 +838,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 MySQL 服务器持有的 backlog 队列的长度。
 - 引入版本: -
 
+### `mysql_send_packet_timeout_ms`
+
+- 默认值: 60000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: MySQL 协议通道单次写包的超时时间。限制 FE worker 在发送结果行时等待慢客户端 TCP 接收缓冲区排空的时长。不限制的话 worker 可能在 `Selector.select()` 上无限阻塞，且查询无法被 `KILL QUERY` 终止。设置为 `0` 禁用（旧版无限等待行为）。
+- 引入版本: v4.1
+
 ### `mysql_server_version`
 
 - 默认值: 8.0.33
@@ -1247,6 +1256,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否启用周期性 Hive 元数据缓存刷新。启用后，StarRocks 会轮询 Hive 集群的 metastore（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Hive Catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。
 - 引入版本: v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局 RPC 线程池中的线程数，用于执行 “refresh other FE” 的 fan-out 调用。该线程池限制同步和异步外表刷新流程中，向其他 FE 并发发送刷新 RPC 的数量。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
 
 ### `enable_collect_query_detail_info`
 

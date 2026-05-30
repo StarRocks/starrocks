@@ -18,6 +18,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/stack_util.h"
@@ -40,26 +41,39 @@
 namespace starrocks::lake {
 
 Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
     auto chunk_container = _pk_column_chunk->clone_empty();
     if (_iter != nullptr) {
         while (true) {
             chunk_container->reset();
-            auto st = Status::OK();
-            {
+            Status st;
+            // Capture the segment-wide physical rowid base (= iterator's range_start)
+            // from the first non-empty emit only. Subsequent emits use the plain form
+            // since the base is already known and contiguity is structurally guaranteed
+            // by get_each_segment_iterator (no delvec / predicates / sparse ranges).
+            if (!_physical_rowid_base.has_value()) {
+                std::vector<uint32_t> rowid_buffer;
+                {
+                    TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
+                    st = _iter->get_next(chunk_container.get(), &rowid_buffer);
+                }
+                if (st.ok() && !rowid_buffer.empty()) {
+                    _physical_rowid_base = rowid_buffer.front();
+                }
+            } else {
                 TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
                 st = _iter->get_next(chunk_container.get());
             }
             if (st.is_end_of_file()) {
                 break;
-            } else if (!st.ok()) {
+            }
+            if (!st.ok()) {
                 return st;
-            } else {
-                TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
-                if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                                   _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
-                    break;
-                }
+            }
+            TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
+            if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
+                               _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
+                break;
             }
         }
     }
@@ -120,8 +134,12 @@ void SegmentPKIterator::next() {
     }
 }
 
-std::pair<ChunkPtr, size_t> SegmentPKIterator::current() {
-    return std::pair<ChunkPtr, size_t>(std::move(_pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
+SegmentPKChunkRef SegmentPKIterator::current() {
+    SegmentPKChunkRef ref;
+    const size_t logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
+    ref.physical_rowid_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(logical_rowid_offset);
+    ref.chunk = std::move(_pk_column_chunk);
+    return ref;
 }
 
 StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {
@@ -369,7 +387,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     }
     std::vector<uint32_t> column_id{auto_increment_column_id};
     auto auto_inc_column_schema = ChunkHelper::convert_schema(params.tablet_schema, column_id);
-    auto column = ChunkHelper::column_from_field(*auto_inc_column_schema.field(0).get());
+    auto column = ChunkFactory::column_from_field(*auto_inc_column_schema.field(0).get());
     MutableColumns read_column;
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
@@ -486,7 +504,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
     _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->standalone_pk_column()->size());
     for (uint32_t j = 0; j < read_columns.size(); ++j) {
-        auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
+        auto column = ChunkFactory::column_from_field(*read_column_schema.field(j).get());
         read_columns[j] = column->clone_empty();
         _partial_update_states[segment_id].write_columns[j] = column->clone_empty();
     }

@@ -326,7 +326,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 ```
 
-**PROPERTIES**（选填）
+#### PROPERTIES（选填）
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 

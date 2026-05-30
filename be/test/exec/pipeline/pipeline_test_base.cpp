@@ -23,11 +23,12 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 
@@ -142,7 +143,7 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescript
     static std::uniform_real_distribution<float> uf;
     static std::uniform_real_distribution<double> ud;
 
-    auto chunk = ChunkHelper::new_chunk(slots, row_num);
+    auto chunk = RuntimeChunkHelper::new_chunk(slots, row_num);
 
     // add data
     for (size_t i = 0; i < slots.size(); ++i) {

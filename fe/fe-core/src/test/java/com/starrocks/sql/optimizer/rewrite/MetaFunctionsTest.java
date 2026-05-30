@@ -21,6 +21,8 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
@@ -441,5 +443,153 @@ public class MetaFunctionsTest extends MVTestBase {
         Assertions.assertNotNull(result);
         // External tables typically have no related MVs
         Assertions.assertEquals("[]", result.getVarchar());
+    }
+
+    private static QueryDetail makeQueryDetail(String queryId, String sql, UserIdentity owner) {
+        QueryDetail detail = new QueryDetail(
+                queryId, true, 0, "127.0.0.1",
+                System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
+                "test", sql, owner == null ? "" : owner.getUser(), "",
+                "default_catalog", "QUERY", null);
+        if (owner != null) {
+            detail.setUserIdentity(owner.toString());
+        }
+        return detail;
+    }
+
+    private static void removeFromQueryDetailQueue(String queryId) {
+        QueryDetailQueue.TOTAL_QUERIES.removeIf(d -> queryId.equals(d.getQueryId()));
+    }
+
+    /**
+     * Snapshot/restore the two FE configs that get_query_dump_from_query_id checks
+     * upfront, so per-test overrides don't bleed into sibling tests.
+     */
+    private static final class QueryDumpConfigGuard implements AutoCloseable {
+        private final boolean prevCollect = com.starrocks.common.Config.enable_collect_query_detail_info;
+        private final boolean prevDesensitize = com.starrocks.common.Config.enable_sql_desensitize_in_log;
+
+        QueryDumpConfigGuard(boolean enableCollect, boolean enableDesensitize) {
+            com.starrocks.common.Config.enable_collect_query_detail_info = enableCollect;
+            com.starrocks.common.Config.enable_sql_desensitize_in_log = enableDesensitize;
+        }
+
+        @Override
+        public void close() {
+            com.starrocks.common.Config.enable_collect_query_detail_info = prevCollect;
+            com.starrocks.common.Config.enable_sql_desensitize_in_log = prevDesensitize;
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdRequiresFeatureEnabled() {
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(false, false)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(
+                            ConstantOperator.createVarchar("11111111-2222-3333-4444-555555555555")));
+            Assertions.assertTrue(ex.getMessage().contains("query detail collection is disabled"));
+            Assertions.assertTrue(ex.getMessage().contains("enable_collect_query_detail_info"));
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdRejectsDesensitizationEnabled() {
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, true)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(
+                            ConstantOperator.createVarchar("11111111-2222-3333-4444-555555555555")));
+            Assertions.assertTrue(ex.getMessage().contains("SQL desensitization is enabled"));
+            Assertions.assertTrue(ex.getMessage().contains("enable_sql_desensitize_in_log"));
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdNotFound() {
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(
+                            ConstantOperator.createVarchar("11111111-2222-3333-4444-555555555555")));
+            Assertions.assertTrue(ex.getMessage().contains("query_id not found"));
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdDesensitizedSql() {
+        String queryId = "ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb";
+        QueryDetail detail = makeQueryDetail(queryId, "this is a desensitized sql",
+                connectContext.getCurrentUserIdentity());
+        QueryDetailQueue.addQueryDetail(detail);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId)));
+            Assertions.assertTrue(ex.getMessage().contains("original sql not retained"));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdLooksUpSql() throws Exception {
+        String queryId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        QueryDetail detail = makeQueryDetail(queryId, "select count(*) from test.tbl1",
+                connectContext.getCurrentUserIdentity());
+        QueryDetailQueue.addQueryDetail(detail);
+        // QueryDumper expects a fresh QueryDumpInfo on the context; PlanTestBase / MVTestBase
+        // installs a MockDumpInfo that the dumper would otherwise try to cast.
+        com.starrocks.sql.optimizer.dump.DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+        connectContext.setDumpInfo(null);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            ConstantOperator result = MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId));
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result.getVarchar().contains("query_id")
+                    || result.getVarchar().contains("statement"));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdRejectsSameUsernameDifferentHost() {
+        // QueryDetail.user is just the username; two distinct accounts that share a
+        // username but differ on host must NOT cross-match. The check has to look at
+        // userIdentity (user + host).
+        String queryId = "cafecafe-cafe-cafe-cafe-cafecafecafe";
+        UserIdentity originalIdentity = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "10.0.0.1");
+        UserIdentity callerIdentity = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "10.0.0.2");
+        QueryDetail detail = makeQueryDetail(queryId, "select 1", originalIdentity);
+        QueryDetailQueue.addQueryDetail(detail);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            connectContext.setCurrentUserIdentity(callerIdentity);
+            connectContext.setCurrentRoleIds(callerIdentity);
+            connectContext.setThreadLocalInfo();
+            assertThrows(ErrorReportException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId)));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            connectContext.setCurrentRoleIds(UserIdentity.ROOT);
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdAccessDenied() {
+        String queryId = "12345678-1234-1234-1234-123456789012";
+        UserIdentity ownerIdentity = UserIdentity.createAnalyzedUserIdentWithIp("some_other_user", "%");
+        QueryDetail detail = makeQueryDetail(queryId, "select 1", ownerIdentity);
+        QueryDetailQueue.addQueryDetail(detail);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            assertThrows(ErrorReportException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId)));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            connectContext.setCurrentRoleIds(UserIdentity.ROOT);
+            connectContext.setThreadLocalInfo();
+        }
     }
 }

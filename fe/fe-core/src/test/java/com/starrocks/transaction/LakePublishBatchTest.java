@@ -655,6 +655,21 @@ public class LakePublishBatchTest {
 
     @Test
     public void testBatchPublishShadowIndex() throws Exception {
+        // Strict cut on diverging loaded-index snapshots (see
+        // DatabaseTransactionMgr.getReadyToPublishTxnListBatch) breaks this scenario into
+        // single-txn batches per snapshot, but TransactionGraph.getTxnsWithTxnDependencyBatch
+        // refuses to return chains smaller than min_version_num. Production default is 1; the
+        // class-level setUp raises it to 2 to stress batching. Lower it back for this one
+        // test so the post-cut single-txn batches actually publish.
+        Config.lake_batch_publish_min_version_num = 1;
+        try {
+            doTestBatchPublishShadowIndex();
+        } finally {
+            Config.lake_batch_publish_min_version_num = 2;
+        }
+    }
+
+    private void doTestBatchPublishShadowIndex() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
@@ -730,12 +745,23 @@ public class LakePublishBatchTest {
         LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
         assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
         MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
-        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
-        assertNotNull(request);
-        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
-        assertEquals(2, request.getTxnInfos().size());
-        assertEquals(txn2, request.getTxnInfos().get(0).getTxnId());
-        assertEquals(txn3, request.getTxnInfos().get(1).getTxnId());
+        // Strict cut in DatabaseTransactionMgr.getReadyToPublishTxnListBatch splits txn1
+        // away from txn2/txn3 (their loadedIndexIds snapshots differ across the schema
+        // change boundary), and the resulting single-txn batches publish via
+        // PublishVersionDaemon.publishLakeTransactionAsync. That path calls
+        // Utils.publishLogVersion per txn, producing one PublishLogVersionBatchRequest
+        // per shadow-loaded txn (txn2 then txn3) instead of one combined request.
+        PublishLogVersionBatchRequest firstShadowRequest = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(firstShadowRequest);
+        assertEquals(List.of(shadowTablet.getId()), firstShadowRequest.getTabletIds());
+        assertEquals(1, firstShadowRequest.getTxnInfos().size());
+        assertEquals(txn2, firstShadowRequest.getTxnInfos().get(0).getTxnId());
+
+        PublishLogVersionBatchRequest secondShadowRequest = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(secondShadowRequest);
+        assertEquals(List.of(shadowTablet.getId()), secondShadowRequest.getTabletIds());
+        assertEquals(1, secondShadowRequest.getTxnInfos().size());
+        assertEquals(txn3, secondShadowRequest.getTxnInfos().get(0).getTxnId());
     }
 
     private List<TabletCommitInfo> getPartitionTabletCommitInfos(Partition partition) {

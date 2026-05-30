@@ -36,6 +36,10 @@ void fill_data_column_with_slot(Column* data_column, void* slot) {
         result->append(date_value);
     } else if constexpr (IsTimestamp<ValueType>) {
         auto* date_time_value = (DateTimeValue*)slot;
+        // Microseconds are dropped here. TimestampValue::create has a default
+        // microsecond=0 7th parameter; pass date_time_value->microsecond() to
+        // preserve it. Today's callers all populate DateTimeValue at second
+        // precision, so this is a no-op for them.
         TimestampValue timestamp_value =
                 TimestampValue::create(date_time_value->year(), date_time_value->month(), date_time_value->day(),
                                        date_time_value->hour(), date_time_value->minute(), date_time_value->second());

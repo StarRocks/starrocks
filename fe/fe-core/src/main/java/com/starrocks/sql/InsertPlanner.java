@@ -61,7 +61,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -72,7 +71,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
@@ -133,6 +131,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -287,19 +286,6 @@ public class InsertPlanner {
         }
     }
 
-    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
-        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
-        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
-            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
-                if (t.getValue().isExternalTableWithFileSystem()) {
-                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
-                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
-                }
-            }
-        }
-    }
-
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -317,17 +303,15 @@ public class InsertPlanner {
                     && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
             Set<String> columnsToFilter = preserveRowLineage
                     ? IcebergTable.ICEBERG_META_COLUMNS.stream()
-                            .filter(col -> !col.equals(IcebergTable.ROW_ID)
-                                    && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
-                            .collect(Collectors.toSet())
+                    .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                            && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                    .collect(Collectors.toSet())
                     : IcebergTable.ICEBERG_META_COLUMNS;
             outputBaseSchema = outputBaseSchema.stream().filter(col ->
                     !columnsToFilter.contains(col.getName())).toList();
             outputFullSchema = outputFullSchema.stream().filter(col ->
                     !columnsToFilter.contains(col.getName())).toList();
         }
-
-        refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -1010,6 +994,8 @@ public class InsertPlanner {
 
         for (PartitionField field : spec.fields()) {
             String sourceColumnName = icebergSchema.findColumnName(field.sourceId());
+            boolean isTimestampWithZone =
+                    icebergSchema.findType(field.sourceId()).equals(Types.TimestampType.withZone());
             int sourceColumnIndex = -1;
             for (int i = 0; i < fullSchema.size(); i++) {
                 if (fullSchema.get(i).getName().equalsIgnoreCase(sourceColumnName)) {
@@ -1034,7 +1020,7 @@ public class InsertPlanner {
                 case DAY:
                 case HOUR: {
                     String funcName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX +
-                            transform.name().toLowerCase();
+                            (isTimestampWithZone ? "timestamptz_" : "") + transform.name().toLowerCase();
                     Type[] argTypes = new Type[] {sourceRef.getType()};
                     Function fn = ExprUtils.getBuiltinFunction(funcName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -1057,7 +1043,9 @@ public class InsertPlanner {
                         partitionColumnIDs.add(sourceRef.getId());
                         break;
                     }
-                    String funcName = FunctionSet.ICEBERG_TRANSFORM_BUCKET;
+                    String funcName = isTimestampWithZone
+                            ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "timestamptz_bucket"
+                            : FunctionSet.ICEBERG_TRANSFORM_BUCKET;
                     Type[] argTypes = new Type[] {sourceRef.getType(), com.starrocks.type.IntegerType.INT};
                     Function fn = ExprUtils.getBuiltinFunction(funcName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

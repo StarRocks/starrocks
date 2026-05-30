@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Overview of the procedures to deploy, upgrade, and downgrade a StarRocks cluster in production."
 ---
 
 # Deployment Overview

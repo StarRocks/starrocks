@@ -20,6 +20,7 @@
 #include "exec/scan_node.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

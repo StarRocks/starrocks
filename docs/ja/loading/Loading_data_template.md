@@ -392,6 +392,6 @@ INSERT INTO user_behavior_declared
 - 同期および非同期データロードの詳細については、[ロードの概念](./loading_introduction/loading_concepts.md) を参照してください。
 - Broker Load がロード中にデータ変換をサポートする方法については、[ロード中のデータ変換](../loading/Etl_in_loading.md) および [プライマリキー テーブルへのロードによるデータの変更](../loading/Load_to_Primary_Key_tables.md) を参照してください。
 - この文書では IAM ユーザー認証のみをカバーしています。他のオプションについては、[AWS リソースへの認証](../integrations/authenticate_to_aws_resources.md) を参照してください。
-- [AWS CLI コマンドリファレンス](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) では、S3 URI を詳細に説明しています。
+- [AWS CLI コマンドリファレンス](https://docs.aws.amazon.com/cli/latest/reference/s3/) では、S3 URI を詳細に説明しています。
 - [テーブル設計](../table_design/StarRocks_table_design.md) についてさらに学びましょう。
 - Broker Load は、上記の例よりも多くの構成および使用オプションを提供しており、詳細は [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) に記載されています。

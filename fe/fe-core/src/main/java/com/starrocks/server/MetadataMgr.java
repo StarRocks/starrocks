@@ -32,6 +32,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -546,6 +547,12 @@ public class MetadataMgr {
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         return connectorMetadata.map(metadata -> metadata.getCurrentTvrSnapshot(dbName, table))
+                .orElse(TvrTableSnapshot.empty());
+    }
+
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.acquireTvrSnapshot(dbName, table, mvId))
                 .orElse(TvrTableSnapshot.empty());
     }
 

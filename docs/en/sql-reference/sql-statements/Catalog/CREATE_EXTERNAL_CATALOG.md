@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE EXTERNAL CATALOG creates an external catalog."
 ---
 
 # CREATE EXTERNAL CATALOG

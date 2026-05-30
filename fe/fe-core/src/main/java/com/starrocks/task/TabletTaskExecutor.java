@@ -91,6 +91,9 @@ public class TabletTaskExecutor {
                                                    int numBackends,
                                                    ComputeResource computeResource,
                                                    CreateTabletOption option) throws DdlException {
+        if (table.isLightWeightTabletCreation()) {
+            return;
+        }
         // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
         // The number 200 is just an experiment value that seems to work without obvious problems, feel free to
         // change it if you have a better choice.
@@ -122,6 +125,9 @@ public class TabletTaskExecutor {
                                                    int numBackends,
                                                    ComputeResource computeResource,
                                                    CreateTabletOption option) throws DdlException {
+        if (table.isLightWeightTabletCreation()) {
+            return;
+        }
         long start = System.currentTimeMillis();
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(

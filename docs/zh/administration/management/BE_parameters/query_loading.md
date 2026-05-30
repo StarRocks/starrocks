@@ -30,7 +30,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [查询引擎](#查询引擎)
 - [导入导出](#导入导出)
 
@@ -607,6 +607,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
 - 引入版本：-
 
+### jvm_call_thread_pool_size
+
+- 默认值：1
+- 类型：Int
+- 单位：Threads
+- 是否动态：否
+- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 清理任务与 Java UDF 执行竞争。
+- 引入版本：-
+
 ### udf_thread_pool_size
 
 - 默认值：1
@@ -624,6 +633,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
+
+### enable_vector_adaptive_search
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：HNSW 向量索引自适应 `ef_search` 缩放的总开关。开启时，BE 会根据 segment 行数为每个 segment 调整有效 `ef_search`，从而在 compaction 合并大 segment 后无需手动调参即可保持召回率。设置为 `false` 时关闭自适应缩放，按用户指定的 `ef_search` 原值执行。
+- 引入版本：-
+
+### vector_adaptive_ef_alpha
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：自适应 `ef_search` 的增长斜率。缩放系数为 `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)`。值越大召回提升越多但 CPU 开销越高；值越小则相反。仅在 `enable_vector_adaptive_search=true` 且 `segment_rows > vector_adaptive_ef_baseline_rows` 时生效。
+- 引入版本：-
+
+### vector_adaptive_ef_baseline_rows
+
+- 默认值：300000
+- 类型：Int
+- 单位：Rows
+- 是否动态：是
+- 描述：自适应 `ef_search` 不进行缩放的 segment 行数基线。低于该阈值的 segment 使用用户指定的 `ef_search`；高于该阈值的 segment 会得到放大的有效 `ef_search`，用以补偿较大 HNSW 图的搜索深度。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
+### vector_adaptive_ef_cap
+
+- 默认值：8.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：自适应 `ef_search` 倍率上限。即使 segment 极大也将放大倍率限制在该上限内，避免 CPU 与延迟在极端情况下失控。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
 
 ### vector_chunk_size
 
@@ -732,6 +777,69 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Hours
 - 是否动态：是
 - 描述：导入数据信息保留的时长。
+- 引入版本：-
+
+### enable_rejected_record_sync
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：拒绝记录同步守护线程的特性开关。启用后，BE 常驻的 `RejectedRecordSyncDaemon` 会扫描 `RejectedRecordWriter` 产生的分片级 JSON Lines 文件，并通过 merge-commit Stream Load 批量回写到 `_statistics_.rejected_records` 系统表。在分阶段上线期间默认关闭：升级到含该守护线程的版本后，只有在运维显式开启后集群才会开始向新系统表写入数据。
+- 引入版本：-
+
+### rejected_record_sync_interval_sec
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：`RejectedRecordSyncDaemon` 的扫描周期。未找到新文件的 tick 为 no-op。减小该值可降低拒绝行在 `_statistics_.rejected_records` 中可查询的延迟，增大该值可减轻文件系统压力。
+- 引入版本：-
+
+### rejected_record_sync_max_batch_rows
+
+- 默认值：10000
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：单次 merge-commit Stream Load 批次的行数上限。在守护线程拼装文件内容的过程中按行强制执行，因此一个超大单文件也会被拆分；超出上限的回写量会在连续 tick 间拆分。该上限用于限制 Stream Load 事务规模，避免一次过大的 flush 反压影响无关的 load。
+- 引入版本：-
+
+### rejected_record_sync_max_batch_bytes
+
+- 默认值：33554432（32 MiB）
+- 类型：Int64
+- 单位：字节
+- 是否动态：是
+- 描述：守护线程每次 POST 拼装的 Stream Load payload 字节上限。与 `rejected_record_sync_max_batch_rows` 同时生效，确保即使列很宽或 `error_message` 很长的 load 也不会在内存里组装出 GB 级 payload。当上限在文件中途被触发时，守护线程会提交当前批次并开启新的 payload；该文件保留到其全部行都已发送为止。建议不超过 FE 的 `streaming_load_max_mb`，以避免 FE 侧拒收。
+- 引入版本：-
+
+### rejected_record_sync_max_backoff_sec
+
+- 默认值：600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：当 `post_to_stream_load` 持续失败时 tick 间隔的上限。守护线程每次失败后将休眠时间翻倍（`rejected_record_sync_interval_sec << 连续失败次数`），直到达到该上限；一次成功后立即回到基础间隔。避免长时间 FE 宕机时每 `rejected_record_sync_interval_sec` 秒都产生一条 WARN 日志 + 一次 `_sync_failures` 计数。`Uninitialized` 状态（"master FE 尚未就绪"）不计入失败连续数。
+- 引入版本：-
+
+### rejected_record_local_retention_hours
+
+- 默认值：24
+- 类型：Int
+- 单位：小时
+- 是否动态：是
+- 描述：本地 JSON Lines 文件被守护线程回收前的最长保留时间。作为兜底上限：同步失败通常每个 tick 都会重试，但在 FE 不可达、系统表被删除、鉴权异常等配置异常场景下，该配置可防止文件无限堆积占满存储路径。
+- 引入版本：-
+
+### rejected_record_sync_post_timeout_sec
+
+- 默认值：60
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：守护线程向 FE 发起 Stream Load PUT 请求时的单次超时时间。merge-commit 批次可能因为多个 BE 并发请求被合并到同一事务而在 FE 提交队列短暂等待，因此该值故意设置得比默认查询超时更宽松。
 - 引入版本：-
 
 ### load_process_max_memory_limit_bytes

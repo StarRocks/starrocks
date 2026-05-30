@@ -32,8 +32,13 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ConsistencyCheckerTest {
 
@@ -177,5 +182,64 @@ public class ConsistencyCheckerTest {
         tabletMeta.setToBeCleanedTime(123L);
         tabletMeta.resetToBeCleanedTime();
         Assertions.assertNull(tabletMeta.getToBeCleanedTime());
+    }
+
+    @Test
+    public void testOnStoppedClearsLeaderSessionState() throws Exception {
+        ConsistencyChecker checker = new ConsistencyChecker();
+
+        @SuppressWarnings("unchecked")
+        Map<Long, CheckConsistencyJob> jobs =
+                (Map<Long, CheckConsistencyJob>) FieldUtils.readField(checker, "jobs", true);
+        @SuppressWarnings("unchecked")
+        ConcurrentHashMap<Long, Integer> creatingTableCounters =
+                (ConcurrentHashMap<Long, Integer>) FieldUtils.readField(checker, "creatingTableCounters", true);
+
+        jobs.put(101L, new CheckConsistencyJob(101L));
+        jobs.put(102L, new CheckConsistencyJob(102L));
+        creatingTableCounters.put(7L, 1);
+        FieldUtils.writeField(checker, "lastTabletMetaCheckTime", 12345L, true);
+
+        Assertions.assertEquals(2, jobs.size(), "precondition: jobs populated");
+        Assertions.assertEquals(1, creatingTableCounters.size(), "precondition: counter populated");
+        Assertions.assertEquals(12345L, FieldUtils.readField(checker, "lastTabletMetaCheckTime", true));
+
+        // CREATE TABLE flows that bumped creatingTableCounters fail when the editlog is sealed,
+        // so leftover counters would otherwise leak across leader sessions and incorrectly mask
+        // tablets from future consistency checks. lastTabletMetaCheckTime is reset for the same
+        // reason - the next leader should re-issue a tablet-meta scan instead of honoring a
+        // watermark from a different session.
+        MethodUtils.invokeMethod(checker, true, "onStopped");
+
+        Assertions.assertTrue(jobs.isEmpty(), "jobs cleared on demotion");
+        Assertions.assertTrue(creatingTableCounters.isEmpty(), "creatingTableCounters cleared on demotion");
+        Assertions.assertEquals(0L, FieldUtils.readField(checker, "lastTabletMetaCheckTime", true),
+                "lastTabletMetaCheckTime watermark reset on demotion");
+    }
+
+    @Test
+    public void testOnStoppedSwallowsClearException() throws Exception {
+        // A misbehaving CheckConsistencyJob.clear() must not abort the demotion drain - the
+        // remaining jobs still need to be removed and the watermark/counters still need to be
+        // reset. Exercises the per-job catch around job.clear().
+        ConsistencyChecker checker = new ConsistencyChecker();
+
+        @SuppressWarnings("unchecked")
+        Map<Long, CheckConsistencyJob> jobs =
+                (Map<Long, CheckConsistencyJob>) FieldUtils.readField(checker, "jobs", true);
+
+        CheckConsistencyJob throwingJob = new CheckConsistencyJob(201L) {
+            @Override
+            public synchronized void clear() {
+                throw new RuntimeException("simulated AgentTaskQueue failure");
+            }
+        };
+        jobs.put(201L, throwingJob);
+        jobs.put(202L, new CheckConsistencyJob(202L));
+
+        MethodUtils.invokeMethod(checker, true, "onStopped");
+
+        Assertions.assertTrue(jobs.isEmpty(),
+                "jobs map must be cleared even when an individual job's clear() throws");
     }
 }

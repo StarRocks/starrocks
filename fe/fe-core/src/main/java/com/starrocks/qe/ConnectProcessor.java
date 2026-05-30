@@ -775,17 +775,37 @@ public class ConnectProcessor {
             ctx.getState().setError("Unknown database(" + ctx.getDatabase() + ")");
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        // Internal catalog: lookup resolves to Database.nameToTable (a ConcurrentHashMap,
+        // lock-free safe). External catalog: lookup routes through ConnectorMetadata, whose
+        // concurrency is connector-managed. No FE write path takes the LockManager lock on
+        // external db ids, so the intensive lock acquired below is harmless overhead on
+        // external catalogs and the unlocked lookup changes nothing for them.
+        Table table;
         try {
-            // we should get table through metadata manager
-            Table table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
+            table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
                     ctx, ctx.getCurrentCatalog(), ctx.getDatabase(), tableName);
-            if (table == null) {
+        } catch (StarRocksConnectorException e) {
+            LOG.error("errors happened when getting table {}", tableName, e);
+            ctx.getState().setEof();
+            return;
+        }
+        if (table == null) {
+            ctx.getState().setError("Unknown table(" + tableName + ")");
+            return;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        try {
+            // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
+            // and lock acquisition. The table id is stable, so id-based revalidation would
+            // miss a RENAME that re-binds the name to a different table. Internal-catalog
+            // only: LocalMetastore doesn't track connector tables, so a re-fetch for
+            // external catalogs would always return null and falsely fail.
+            if (db.getCatalogName() == null && db.getTable(tableName) != table) {
                 ctx.getState().setError("Unknown table(" + tableName + ")");
                 return;
             }
-
             MysqlSerializer serializer = ctx.getSerializer();
             MysqlChannel channel = ctx.getMysqlChannel();
 
@@ -800,7 +820,7 @@ public class ConnectProcessor {
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
         ctx.getState().setEof();
     }

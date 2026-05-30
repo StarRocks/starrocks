@@ -21,7 +21,7 @@
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
 #include "common/runtime_profile.h"
-#include "exec/sorting/sort_permute.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"

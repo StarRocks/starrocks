@@ -106,8 +106,10 @@ public:
         auto* udaf_ctx = get_java_udaf_context(ctx);
         DCHECK(udaf_ctx != nullptr);
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
+        // STRUCT-bearing return types route through append_jvalue's STRUCT path with the
+        // cached UdfTypeDesc supplying formal record class info per nested STRUCT slot.
         auto st = append_jvalue(ctx->get_return_type(), udaf_ctx->ctx->finalize->method_desc[0].is_box, to, val,
-                                ctx->error_if_overflow());
+                                ctx->error_if_overflow(), udaf_ctx->ctx->finalize_return_type_desc.handle());
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
         release_jvalue(udaf_ctx->ctx->finalize->method_desc[0].is_box, val);
@@ -139,8 +141,13 @@ public:
         for (int i = 0; i < src.size(); ++i) {
             raw_input_ptrs[i] = src[i].get();
         }
-        auto st =
-                JavaDataTypeConverter::convert_to_boxed_array(ctx, raw_input_ptrs.data(), num_cols, batch_size, &args);
+        std::vector<jobject> arg_type_descs;
+        arg_type_descs.reserve(udf_ctxs->ctx->update_arg_type_descs.size());
+        for (const auto& gref : udf_ctxs->ctx->update_arg_type_descs) {
+            arg_type_descs.emplace_back(gref.handle());
+        }
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, raw_input_ptrs.data(), num_cols, batch_size, &args,
+                                                                &arg_type_descs);
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
@@ -206,6 +213,18 @@ public:
 
     // batch interface
 
+    // Snapshot the per-arg UdfTypeDesc handles cached on the shared context. Slots whose
+    // SQL subtree contains no STRUCT are stored as null-handle entries; the boxer falls
+    // back to JavaArrayConverter for those subtrees.
+    static std::vector<jobject> _collect_update_arg_type_descs(JavaUDAFUniqueContext* udf_ctxs) {
+        std::vector<jobject> out;
+        out.reserve(udf_ctxs->ctx->update_arg_type_descs.size());
+        for (const auto& gref : udf_ctxs->ctx->update_arg_type_descs) {
+            out.emplace_back(gref.handle());
+        }
+        return out;
+    }
+
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         auto& helper = JVMFunctionHelper::getInstance();
@@ -219,7 +238,9 @@ public:
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            auto arg_type_descs = _collect_update_arg_type_descs(udf_ctxs);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args,
+                                                                    &arg_type_descs);
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
             helper.batch_update(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->update->method.handle(), states_arr,
@@ -240,7 +261,9 @@ public:
             auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
                                                                                    filter.data(), batch_size);
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            auto arg_type_descs = _collect_update_arg_type_descs(udf_ctxs);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args,
+                                                                    &arg_type_descs);
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
             helper.batch_update_if_not_null(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->update->method.handle(),
@@ -259,7 +282,9 @@ public:
         env->PushLocalFrame(num_cols * 3 + 1);
         auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
-            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            auto arg_type_descs = _collect_update_arg_type_descs(udf_ctxs);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args,
+                                                                    &arg_type_descs);
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
@@ -454,7 +479,17 @@ public:
         // descriptor type. For DECIMAL, method_desc[0].type is a coarse BigDecimal sentinel;
         // the true precision/scale lives on the UDAF's declared return type.
         const auto& return_type = ctx->get_return_type();
+        jobject return_desc = udf_ctxs->ctx->finalize_return_type_desc.handle();
         auto write_result = [&](Column* col) {
+            if (return_desc != nullptr) {
+                // STRUCT subtree in the return: route through the unified Java writeResult,
+                // which walks the UdfTypeDesc tree and drains records / lists / maps /
+                // scalars into the native column tree.
+                auto st = helper.write_result(res, static_cast<int>(batch_size), reinterpret_cast<jlong>(col),
+                                              return_desc, ctx->error_if_overflow());
+                SET_FUNCTION_CONTEXT_ERR(st, ctx);
+                return;
+            }
             // The unified writer dispatches DECIMAL types internally; precision/scale
             // and the overflow flag are ignored for non-DECIMAL slots.
             helper.get_result_from_boxed_array(ctx, return_type.type, col, res, batch_size, return_type.precision,

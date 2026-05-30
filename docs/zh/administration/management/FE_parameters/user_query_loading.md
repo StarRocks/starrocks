@@ -206,7 +206,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 控制物化视图快速模式变更（FSE）的行为。有效值为：`strict`（默认）- 仅在 `isSupportFastSchemaEvolutionInDanger` 为 true 时允许 FSE，并清除版本映射中受影响的分区条目；`force` - 即使 `isSupportFastSchemaEvolutionInDanger` 为 false 也允许 FSE，并清除受影响的分区条目以在刷新时触发重新计算；`force_no_clear` - 即使 `isSupportFastSchemaEvolutionInDanger` 为 false 也允许 FSE，但不清除分区条目。
-- 引入版本: v3.4.0
+- 引入版本: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -1169,6 +1169,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 准备事务的默认超时时长。
+- 引入版本: -
+
+### `rejected_records_retained_days`
+
+- 默认值: 7
+- 类型: Int
+- 单位: 天
+- 是否可变: Yes
+- 描述: 内部系统表 `_statistics_.rejected_records` 保留的每日分区数。该值会被传递给 `TableKeeper`（下限为 1），并在每次 keeper 调度时被反写到目标表的 `partition_live_number` 属性。当需要将拒绝行历史保留更久（用于审计或更长时间窗口的回放）或存储预算紧张时，可调整此值。该值只影响新建的每日分区及 keeper 的 TTL 对齐，不会使已被清理的分区恢复。
 - 引入版本: -
 
 ### `routine_load_task_consume_second`

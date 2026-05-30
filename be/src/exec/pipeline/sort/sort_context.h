@@ -22,15 +22,15 @@
 #include "column/chunk.h"
 #include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/pipeline/observer.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_cursor.h"
+#include "compute_env/sorting/sorting.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_cursor.h"
-#include "exec/sorting/sorting.h"
 
 namespace starrocks::pipeline {
 

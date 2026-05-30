@@ -45,7 +45,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "agent/status.h"
 #include "base/concurrency/spinlock.h"
 #include "base/statusor.h"
 #include "common/status.h"

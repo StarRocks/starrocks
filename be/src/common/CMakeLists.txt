@@ -15,13 +15,17 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
 set(COMMON_FILES
+  bloom_filter.cpp
+  block_split_bloom_filter.cpp
   bthread_timer.cpp
   brpc/brpc_stub_cache.cpp
   brpc/internal_service_recoverable_stub.cpp
   brpc/lake_service_recoverable_stub.cpp
   brpc_helper.cpp
   configbase.cpp
+  config_update_registry.cpp
   config.cpp
+  greplog.cpp
   memory/column_allocator.cpp
   metrics/process_metrics_registry.cpp
   runtime_profile.cpp
@@ -43,6 +47,7 @@ set(COMMON_FILES
   util/misc.cpp
   util/stack_trace_mutex.cpp
   util/table_metrics.cpp
+  util/thrift_client_cache.cpp
   util/thrift_client.cpp
   util/thrift_server.cpp
   util/thrift_util.cpp

@@ -23,6 +23,79 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.10
+
+发布日期：2026 年 5 月 9 日
+
+### 行为变更
+
+- `INSERT INTO FILES` 错误信息中的云存储凭证现已被脱敏，避免凭证通过错误日志或 `SHOW LOAD` 输出意外泄露。[#71245](https://github.com/StarRocks/starrocks/pull/71245)
+- 不再允许在 Hive Catalog 中查询 insert-only ACID Hive 表。此前由于无法识别此类表的 INSERT OVERWRITE 操作，查询结果可能比实际可见行多。现在此类表的查询将直接返回错误，避免静默的数据正确性问题。[#71460](https://github.com/StarRocks/starrocks/pull/71460)
+
+### 功能优化
+
+- 在 Iceberg `PartitionData` 构造路径中新增 Avro Schema 缓存，避免分区数较多时反复的 Jackson `ObjectMapper` 分配，显著降低分区加载内存开销。[#72215](https://github.com/StarRocks/starrocks/pull/72215)
+- 优化 `CatalogRecycleBin.getAdjustedRecycleTimestamp`，避免每次调用都重新构建 table-id 映射，降低回收站清理和 Tablet 调度的额外开销。[#72128](https://github.com/StarRocks/starrocks/pull/72128)
+- 存算分离模式下 `OlapTableSink.createLocation` 现在会批量获取 Tablet 位置信息，消除按 Tablet 单独发起 StarOS RPC 的开销，显著缩短 Planner 临界区时间。[#72041](https://github.com/StarRocks/starrocks/pull/72041)
+- Java UDAF 现在按查询粒度只加载和初始化一次，并在多个 Pipeline Driver 间复用，消除高 `pipeline_dop` 下 Driver 准备阶段的线性开销。[#72038](https://github.com/StarRocks/starrocks/pull/72038)
+- 新增 BE 指标 `starrocks_be_staros_shard_info_fallback_total` 和 `starrocks_be_staros_shard_info_fallback_failed_total`，用于追踪 StarOS Worker 在本地缓存未命中后回退到 starmgr 拉取 Shard 信息的次数。[#71620](https://github.com/StarRocks/starrocks/pull/71620)
+- File Bundle 写入现在优先选择 Tablet 本地的聚合节点，避免跨节点查找 Shard 信息。[#71613](https://github.com/StarRocks/starrocks/pull/71613)
+- Audit Log 中现在记录每个查询直接引用的表和视图。[#71596](https://github.com/StarRocks/starrocks/pull/71596)
+- `INSERT INTO FILES` 导出 CSV 时支持 `csv.enclose` 和 `csv.escape` 属性，可控制字段引用与转义行为。[#71589](https://github.com/StarRocks/starrocks/pull/71589)
+- 支持基于 DN 模式的 LDAP 直接绑定认证，在单租户 LDAP 场景下无需配置管理员搜索账号。[#71559](https://github.com/StarRocks/starrocks/pull/71559)
+- 为存算分离集群新增 `starrocks_fe_tablet_num` 指标，与存算一体集群的指标对齐。[#71444](https://github.com/StarRocks/starrocks/pull/71444)
+- `star_mgr_meta_sync_interval_sec` 现在支持通过 `ADMIN SET FRONTEND CONFIG` 在运行时动态修改，新值在下一个同步周期生效，无需重启 FE。[#71675](https://github.com/StarRocks/starrocks/pull/71675)
+
+### 问题修复
+
+修复了以下问题：
+
+- 存算分离 Combined Txn Log 模式下，按分区 Coordinator 分发的 INSERT 中存在跨 Sender 竞态，可能将合法 txn log 错误识别为 orphan 并丢弃，导致事务长时间不可见。[#72237](https://github.com/StarRocks/starrocks/pull/72237)
+- 存算分离 Combined Txn Log 模式下，运行时通过 `_incremental_open_node_channel` 打开的增量 Channel 因沿用旧的 "sender_id == 0 收集所有日志" 规则，会静默丢失 txn log。[#71992](https://github.com/StarRocks/starrocks/pull/71992)
+- `RuntimeProfile::to_thrift()` 在序列化期间被其他线程重置 Counter min/max 时，会因 `std::bad_optional_access` 导致 BE 崩溃。[#72904](https://github.com/StarRocks/starrocks/pull/72904)
+- Flat JSON merge 在某一侧为空时结果不一致的问题。[#72973](https://github.com/StarRocks/starrocks/pull/72973)
+- 用户在 `CREATE TABLE ... PROPERTIES (...)` 中显式指定 `format-version` 时，创建 Iceberg 表会因 "Multiple entries with same key: format-version" 报错的问题。[#72828](https://github.com/StarRocks/starrocks/pull/72828)
+- `CompactionScheduler.startCompaction` 在单表临界区内持有了库级 READ 锁，阻塞同库其他表的并发 DDL；现已改为库 IS + 表 READ。[#72178](https://github.com/StarRocks/starrocks/pull/72178)
+- `StarMgrMetaSyncer.syncTableMetaInternal` 和 `syncTableColocationInfo` 在外部 StarOS RPC 期间持有库级 READ/WRITE 锁，导致同库内所有表的 CREATE/DROP/ALTER/RENAME 在 RPC 期间被冻结。[#72108](https://github.com/StarRocks/starrocks/pull/72108)
+- `StarMgrMetaSyncer.getAllPartitionShardGroupId` 在遍历所有云原生表和物理分区期间持续持有库 READ 锁，在大型 Catalog 上会阻塞等待库写锁的 FE 线程。[#71614](https://github.com/StarRocks/starrocks/pull/71614)
+- `getTableNamesViewWithLock` 中冗余的库 READ 锁。底层 `nameToTable` 已是 `ConcurrentHashMap`，外层锁仅引入竞争。[#72042](https://github.com/StarRocks/starrocks/pull/72042)
+- 只读的 `/api/{db}/{table}/_count` REST 端点在计算 `proximateRowCount()` 时不必要地获取了库 WRITE 锁的问题。[#72053](https://github.com/StarRocks/starrocks/pull/72053)
+- Tablet Split、Schema Change、ALTER 等操作通过推进 `nextVersion` 预占版本号但无对应 publish 形成版本空洞，进而引发批量 publish 死锁的问题。[#71483](https://github.com/StarRocks/starrocks/pull/71483)
+- 存算一体模式下，Rowset 元数据 LRU 缓存满时执行 warmup 引发的死锁问题。[#71459](https://github.com/StarRocks/starrocks/pull/71459)
+- `PipelineTimerTask` 因消费者注册与完成信号顺序错误，可能在 `waitUtilFinished` 中卡住的问题。[#72058](https://github.com/StarRocks/starrocks/pull/72058)
+- `ConnectorSinkPassthroughExchanger::accept` 中 `_writer_count` 的条件竞态导致 BE 因 vector 越界访问触发 SIGSEGV 的问题。[#71848](https://github.com/StarRocks/starrocks/pull/71848)
+- `LoadChannel::get_load_replica_status` 中临时 `shared_ptr` 析构导致的 use-after-free 问题。[#71843](https://github.com/StarRocks/starrocks/pull/71843)
+- Information Schema Sink 在异步 RPC 闭包处理中缺少引用计数，导致 use-after-free 的问题。[#71513](https://github.com/StarRocks/starrocks/pull/71513)
+- `reverse(DecimalV3)` 由于对 Decimal 宽度处理不当导致 BE 崩溃的问题。[#71834](https://github.com/StarRocks/starrocks/pull/71834)
+- `UNNEST` 生成的列其 define 表达式被错误地标记为 ARRAY 类型，下游全局字典生成时引发 BE 崩溃的问题。[#72027](https://github.com/StarRocks/starrocks/pull/72027)
+- 创建 Iceberg 外表时若 Transform 参数顺序非法（如 `bucket(4, region)`、`truncate(4, region)`），FE 会抛出 NPE 而不是正常的 Analyzer 错误的问题。[#71917](https://github.com/StarRocks/starrocks/pull/71917)
+- 当某 Iceberg 表的首个查询不需要列统计（例如 `SELECT *`）时，Manifest Data File 缓存条目缺失列统计信息的问题。[#71913](https://github.com/StarRocks/starrocks/pull/71913)
+- Iceberg 表按 `bucket(col, N)` 分区时，因 `PruneHDFSScanColumnRule` 注入占位物化列导致 min/max 优化被静默跳过、回退到全文件扫描的问题。[#71863](https://github.com/StarRocks/starrocks/pull/71863)
+- `AggregateJoinPushDownRule` 通过 `Table.getId()` 比较外表（如 IcebergTable）身份，而 Connector 表 ID 可能在 Plan 重建时发生变化，导致基于 Iceberg 的物化视图改写失败的问题。[#71856](https://github.com/StarRocks/starrocks/pull/71856)
+- Hive 动态分区 INSERT OVERWRITE 提交时，若 Metastore 仍记录某分区但其 Location 在文件系统中不存在则失败的问题；现在会在提交前创建缺失的分区目录。[#71810](https://github.com/StarRocks/starrocks/pull/71810)
+- Arrow 返回 Dictionary 类型列（含 ARRAY、STRUCT、MAP 内嵌套的 Dictionary）时，Parquet Scanner 报 `Illegal converting from arrow type(dictionary) ...` 的问题。[#71855](https://github.com/StarRocks/starrocks/pull/71855)
+- `ColocatedBackendSelector.Assignment` 在增量批次处理中保留了上一批次的 Scan Range，导致这些文件被重复部署和扫描的问题。[#71789](https://github.com/StarRocks/starrocks/pull/71789)
+- `PruneShuffleColumnRule` 在剪除 Exchange Shuffle 列后未更新 Join 的 `outputProperty`，导致下游分布信息错误的问题。[#72003](https://github.com/StarRocks/starrocks/pull/72003)
+- 多阶段物化视图改写第一阶段禁用 `JoinPredicatePushDown` 时，`PushDownJoinOnExpressionToChildProject` 不能正常工作，且第二阶段缺失 Project 节点导致 Shuffle 分布错误的问题。[#71075](https://github.com/StarRocks/starrocks/pull/71075)
+- 谓词归一化使同一标量子查询占位符多次出现时，`ReplaceSubqueryRewriteRule` 重复挂接 `Apply` 节点引入冗余子查询分支的问题。[#71155](https://github.com/StarRocks/starrocks/pull/71155)
+- `EventScheduler` 中 Join Probe 已完成时 short-circuit 检测未将 Pipeline 整体置为完成状态的问题。[#71740](https://github.com/StarRocks/starrocks/pull/71740)
+- 通过 `aws.s3.iam_role_arn` 配置的 AWS Assume Role 未应用到 JNI Scanner（RCFile/Avro/SequenceFile/Hudi），导致 S3 403 的问题。[#71422](https://github.com/StarRocks/starrocks/pull/71422)
+- Oracle JDBC 谓词下推时日期字面值未匹配 Oracle NLS 格式导致 SQL 报错的问题；现在以 `date '...'` 形式发出。[#71412](https://github.com/StarRocks/starrocks/pull/71412)
+- 存算分离模式下，Follower FE 转发 DDL 给 Leader 后仅等待 FE Journal 回放而未等待 StarMgr Journal，导致紧随建表的查询出现 "no queryable replica" 的问题。[#71263](https://github.com/StarRocks/starrocks/pull/71263)
+- 主键表 `get_tablet_stats` 对每个 Segment 都通过 `get_del_vec_in_meta()` 重新加载完整 `TabletMetadata` 的问题。[#71672](https://github.com/StarRocks/starrocks/pull/71672)
+- Arrow Flight 在空结果集情况下返回的列名为 `r`（占位名）而不是真实 Schema 的问题。[#71534](https://github.com/StarRocks/starrocks/pull/71534)
+- 调整 `parallel_clone_task_per_path` 时 CLONE 线程池大小未将 Store Path 数纳入计算的问题。[#71484](https://github.com/StarRocks/starrocks/pull/71484)
+- 资源组用户分类器拒绝以数字开头的用户名（而 `CREATE USER` 允许）的问题；现在使用与 `CREATE USER` 相同的校验规则。[#71470](https://github.com/StarRocks/starrocks/pull/71470)
+- `HttpServerHandler.channelInactive` 在 `isRegistered()` 为 false 时跳过 `unregisterConnection`，导致早期失败请求泄漏 Connection Map 条目的问题。[#72006](https://github.com/StarRocks/starrocks/pull/72006)
+- Java UDF 中 JNI 调用（如 `NewObject`、`NewArray`、`NewStringUTF`）未检查异常或 null 返回，可能导致静默失败或未定义行为的问题。[#71734](https://github.com/StarRocks/starrocks/pull/71734)
+- `be_tablets.DATA_SIZE` 错误地报告 `total_disk_size`（包括 Rowset 内嵌索引以及 Lake PK 持久化索引），现统一改为报告 Rowset 列数据字节数。[#70735](https://github.com/StarRocks/starrocks/pull/70735)
+- `StarMgrMetaSyncer` 在没有需删除的 Shard 时仍打印 "Failed to batch drop tablets" 告警日志的问题。[#72209](https://github.com/StarRocks/starrocks/pull/72209)
+- CVE-2026-42198（pgjdbc）和 CVE-2026-5598（BouncyCastle）：将 `org.postgresql:postgresql` 升级到 42.7.11，BouncyCastle 升级到 1.84。[#72797](https://github.com/StarRocks/starrocks/pull/72797)
+- Netty CVE：将 Netty 升级到 4.1.133.Final。[#72905](https://github.com/StarRocks/starrocks/pull/72905)
+- 升级 Broker 的 netty / jetty / awssdk / jackson 依赖以处理已知 CVE。[#72184](https://github.com/StarRocks/starrocks/pull/72184)
+- 将 jetty-http 升级到 9.4.58.v20250814，修复旧版本中的已知 CVE。[#71762](https://github.com/StarRocks/starrocks/pull/71762)
+- 由于 jetty 9.x 已 EOL 且上游不再发布修复版本，临时屏蔽 CVE-2026-2332 以解锁构建流程。[#71914](https://github.com/StarRocks/starrocks/pull/71914)
+
 ## 4.0.9
 
 发布日期：2026 年 4 月 16 日

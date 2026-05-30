@@ -24,7 +24,7 @@
 #include "http/http_status.h"
 
 #ifdef USE_STAROS
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #endif
 
 namespace starrocks {

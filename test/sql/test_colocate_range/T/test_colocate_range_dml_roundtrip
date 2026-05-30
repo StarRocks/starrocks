@@ -1,0 +1,29 @@
+-- name: test_colocate_range_dml_roundtrip @cloud @sequential
+-- SQL integration: insert / delete / select round-trip on a range-colocate
+-- table. Verifies write paths stay correct after the colocate-group setup.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_dml_${uuid0}:k1');
+
+insert into t values
+    (1, 10, 100), (1, 11, 110),
+    (2, 20, 200), (2, 21, 210),
+    (3, 30, 300), (3, 31, 310);
+
+select count(*) from t;
+select sum(v) from t;
+
+-- delete one k1 partition's worth of rows
+delete from t where k1 = 2;
+
+select count(*) from t;
+select sum(v) from t;
+select count(distinct k1) from t;
+
+drop table t;
+drop database db_${uuid0};

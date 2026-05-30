@@ -217,9 +217,11 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 
 DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 2;
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
--- Refresh must FAIL because incremental mode does not allow non-append-only delta
+-- Refresh must FAIL because incremental mode does not allow non-append-only delta.
+-- The error must surface both the specific reason and the drop-and-recreate guidance.
 SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
-SELECT ERROR_MESSAGE LIKE '%not append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%non-append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
 
 DROP MATERIALIZED VIEW test_mv1;
 

@@ -594,6 +594,11 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayModifyTableColocate(info);
                     break;
                 }
+                case OperationType.OP_COLOCATE_RANGE_UPDATE: {
+                    final ColocateRangePersistInfo info = (ColocateRangePersistInfo) journal.data();
+                    globalStateMgr.getColocateTableIndex().replayColocateRangeUpdate(info);
+                    break;
+                }
                 case OperationType.OP_HEARTBEAT_V2: {
                     final HbPackage hbPackage = (HbPackage) journal.data();
                     GlobalStateMgr.getCurrentState().getHeartbeatMgr().replayHearbeat(hbPackage);
@@ -1852,6 +1857,20 @@ public class EditLog {
 
     public void logModifyTableColocate(TablePropertyInfo info) {
         logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
+    }
+
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info);
+    }
+
+    /**
+     * WAL-applier overload: the supplied applier runs after the journal record is durable,
+     * so the in-memory mutation matches the persisted state on both leader and follower.
+     * Used by the SplitTabletJob post-publish path so the ColocateRangeMgr update is
+     * sequenced with the same semantics as markGroupUnstable.
+     */
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info, walApplier);
     }
 
     public void logHeartbeat(HbPackage hbPackage) {

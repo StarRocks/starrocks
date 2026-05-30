@@ -1,5 +1,10 @@
 name: CI Report
-run-name: CI Report(#${{ github.event.workflow_run.id }})
+run-name: >-
+  CI Report —
+  ${{ github.event.workflow_run.pull_requests[0].number
+      && format('PR #{0} ({1})', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_branch)
+      || github.event.workflow_run.head_branch }}
+  (parent #${{ github.event.workflow_run.id }})
 
 on:
   workflow_run:
@@ -39,6 +44,20 @@ jobs:
       BUCKET_PREFIX: ${{ steps.bucket_info.outputs.bucket_prefix }}
       SKIP_COV: ${{ steps.pr_details.outputs.SKIP_COV }}
     steps:
+      - name: Surface parent CI PIPELINE link
+        env:
+          PARENT_RUN_ID: ${{ github.event.workflow_run.id }}
+          PARENT_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          {
+            echo "## Parent CI PIPELINE run"
+            echo ""
+            printf '[Run #%s](%s) - branch `%s` @ `%s`\n' \
+              "$PARENT_RUN_ID" "$PARENT_RUN_URL" "$HEAD_BRANCH" "$HEAD_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - run: |
           sleep 10
 
@@ -377,7 +396,12 @@ jobs:
 
       - name: Merge BE Total Coverage
         id: merge
-        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success' && env.SKIP_COV != 'true'
+        if: >
+          steps.download-ut-xml.outputs.size != '0'
+          && steps.download-ut-xml.outcome == 'success'
+          && env.SKIP_COV != 'true'
+          && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
+          && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
@@ -396,7 +420,12 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: always() && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
+        if: >
+          always()
+          && steps.download-ut-xml.outputs.size != '0'
+          && steps.download-ut-xml.outcome == 'success'
+          && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
+          && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         env:
           be_path: ${{ github.workspace }}/be
           merge_outcome: ${{ steps.merge.outcome }}
@@ -405,7 +434,10 @@ jobs:
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          if [[ "${{ github.repository }}" != "StarRocks/starrocks" ]] || [[ "${merge_outcome}" == "failure" ]]; then
+          # Fallback to raw BE UT coverage only when merge actually failed or was skipped.
+          # Previous code keyed on repository name; now both repos run merge by default,
+          # so the only signal is merge_outcome.
+          if [[ "${merge_outcome}" == "failure" || "${merge_outcome}" == "skipped" ]]; then
               total_xml=${be_path}/be_ut_coverage.xml
           fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \

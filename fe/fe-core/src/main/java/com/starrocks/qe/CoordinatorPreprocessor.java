@@ -31,6 +31,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
@@ -151,10 +152,13 @@ public class CoordinatorPreprocessor {
         boolean skipBlackList = sessionVariable.isSkipBlackList();
         
         if (RunMode.isSharedDataMode()) {
+            BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy =
+                    sessionVariable.getBlacklistBackupRoutingPolicy();
             if (skipBlackList) {
-                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory();
+                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory(
+                        blacklistBackupRoutingPolicy);
             } else {
-                return new DefaultSharedDataWorkerProvider.Factory();
+                return new DefaultSharedDataWorkerProvider.Factory(blacklistBackupRoutingPolicy);
             }
         } else {
             if (skipBlackList) {

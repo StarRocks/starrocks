@@ -43,6 +43,7 @@ import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
@@ -82,6 +83,8 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -1280,5 +1283,157 @@ public class GlobalTransactionMgrTest {
     private void assertEditLogWriteFailed(RuntimeException exception) {
         Assertions.assertTrue(exception.getMessage().contains("EditLog write failed")
                 || exception.getCause() != null && exception.getCause().getMessage().contains("EditLog write failed"));
+    }
+
+    // ===========================================================================
+    // Tests for ADMIN SKIP COMMITTED TRANSACTION
+    // (DatabaseTransactionMgr.markCommittedTransactionAsNoOpPublish &
+    //  GlobalTransactionMgr.markCommittedTransactionAsNoOpPublish)
+    // ===========================================================================
+
+    @Test
+    public void testMarkNoOpPublishRejectsWhenConfigDisabled() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // Begin and commit a transaction so it sits in COMMITTED state.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+        assertEquals(TransactionStatus.COMMITTED,
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId).getTransactionStatus());
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = false;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "disabled-test"));
+            Assertions.assertTrue(ex.getMessage().contains("disabled"),
+                    "error must mention the config gate, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishRejectsNonCommittedState() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // Begin only — the txn is in PREPARE, not COMMITTED.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        assertEquals(TransactionStatus.PREPARE,
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId).getTransactionStatus());
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "wrong-state"));
+            Assertions.assertTrue(ex.getMessage().contains("COMMITTED"),
+                    "error must mention COMMITTED requirement, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishRejectsUnsupportedSourceType() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // DELETE is not in the supported source-type whitelist.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.DELETE, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "wrong-source-type"));
+            Assertions.assertTrue(ex.getMessage().contains("source type"),
+                    "error must mention source type rejection, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishHappyPath() throws Exception {
+        // Make the OlapTable fixture look like a lake table with file_bundling=true
+        // so the full success path executes (state validation, idempotency check,
+        // mark+persist via edit log, audit log). Without this MockUp the fixture's
+        // regular OlapTable is rejected at the lake-table validation.
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isCloudNativeTable() {
+                return true;
+            }
+            @Mock
+            public Boolean isFileBundling() {
+                return Boolean.TRUE;
+            }
+        };
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId).getTransactionStatus());
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "happy-path-test");
+
+            TransactionState state = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId);
+            Assertions.assertNotNull(state);
+            Assertions.assertTrue(state.isNoOpPublish(),
+                    "txn must be marked as no-op publish after successful call");
+            Assertions.assertEquals("happy-path-test", state.getNoOpPublishReason());
+            // Status remains COMMITTED — the daemon will later flip it to VISIBLE
+            // after BE handles the no-op publish RPC.
+            Assertions.assertEquals(TransactionStatus.COMMITTED, state.getTransactionStatus());
+
+            // Second invocation is idempotent (state is already marked).
+            masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "second-call-ignored");
+            TransactionState stateAfter = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId);
+            // Reason from the FIRST call is preserved, not overwritten.
+            Assertions.assertEquals("happy-path-test", stateAfter.getNoOpPublishReason());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishRejectsNonLakeTable() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // The test fixture's testTableId1 is a regular OlapTable (not cloud-native),
+        // so the lake-table validation must reject this txn.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "non-lake-test"));
+            Assertions.assertTrue(ex.getMessage().contains("shared-data") || ex.getMessage().contains("lake"),
+                    "error must mention shared-data/lake requirement, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
     }
 }

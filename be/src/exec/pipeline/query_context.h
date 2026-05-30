@@ -16,15 +16,16 @@
 
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #include "base/concurrency/spinlock.h"
 #include "base/hash/hash.h"
 #include "base/hash/hash_std.hpp"
-#include "base/metrics.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -32,11 +33,9 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors_fwd.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state_fwd.h"
 #include "util/debug/query_trace.h"
@@ -408,54 +407,6 @@ private:
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 
     GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
-};
-
-// TODO: use brpc::TimerThread refactor QueryContext
-class QueryContextManager {
-public:
-    QueryContextManager(size_t log2_num_slots);
-    ~QueryContextManager();
-    Status init(MetricRegistry* metrics = nullptr);
-    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
-    QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
-    size_t size();
-    bool remove(const TUniqueId& query_id);
-    // used for graceful exit
-    void clear();
-
-    void report_fragments(const std::vector<starrocks::PipeLineReportTaskKey>& non_pipeline_need_report_fragment_ids);
-
-    void report_fragments_with_same_host(
-            const std::vector<std::shared_ptr<FragmentContext>>& need_report_fragment_context,
-            std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
-            std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
-            std::vector<int32_t>& cur_batch_report_indexes);
-
-    void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
-                                  PCollectQueryStatisticsResult* response);
-    void for_each_active_ctx(const std::function<void(QueryContextPtr)>& func);
-
-private:
-    static void _clean_func(QueryContextManager* manager);
-    void _clean_query_contexts();
-    void _stop_clean_func() { _stop.store(true); }
-    bool _is_stopped() { return _stop; }
-    size_t _slot_idx(const TUniqueId& query_id);
-    void _clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del);
-
-private:
-    const size_t _num_slots;
-    const size_t _slot_mask;
-    std::vector<std::shared_mutex> _mutexes;
-    std::vector<std::unordered_map<TUniqueId, QueryContextPtr>> _context_maps;
-    std::vector<std::unordered_map<TUniqueId, QueryContextPtr>> _second_chance_maps;
-
-    std::atomic<bool> _stop{false};
-    std::shared_ptr<std::thread> _clean_thread;
-    MetricRegistry* _metrics = nullptr;
-
-    inline static const char* _metric_name = "pip_query_ctx_cnt";
-    std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
 } // namespace pipeline

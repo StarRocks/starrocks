@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "These functions return the size information of table columns for storage analysis and optimization."
 ---
 
 # column_size & column_compressed_size

@@ -40,10 +40,12 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "http/http_metrics.h"
-#include "io/core/io_profiler_metrics.h"
+#include "io/io_profiler_metrics.h"
+#include "platform/platform_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "service/service_metrics.h"
+#include "staros_integration/staros_worker_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
@@ -245,6 +247,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     compression::install_compression_context_pool_metrics(registry);
     HttpMetrics::instance()->install(registry);
     ServiceMetrics::instance()->install(registry);
+    StarOSWorkerMetrics::instance()->install(registry);
     auto* agent_metrics = AgentMetrics::instance();
     agent_metrics->install(registry);
     auto* runtime_metrics = RuntimeMetrics::instance();
@@ -264,7 +267,8 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     agent_metrics->install_disk_path_metrics(registry, options.storage_paths);
 
     if (options.init_system_metrics) {
-        SystemMetrics::instance()->install(registry, disk_devices, network_interfaces);
+        PlatformMetrics::instance()->install(registry, disk_devices, network_interfaces);
+        SystemMetrics::instance()->install(registry);
         IOProfilerMetrics::instance()->install(registry);
     }
 

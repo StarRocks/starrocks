@@ -33,7 +33,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [ログ](#ログ)
 - [サーバー](#サーバー)
 - [メタデータとクラスター管理](#メタデータとクラスター管理)

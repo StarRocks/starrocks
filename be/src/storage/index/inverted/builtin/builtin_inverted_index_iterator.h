@@ -37,10 +37,10 @@ public:
 
     ~BuiltinInvertedIndexIterator() override = default;
 
-    Status read_from_inverted_index(const std::string& column_name, const void* query_value,
+    Status read_from_inverted_index(const std::string_view column_name, const void* query_value,
                                     InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
 
-    Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
+    Status read_null(const std::string_view column_name, roaring::Roaring* bit_map) override;
 
 private:
     Status _tokenize_query_by_parser(const Slice& query, std::vector<std::string>* tokens);

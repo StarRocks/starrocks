@@ -16,28 +16,30 @@
 
 #include <gtest/gtest.h>
 
-namespace starrocks {
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
+#include "compute_env/compute_env.h"
+#include "platform/platform_env.h"
+#include "runtime/env/global_env.h"
 
-TEST(GlobalEnvTest, calc_query_mem_limit) {
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(-1, 80), -1);
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, -2), 900000000);
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, 102), 900000000);
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, 70), 700000000);
-}
+namespace starrocks {
 
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;
+    auto* global_env = GlobalEnv::GetInstance();
+    auto* platform_env = PlatformEnv::GetInstance();
+    platform_env->destroy();
+
+    static auto* metrics = new MetricRegistry("exec_env_test");
+    ASSERT_OK(platform_env->init(metrics));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
 
-    env._thread_pool = reinterpret_cast<PriorityThreadPool*>(0x1);
-    env._driver_limiter = reinterpret_cast<pipeline::DriverLimiter*>(0x2);
-    env._pipeline_timer = reinterpret_cast<pipeline::PipelineTimer*>(0x3);
-    env._max_executor_threads = 17;
-    env._backend_client_cache = reinterpret_cast<ClientCache<BackendServiceClient>*>(0x4);
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.max_num_pipeline_drivers = 2;
+    ASSERT_OK(env.compute_env()->init(compute_env_options));
     env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
-    env._brpc_stub_cache = reinterpret_cast<BrpcStubCache*>(0x6);
     env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
@@ -46,20 +48,30 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     env._refresh_service_contexts();
 
-    EXPECT_EQ(env.execution_services().thread_pool, env._thread_pool);
+    EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
     EXPECT_EQ(env.execution_services().workgroup_manager, nullptr);
-    EXPECT_EQ(env.execution_services().driver_limiter, env._driver_limiter);
-    EXPECT_EQ(env.execution_services().pipeline_timer, env._pipeline_timer);
-    EXPECT_EQ(env.execution_services().max_executor_threads, env._max_executor_threads);
+    EXPECT_EQ(env.execution_services().driver_limiter, env.compute_env()->driver_limiter());
+    EXPECT_EQ(env.execution_services().pipeline_timer, env.compute_env()->pipeline_timer());
+    EXPECT_EQ(env.execution_services().max_executor_threads, global_env->max_executor_threads());
+    EXPECT_EQ(env.stream_mgr(), env.compute_env()->stream_mgr());
+    EXPECT_EQ(env.result_mgr(), env.compute_env()->result_mgr());
+    EXPECT_EQ(env.result_queue_mgr(), env.compute_env()->result_queue_mgr());
 
-    EXPECT_EQ(env.rpc_services().backend_client_cache, env._backend_client_cache);
+    EXPECT_EQ(env.rpc_services().backend_client_cache, platform_env->backend_client_cache());
+    EXPECT_EQ(env.rpc_services().frontend_client_cache, platform_env->frontend_client_cache());
+    EXPECT_EQ(env.rpc_services().broker_client_cache, platform_env->broker_client_cache());
     EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);
-    EXPECT_EQ(env.rpc_services().brpc_stub_cache, env._brpc_stub_cache);
+    EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
 
     EXPECT_EQ(env.lake_services().lake_tablet_manager, env._lake_tablet_manager);
+    EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
+              global_env->lake_vector_index_build_thread_pool());
 
     EXPECT_EQ(env.runtime_services().fragment_mgr, env._fragment_mgr);
     EXPECT_EQ(env.runtime_services().query_context_mgr, env._query_context_mgr);
+    EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
+    EXPECT_EQ(env.runtime_services().result_mgr, env.compute_env()->result_mgr());
+    EXPECT_EQ(env.runtime_services().result_queue_mgr, env.compute_env()->result_queue_mgr());
 
     EXPECT_EQ(env.agent_services().agent_server, env._agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);

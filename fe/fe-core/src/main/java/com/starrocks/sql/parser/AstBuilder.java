@@ -79,6 +79,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
@@ -340,6 +341,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -3062,6 +3064,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new AdminAlterAutomatedSnapshotIntervalStmt(intervalLiteral, createPos(context));
     }
 
+    @Override
+    public ParseNode visitAdminSkipCommittedTransactionStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminSkipCommittedTransactionStatementContext context) {
+        long txnId = Long.parseLong(context.txnId.getText());
+        String reason = "";
+        if (context.reason != null) {
+            reason = ((StringLiteral) visit(context.reason)).getValue();
+        }
+        return new AdminSkipCommittedTransactionStmt(txnId, reason, createPos(context));
+    }
+
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
 
     @Override
@@ -4722,13 +4735,26 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitExecuteScriptStatement(com.starrocks.sql.parser.StarRocksParser.ExecuteScriptStatementContext context) {
-        long beId = -1;
-        if (context.INTEGER_VALUE() != null) {
-            beId = Long.parseLong(context.INTEGER_VALUE().getText());
-        }
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         String script = stringLiteral.getStringValue();
-        return new ExecuteScriptStmt(beId, script, createPos(context));
+        com.starrocks.sql.parser.StarRocksParser.ExecuteScriptTargetContext target = context.executeScriptTarget();
+
+        ExecuteScriptStmt.TargetType targetType;
+        java.util.List<Long> nodeIds = java.util.Collections.emptyList();
+        if (target.FRONTEND() != null) {
+            targetType = ExecuteScriptStmt.TargetType.FRONTEND;
+        } else if (target.ALL() != null && target.BACKENDS() != null) {
+            targetType = ExecuteScriptStmt.TargetType.ALL_BACKENDS;
+        } else if (target.ALL() != null && target.COMPUTE() != null) {
+            targetType = ExecuteScriptStmt.TargetType.ALL_COMPUTE_NODES;
+        } else {
+            targetType = ExecuteScriptStmt.TargetType.NODES;
+            nodeIds = new java.util.ArrayList<>(target.INTEGER_VALUE().size());
+            for (org.antlr.v4.runtime.tree.TerminalNode node : target.INTEGER_VALUE()) {
+                nodeIds.add(Long.parseLong(node.getText()));
+            }
+        }
+        return new ExecuteScriptStmt(targetType, nodeIds, script, createPos(context));
     }
 
     // ---------------------------------------- Storage Volume Statement ----------------------------------------------
@@ -5207,6 +5233,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitOptimizeClause(com.starrocks.sql.parser.StarRocksParser.OptimizeClauseContext context) {
+        if (context.keyDesc() == null && context.partitionDesc() == null && context.distributionDesc() == null
+                && context.orderByDesc() == null && context.partitionNames() == null && context.optimizeRange() == null) {
+            throw new ParsingException("ALTER TABLE requires at least one alter clause", createPos(context));
+        }
         return new OptimizeClause(
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
@@ -6899,6 +6929,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitShowCreateFunctionStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowCreateFunctionStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        boolean isGlobal = context.GLOBAL() != null;
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, createPos(context), isGlobal);
+        if (isGlobal && !Strings.isNullOrEmpty(functionRef.getDbName())) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
+        }
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        return new ShowCreateFunctionStmt(functionRef, argsDef, createPos(context));
+    }
+
+    @Override
     public ParseNode visitCreateUdfFunctionStmt(com.starrocks.sql.parser.StarRocksParser.CreateUdfFunctionStmtContext context) {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
@@ -8441,6 +8484,31 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitTrimFunction(com.starrocks.sql.parser.StarRocksParser.TrimFunctionContext context) {
+        NodePosition pos = createPos(context);
+        Expr strExpr = (Expr) visit(context.str);
+        boolean leading = context.LEADING() != null;
+        boolean trailing = context.TRAILING() != null;
+
+        if (context.remstr != null) {
+            // MySQL substring semantics: route to the substring-trim builtins.
+            Expr remstr = (Expr) visit(context.remstr);
+            String fnName = leading ? FunctionSet.LTRIM_STRING
+                    : trailing ? FunctionSet.RTRIM_STRING
+                    : FunctionSet.TRIM_STRING;
+            return new FunctionCallExpr(fnName,
+                    new FunctionParams(false, Lists.newArrayList(strExpr, remstr)), pos);
+        } else {
+            // No remstr -> whitespace trim, reuse existing optimized builtins.
+            String fnName = leading ? FunctionSet.LTRIM
+                    : trailing ? FunctionSet.RTRIM
+                    : FunctionSet.TRIM;
+            return new FunctionCallExpr(fnName,
+                    new FunctionParams(false, Lists.newArrayList(strExpr)), pos);
+        }
+    }
+
+    @Override
     public ParseNode visitCast(com.starrocks.sql.parser.StarRocksParser.CastContext context) {
         return new CastExpr(new TypeDef(TypeParser.getType(context.type())), (Expr) visit(context.expression()),
                 createPos(context));
@@ -8450,6 +8518,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitConvert(com.starrocks.sql.parser.StarRocksParser.ConvertContext context) {
         return new CastExpr(new TypeDef(TypeParser.getType(context.type())), (Expr) visit(context.expression()),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTypeCast(com.starrocks.sql.parser.StarRocksParser.TypeCastContext context) {
+        return new CastExpr(new TypeDef(TypeParser.getType(context.type())),
+                (Expr) visit(context.primaryExpression()), createPos(context));
     }
 
     @Override

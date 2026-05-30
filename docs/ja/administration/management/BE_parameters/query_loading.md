@@ -33,7 +33,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ***
 
-このトピックでは、以下の種類のFE構成について説明します。
+このトピックでは、以下の種類のBE構成について説明します。
 
 - [クエリ](#query)
 - [ロードとアンロード](#loading-and-unloading)

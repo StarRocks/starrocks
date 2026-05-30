@@ -66,6 +66,14 @@ private:
     int _real_port;
 
     int _server_fd = -1;
+    // True iff `_server_fd` was opened with SO_REUSEPORT set before bind(),
+    // i.e. it is a real member of the kernel's reuseport group. Workers only
+    // open their own per-worker listen sockets in that case; otherwise every
+    // worker shares `_server_fd` (legacy single-listener behaviour).
+    bool _reuseport_enabled = false;
+    // Per-worker listening fds bound with SO_REUSEPORT. Empty when reuseport
+    // mode is disabled — in that case all workers share `_server_fd`.
+    std::vector<int> _worker_fds;
     std::vector<std::thread> _workers;
 
     pthread_rwlock_t _rw_lock;

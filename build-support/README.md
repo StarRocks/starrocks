@@ -18,6 +18,7 @@ Brief notes on helper scripts in this directory.
     - `./build-support/clang-tidy.sh run-full <branch> <build_type> <j_parallel> [add_compile_options]`
     - `./build-support/clang-tidy.sh run-changed <base_version> <branch> <build_type> <j_parallel> [add_compile_options]`
 - `build-support/compile_time.sh`: Collect and report compile-time statistics (clang). Usage: `bash build-support/compile_time.sh`
+- `build-support/darwin_build_env.sh`: Internal macOS ARM64 environment setup sourced by the root build helpers. Use `./build.sh --be` rather than sourcing it directly.
 - `build-support/format_changed_files.py`: Filter a list of changed files to C++ sources within target dirs. Usage: `python3 build-support/format_changed_files.py --help`
 - `build-support/gen_config_fwd_headers.py`: Generate or validate committed `be/src/common/config_<domain>_fwd.h` headers from `be/src/common/config.h`. The selection manifest lives at `be/src/common/config_fwd_headers_manifest.json`. The generator preserves selected configs' surrounding preprocessor guards and, by default, only rewrites files whose content changed so unchanged headers keep their timestamps. Usage: `python3 build-support/gen_config_fwd_headers.py`, `python3 build-support/gen_config_fwd_headers.py --check`, or `python3 build-support/gen_config_fwd_headers.py --force`
 - `build-support/gen_build_version.py`: Generate build version metadata. Usage: `python3 build-support/gen_build_version.py --help`

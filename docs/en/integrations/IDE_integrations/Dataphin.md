@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Dataphin is a cloud-based output of the internal practices of Alibaba Group's OneData data governance methodology."
 ---
 
 # Dataphin

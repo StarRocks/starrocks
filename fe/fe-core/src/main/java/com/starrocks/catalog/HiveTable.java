@@ -134,6 +134,7 @@ public class HiveTable extends Table {
     private Map<String, String> hiveProperties = Maps.newHashMap();
     @SerializedName(value = "sp")
     private Map<String, String> serdeProperties = Maps.newHashMap();
+    @SerializedName(value = "asj") private String avroSchemaJson;
 
     private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
@@ -255,6 +256,14 @@ public class HiveTable extends Table {
 
     public Map<String, String> getSerdeProperties() {
         return serdeProperties;
+    }
+
+    public String getAvroSchemaJson() {
+        return avroSchemaJson;
+    }
+
+    public void setAvroSchemaJson(String avroSchemaJson) {
+        this.avroSchemaJson = avroSchemaJson;
     }
 
     public boolean hasBooleanTypePartitionColumn() {
@@ -389,6 +398,9 @@ public class HiveTable extends Table {
         tHdfsTable.setHive_column_names(hiveProperties.get(HIVE_TABLE_COLUMN_NAMES));
         tHdfsTable.setHive_column_types(hiveProperties.get(HIVE_TABLE_COLUMN_TYPES));
         tHdfsTable.setSerde_properties(serdeProperties);
+        if (avroSchemaJson != null) {
+            tHdfsTable.setAvro_schema_json(avroSchemaJson);
+        }
         tHdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),

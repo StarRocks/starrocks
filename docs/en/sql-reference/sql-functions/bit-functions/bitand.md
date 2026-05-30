@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the bitwise AND of two numeric expressions."
 ---
 
 # bitand

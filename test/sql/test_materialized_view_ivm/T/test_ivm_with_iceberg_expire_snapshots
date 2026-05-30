@@ -174,10 +174,12 @@ ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(r
 -- The Iceberg connector surfaces this as "Starting snapshot ... is
 -- not a parent ancestor of end snapshot ..." because the MV's TVR
 -- anchor is no longer part of the current snapshot chain after
--- expire_snapshots removed it.
+-- expire_snapshots removed it. The IVM processor wraps this with the
+-- partition-shape change error and drop-and-recreate guidance.
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
-SELECT ERROR_MESSAGE REGEXP '(not append-only|not a parent ancestor)' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%snapshot ancestry broken%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
 
 DROP MATERIALIZED VIEW test_mv2;
 

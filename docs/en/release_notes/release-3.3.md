@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.3 release notes: sub-second DDL via Fast Schema Evolution in shared-data, StarRocks Data Migration Tool, CACHE SELECT for data lake warmup,..."
 ---
 
 # StarRocks version 3.3
@@ -284,7 +285,7 @@ Release Date: May 14, 2025
 ### Improvements
 
 - Optimized error messages for regex parsing failures. [#57904](https://github.com/StarRocks/starrocks/pull/57904)
-- Fixed security vulnerabilities [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) and [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464). [#58425](https://github.com/StarRocks/starrocks/pull/58425)
+- Fixed security vulnerabilities [SNYK-JAVA-ORGJSON-5488379](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) and [SNYK-JAVA-ORGJSON-5962464](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464). [#58425](https://github.com/StarRocks/starrocks/pull/58425)
 
 ### Bug Fixes
 

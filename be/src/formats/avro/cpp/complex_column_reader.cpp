@@ -38,7 +38,9 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
         const auto& field_name = _type_desc.field_names[i];
         ASSIGN_OR_RETURN(auto* field_column, struct_column->field_column_raw_ptr(field_name));
 
-        if (record.hasField(field_name)) {
+        if (_field_readers[i] == nullptr) {
+            field_column->append_nulls(1);
+        } else if (record.hasField(field_name)) {
             const auto& field = record.field(field_name);
             auto* field_reader = down_cast<NullableColumnReader*>(_field_readers[i].get());
             RETURN_IF_ERROR(field_reader->read_datum(field, field_column));
@@ -52,8 +54,6 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
 Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
     DCHECK_EQ(datum.type(), avro::AVRO_ARRAY);
 
-    auto* element_reader = down_cast<NullableColumnReader*>(_element_reader.get());
-
     auto array_column = down_cast<ArrayColumn*>(column);
     auto* elements_column = array_column->elements_column_raw_ptr();
     auto* offsets_column = array_column->offsets_column_raw_ptr();
@@ -63,7 +63,12 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
 
     uint32_t n = 0;
     for (auto& value : array_values) {
-        RETURN_IF_ERROR(element_reader->read_datum(value, elements_column));
+        if (_element_reader != nullptr) {
+            auto* element_reader = down_cast<NullableColumnReader*>(_element_reader.get());
+            RETURN_IF_ERROR(element_reader->read_datum(value, elements_column));
+        } else {
+            elements_column->append_nulls(1);
+        }
         ++n;
     }
 
@@ -75,12 +80,8 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
 Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
     DCHECK_EQ(datum.type(), avro::AVRO_MAP);
 
-    auto* value_reader = down_cast<NullableColumnReader*>(_value_reader.get());
-
     auto map_column = down_cast<MapColumn*>(column);
     auto keys_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
-    auto* keys_null_column = keys_column->null_column_raw_ptr();
-    auto keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column_raw_ptr());
     auto* values_column = map_column->values_column_raw_ptr();
     auto* offsets_column = map_column->offsets_column_raw_ptr();
 
@@ -89,16 +90,28 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
 
     uint32_t n = 0;
     for (auto& p : map_values) {
-        const auto& key = p.first;
-        if (UNLIKELY(key.size() > _type_desc.children[0].len)) {
-            return Status::DataQualityError(fmt::format("Value length is beyond the capacity. column: {}, capacity: {}",
-                                                        _col_name, _type_desc.children[0].len));
+        if (_key_reader != nullptr) {
+            auto* keys_null_column = keys_column->null_column_raw_ptr();
+            auto* keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column_raw_ptr());
+            const auto& key = p.first;
+            if (UNLIKELY(key.size() > _type_desc.children[0].len)) {
+                return Status::DataQualityError(
+                        fmt::format("Value length is beyond the capacity. column: {}, capacity: {}", _col_name,
+                                    _type_desc.children[0].len));
+            }
+            keys_data_column->append(Slice(key));
+            keys_null_column->append(0);
+        } else {
+            keys_column->append_nulls(1);
         }
-        keys_data_column->append(Slice(key));
-        keys_null_column->append(0);
 
-        const auto& value = p.second;
-        RETURN_IF_ERROR(value_reader->read_datum(value, values_column));
+        if (_value_reader != nullptr) {
+            auto* value_reader = down_cast<NullableColumnReader*>(_value_reader.get());
+            const auto& value = p.second;
+            RETURN_IF_ERROR(value_reader->read_datum(value, values_column));
+        } else {
+            values_column->append_nulls(1);
+        }
 
         ++n;
     }

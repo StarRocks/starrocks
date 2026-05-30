@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE MATERIALIZED VIEW creates a materialized view."
 ---
 
 # CREATE MATERIALIZED VIEW
@@ -42,7 +43,7 @@ Parameters in brackets [] are optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (`_`), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 - The name is case-sensitive.
 
@@ -185,7 +186,7 @@ Parameters in brackets [] are optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (`_`), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 - The name is case-sensitive.
 
@@ -328,7 +329,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");  
 ```  
 
-**PROPERTIES** (optional)
+#### PROPERTIES (optional)
 
 Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md).
 

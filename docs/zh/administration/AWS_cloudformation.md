@@ -57,14 +57,14 @@ AWS CloudFormation 是 AWS 提供的一项服务，支持简单且快速地对 A
       |                    | Meta data dir                                                | FE 元数据存储路径，且必须为绝对路径。默认为 **feDefaultMetaPath**，表示使用默认路径 **/home/starrocks/StarRocks/fe/meta**。 |
       | BE 配置项          | Dir to save be sys log                                       | BE 日志的存储路径，必须填写绝对路径。                        |
       |                    | Sys Log Level                                                | BE 日志级别，默认值为 **INFO**，取值为 **INFO**、**WARN**、 **ERROR**、**FATAL**。 |
-      |                    | Volume type of Be nodes                                      | Amazon EBS 卷类型。Amazon EBS 卷（简称 EBS 卷）是块存储卷，挂载至Amazon EC2 实例上。更多介绍和类型说明，请参见[Amazon EBS 卷](https://docs.aws.amazon.com/zh_cn/AWSEC2/latest/UserGuide/ebs-volumes.html)。 |
+      |                    | Volume type of Be nodes                                      | Amazon EBS 卷类型。Amazon EBS 卷（简称 EBS 卷）是块存储卷，挂载至Amazon EC2 实例上。更多介绍和类型说明，请参见[Amazon EBS 卷](https://docs.aws.amazon.com/zh_cn/ebs/latest/userguide/ebs-volumes.html)。 |
       |                    | Volume size of Be nodes                                      | EBS 卷中可用于 BE 节点存储数据的容量，单位为 GB。            |
 
-5. 设置堆栈更多选项。更多说明，请参见[设置 AWS CloudFormation 堆栈选项](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-console-add-tags.html)。
+5. 设置堆栈更多选项。更多说明，请参见[设置 AWS CloudFormation 堆栈选项](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html)。
 
     设置完成后，单击**下一步**。
 
-6. 审核前面设置的堆栈信息，包括模板、详细信息、更多选项。并且，评估堆栈成本。更多说明，请参见[审查堆栈信息并评估堆栈成本](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-using-console-create-stack-review.html)。
+6. 审核前面设置的堆栈信息，包括模板、详细信息、更多选项。并且，评估堆栈成本。更多说明，请参见[审查堆栈信息并评估堆栈成本](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html)。
 
    > 说明：如果需要修改堆栈信息，请单击对应部分右上角的**编辑**，以返回相关页面。
 

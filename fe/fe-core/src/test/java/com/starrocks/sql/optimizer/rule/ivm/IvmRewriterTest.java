@@ -21,6 +21,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.load.Load;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -52,9 +53,9 @@ import java.util.Map;
 
 /**
  * Tests for {@link IvmRewriter} covering:
- * - Gate: skip when IVM refresh not enabled
+ * - Gate: skip when {@code enable_ivm_refresh} is off
  * - Convergence success: Delta markers eliminated for supported patterns
- * - Convergence failure: original plan restored for unsupported patterns
+ * - Convergence failure: throw SemanticException for unsupported patterns
  * - appendPkLoadOpColumn: __op column + TopN for PK MVs
  * - isPrimaryKeyTargetMv: various statement types
  */
@@ -121,10 +122,10 @@ public class IvmRewriterTest {
         Assertions.assertEquals(originalPlanDigest, IvmRuleUtils.structureDigest(scan));
     }
 
-    // ==================== Convergence: failure → fallback ====================
+    // ==================== Convergence: failure → throw ====================
 
     @Test
-    public void testRewriteFallsBackForUnsupportedOperator(@Mocked IcebergTable table) {
+    public void testRewriteThrowsForUnsupportedOperator(@Mocked IcebergTable table) {
         mockIcebergTable(table);
         ColumnRefFactory factory = new ColumnRefFactory();
         OptimizerContext context = OptimizerFactory.mockContext(factory);
@@ -147,9 +148,12 @@ public class IvmRewriterTest {
         ColumnRefSet requiredColumnsBefore = requiredColumns.clone();
         ColumnRefSet taskRequiredColumnsBefore = taskContext.getRequiredColumns().clone();
 
-        IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns));
+        Assertions.assertTrue(ex.getMessage().contains("failed to fully resolve incremental markers"),
+                "error message must explain unresolved markers, got: " + ex.getMessage());
 
-        // Convergence failed → original plan restored
+        // Original plan must be restored by the finally block.
         Assertions.assertFalse(IvmRuleUtils.containsLogicalDelta(root));
         Assertions.assertSame(originalChild, root.inputAt(0));
         Assertions.assertEquals(originalPlanDigest, IvmRuleUtils.structureDigest(originalChild));

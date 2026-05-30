@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "common/config_ingest_fwd.h"
@@ -84,10 +85,10 @@ protected:
         params.sorted_by_keys_per_tablet = sorted;
         CHECK_OK(reader->open(params));
 
-        auto chunk = ChunkHelper::new_chunk(*(schema->schema()), 10);
+        auto chunk = ChunkFactory::new_chunk(*(schema->schema()), 10);
 
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*(schema->schema()), 10);
+            auto tmp = ChunkFactory::new_chunk(*(schema->schema()), 10);
             auto st = reader->get_next(tmp.get());
             if (st.ok()) {
                 chunk->append(*tmp);
@@ -1071,7 +1072,7 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_new_schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(*_new_schema, 1024);
 
     if (GetParam().keys_type == DUP_KEYS) {
         for (int n = 0; n < GetParam().writes_before + GetParam().writes_after; n++) {
@@ -1328,7 +1329,7 @@ TEST_P(SchemaChangeModifyColumnMultiSegmentOrderTest, test_alter_table) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_new_schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(*_new_schema, 1024);
 
     CHECK_OK(reader->get_next(chunk.get()));
     for (int i = 0; i < rc0.size(); i++) {
@@ -1559,7 +1560,7 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_new_schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(*_new_schema, 1024);
 
     if (GetParam().writes_before + GetParam().writes_after > 0) {
         CHECK_OK(reader->get_next(chunk.get()));
@@ -1797,7 +1798,7 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_new_schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(*_new_schema, 1024);
 
     if (GetParam().writes_before + GetParam().writes_after > 0) {
         CHECK_OK(reader->get_next(chunk.get()));
@@ -2033,7 +2034,7 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_new_schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(*_new_schema, 1024);
 
     if (GetParam().writes_before + GetParam().writes_after > 0) {
         CHECK_OK(reader->get_next(chunk.get()));
@@ -2525,7 +2526,7 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_materialized_view) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*new_schema_for_read, 1024);
+    auto chunk = ChunkFactory::new_chunk(*new_schema_for_read, 1024);
     int row_count = 0;
     while (true) {
         auto st = reader->get_next(chunk.get());
@@ -2745,7 +2746,7 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_generated_column) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*new_schema_for_read, 1024);
+    auto chunk = ChunkFactory::new_chunk(*new_schema_for_read, 1024);
     int row_count = 0;
     while (true) {
         auto st = reader->get_next(chunk.get());

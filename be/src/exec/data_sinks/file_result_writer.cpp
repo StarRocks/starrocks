@@ -44,10 +44,10 @@
 #include "exec/parquet_builder.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
+#include "formats/io/formatted_output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
-#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -85,8 +85,9 @@ Status FileResultWriter::_create_fs() {
                                                      _file_opts->broker_properties,
                                                      config::broker_write_timeout_seconds * 1000);
         } else {
-            ASSIGN_OR_RETURN(_fs,
-                             FileSystemFactory::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
+            ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateUniqueFromString(
+                                          _file_opts->file_path,
+                                          FSOptions(&_file_opts->hdfs_properties, _file_opts->write_buffer_size_kb)));
         }
     }
     if (_fs == nullptr) {

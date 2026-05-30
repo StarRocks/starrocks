@@ -41,9 +41,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
-    private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
@@ -337,12 +337,11 @@ public class JDBCMetadata implements ConnectorMetadata {
                             return null;
                         }
 
-                        Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
-                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                        Long tableId = tableIdCache.getPersistentCache(jdbcTable,
+                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong());
                         Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                         if (table != null) {
-                            table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
                             if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
                                 ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
                             }
@@ -356,24 +355,34 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        try (Connection connection = getConnection()) {
+            return schemaResolver.getTableComment(connection, dbName, tblName);
+        } catch (SQLException e) {
+            LOG.warn("get table comment for JDBC catalog fail!", e);
+            return "";
+        }
+    }
+
+    @Override
     public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
         String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
         String metadataQuery = "SELECT * FROM (" + normalizedQuery + ") starrocks_query WHERE 1 = 0";
         try (Connection connection = getConnection();
-                PreparedStatement preparedStatement = connection.prepareStatement(metadataQuery)) {
+                Statement statement = connection.createStatement()) {
             int queryTimeoutSeconds = schemaResolver.getQueryTimeoutSeconds();
             if (queryTimeoutSeconds > 0) {
-                preparedStatement.setQueryTimeout(queryTimeoutSeconds);
+                statement.setQueryTimeout(queryTimeoutSeconds);
             }
 
-            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+            try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
                 Map<String, Integer> originalJdbcTypes = new HashMap<>();
                 List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
                 if (fullSchema.isEmpty()) {
                     throw new StarRocksConnectorException("pass-through query returned no columns");
                 }
 
-                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                long tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
                 JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, fullSchema, dbName, catalogName,
                         properties);
                 queryTable.setPassThroughQuery(normalizedQuery);

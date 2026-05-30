@@ -15,7 +15,7 @@
 
 set -eo pipefail
 
-# build.sh sources env_macos.sh before calling us (directly or via the auto-
+# build.sh sources build-support/darwin_build_env.sh before calling us (directly or via the auto-
 # trigger when thirdparty is not yet built), which exports a batch of CMake
 # behavior-control vars intended for the BE build only. They leak into
 # thirdparty subprocesses and break bundled cmake logic
@@ -1874,12 +1874,55 @@ build_formula_azure() {
     sync_lib64_links
 }
 
-build_formula_xxhash() {
-    ensure_formula xxhash
+build_xxhash() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libxxhash.a" &&
+          ! -L "${TP_INSTALL_DIR}/lib/libxxhash.a" &&
+          -f "${TP_INCLUDE_DIR}/xxhash.h" &&
+          ! -L "${TP_INCLUDE_DIR}/xxhash.h" &&
+          -f "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
+          ! -L "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
+          -f "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc" &&
+          ! -L "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc" &&
+          -d "${TP_INSTALL_DIR}/lib/cmake/xxHash" &&
+          ! -L "${TP_INSTALL_DIR}/lib/cmake/xxHash" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${XXHASH_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${XXHASH_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+
+    rm -rf "${TP_INCLUDE_DIR}/xxhash" \
+        "${TP_INSTALL_DIR}/lib/cmake/xxHash"
+    rm -f "${TP_INCLUDE_DIR}/xxhash.h" \
+        "${TP_INCLUDE_DIR}/xxh3.h" \
+        "${TP_INCLUDE_DIR}/xxh_x86dispatch.h" \
+        "${TP_INSTALL_DIR}/lib/libxxhash"* \
+        "${TP_INSTALL_DIR}/lib64/libxxhash"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc"
+
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
+        -S cmake_unofficial -B "${BUILD_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DXXHASH_BUILD_XXHSUM=OFF
+    "${CMAKE_CMD}" --build "${BUILD_DIR}" -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install "${BUILD_DIR}"
+
+    mkdir -p "${TP_INCLUDE_DIR}/xxhash"
+    cp "${TP_INCLUDE_DIR}/xxhash.h" "${TP_INCLUDE_DIR}/xxhash/xxhash.h"
+    sync_lib64_links
+}
+
+build_formula_blake3() {
+    ensure_formula blake3
     local prefix
-    prefix="$(formula_prefix xxhash)"
-    link_if_missing "${prefix}/include/xxhash.h" "${TP_INCLUDE_DIR}/xxhash.h"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libxxhash.a" "${prefix}/lib/libxxhash"*.dylib
+    prefix="$(formula_prefix blake3)"
+    link_if_missing "${prefix}/include/blake3.h" "${TP_INCLUDE_DIR}/blake3.h"
+    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libblake3.a" "${prefix}/lib/libblake3"*.dylib
     link_formula_metadata "${prefix}"
     sync_lib64_links
 }
@@ -2480,7 +2523,10 @@ for package in "${packages[@]}"; do
             build_flamegraph
             ;;
         xxhash)
-            build_formula_xxhash
+            build_xxhash
+            ;;
+        blake3)
+            build_formula_blake3
             ;;
         benchgen)
             build_benchgen

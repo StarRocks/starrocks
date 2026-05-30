@@ -478,6 +478,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Shared-data only. Subset of `starrocks_be_staros_shard_info_fallback_total` where the starmgr RPC returned a non-OK status. Use the ratio `failed_total / fallback_total` to alert on transient starmgr errors separately from routine successful fallbacks.
 
+## `starrocks_be_staros_shard_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -652,6 +658,82 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets).
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve.
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total sampler invocations driven by Sample-Based Tablet Pre-Split. Incremented once per eligible invocation when the production sampler pipeline starts a sample.
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission), `pre_create_failed` (multi-partition path: `LocalMetastore.addPartitions` threw while pre-creating a target partition — that one partition is dropped from the combined submit and falls back to BE runtime auto-create; sibling partitions in the same load continue).
+- Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Meta-tier → data-tier fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data_tier}`.
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `tier` — `meta_tier` (boundaries computed from Parquet/ORC row-group statistics; no row data read) or `data_tier` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct data-tier invocations and meta-tier → data-tier fallbacks).
+- Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- Unit: Count
+- Type: Histogram
+- Description: Number of boundary tuples produced by the planner per invocation. Equals `effectiveTabletCount - 1` (a K-tablet split needs K-1 cut points).
+
+## `starrocks_fe_tablet_pre_split_partitions_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Multi-partition (P2-a) counter. Total predicted target partitions counted by the Sample-Based Tablet Pre-Split coordinator — one increment per `PartitionSamples` entry that survived the grouper. Combined with `tablet_pre_split_partitions_capped` and the `tablet_pre_split_pre_create{result=...}` family this tells operators how many partitions each multi-partition invocation actually acts on. Stays at zero for the single-partition path.
+
+## `starrocks_fe_tablet_pre_split_partitions_capped`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Multi-partition (P2-a) counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the partitions with the highest sample counts and drops the lowest-count tail; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+
+## `starrocks_fe_tablet_pre_split_pre_create`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` — `succeeded` (`LocalMetastore.addPartitions` returned normally — the partition was created or silently deduped), `failed` (`addPartitions` threw, e.g. concurrent ALTER or journal failure; the affected partition falls back to BE runtime auto-create and is also recorded under `tablet_pre_split_sampler_failed{reason=pre_create_failed}`), `already_exists` (the partition was found in the catalog at pre-create time — concurrent loader race; the coordinator reuses the existing partition).
+- Description: Multi-partition (P2-a) counter. Number of partition pre-create attempts the coordinator issued via `LocalMetastore.addPartitions`, broken down by outcome. Total attempts = sum of all three labels. Stays at zero for the single-partition path.
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time spent in the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan + build reshard job). Capped by `tablet_pre_split_pre_submit_timeout_seconds`.
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on the INSERT-from-FILES production path (the hook synchronously awaits FINISHED so the triggering INSERT plans against the post-split layout) and on the optional `runPreSplit` synchronous-await wrapper used by tests. The Broker Load production path is fire-and-forget and does not update this histogram.
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on the INSERT-from-FILES production path on timeout (the INSERT then proceeds without abort against the currently visible tablet layout — still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait. `tablet_pre_split_load_abort` is NOT incremented because the INSERT itself is not aborted) and on the `runPreSplit` synchronous-await wrapper. The Broker Load production path does not await and so does not update this counter.
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - Unit: Count
@@ -728,6 +810,26 @@ All transaction metrics share the following labels:
 
 - Unit: Bytes
 - Description: Memory used by storage page cache.
+
+## `spm_baseline_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current number of global SQL Plan Management (SPM) baselines on the FE leader.
+
+## `spm_capture_candidate_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`captured`, `skipped_duplicate`, `skipped_table_count`, `skipped_table_missing`, `skipped_db_missing`, `skipped_pattern_mismatch`, or `failed`)
+- Description: Total number of SPM auto-capture candidate processing results. Each series records how query-history candidates are classified during auto-capture.
+
+## `spm_rewrite_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`hit`, `miss`, or `error`)
+- Description: Total number of SPM rewrite attempts by result. `hit` means a baseline is matched and applied successfully. `miss` means rewrite is attempted but no enabled baseline matches. `error` means rewrite falls back because an exception occurs during the SPM rewrite flow.
 
 ## `stream_load`
 
@@ -935,4 +1037,3 @@ All transaction metrics share the following labels:
 - Description: Number of cumulative compaction tasks waiting for execution.
 
 ## `writable_blocks_total (Deprecated)`
-

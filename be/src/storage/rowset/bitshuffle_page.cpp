@@ -35,7 +35,7 @@
 #include "storage/rowset/bitshuffle_page.h"
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 
 namespace starrocks {
 

@@ -23,17 +23,17 @@
 #include <cstring>
 #include <string>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
-#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -71,11 +71,13 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
-        _pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
-        ASSERT_OK(_pipeline_timer->start());
-        _env._pipeline_timer = _pipeline_timer.get();
+        auto* platform_env = PlatformEnv::GetInstance();
+        if (platform_env->brpc_stub_cache() == nullptr) {
+            ASSERT_OK(platform_env->init(&_metrics));
+            _owns_platform_env = true;
+        }
+        _env._refresh_service_contexts();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(_pipeline_timer.get());
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
@@ -88,14 +90,14 @@ public:
         _env._transaction_mgr = nullptr;
         delete _env._stream_context_mgr;
         _env._stream_context_mgr = nullptr;
-        delete _env._brpc_stub_cache;
-        _env._brpc_stub_cache = nullptr;
-        _env._pipeline_timer = nullptr;
-        _pipeline_timer.reset();
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        if (_owns_platform_env) {
+            PlatformEnv::GetInstance()->destroy();
+            _owns_platform_env = false;
+        }
 
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
@@ -105,7 +107,8 @@ public:
 protected:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
-    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
+    MetricRegistry _metrics{"transaction_stream_load_action_test"};
+    bool _owns_platform_env = false;
 };
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {

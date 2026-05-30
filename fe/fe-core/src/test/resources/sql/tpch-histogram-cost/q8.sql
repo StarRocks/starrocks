@@ -81,7 +81,7 @@ OutPut Exchange Id: 32
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 243622.67615999994] ESTIMATE
-|  * case-->[0.0, 104949.5, 0.0, 8.0, 243623.67615999994] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 8.0, 243623.67615999994] MCV: [[0:243623]] ESTIMATE
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -99,7 +99,7 @@ OutPut Exchange Id: 32
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 243622.67615999994] ESTIMATE
-|  * case-->[0.0, 104949.5, 0.0, 8.0, 243623.67615999994] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 8.0, 243623.67615999994] MCV: [[0:243623]] ESTIMATE
 |
 |----28:EXCHANGE
 |       distribution type: BROADCAST

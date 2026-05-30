@@ -39,14 +39,15 @@
 
 #include "base/string/utf8.h"
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/column_viewer.h"
 #include "fs/fs_memory.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/key_coder.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/key_coder.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
@@ -542,7 +543,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         ASSERT_EQ(ngram_num, ngram.size());
 
         size_t to_read = ngram_num;
-        const auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        const auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
         ASSERT_TRUE(iter->next_batch_ngram(0, &to_read, col.get()).ok());
         ASSERT_EQ(ngram_num, to_read);
 

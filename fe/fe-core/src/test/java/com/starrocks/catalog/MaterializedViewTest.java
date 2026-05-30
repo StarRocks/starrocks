@@ -625,6 +625,83 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }
 
+    // Regression test: sync MVs are mv indexes inside an OLAP table, not registered as Tables.
+    // SHOW CREATE MATERIALIZED VIEW <sync_mv_name> must locate the index by name and return its
+    // CREATE statement instead of failing with "Table not found".
+    @Test
+    public void testShowCreateRollupSyncMV() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_rollup_sync_mv\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView(
+                        "create materialized view rollup_sync_mv_to_check as " +
+                                "select k2, sum(v1) as total from tbl_rollup_sync_mv group by k2;");
+        String showSql = "show create materialized view rollup_sync_mv_to_check;";
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertEquals(QueryState.MysqlStateType.EOF, connectContext.getState().getStateType());
+    }
+
+    // Fallback scan exhaustion: a sync-MV-shaped lookup with a name that matches
+    // nothing in any base table runs through the full snapshot and falls through
+    // to ErrorReport.reportSemanticException(ERR_BAD_TABLE_ERROR, ...).
+    @Test
+    public void testShowCreateSyncMVNotFound() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_sync_mv_not_found\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String showSql = "show create materialized view does_not_exist_anywhere;";
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, connectContext.getState().getStateType());
+    }
+
+    // Authorization deny path: once the fallback locates the owning base table and
+    // calls Authorizer.checkAnyActionOnTable, mock the check to throw and verify
+    // the deny error fires (reportAccessDenied -> ERR state).
+    @Test
+    public void testShowCreateSyncMVAccessDenied() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_sync_mv_auth\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView(
+                        "create materialized view sync_mv_auth_deny as " +
+                                "select k2, sum(v1) as total from tbl_sync_mv_auth group by k2;");
+        new mockit.MockUp<com.starrocks.sql.analyzer.Authorizer>() {
+            @mockit.Mock
+            public void checkAnyActionOnTable(ConnectContext context,
+                                              com.starrocks.catalog.TableName tableName)
+                    throws com.starrocks.authorization.AccessDeniedException {
+                throw new com.starrocks.authorization.AccessDeniedException();
+            }
+        };
+        String showSql = "show create materialized view sync_mv_auth_deny;";
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, connectContext.getState().getStateType());
+    }
+
     @Test
     public void testAlterMVWithIndex() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")

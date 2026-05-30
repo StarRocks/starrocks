@@ -198,6 +198,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1
 * 类型：Int
 
+### avro_use_jni_reader
+
+* **作用域**: Session
+* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），StarRocks 会使用 JNI Reader；关闭后（`false`），StarRocks 会使用原生 Avro Reader。当前该变量主要用于兼容性兜底。该变量默认关闭，因此默认会使用原生 Avro Reader。
+
+  当前说明：
+  - 原生 Avro Reader 与 JNI Reader 在 `CHAR(n)` 语义上已经对齐。相关对齐见 [#73579](https://github.com/StarRocks/starrocks/pull/73579)，因此当前 native 与 JNI 行为在这一点上保持一致。
+  - 原生 Avro Reader 目前仅支持 `null`、`deflate` 和 `snappy` 这几种 codec，不支持 `bzip2` 等其他 codec。如果需要处理原生 Reader 不支持的 codec，请手动启用 JNI Reader。
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v4.1.1
+
 ### binary_encoding_format
 
 * **作用域**: Session
@@ -223,6 +235,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：秒
 * 类型：String
 * 引入版本：v3.1
+
+### blacklist_backup_routing
+
+* **范围**：Session
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+
+* **默认值**：`CIRCULAR`
+* **类型**：String
+* **合法取值**：`CIRCULAR`、`RANDOM`
+* **引入版本**：-
 
 ### catalog（3.2.4 及以后）
 
@@ -346,7 +368,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
   * Hive 表中未指定 `compression_codec` 属性。
   * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
-  * `INSERT INTO FILES` 时未设置 `compression` 属性。 
+  * `INSERT INTO FILES` 时未设置 `compression` 属性。
 * 默认值：uncompressed
 * 类型：String
 * 引入版本：v3.2.3
@@ -753,6 +775,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
 
+### enable_explain_in_profile
+
+* **范围**: Session
+* **描述**: 当该变量为 `true` 且该查询会生成 profile 时，会将已执行计划的 `EXPLAIN COSTS` 文本嵌入到 profile 的 `Summary` 段中，键名为 `ExplainPlan`。这样在离线分析 profile 工件（无需访问运行中的集群）时，可以同时查看优化器的基数估算、列统计、谓词下推、Runtime Filter 声明和总体计划代价等信息，便于排查慢查询。
+
+  嵌入到 profile 中的计划与其他持久化的 SQL 工件遵循一致的脱敏控制：包含凭据的字面量（例如 `FILES(...)`）始终会被屏蔽；当集群级 FE 配置 `enable_sql_desensitize_in_log` 或会话变量 `enable_desensitize_explain` 任一项开启时，谓词 / 投影中的字面量将以摘要形式渲染。
+* **默认值**: false
+* **类型**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **范围**: Session
@@ -878,6 +909,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。
 * 默认值：true
 * 引入版本：v2.3
+
+### enable_tablet_pre_split
+
+* 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）的会话级开关。默认 `true`，因此主开关由 FE 配置 `enable_tablet_pre_split_for_*` 控制。对于不希望被预分裂干扰的会话，可将其设为 `false`。预分裂需同时满足对应 FE 配置和该会话变量都为 `true`。
+* 默认值：true
+* 引入版本：v4.1.0
 
 ### enable_topn_runtime_filter
 
@@ -1254,9 +1291,9 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
   * `auto`：系统自动选择方案。
-  * `local`：使用本地缓存方案。
-  * `distributed`：使用分布式方案。
-* 默认值：auto
+  * `local`：由 FE 在本地解析 Iceberg manifest 文件，并在解析过程中将 scan range 增量下发给 BE，无需等待所有 manifest 解析完成，可降低内存占用和首包延迟。
+  * `distributed`：将 manifest 解析任务分发给多个 BE 并行处理，但 FE 需等待所有 BE 返回结果后才能下发 scan range，对于 manifest 文件较多的大表，可能导致较高内存占用和较长等待时间。仅在 FE CPU 成为瓶颈且 manifest 数量极多时建议使用。
+* 默认值：local（v3.5 起由 `auto` 改为 `local`；v3.5 起增量 scan range 下发默认开启，`local` 模式在大多数场景下内存占用更低、延迟更小）
 * 引入版本：v3.3.3
 
 #### enable_iceberg_column_statistics
@@ -1269,7 +1306,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
   * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
-  * `always`：总是缓存数据。 
+  * `always`：总是缓存数据。
   * `never` 永不缓存数据。
 * 默认值：auto
 * 引入版本：v3.3.2
@@ -1355,7 +1392,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：100
 * 引入版本：v3.0
 
-### resource_group 
+### resource_group
 
 * **描述**: 此会话指定的 resource group
 * **默认值**: ""

@@ -112,6 +112,7 @@ starrocks_set_default_packages() {
         flamegraph
         tenann
         xxhash
+        blake3
         pprof
         benchgen
     )

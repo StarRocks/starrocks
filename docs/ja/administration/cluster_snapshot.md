@@ -139,10 +139,26 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
+   ノードをクラスターに追加します。
+
+   ```SQL
+   -- Followerノードを追加します：
+   ALTER SYSTEM ADD FOLLOWER "<follower_host>:<follower_edit_log_port>";
+   
+   -- Observer ノードを追加します：
+   ALTER SYSTEM ADD OBSERVER "<observer_host>:<observer_edit_log_port>";
+   ```
+
 4. **`storage_root_path` ディレクトリをクリーニングした後に**CN ノードを起動します。
 
    ```Bash
    ./be/bin/start_cn.sh --daemon
+   ```
+
+   ノードをクラスターに追加します。
+
+   ```SQL
+   ALTER SYSTEM ADD COMPUTE NODE "<cn_host>:<cn_heartbeat_service_port>";
    ```
 
 ステップ 1 で **cluster_snapshot.yaml** を変更した場合、ノードとストレージボリュームはファイル内の情報に基づいて新しいクラスタで再構成されます。

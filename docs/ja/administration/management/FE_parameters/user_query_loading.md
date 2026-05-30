@@ -206,7 +206,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 可変: はい
 - 説明: マテリアライズドビュー (MV) の高速スキーマ進化 (FSE) の動作を制御します。有効な値は次のとおりです: `strict` (デフォルト) - `isSupportFastSchemaEvolutionInDanger` が true の場合にのみ FSE を許可し、影響を受けるパーティションエントリをバージョンマップからクリアします。 `force` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可し、影響を受けるパーティションエントリをクリアしてリフレッシュ時に再計算をトリガーします。 `force_no_clear` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可しますが、パーティションエントリはクリアしません。
-- 導入バージョン: v3.4.0
+- 導入バージョン: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -1169,6 +1169,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：準備されたトランザクションのデフォルトのタイムアウト期間。
+- 導入時期：-
+
+### `rejected_records_retained_days`
+
+- デフォルト：7
+- タイプ：Int
+- 単位：Days
+- 変更可能：Yes
+- 説明：内部システムテーブル `_statistics_.rejected_records` に保持する日次パーティション数。値は `TableKeeper` に渡され（最小 1 にクランプされます）、各 keeper ティックでターゲットテーブルの `partition_live_number` プロパティに反映されます。拒否された行の履歴をデフォルトの 1 週間より長く保持したい場合（監査または長めの再取り込みウィンドウ用）や、ストレージ予算が厳しい場合にこの値を調整します。この値は新しい日次パーティションと keeper の TTL 調整にのみ影響し、すでに削除されたパーティションを復元することはありません。
 - 導入時期：-
 
 ### `routine_load_task_consume_second`

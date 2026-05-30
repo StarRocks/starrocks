@@ -55,7 +55,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | last_refresh_start_time    | マテリアライズドビューの最後のリフレッシュの開始時間。 |
 | last_refresh_finished_time | マテリアライズドビューの最後のリフレッシュの終了時間。   |
 | last_refresh_duration      | 最後のリフレッシュにかかった時間。単位: 秒。           |
-| last_refresh_state         | 最後のリフレッシュのステータス。PENDING、RUNNING、FAILED、SUCCESS があります。 |
+| last_refresh_state         | 最後のリフレッシュのステータス。PENDING、RUNNING、FAILED、SUCCESS、SKIPPED があります。ベーステーブルのパーティションでデータの変更が検出されない場合、対応するマテリアライズドビューのパーティションに対するリフレッシュ処理はスキップされます。 |
 | last_refresh_force_refresh | 最後のリフレッシュがFORCEリフレッシュかどうか。                 |
 | last_refresh_start_partition | マテリアライズドビューの最後のリフレッシュの開始パーティション。 |
 | last_refresh_end_partition | マテリアライズドビューの最後のリフレッシュの終了パーティション。 |

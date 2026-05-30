@@ -17,8 +17,8 @@
 
 extern "C" {
 
-// brpc periodically calls the gperftools hook on Linux builds. The macOS test
-// binaries do not link TCMalloc, so keep the call as a no-op.
+// brpc weakly probes this gperftools compatibility hook. StarRocks uses jemalloc
+// on macOS and test binaries do not link the gperftools allocator, so keep the call as a no-op.
 void MallocExtension_ReleaseFreeMemory() {}
 
 } // extern "C"

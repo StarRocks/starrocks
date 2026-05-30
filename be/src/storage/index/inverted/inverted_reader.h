@@ -41,10 +41,10 @@ public:
     virtual Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator,
                                 const IndexReadOptions& index_opt) = 0;
 
-    virtual Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
+    virtual Status query(OlapReaderStatistics* stats, const std::string_view column_name, const void* query_value,
                          InvertedIndexQueryType query_type, roaring::Roaring* bit_map) = 0;
 
-    virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name,
+    virtual Status query_null(OlapReaderStatistics* stats, const std::string_view column_name,
                               roaring::Roaring* bit_map) = 0;
 
     virtual InvertedIndexReaderType get_inverted_index_reader_type() = 0;

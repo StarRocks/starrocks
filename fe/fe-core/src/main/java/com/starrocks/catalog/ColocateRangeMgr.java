@@ -89,16 +89,41 @@ public class ColocateRangeMgr {
      *         group does not exist or the value is not covered
      */
     public int getColocateRangeIndex(long colocateGroupId, Tuple colocateValue) {
-        List<ColocateRange> colocateRanges = colocateGroupToRanges.get(colocateGroupId);
-        if (colocateRanges == null || colocateRanges.isEmpty()) {
+        return indexOf(colocateGroupToRanges.get(colocateGroupId), colocateValue);
+    }
+
+    /**
+     * Binary-search variant of {@link #getColocateRangeIndex} that operates on a caller-supplied
+     * range list. Used when the caller is mutating a working copy in-flight (e.g. splice path)
+     * and cannot consult the live {@code colocateGroupToRanges} map.
+     *
+     * @return the index of the {@link ColocateRange} containing {@code value}, or {@code -1}
+     *         if {@code ranges} is null/empty or the value is not covered. {@code value == null}
+     *         maps to the first range (the global {@code -infinity} sentinel).
+     */
+    public static int indexOf(List<ColocateRange> ranges, Tuple value) {
+        if (ranges == null || ranges.isEmpty()) {
             return -1;
         }
-        if (colocateValue == null) {
+        if (value == null) {
             return 0;
         }
-        Range<Tuple> pointRange = Range.gele(colocateValue, colocateValue);
-        int index = Collections.binarySearch(colocateRanges, pointRange);
+        int index = Collections.binarySearch(ranges, Range.gele(value, value));
         return index >= 0 ? index : -1;
+    }
+
+    /**
+     * Returns true iff the range list has an entry whose lower bound is exactly {@code prefix}
+     * with inclusive lower (i.e. {@code prefix} is already a registered colocate boundary).
+     */
+    public static boolean hasBoundaryAt(List<ColocateRange> ranges, Tuple prefix) {
+        int idx = indexOf(ranges, prefix);
+        if (idx < 0) {
+            return false;
+        }
+        Range<Tuple> range = ranges.get(idx).getRange();
+        return !range.isMinimum() && range.isLowerBoundIncluded()
+                && java.util.Objects.equals(range.getLowerBound(), prefix);
     }
 
     /**

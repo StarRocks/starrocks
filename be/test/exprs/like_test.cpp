@@ -16,10 +16,10 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "common/bloom_filter.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

@@ -52,7 +52,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -81,7 +81,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class ConsistencyChecker extends FrontendDaemon {
+public class ConsistencyChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ConsistencyChecker.class);
 
     private static final int MAX_JOB_NUM = 100;
@@ -334,7 +334,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (System.currentTimeMillis() - lastTabletMetaCheckTime > Config.consistency_tablet_meta_check_interval_ms) {
             checkTabletMetaConsistency(creatingTableCounters);
             lastTabletMetaCheckTime = System.currentTimeMillis();
@@ -381,6 +381,32 @@ public class ConsistencyChecker extends FrontendDaemon {
         } finally {
             jobsLock.writeLock().unlock();
         }
+    }
+
+    @Override
+    protected void onStopped() {
+        // jobs holds in-flight CheckConsistencyJob instances and creatingTableCounters tracks
+        // CREATE TABLE flows that are still running on this leader. Both belong to the current
+        // leader session: in-flight create paths will fail when the editlog is sealed, so any
+        // counter increments left behind would otherwise leak across sessions and incorrectly
+        // mask tablets from future consistency checks. The watermark is reset for the same
+        // reason - the next leader should re-issue a tablet-meta scan rather than honor a
+        // timestamp captured by a different session.
+        jobsLock.writeLock().lock();
+        try {
+            for (CheckConsistencyJob job : jobs.values()) {
+                try {
+                    job.clear();
+                } catch (Throwable t) {
+                    LOG.warn("clear consistency job for tablet {} failed", job.getTabletId(), t);
+                }
+            }
+            jobs.clear();
+        } finally {
+            jobsLock.writeLock().unlock();
+        }
+        creatingTableCounters.clear();
+        lastTabletMetaCheckTime = 0;
     }
 
     /*

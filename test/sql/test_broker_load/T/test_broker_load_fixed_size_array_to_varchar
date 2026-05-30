@@ -1,0 +1,32 @@
+-- name: test_broker_load_fixed_size_array_to_varchar
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_broker_load/fixed_size_array/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/arrow_fixed_size_array.parquet oss://${oss_bucket}/test_broker_load/fixed_size_array/${uuid0}/ >/dev/null
+
+CREATE TABLE t1 (
+    id    BIGINT          NOT NULL,
+    tags  VARCHAR(65533)  NULL
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+LOAD LABEL label0_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_broker_load/fixed_size_array/${uuid0}/arrow_fixed_size_array.parquet")
+    INTO TABLE t1
+    FORMAT AS "parquet"
+    (id, tags)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+function: wait_load_finish("label0_${uuid0}")
+
+select state, error_msg from information_schema.loads where label="label0_${uuid0}";
+select count(*) from t1;
+select id, tags from t1 order by id;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/fixed_size_array/${uuid0} >/dev/null || echo "exit 0" >/dev/null

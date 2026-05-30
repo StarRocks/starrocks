@@ -17,6 +17,8 @@
 #include "base/compression/compression_utils.h"
 #include "base/compression/stream_decompressor.h"
 #include "cache/data_cache_hit_rate_counter.hpp"
+#include "cache/scan/cache_select_input_stream.hpp"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "column/runtime_type_traits.h"
@@ -26,9 +28,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "fs/hdfs/fs_hdfs.h"
-#include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
-#include "io/shared_buffered_input_stream.h"
 #include "storage/predicate_parser.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
@@ -349,8 +349,8 @@ void HdfsScanner::close() noexcept {
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
-        std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
+        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
     int64_t file_size = options.file_size;
     if (file_size < 0) {
@@ -363,8 +363,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
 
     input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, options.fs_stats);
 
-    shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(input_stream, filename, file_size);
-    const io::SharedBufferedInputStream::CoalesceOptions shared_options = {
+    shared_buffered_input_stream = std::make_shared<SharedBufferedInputStream>(input_stream, filename, file_size);
+    const SharedBufferedInputStream::CoalesceOptions shared_options = {
             .max_dist_size = config::io_coalesce_read_max_distance_size,
             .max_buffer_size = config::io_coalesce_read_max_buffer_size};
     shared_buffered_input_stream->set_coalesce_options(shared_options);
@@ -374,11 +374,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
     const DataCacheOptions& datacache_options = options.datacache_options;
     if (datacache_options.enable_datacache) {
         if (datacache_options.enable_cache_select) {
-            cache_input_stream = std::make_shared<io::CacheSelectInputStream>(
+            cache_input_stream = std::make_shared<CacheSelectInputStream>(
                     shared_buffered_input_stream, filename, file_size, datacache_options.modification_time);
         } else {
-            cache_input_stream = std::make_shared<io::CacheInputStream>(shared_buffered_input_stream, filename,
-                                                                        file_size, datacache_options.modification_time);
+            cache_input_stream = std::make_shared<CacheInputStream>(shared_buffered_input_stream, filename, file_size,
+                                                                    datacache_options.modification_time);
             cache_input_stream->set_enable_populate_cache(datacache_options.enable_populate_datacache);
             cache_input_stream->set_enable_async_populate_mode(datacache_options.enable_datacache_async_populate_mode);
             cache_input_stream->set_enable_cache_io_adaptor(datacache_options.enable_datacache_io_adaptor);
@@ -545,7 +545,7 @@ void HdfsScanner::update_counter() {
                                                                 _app_stats.page_read_counter);
 
     if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
-        const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
+        const CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_mem_bytes, stats.read_mem_cache_bytes);

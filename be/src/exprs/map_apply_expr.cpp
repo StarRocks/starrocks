@@ -27,7 +27,6 @@
 #include "exprs/lambda_function.h"
 #include "exprs/map_expr.h"
 #include "glog/logging.h"
-#include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

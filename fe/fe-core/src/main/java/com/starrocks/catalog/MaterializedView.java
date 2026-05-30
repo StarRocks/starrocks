@@ -2220,7 +2220,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
             if (inferredBucketNum == 0) {
-                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends(isLightWeightTabletCreation());
             }
             info.setBucketNum(inferredBucketNum);
         }

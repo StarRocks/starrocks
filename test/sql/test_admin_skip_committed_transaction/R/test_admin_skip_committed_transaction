@@ -1,0 +1,43 @@
+-- name: test_admin_skip_committed_transaction_validation @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_lake (k1 int, v1 string) primary key(k1)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+-- result:
+-- !result
+admin show frontend config like 'enable_admin_skip_committed_txn';
+-- result:
+enable_admin_skip_committed_txn	[]	false	boolean	true	Whether to enable ADMIN SKIP COMMITTED TRANSACTION. When false, the admin SQL is rejected with an error. Default is false to prevent accidental data loss. Only enable when an operator needs to unblock a stuck-publish transaction. Only supported on lake tables with file_bundling=true.
+-- !result
+admin skip committed transaction 999999999;
+-- result:
+E: (1064, "ADMIN SKIP COMMITTED TRANSACTION is disabled. Set FE config enable_admin_skip_committed_txn=true to enable it. This is an operator-only escape hatch that discards transaction data; disable it again immediately after recovery.")
+-- !result
+admin set frontend config ('enable_admin_skip_committed_txn' = 'true');
+-- result:
+-- !result
+admin skip committed transaction 999999999;
+-- result:
+E: (1064, 'transaction 999999999 not found in any database; it may have been finished or never existed')
+-- !result
+-- 4. Sanity check that normal INSERT still works while the gate is on (does
+--    NOT exercise the VISIBLE-state rejection — that path is covered by the
+--    FE unit test testRejectsNonCommittedState).
+insert into t_lake values (1, 'a');
+-- result:
+-- !result
+select count(*) from t_lake;
+-- result:
+1
+-- !result
+admin set frontend config ('enable_admin_skip_committed_txn' = 'false');
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

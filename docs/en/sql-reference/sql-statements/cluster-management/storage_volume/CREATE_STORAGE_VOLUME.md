@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE STORAGE VOLUME creates a storage volume for a remote storage system."
 ---
 
 # CREATE STORAGE VOLUME
@@ -11,6 +12,8 @@ A storage volume consists of the properties and credential information of the re
 > **CAUTION**
 >
 > Only users with the CREATE STORAGE VOLUME privilege on the SYSTEM level can perform this operation.
+>
+> In shared-data mode, StarRocks performs a storage accessibility check for each `LOCATION` during `CREATE STORAGE VOLUME` when the FE configuration item `enable_storage_volume_access_check` is enabled (enabled by default). If this check is enabled and credential, endpoint, or network access is invalid, the statement fails immediately. You can turn off this check by disabling `enable_storage_volume_access_check`.
 
 ## Syntax
 
@@ -253,7 +256,7 @@ Azure Data Lake Storage Gen1 is not supported.
 - If you use S3 protocol with the IAM user-based authentication to access Google Storage, set the following properties:
 
   :::tip 
-  Google Storage is supported using the [XML API](https://cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
+  Google Storage is supported using the [XML API](https://docs.cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
   :::
 
   ```SQL

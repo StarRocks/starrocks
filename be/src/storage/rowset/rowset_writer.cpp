@@ -43,6 +43,8 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -52,24 +54,24 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
-#include "io/core/io_error.h"
+#include "io/io_error.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
+#include "storage/base/merge_iterator.h"
+#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
-#include "storage/row_source_mask.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/type_utils.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "storage/type_utils.h"
 
 namespace starrocks {
 
@@ -914,7 +916,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -945,7 +947,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             return Status::InternalError(ss.str());
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -1011,10 +1013,10 @@ Status HorizontalRowsetWriter::_final_merge() {
             }
             RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-            auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
 
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();
@@ -1085,7 +1087,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -1108,7 +1110,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         // method to create segment data files, rather than temporary segment files.
         _context.segments_overlap = NONOVERLAPPING;
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;

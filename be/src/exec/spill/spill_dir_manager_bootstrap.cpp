@@ -20,7 +20,7 @@
 #include "exec/spill/dir_manager.h"
 #include "fmt/format.h"
 #include "fs/fs_factory.h"
-#include "storage/options.h"
+#include "platform/store_path.h"
 #include "storage/storage_engine.h"
 #include "storage/utils.h"
 

@@ -92,12 +92,32 @@ public class SessionVariableConstants {
     }
 
     public enum ComputationFragmentSchedulingPolicy {
-        
+
         // only select compute node in scheduler policy (default)
         COMPUTE_NODES_ONLY,
 
         // both select compute node and backend in scheduler policy
         ALL_NODES
+    }
+
+    /**
+     * How to pick a backup compute node in shared-data mode when the scan's primary worker is unavailable
+     * (for example because it is blocklisted).
+     */
+    public enum BlacklistBackupRoutingPolicy {
+        /**
+         * Walk the sorted warehouse node id ring starting from the primary worker and return the first eligible
+         * buddy (default, deterministic behavior).
+         */
+        CIRCULAR,
+        /**
+         * Choose uniformly at random from eligible nodes.
+         */
+        RANDOM;
+
+        public static BlacklistBackupRoutingPolicy getDefault() {
+            return CIRCULAR;
+        }
     }
 
     public enum AggregationStage {

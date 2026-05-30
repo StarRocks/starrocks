@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -322,7 +323,7 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
     PushBrokerReader reader;
     Schema schema = _create_schema();
     reader.init(broker_scan_range, request);
-    ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
+    ChunkPtr chunk = ChunkFactory::new_chunk(schema, 0);
 
     // next chunk
     reader.next_chunk(&chunk);

@@ -114,7 +114,7 @@ BE を [Decommission](../sql-reference/sql-statements/cluster-management/nodes_p
 
 ## この BE ログは何を意味しますか？"tcmalloc: large alloc xxxxxxxx bytes"
 
-大きなメモリ割り当て要求が発生しました。これは通常、大きなクエリによって引き起こされます。対応する `query_id` を `be.INFO` で確認して SQL を特定してください。
+これは以前のアロケータによる大きなメモリ割り当ての診断ログです。大きなメモリ割り当て要求が発生しており、通常は大きなクエリによって引き起こされます。対応する `query_id` を `be.INFO` で確認して SQL を特定し、`/mem_tracker` と `/memz` で現在のメモリ使用量を確認してください。
 
 ## ノードを追加した後のタブレット移行はディスク I/O の変動を引き起こしますか？
 

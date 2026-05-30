@@ -34,8 +34,6 @@
 
 #pragma once
 
-#include <storage/flat_json_config.h>
-
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -45,9 +43,10 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"

@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"

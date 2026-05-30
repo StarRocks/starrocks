@@ -14,6 +14,7 @@
 
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <cassert>
 #include <cstdlib>
@@ -66,7 +67,8 @@ struct TestParams {
     bool print_debug_info = false;
 };
 
-static const std::string kTestDirectory = "./test_persistent_index_consistency";
+// Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+static const std::string kTestDirectory = "./test_persistent_index_consistency_" + std::to_string(getpid());
 
 template <typename T>
 class PersistentIndexWrapper {

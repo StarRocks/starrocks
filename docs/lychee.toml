@@ -12,14 +12,12 @@ no_progress = true
 
 #############################  Cache  ###############################
 
-# Enable link caching. This can be helpful to avoid checking the same links on
-# multiple runs.
-# If we start checking external links we should enable this, but at the
-# moment we are checking links to Markdown files only with arg --offline
-cache = false
+# Enable link caching. The same URL often appears across en/zh/ja docs,
+# so caching avoids redundant network requests within a single run.
+cache = true
 
 # Discard all cached requests older than this duration.
-# max_cache_age = "2d"
+max_cache_age = "2d"
 
 #############################  Runtime  #############################
 
@@ -70,6 +68,14 @@ method = "get"
 # Exclude URLs from checking (supports regex)
 
  exclude = [
+     "https://www.nyc.gov/*",
+     "https://www.noaa.gov/*",
+     "https://stackoverflow.com/*",
+     "https://openjdk.org/*",
+     "https://search.maven.org/*",
+     "https://gist.github.com/*",
+     "https://github.com/*",
+     "https://www.linkedin.com/*",
    ]
 
 # Exclude these filesystem paths from getting checked.

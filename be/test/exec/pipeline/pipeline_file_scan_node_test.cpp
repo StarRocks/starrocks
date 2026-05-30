@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_util.h"
@@ -40,6 +41,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
@@ -64,7 +66,7 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        _exec_env->metrics()->set_collect_hook_enabled(true);
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
 
         const auto& params = _request.params;
         const auto& query_id = params.query_id;
@@ -86,6 +88,7 @@ public:
         _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
                 _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
                 _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+        _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
         _fragment_future = _fragment_ctx->finish_future();
         _runtime_state = _fragment_ctx->runtime_state();

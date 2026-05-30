@@ -45,6 +45,9 @@
 #include "starrocks_macos_libevent_shims.h"
 #endif
 
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -123,6 +126,52 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
+// Open a TCP listener bound to `point`, optionally placed in the kernel's
+// SO_REUSEPORT group. SO_REUSEPORT must be set on every participating fd
+// *before* bind() — Linux's man socket(7) is explicit, and the kernel only
+// inserts the fd into the reuseport hash via inet_reuseport_add_sock() at
+// bind() time. setsockopt() after bind() merely flips sk_reuseport without
+// joining the group, so the next bind() to the same port from another fd
+// gets EADDRINUSE.
+//
+// Mirrors butil::tcp_listen()'s SO_REUSEADDR + listen(65535) defaults so the
+// primary listener behaves identically to the brpc helper it replaces.
+// Returns the listening fd, or -1 with errno set on failure.
+static int open_listen_socket(const butil::EndPoint& point, bool reuse_port) {
+    struct sockaddr_storage serv_addr;
+    socklen_t serv_addr_size = 0;
+    if (butil::endpoint2sockaddr(point, &serv_addr, &serv_addr_size) != 0) {
+        return -1;
+    }
+    int fd = ::socket(serv_addr.ss_family, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+    int yes = 1;
+    bool ok = (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == 0);
+#ifdef SO_REUSEPORT
+    if (ok && reuse_port) {
+        ok = (::setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) == 0);
+    }
+#else
+    (void)reuse_port;
+#endif
+    if (ok) {
+        ok = (::bind(fd, reinterpret_cast<struct sockaddr*>(&serv_addr), serv_addr_size) == 0);
+    }
+    if (ok) {
+        // Match butil::tcp_listen's backlog; kernel still caps at somaxconn.
+        ok = (::listen(fd, 65535) == 0);
+    }
+    if (!ok) {
+        int saved = errno;
+        ::close(fd);
+        errno = saved;
+        return -1;
+    }
+    return fd;
+}
+
 EvHttpServer::EvHttpServer(int port, int num_workers) : _port(port), _num_workers(num_workers), _real_port(0) {
     _host = BackendOptions::get_service_bind_address();
     DCHECK_GT(_num_workers, 0);
@@ -144,8 +193,23 @@ EvHttpServer::~EvHttpServer() {
 Status EvHttpServer::start() {
     // bind to
     RETURN_IF_ERROR(_bind());
+
+    // Resolve the bind endpoint once, on the main thread, for per-worker
+    // SO_REUSEPORT listeners. _bind() has already populated _real_port (incl.
+    // the port==0 auto-assign case) and decided whether SO_REUSEPORT is in
+    // effect on _server_fd. Workers only attempt their own listener when
+    // _bind() succeeded in joining the reuseport group; otherwise they share
+    // _server_fd, matching the pre-PR legacy behaviour.
+    butil::EndPoint listen_point;
+    bool reuseport_enabled = _reuseport_enabled;
+    if (reuseport_enabled && butil::str2endpoint(_host.c_str(), _real_port, &listen_point) != 0) {
+        LOG(WARNING) << "Failed to resolve listen endpoint " << _host << ":" << _real_port
+                     << " for SO_REUSEPORT mode; falling back to shared-fd accept";
+        reuseport_enabled = false;
+    }
+
     for (int i = 0; i < _num_workers; ++i) {
-        auto worker = [this]() {
+        auto worker = [this, listen_point, reuseport_enabled, i]() {
             struct event_base* base = event_base_new();
             if (base == nullptr) {
                 LOG(WARNING) << "Couldn't create an event_base.";
@@ -171,7 +235,31 @@ Status EvHttpServer::start() {
             // so cap pre-read bodies before any handler-specific header checks.
             evhttp_set_max_body_size(http, static_cast<ev_ssize_t>(config::streaming_load_max_mb) * 1024 * 1024);
 #endif
-            auto res = evhttp_accept_socket(http, _server_fd);
+
+            // Worker 0 reuses _server_fd from _bind(); workers 1..N-1 create
+            // their own SO_REUSEPORT listeners so the kernel load-balances
+            // accepts in-kernel rather than waking all workers on every
+            // connection (the cause of native_queued_spin_lock_slowpath
+            // contention seen in perf when be_http_num_workers is large).
+            int worker_fd = _server_fd;
+            if (reuseport_enabled && i > 0) {
+                int new_fd = open_listen_socket(listen_point, /*reuse_port=*/true);
+                if (new_fd < 0) {
+                    LOG(WARNING) << "Worker " << i << ": SO_REUSEPORT listen failed, "
+                                 << "falling back to shared fd: " << errno_to_string(errno);
+                } else if (butil::make_non_blocking(new_fd) < 0) {
+                    LOG(WARNING) << "Worker " << i << ": failed to set non-blocking on reuseport fd, "
+                                 << "falling back to shared fd: " << errno_to_string(errno);
+                    ::close(new_fd);
+                } else {
+                    pthread_rwlock_wrlock(&_rw_lock);
+                    _worker_fds.push_back(new_fd);
+                    pthread_rwlock_unlock(&_rw_lock);
+                    worker_fd = new_fd;
+                }
+            }
+
+            auto res = evhttp_accept_socket(http, worker_fd);
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
                              << ", error:" << errno_to_string(errno);
@@ -197,6 +285,22 @@ void EvHttpServer::stop() {
 
     // shutdown the socket to wake up the epoll_wait
     shutdown(_server_fd, SHUT_RDWR);
+    // Per-worker SO_REUSEPORT listeners need their own shutdown, otherwise
+    // their event_base_dispatch will not unblock from epoll_wait and join()
+    // will hang.
+    //
+    // Snapshot _worker_fds under the lock so we don't race with workers that
+    // are still finishing setup in start() and appending their fd. Any fd
+    // published after this snapshot belongs to a worker whose event_base has
+    // not yet entered dispatch — its own dispatch loop will see the loopbreak
+    // set above and exit immediately, so a missed shutdown there is harmless.
+    std::vector<int> worker_fds_snapshot;
+    pthread_rwlock_rdlock(&_rw_lock);
+    worker_fds_snapshot = _worker_fds;
+    pthread_rwlock_unlock(&_rw_lock);
+    for (int fd : worker_fds_snapshot) {
+        ::shutdown(fd, SHUT_RDWR);
+    }
 }
 
 void EvHttpServer::join() {
@@ -208,6 +312,10 @@ void EvHttpServer::join() {
 
     // close the socket at last
     close(_server_fd);
+    for (int fd : _worker_fds) {
+        ::close(fd);
+    }
+    _worker_fds.clear();
 
     // free the evhttp and event_base
     for (auto http : _https) {
@@ -227,14 +335,22 @@ Status EvHttpServer::_bind() {
         ss << "convert address failed, host=" << _host << ", port=" << _port;
         return Status::InternalError(ss.str());
     }
-    // reuse_addr arg is removed in brpc 0.9.7 and use gflag instead.
-    // default reuse_addr is true and reuse_port is false.
-    _server_fd = butil::tcp_listen(point);
+    // SO_REUSEPORT must be set on the primary listener before bind() so the
+    // kernel adds it to the reuseport group; secondary worker listeners then
+    // bind to the same {addr, port} successfully and the kernel load-balances
+    // accept() across them. Only opt in when there is more than one worker —
+    // a single-worker server has nothing to load-balance with.
+    bool want_reuse_port = false;
+#ifdef SO_REUSEPORT
+    want_reuse_port = (_num_workers > 1);
+#endif
+    _server_fd = open_listen_socket(point, want_reuse_port);
     if (_server_fd < 0) {
         std::stringstream ss;
         ss << "Failed to listen port. port: " << _port << ", error: " << errno_to_string(errno);
         return Status::InternalError(ss.str());
     }
+    _reuseport_enabled = want_reuse_port;
     if (_port == 0) {
         struct sockaddr_in addr;
         socklen_t socklen = sizeof(addr);
@@ -242,6 +358,8 @@ Status EvHttpServer::_bind() {
         if (rc == 0) {
             _real_port = ntohs(addr.sin_port);
         }
+    } else {
+        _real_port = _port;
     }
     res = butil::make_non_blocking(_server_fd);
     if (res < 0) {

@@ -467,10 +467,6 @@
     "message": "DBT",
     "description": "The label for link DBT in sidebar docs, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
   },
-  "sidebar.docs.category.Best Practices": {
-    "message": "Best Practices",
-    "description": "The label for category Best Practices in sidebar docs"
-  },
   "sidebar.docs.category.Query Tuning": {
     "message": "クエリチューニング",
     "description": "The label for category Query Tuning in sidebar docs"
