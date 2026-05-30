@@ -152,6 +152,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // getOriginDefaultValue() derives the add-time value from the current state in that case.
     @SerializedName(value = "originDefaultValue")
     private String originDefaultValue;
+    // Expression form of the add-time backfill default, used for complex (ARRAY/MAP/STRUCT) defaults
+    // whose materialized JSON only exists on the BE: MODIFY freezes the pre-change expression here,
+    // and the BE converts it to the origin JSON. Scalar defaults use |originDefaultValue| instead.
+    @SerializedName(value = "originDefaultExpr")
+    private DefaultExpr originDefaultExpr;
     // this handle function like now() or simple expression
     @SerializedName(value = "defaultExpr")
     private DefaultExpr defaultExpr;
@@ -307,6 +312,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = column.isAllowNull();
         this.defaultValue = column.getDefaultValue();
         this.originDefaultValue = column.originDefaultValue;
+        this.originDefaultExpr = column.originDefaultExpr;
         this.comment = column.getComment();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
@@ -462,9 +468,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.originDefaultValue != null) {
             return this.originDefaultValue;
         }
-        // Complex (ARRAY/MAP/STRUCT) expression defaults are materialized to a JSON value that older
-        // rows read; it is not recoverable here, so return null and let the read path keep using
-        // default_value.
+        // Complex (ARRAY/MAP/STRUCT) defaults have no literal here — their add-time origin is carried
+        // in expression form via getOriginDefaultExpr() and materialized to JSON on the BE.
         if (defaultExpr != null && defaultExpr.hasExprObject()) {
             return null;
         }
@@ -475,6 +480,24 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return defaultValue;
         }
         return isAllowNull ? NULL_ORIGIN_DEFAULT_VALUE : null;
+    }
+
+    public void setOriginDefaultExpr(DefaultExpr originDefaultExpr) {
+        this.originDefaultExpr = originDefaultExpr;
+    }
+
+    // Add-time backfill default in expression form, for complex (ARRAY/MAP/STRUCT) defaults. Returns
+    // the value frozen by a prior MODIFY once set; otherwise the current complex default expression,
+    // which equals the add-time value (a default can only change via MODIFY, which freezes it). Null
+    // for non-complex columns (those use getOriginDefaultValue()).
+    public DefaultExpr getOriginDefaultExpr() {
+        if (this.originDefaultExpr != null) {
+            return this.originDefaultExpr;
+        }
+        if (defaultExpr != null && defaultExpr.hasExprObject()) {
+            return defaultExpr;
+        }
+        return null;
     }
 
     public void setComment(String comment) {
@@ -565,6 +588,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         String originDefault = getOriginDefaultValue();
         if (originDefault != null) {
             tColumn.setOrigin_default_value(originDefault);
+        }
+        // Complex (ARRAY/MAP/STRUCT) defaults carry their frozen origin in expression form; the BE
+        // converts it to the origin JSON, mirroring default_expr -> default_value.
+        DefaultExpr originExpr = getOriginDefaultExpr();
+        if (originExpr != null && originExpr.getExprObject() != null) {
+            tColumn.setOrigin_default_expr(ExprToThrift.treeToThrift(originExpr.getExprObject()));
         }
 
         // The define expr does not need to be serialized here for now.
@@ -677,19 +706,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return true;
     }
 
-    // Whether MODIFY ... DEFAULT may change this column's default. Allowed for a non-key value
-    // column with a simple aggregation whose add-time default is recoverable
-    // (getOriginDefaultValue() != null) — covering literal, no-default (NULL), and ADD-time
-    // now()/current_timestamp columns, including ones created before this feature. VARY (uuid())
-    // and complex expression defaults have no recoverable add-time literal and stay immutable, as
-    // do SUM/MIN/MAX/union aggregations (e.g. SUM requires a zero default).
+    // Whether MODIFY ... DEFAULT may change this column's default. Allowed for any non-key value
+    // column with a simple aggregation: scalar defaults keep the add-time value via
+    // getOriginDefaultValue(), complex (ARRAY/MAP/STRUCT) defaults via getOriginDefaultExpr(). Key
+    // columns and SUM/MIN/MAX/union aggregations (e.g. SUM requires a zero default) stay immutable.
     private boolean isDefaultValueChangeAllowed() {
         if (isKey) {
-            return false;
-        }
-        // Complex (ARRAY/MAP/STRUCT) expression defaults can't be preserved for rows older than the
-        // column — their materialized value isn't recoverable here — so they stay immutable.
-        if (defaultExpr != null && defaultExpr.hasExprObject()) {
             return false;
         }
         // SUM/MIN/MAX/union aggregations have constrained defaults (e.g. SUM must be 0).

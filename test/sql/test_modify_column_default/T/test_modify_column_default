@@ -71,3 +71,37 @@ select * from t order by id;
 select count(c) from t;
 
 drop database db_${uuid0};
+
+
+-- name: test_modify_complex_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- row written before column c exists
+insert into t values (1);
+
+-- add an ARRAY column with a complex default (constant literal)
+alter table t add column c ARRAY<INT> DEFAULT [1,2,3];
+function: wait_alter_table_finish()
+
+-- row written while the default is [1,2,3]: physically stores it
+insert into t (id) values (2);
+
+-- change the complex default; older rows must keep the add-time [1,2,3]
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+function: wait_alter_table_finish()
+
+-- row written after the change: physically stores [4,5,6]
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time default [1,2,3]; only id=3 is [4,5,6]
+select * from t order by id;
+
+drop database db_${uuid0};

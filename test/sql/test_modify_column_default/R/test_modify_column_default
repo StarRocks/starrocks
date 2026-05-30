@@ -100,3 +100,50 @@ select count(c) from t;
 drop database db_${uuid0};
 -- result:
 -- !result
+-- name: test_modify_complex_default_keeps_old_rows
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c ARRAY<INT> DEFAULT [1,2,3];
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	[1,2,3]
+2	[1,2,3]
+3	[4,5,6]
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

@@ -236,6 +236,15 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     // Frozen backfill default for rows older than this column (see Descriptors.thrift / ColumnPB).
     if (t_column.__isset.origin_default_value) {
         column_pb->set_origin_default_value(t_column.origin_default_value);
+    } else if (t_column.__isset.origin_default_expr) {
+        // Complex (array/map/struct) origin: evaluate to JSON, same as default_expr -> default_value.
+        auto converted = convert_default_expr_to_json_string(t_column.origin_default_expr);
+        if (converted.ok()) {
+            column_pb->set_origin_default_value(converted.value());
+        } else {
+            LOG(WARNING) << "Failed to convert origin_default_expr to JSON String for column '" << t_column.column_name
+                         << "': " << converted.status().to_string();
+        }
     }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
@@ -532,6 +541,16 @@ Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns) {
                 column.__isset.default_value = true;
             } else {
                 LOG(ERROR) << "Failed to convert default_expr to JSON String for column '" << column.column_name
+                           << "': " << result.status().to_string();
+            }
+        }
+        if (column.__isset.origin_default_expr && !column.__isset.origin_default_value) {
+            auto result = convert_default_expr_to_json_string(column.origin_default_expr);
+            if (result.ok()) {
+                column.origin_default_value = result.value();
+                column.__isset.origin_default_value = true;
+            } else {
+                LOG(ERROR) << "Failed to convert origin_default_expr to JSON String for column '" << column.column_name
                            << "': " << result.status().to_string();
             }
         }
