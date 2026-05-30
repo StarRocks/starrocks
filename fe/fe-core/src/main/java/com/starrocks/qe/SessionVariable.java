@@ -1005,6 +1005,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
+    // Rewrites comparisons between a STRING date column (canonical 'yyyy-MM-dd' values) and a temporal
+    // constant into a pure string-domain comparison, so connector push-down and partition pruning behave
+    // consistently for current_date() / current_date()-interval predicates. Disable for string columns
+    // that store non-canonical date formats or genuine datetime strings.
+    public static final String ENABLE_REWRITE_STRING_DATE_PREDICATE = "enable_rewrite_string_date_predicate";
+
     public static final String ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION =
             "enable_partition_column_value_only_optimization";
 
@@ -3073,6 +3079,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
+
+    @VarAttr(name = ENABLE_REWRITE_STRING_DATE_PREDICATE)
+    private boolean enableRewriteStringDatePredicate = true;
 
     @VarAttr(name = ENABLE_MIN_MAX_OPTIMIZATION)
     private boolean enableMinMaxOptimization = true;
@@ -5650,6 +5659,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCountStarOptimization(boolean v) {
         enableCountStarOptimization = v;
+    }
+
+    public boolean isEnableRewriteStringDatePredicate() {
+        return enableRewriteStringDatePredicate;
+    }
+
+    public void setEnableRewriteStringDatePredicate(boolean v) {
+        enableRewriteStringDatePredicate = v;
     }
 
     public boolean isEnableMinMaxOptimization() {

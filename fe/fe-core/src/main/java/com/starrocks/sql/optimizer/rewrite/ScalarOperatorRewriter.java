@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedDateColumnPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedStringDatePredicateRule;
 
 import java.util.List;
 import java.util.Map;
@@ -83,6 +84,7 @@ public class ScalarOperatorRewriter {
             new SimplifiedScanColumnRule(),
             new SimplifiedPredicateRule(),
             new SimplifiedDateColumnPredicateRule(),
+            new SimplifiedStringDatePredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
             ConsolidateLikesRule.INSTANCE
