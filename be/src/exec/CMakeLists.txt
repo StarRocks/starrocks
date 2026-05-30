@@ -28,6 +28,7 @@ set(EXEC_PRIMITIVE_FILES
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
     pipeline/operator.cpp
+    pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
