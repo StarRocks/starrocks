@@ -147,3 +147,173 @@ select * from t order by id;
 drop database db_${uuid0};
 -- result:
 -- !result
+-- name: test_modify_default_keeps_original_across_multiple_changes
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c INT DEFAULT "1";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+alter table t modify column c INT DEFAULT "2";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table t modify column c INT DEFAULT "3";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	1
+2	1
+3	3
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_modify_uuid_default_keeps_old_rows_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c VARCHAR(40) DEFAULT uuid();
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table t modify column c VARCHAR(40) DEFAULT "x";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	None
+3	x
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_modify_default_on_create_table_column
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT,
+    c INT DEFAULT "1"
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t (id) values (1);
+-- result:
+-- !result
+alter table t modify column c INT DEFAULT "2";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	1
+2	2
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_modify_default_rejected_for_key_and_aggregate_columns
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table tk (
+    id INT DEFAULT "0",
+    v INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+alter table tk modify column id INT DEFAULT "1";
+-- result:
+E: (1064, 'Can not change default value')
+-- !result
+create table ta (
+    id INT,
+    s INT SUM
+)
+AGGREGATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+alter table ta modify column s INT SUM DEFAULT "5";
+-- result:
+E: (1064, 'Can not change default value')
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
