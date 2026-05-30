@@ -1554,7 +1554,10 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static boolean hasMicroseconds(String plan) {
-        Pattern pattern = Pattern.compile("<slot 2>\\s*:\\s*'\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{6}'");
+        // current_timestamp(N) is a stable const default: it freezes to a single literal (in slot 3, like the
+        // no-precision form), and the plan renders the fractional part with significant digits only, so the
+        // matcher is slot-agnostic and accepts 1-6 fractional digits rather than a fixed six.
+        Pattern pattern = Pattern.compile("'\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{1,6}'");
         Matcher matcher = pattern.matcher(plan);
         return matcher.find();
     }

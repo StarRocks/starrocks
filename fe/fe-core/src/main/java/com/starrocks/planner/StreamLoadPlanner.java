@@ -48,9 +48,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
@@ -74,9 +76,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -86,7 +85,6 @@ import java.util.Optional;
 // TODO(zc): support other type table
 public class StreamLoadPlanner {
     private static final Logger LOG = LogManager.getLogger(StreamLoadPlanner.class);
-    private final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     // destination Db and table get from request
     // Data will load to this table
@@ -133,6 +131,7 @@ public class StreamLoadPlanner {
     }
 
     public TExecPlanFragmentParams plan(TUniqueId loadId) throws StarRocksException {
+        connectContext.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());
         try (final var scope = connectContext.bindScope()) {
             return do_plan(loadId);
         }
@@ -300,10 +299,8 @@ public class StreamLoadPlanner {
         }
 
         params.setQuery_options(queryOptions);
-        TQueryGlobals queryGlobals = new TQueryGlobals();
-        queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
-        queryGlobals.setTimestamp_ms(new Date().getTime());
-        queryGlobals.setTime_zone(streamLoadInfo.getTimezone());
+        TQueryGlobals queryGlobals = CoordinatorPreprocessor.genQueryGlobals(
+                connectContext.getStartTimeInstant(), TimeUtils.getTimeZone().toZoneId().getId());
         params.setQuery_globals(queryGlobals);
 
         // Since stream load has only one fragment,
