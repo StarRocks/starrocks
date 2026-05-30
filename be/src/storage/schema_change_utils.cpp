@@ -386,6 +386,46 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
     return true;
 }
 
+// Place an evaluated generated/default column value into the destination chunk slot, honoring the
+// destination column's nullability. A generated column is always nullable, but a volatile default
+// (uuid()/uuid_numeric()) can be added to a NOT NULL column; since the expr engine marks even never-null
+// functions as nullable, a non-nullable destination unwraps the data column. A genuine null reaching a
+// NOT NULL column violates the constraint and is reported as an error.
+static Status assign_generated_column_value(Chunk* chunk, size_t idx, ColumnPtr tmp, size_t num_rows) {
+    // Mutating ops need the raw mutable column; the chunk slot (ColumnPtr) is only swapped, never mutated.
+    Column* dst = chunk->get_column_raw_ptr_by_index(idx);
+    if (dst->is_nullable()) {
+        if (tmp->only_null()) {
+            // Only null column maybe lost type info, we append null for the chunk instead of swapping.
+            dst->reset_column();
+            dst->append_nulls(num_rows);
+        } else if (tmp->is_nullable()) {
+            chunk->get_column_by_index(idx).swap(tmp);
+        } else {
+            // Non-nullable result (e.g. a const column) into a nullable destination: unpack and graft.
+            ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
+            down_cast<NullableColumn*>(dst)->swap_by_data_column(output_column);
+        }
+        return Status::OK();
+    }
+    // Destination is NOT NULL.
+    if (tmp->only_null()) {
+        return Status::InternalError("NOT NULL column got a NULL value from its default expression");
+    }
+    if (tmp->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(tmp.get());
+        if (nullable->null_count() != 0) {
+            return Status::InternalError("NOT NULL column got a NULL value from its default expression");
+        }
+        ColumnPtr data = nullable->data_column();
+        chunk->get_column_by_index(idx).swap(data);
+    } else {
+        ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
+        chunk->get_column_by_index(idx).swap(output_column);
+    }
+    return Status::OK();
+}
+
 Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
     if (_gc_exprs.size() == 0) {
         return Status::OK();
@@ -398,22 +438,8 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
 
     for (auto it : _gc_exprs) {
         ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(new_chunk.get()));
-        if (tmp->only_null()) {
-            // Only null column maybe lost type info, we append null
-            // for the chunk instead of swapping the tmp column.
-            auto* col = new_chunk->get_column_raw_ptr_by_index(it.first);
-            col->reset_column();
-            col->append_nulls(new_chunk->num_rows());
-        } else if (tmp->is_nullable()) {
-            new_chunk->get_column_by_index(it.first).swap(tmp);
-        } else {
-            // generated column must be a nullable column. If tmp is not nullable column,
-            // it maybe a constant column or some other column type.
-            // Unpack normal const column
-            ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
-            auto* col = down_cast<NullableColumn*>(new_chunk->get_column_raw_ptr_by_index(it.first));
-            col->swap_by_data_column(output_column);
-        }
+        RETURN_IF_ERROR(
+                assign_generated_column_value(new_chunk.get(), it.first, std::move(tmp), new_chunk->num_rows()));
     }
 
     // reset the slot-index map for compatibility
@@ -496,22 +522,8 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
         // cid for new partial schema
         int cid = it.first - base_schema_columns;
         ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(read_chunk.get()));
-        if (tmp->only_null()) {
-            // Only null column maybe lost type info, we append null
-            // for the chunk instead of swapping the tmp column.
-            auto* col = down_cast<NullableColumn*>(tmp_new_chunk->get_column_raw_ptr_by_index(cid));
-            col->reset_column();
-            col->append_nulls(read_chunk->num_rows());
-        } else if (tmp->is_nullable()) {
-            tmp_new_chunk->get_column_by_index(cid).swap(tmp);
-        } else {
-            // generated column must be a nullable column. If tmp is not nullable column,
-            // it maybe a constant column or some other column type
-            // Unpack normal const column
-            ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
-            auto* col = down_cast<NullableColumn*>(tmp_new_chunk->get_column_raw_ptr_by_index(cid));
-            col->swap_by_data_column(output_column);
-        }
+        RETURN_IF_ERROR(
+                assign_generated_column_value(tmp_new_chunk.get(), cid, std::move(tmp), read_chunk->num_rows()));
     }
 
     // append into the new_chunk

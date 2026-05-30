@@ -1180,13 +1180,23 @@ public class SchemaChangeHandler extends AlterHandler {
                                       Set<String> newColNameSet) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
-        if (defaultValueType != Column.DefaultValueType.CONST && defaultValueType != Column.DefaultValueType.NULL) {
+        // A volatile (VARY) default such as uuid() / uuid_numeric() gives every row its own value, so the
+        // single-value fast-schema-evolution backfill cannot represent it for pre-existing rows. It is still
+        // addable by forcing a real rewrite that evaluates the default per row (same path as generated columns).
+        boolean varyDefaultRewrite = false;
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            if (newColumn.getDefaultExpr().obtainExpr() == null) {
+                throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
+            }
+            varyDefaultRewrite = true;
+        } else if (defaultValueType != Column.DefaultValueType.CONST && defaultValueType != Column.DefaultValueType.NULL) {
             throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
         }
 
         boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
-        // if column is generated column, need to rewrite table data, so we can not use light schema change
-        if (newColumn.isAutoIncrement() || newColumn.isGeneratedColumn()) {
+        // if column is generated column or has a volatile default, need to rewrite table data,
+        // so we can not use light schema change
+        if (newColumn.isAutoIncrement() || newColumn.isGeneratedColumn() || varyDefaultRewrite) {
             fastSchemaEvolution = false;
         }
 
@@ -1304,6 +1314,22 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException(
                     "Can not add column which already exists in column id: " + newColName
                             + ", you can remove " + foundColumn.get() + " and try again.");
+        }
+
+        // A volatile default is materialized per row only for the base table. A rollup task reads its own old
+        // index version, not the materialized base, so a column added to a rollup (or a key column propagated to
+        // every index on a unique-key table) falls back to the single-value default path (NULL/empty) for
+        // pre-existing rows; re-evaluating the expr per index instead would make a rollup's value disagree with
+        // the base row. Until the value can be derived consistently across indexes, restrict it to the base table.
+        if (varyDefaultRewrite) {
+            boolean addsToNonBaseIndex = targetIndexMetaId != -1L
+                    || (KeysType.UNIQUE_KEYS == olapTable.getKeysType() && newColumn.isKey()
+                            && indexMetaIdToSchema.size() > 1);
+            if (addsToNonBaseIndex) {
+                throw new DdlException("A volatile default (uuid()/uuid_numeric()) can only be added to the base "
+                        + "table; adding column '" + newColName + "' to a rollup or as a key column propagated to "
+                        + "all indexes is not supported.");
+            }
         }
 
         /*

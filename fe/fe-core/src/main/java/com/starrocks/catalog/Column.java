@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
@@ -766,6 +768,25 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return DefaultValueType.CONST;
         }
         return DefaultValueType.NULL;
+    }
+
+    // Build the per-row materialization expr for a volatile (VARY) default such as uuid() / uuid_numeric().
+    // A schema-change rewrite evaluates it once per pre-existing row so each row gets its own value, exactly
+    // as an INSERT evaluates the default per row. CONST defaults (literals, now(N)) freeze a single value and
+    // never reach here. Returns null when there is no obtainable default expr.
+    public TExpr getMaterializedDefaultThriftExpr() {
+        if (defaultExpr == null) {
+            return null;
+        }
+        Expr expr = defaultExpr.obtainExpr();
+        if (expr == null) {
+            return null;
+        }
+        if (!expr.getType().equals(getType())) {
+            expr = new CastExpr(getType(), expr);
+        }
+        expr = ExprUtils.analyzeAndCastFold(expr);
+        return ExprToThrift.treeToThrift(expr);
     }
 
     // if the column have a default value or default expr can be calculated like now(). return calculated value

@@ -1,0 +1,122 @@
+-- name: test_add_column_default_uuid
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+
+-- two rows written before column u exists: they physically lack u and are backfilled during the rewrite
+insert into t values (1), (2);
+
+-- uuid() is a volatile default: every row gets its own value, which the single-value fast-schema-evolution
+-- backfill cannot represent, so ADD COLUMN forces a real rewrite that evaluates uuid() per pre-existing row
+-- (it was previously rejected as "unsupported default expr").
+alter table t add column u VARCHAR(36) DEFAULT (uuid());
+function: wait_alter_table_finish()
+
+-- row written after the column was added gets its own uuid()
+insert into t (id) values (3);
+
+-- every row (pre-existing + new) is non-null
+select count(*) from t where u is NULL;
+
+-- the two pre-existing rows got DISTINCT materialized values, NOT one frozen value (this is what
+-- separates a volatile default from a const default such as now(N), which would share one value)
+select count(distinct u) from t where id in (1, 2);
+
+-- all three rows hold distinct uuids
+select count(distinct u) from t;
+
+-- the metadata default reports the generator
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+
+drop database db_${uuid0};
+
+
+-- name: test_add_column_default_uuid_numeric
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+
+insert into t values (1), (2);
+
+-- uuid_numeric() is the LARGEINT volatile default: same per-row materialization for pre-existing rows
+alter table t add column u LARGEINT DEFAULT (uuid_numeric());
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+select count(*) from t where u is NULL;
+select count(distinct u) from t where id in (1, 2);
+select count(distinct u) from t;
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+
+drop database db_${uuid0};
+
+
+-- name: test_add_column_default_uuid_not_null
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+
+insert into t values (1), (2);
+
+-- NOT NULL volatile default: uuid() never returns null, so the rewrite materializes a non-null value per
+-- pre-existing row even though the column rejects nulls (the destination is non-nullable in the rewrite)
+alter table t add column u VARCHAR(36) NOT NULL DEFAULT (uuid());
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+select count(*) from t where u is NULL;
+select count(distinct u) from t where id in (1, 2);
+select count(distinct u) from t;
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+
+drop database db_${uuid0};
+
+
+-- name: test_add_column_default_uuid_numeric_not_null
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+
+insert into t values (1), (2);
+
+alter table t add column u LARGEINT NOT NULL DEFAULT (uuid_numeric());
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+select count(*) from t where u is NULL;
+select count(distinct u) from t where id in (1, 2);
+select count(distinct u) from t;
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+
+drop database db_${uuid0};
