@@ -87,11 +87,16 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
         config::enable_load_spill_parallel_merge) {
         _pipeline_merge_context->init_parallel_merge();
+        if (!_pipeline_merge_context->token()) {
+            // Thread pool exhausted - cannot submit merge tasks now
+            // Skip eager merge for this flush
+            return Status::OK();
+        }
 
-        // Generate ONE merge task eagerly (not all tasks). Pipeline execution generates
-        // tasks incrementally as the merge pool drains; final_round=false means this merges
-        // to intermediate blocks, not final tablet. If no task can be produced (e.g. groups
-        // not yet large enough), task_iterator.has_more() returns false and we just return.
+        // Generate ONE merge task eagerly (not all tasks). This allows pipeline execution
+        // where merge tasks are generated and submitted incrementally as resources allow,
+        // rather than all upfront which would consume excessive memory.
+        // final_round=false means this merges to intermediate blocks, not final tablet.
         LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
                                                      _pipeline_merge_context->quit_flag(), false /* final_round */);
         task_iterator.init();
@@ -100,7 +105,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
             _pipeline_merge_context->add_merge_task(current_task);
             auto submit_st = _pipeline_merge_context->token()->submit(current_task);
             if (!submit_st.ok()) {
-                // Submit failure doesn't fail the flush — task will report error when checked later.
+                // Submit failure doesn't fail the flush - task will report error when checked later
                 current_task->update_status(submit_st);
             }
         }
