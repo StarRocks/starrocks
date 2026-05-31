@@ -152,7 +152,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.persistentIndexType = other.persistentIndexType;
         this.enableFileBundling = other.enableFileBundling;
         this.compactionStrategy = other.compactionStrategy;
-        this.flatJsonConfig = other.flatJsonConfig;
+        this.flatJsonConfig = other.flatJsonConfig == null
+                ? null
+                : new FlatJsonConfig(other.flatJsonConfig);
     }
 
     @Override
