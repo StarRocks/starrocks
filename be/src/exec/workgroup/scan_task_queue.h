@@ -145,7 +145,8 @@ public:
     bool empty() const { return size() == 0; }
 
     virtual void update_statistics(ScanTask& task, int64_t runtime_ns) = 0;
-    virtual bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const = 0;
+    virtual bool should_yield(const WorkGroupScanSchedEntity* scan_sched_entity,
+                              int64_t unaccounted_runtime_ns) const = 0;
 };
 
 class PriorityScanTaskQueue final : public ScanTaskQueue {
@@ -163,7 +164,10 @@ public:
     size_t size() const override { return _queue.get_size(); }
 
     void update_statistics(ScanTask& task, int64_t runtime_ns) override {}
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override { return false; }
+    bool should_yield(const WorkGroupScanSchedEntity* scan_sched_entity,
+                      int64_t unaccounted_runtime_ns) const override {
+        return false;
+    }
 
 private:
     BlockingPriorityQueue<ScanTask> _queue;
@@ -183,7 +187,7 @@ public:
     size_t size() const override { return _num_tasks.load(std::memory_order_acquire); }
 
     void update_statistics(ScanTask& task, int64_t runtime_ns) override;
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
+    bool should_yield(const WorkGroupScanSchedEntity* scan_sched_entity, int64_t unaccounted_runtime_ns) const override;
 
 private:
     /// These methods should be guarded by the outside _global_mutex.
