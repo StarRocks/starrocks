@@ -25,7 +25,6 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
@@ -762,62 +761,35 @@ public class MetadataMgr {
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (internalStatistics == null ||
-                internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
-            // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
-            // Avoid `analyze table` to collect table statistics from metadata.
-            if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
-                return internalStatistics;
-            } else if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
-                    session.getSourceTablesCount() == 1) {
-                return StatisticsUtils.buildDefaultStatistics(columns.keySet());
-            } else {
-                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                        session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
-                if (connectorBasicStats != null && internalStatistics != null &&
-                        internalStatistics.getColumnStatistics().values().stream().anyMatch(
-                                columnStatistic -> columnStatistic.getHistogram() != null)) {
-                    // combine connector metadata basic stats and histogram from internal stats
-                    Map<ColumnRefOperator, ColumnStatistic> internalColumnStatsMap = internalStatistics.getColumnStatistics();
-                    Map<ColumnRefOperator, ColumnStatistic> combinedColumnStatsMap = Maps.newHashMap();
-                    connectorBasicStats.getColumnStatistics().forEach((key, value) -> {
-                        if (internalColumnStatsMap.containsKey(key)) {
-                            combinedColumnStatsMap.put(key, ColumnStatistic.buildFrom(value).
-                                    setHistogram(internalColumnStatsMap.get(key).getHistogram()).build());
-                        } else {
-                            combinedColumnStatsMap.put(key, value);
-                        }
-                    });
+        boolean hasInternalStats = internalStatistics != null &&
+                internalStatistics.getColumnStatistics().values().stream().anyMatch(stat -> !stat.isUnknown());
+        session.setObtainedFromInternalStatistics(hasInternalStats);
 
-                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
-                } else {
-                    return connectorBasicStats;
-                }
-            }
-        } else {
-            session.setObtainedFromInternalStatistics(true);
-            // Internal stats can mix collected columns with uncollected ones, which are left unknown here.
-            // Those unknown columns would otherwise carry no min/max at all - worse than the connector/manifest
-            // min/max they inherit when there are no internal stats. Backfill them from connector metadata,
-            // respecting the same guards that gate metadata access in the branch above.
-            boolean hasUnknownColumn = internalStatistics.getColumnStatistics().values().stream()
-                    .anyMatch(ColumnStatistic::isUnknown);
-            boolean metadataStatsAllowed = !StatisticUtils.statisticTableBlackListCheck(table.getId()) &&
-                    !(session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
-                            session.getSourceTablesCount() == 1);
-            if (hasUnknownColumn && metadataStatsAllowed) {
-                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                        session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
-                if (connectorBasicStats != null) {
-                    return backfillUnknownColumnsFromConnector(internalStatistics, connectorBasicStats);
-                }
-            }
+        // Fast path: every requested column is covered by internal stats, no need to touch connector metadata.
+        if (hasInternalStats && internalStatistics.getColumnStatistics().values().stream()
+                .noneMatch(ColumnStatistic::isUnknown)) {
             return internalStatistics;
         }
+
+        // Some or all columns are unknown: pull connector/manifest stats and backfill the unknown columns.
+        // Avoid `analyze table` collecting table statistics from metadata.
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return internalStatistics;
+        }
+        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
+                session.getSourceTablesCount() == 1) {
+            return hasInternalStats ? internalStatistics : StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
+        if (connectorBasicStats == null) {
+            return hasInternalStats ? internalStatistics : null;
+        }
+        if (internalStatistics == null) {
+            return connectorBasicStats;
+        }
+        return backfillUnknownColumnsFromConnector(internalStatistics, connectorBasicStats);
     }
 
     // Partial ANALYZE leaves uncollected columns as unknown in the internal stats. Without backfill they carry
