@@ -15,20 +15,21 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
+#include <memory>
+#include <vector>
 
 #include "base/concurrency/limit_setter.h"
+#include "common/thread/cpu_util.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/pipeline_metrics.h"
-#include "work_group.h"
 
 namespace starrocks::pipeline {
-class PipelineExecutorMetrics;
+struct ScanExecutorMetrics;
 }
 
 namespace starrocks::workgroup {
 
 class ScanExecutor;
-class WorkGroupManager;
 struct ScanTask;
 class ScanTaskQueue;
 
