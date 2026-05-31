@@ -156,6 +156,14 @@ public class SchemaChangeTypeCompatibility {
     }
 
     public static boolean isSchemaChangeAllowed(Type lhs, Type rhs) {
+        // An identical type needs no conversion, so the change is always allowed -- this covers a
+        // MODIFY that only changes a column attribute such as the default. The matrix below encodes
+        // only scalar conversions, so without this complex types (ARRAY/MAP/STRUCT) could not be
+        // modified even to the same type. A genuine complex type change (e.g. ARRAY<INT> to
+        // ARRAY<BIGINT>) is not equal here and still falls through to the matrix, which rejects it.
+        if (lhs.equals(rhs)) {
+            return true;
+        }
         if (lhs.isDecimalV3() || rhs.isDecimalV3()) {
             return isSchemaChangeAllowedInvolvingDecimalV3(lhs, rhs);
         }
