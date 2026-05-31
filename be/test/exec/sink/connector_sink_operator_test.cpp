@@ -433,9 +433,8 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_does_not_claim_audit_marker_on_f
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const CommitResult&) {}));
 
     auto factory = make_factory(_fragment_context);
-    auto op = std::make_shared<ConnectorSinkOperator>(factory.get(), 0,
-                                                      Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink),
+    auto op = std::make_shared<ConnectorSinkOperator>(factory.get(), 0, Operator::s_pseudo_plan_node_id_for_final_sink,
+                                                      0, std::move(chunk_sink),
                                                       std::make_unique<connector::AsyncFlushStreamPoller>(),
                                                       sink_mem_mgr, op_mem_mgr, _fragment_context, num_sinkers);
 
