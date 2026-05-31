@@ -436,6 +436,24 @@ protected:
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
 
     HashTableKeyAllocator _state_allocator;
+    // When true, COUNT(*) GROUP BY runs the inline-count fast path: the hash-map
+    // slot holds the int64 counter directly (no arena state, no key dup). Set in
+    // open() for a single COUNT(*) over a supported fixed-size key (numeric, or a
+    // multi-column serialized/compressed key).
+    bool _inline_count = false;
+    // Sorted streaming aggregation (including spill restore) still uses ordinary aggregate-function
+    // states; it never stores the count in a hash-map value slot. Subclasses can turn this off before open().
+    bool _allow_inline_count = true;
+    // True when inline-count is running the merge/intermediate phase: the in-slot counter
+    // accumulates the partial counts from the intermediate column (slot += partial) instead
+    // of counting +1 per input row.
+    bool _inline_count_merge = false;
+    // True after build_hash_map_with_selection ran the inline-count classify-only pass: it filled the
+    // streaming selection (hit vs miss) without counting or stashing anything, so the next
+    // compute_batch_agg_states* must commit by re-probing the kept keys (+1, or += partial in merge).
+    // Every other inline build counts in place and leaves this false, so a chunk the streaming sink
+    // passes through whole is not double-counted.
+    bool _inline_count_defer = false;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 

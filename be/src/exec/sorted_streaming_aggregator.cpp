@@ -229,7 +229,9 @@ private:
     buffer_range buffer[2];
 };
 
-SortedStreamingAggregator::SortedStreamingAggregator(AggregatorParamsPtr params) : Aggregator(std::move(params)) {}
+SortedStreamingAggregator::SortedStreamingAggregator(AggregatorParamsPtr params) : Aggregator(std::move(params)) {
+    _allow_inline_count = false;
+}
 
 SortedStreamingAggregator::~SortedStreamingAggregator() {
     if (_state) {

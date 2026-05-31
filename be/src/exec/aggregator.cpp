@@ -347,10 +347,28 @@ Status Aggregator::open(RuntimeState* state) {
         TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
 
+    // Inline-count fast path: a single COUNT(*) GROUP BY over a fixed-size key (numeric, or a
+    // multi-column serialized/compressed key) keeps the int64 counter in the hash-map slot itself
+    // (no arena state, no key dup). supports_inline_count() decides which key variants qualify.
+    // Gated by the enable_agg_inline_count session variable; everything else is unchanged.
+    const bool inline_count_candidate = _allow_inline_count && state->enable_agg_inline_count() &&
+                                        !_is_only_group_by_columns && !_group_by_expr_ctxs.empty() &&
+                                        _agg_fn_ctxs.size() == 1 && _agg_functions[0]->get_name() == "count" &&
+                                        !_agg_fn_types[0].is_distinct && _hash_map_variant.supports_inline_count();
+    // _is_merge_funcs is empty for a bare DISTINCT/GROUP-BY sink (no agg functions); gating the
+    // [0] read on candidate (it requires one agg function) keeps it from indexing out of bounds.
+    const bool inline_count_is_merge = inline_count_candidate && (_is_merge_funcs[0] || _use_intermediate_as_input());
+    // The merge fast path only folds partial counts in the non-selective compute path; a
+    // group-by LIMIT can route the merge through the selective path, which it does not handle,
+    // so fall back to the general aggregation there rather than under-count.
+    _inline_count = inline_count_candidate && (!inline_count_is_merge || _limit == -1);
+    _inline_count_merge = _inline_count && inline_count_is_merge;
+    _runtime_profile->add_info_string("InlineCountOptimization", _inline_count ? "true" : "false");
+
     {
         _agg_states_total_size = 16;
         _max_agg_state_align_size = 8;
-        if (!_is_only_group_by_columns) {
+        if (!_is_only_group_by_columns && !_inline_count) {
             _hash_map_variant.visit([&](auto& variant) {
                 auto& hash_map_with_key = *variant;
                 using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
@@ -927,8 +945,43 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     return Status::OK();
 }
 
+static void inline_count_merge_build(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
+                                     Buffer<AggDataPtr>* agg_states, const int64_t* partials,
+                                     const Filter* selection = nullptr);
+static void inline_count_commit(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
+                                const Filter* selection);
+
 Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
+    if (_inline_count) {
+        if (!_inline_count_merge) {
+            // Update phase. A fused build already counted in place and clears _inline_count_defer.
+            // A classifying selective build sets it: commit the +1 now by re-probing the keys. This
+            // (non-selective) entry is the all-hit branch, so every row is committed (selection null).
+            if (_inline_count_defer) {
+                inline_count_commit(_hash_map_variant, chunk_size, _group_by_columns, nullptr);
+                _inline_count_defer = false;
+            }
+            return Status::OK();
+        }
+        // Merge phase. Evaluate the partial-count input from the same source the general merge path
+        // uses, then unwrap a nullable wrapper to reach the raw int64 partials the fold consumes.
+        bool use_intermediate = _use_intermediate_as_input();
+        auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+        RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[0], 0));
+        const Column* input = _agg_input_columns[0][0].get();
+        const Column* data =
+                input->is_nullable() ? down_cast<const NullableColumn*>(input)->data_column().get() : input;
+        using CountColumn = RunTimeColumnType<TYPE_BIGINT>; // == Int64Column
+        const auto* partial = down_cast<const CountColumn*>(data);
+        if (_tmp_agg_states.size() < chunk_size) {
+            _tmp_agg_states.resize(chunk_size);
+        }
+        inline_count_merge_build(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
+                                 partial->get_data().data());
+        RETURN_IF_ERROR(check_has_error());
+        return Status::OK();
+    }
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
@@ -953,6 +1006,39 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
 
 Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
+    if (_inline_count) {
+        // Merge phase on the selective (spill preaggregation) path: the kept rows (selection==0) carry
+        // partial counts from the intermediate column, so commit folds them (slot += partial) rather
+        // than the update-phase +1. Streamed rows (selection==1) are spilled unchanged and skipped by
+        // the selection mask. Re-evaluate the partial column the same way the all-hit merge does.
+        if (_inline_count_merge) {
+            if (_inline_count_defer) {
+                bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[0], 0));
+                const Column* input = _agg_input_columns[0][0].get();
+                const Column* data =
+                        input->is_nullable() ? down_cast<const NullableColumn*>(input)->data_column().get() : input;
+                using CountColumn = RunTimeColumnType<TYPE_BIGINT>; // == Int64Column
+                const auto* partial = down_cast<const CountColumn*>(data);
+                if (_tmp_agg_states.size() < chunk_size) {
+                    _tmp_agg_states.resize(chunk_size);
+                }
+                inline_count_merge_build(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
+                                         partial->get_data().data(), &_streaming_selection);
+                _inline_count_defer = false;
+                RETURN_IF_ERROR(check_has_error());
+            }
+            return Status::OK();
+        }
+        // Commit the classifying selective build: re-probe and +1 only the locally-aggregated rows
+        // (selection==0). New keys (selection==1) are streamed out separately and not counted here.
+        if (_inline_count_defer) {
+            inline_count_commit(_hash_map_variant, chunk_size, _group_by_columns, &_streaming_selection);
+            _inline_count_defer = false;
+        }
+        return Status::OK();
+    }
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
@@ -1652,6 +1738,55 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     });
 }
 
+// Inline-count build: drive the in-slot ++counter path for a supported numeric
+// variant. `not_founds`/`limit` carry the selection/limit semantics (ignored for
+// the plain HTBuildOp). DCHECKs on unsupported variants -- _inline_count is only
+// set when supports_inline_count() is true, so the supported branch always runs.
+template <typename HTBuildOp>
+static void inline_count_build(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
+                               Buffer<AggDataPtr>* tmp_states, Filter* not_founds, size_t limit) {
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (agg_inline_count_supported<MapType>) {
+            if (not_founds != nullptr) not_founds->assign(chunk_size, 0);
+            ExtraAggParam extra;
+            extra.not_founds = not_founds;
+            extra.limits = limit;
+            hash_map_with_key->template build_inline_count<HTBuildOp>(chunk_size, group_by_columns, tmp_states, &extra);
+        } else {
+            DCHECK(false) << "inline_count enabled on unsupported variant";
+        }
+    });
+}
+
+// Dispatch the merge fold to the active map's typed build_inline_count_merge. Only the supported
+// numeric variants reach here (gated by supports_inline_count() at open()); the rest DCHECK.
+static void inline_count_merge_build(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
+                                     Buffer<AggDataPtr>* agg_states, const int64_t* partials, const Filter* selection) {
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (agg_inline_count_supported<MapType>) {
+            hash_map_with_key->build_inline_count_merge(chunk_size, group_by_columns, agg_states, partials, selection);
+        } else {
+            DCHECK(false) << "inline_count merge enabled on unsupported variant";
+        }
+    });
+}
+
+// Commit the deferred +1 for the selective inline-count build: re-probe each row the operator chose
+// to aggregate locally (selection[i] == 0, or all rows when selection is null) and add to its slot.
+static void inline_count_commit(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
+                                const Filter* selection) {
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (agg_inline_count_supported<MapType>) {
+            hash_map_with_key->commit_inline_count(chunk_size, group_by_columns, selection);
+        } else {
+            DCHECK(false) << "inline_count commit enabled on unsupported variant";
+        }
+    });
+}
+
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
     if (agg_group_by_with_limit) {
         if (_hash_map_variant.size() >= _limit) {
@@ -1660,6 +1795,17 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         } else {
             _streaming_selection.assign(chunk_size, 0);
         }
+    }
+
+    if (_inline_count) {
+        // Merge phase folds partial counts in compute_batch_agg_states (it needs the chunk to
+        // evaluate the intermediate column); nothing to build here.
+        if (!_inline_count_merge) {
+            _inline_count_defer = false; // fused build counts in place
+            inline_count_build<HTBuildOp<true, false, false>>(_hash_map_variant, chunk_size, _group_by_columns,
+                                                              &_tmp_agg_states, nullptr, 0);
+        }
+        return;
     }
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
@@ -1686,6 +1832,13 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
     } else {
         _streaming_selection.resize(chunk_size);
     }
+    if (_inline_count) {
+        _inline_count_defer = false; // process_limit path counts in place
+        inline_count_build<HTBuildOp<false, true, true>>(_hash_map_variant, chunk_size, _group_by_columns,
+                                                         &_tmp_agg_states, &_streaming_selection, _limit);
+        shared_limit_countdown.fetch_sub(_hash_map_variant.size() - start_size, std::memory_order_relaxed);
+        return;
+    }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
@@ -1696,6 +1849,15 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
+    if (_inline_count) {
+        // Classify-only: probe each row to fill the streaming selection, but count nothing and stash
+        // nothing, so a chunk the operator later streams out whole is not counted. The matching
+        // compute_batch_agg_states* re-probes the kept rows and applies the +1 (commit_inline_count).
+        _inline_count_defer = true;
+        inline_count_build<HTBuildOp<false, true, false>>(_hash_map_variant, chunk_size, _group_by_columns,
+                                                          &_tmp_agg_states, &_streaming_selection, 0);
+        return;
+    }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
@@ -1706,12 +1868,18 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
 
 void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
     _streaming_selection.resize(chunk_size);
-    _hash_map_variant.visit([&](auto& hash_map_with_key) {
-        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
-                                                                        AllocateState<MapType>(this), &_tmp_agg_states,
-                                                                        &_streaming_selection);
-    });
+    if (_inline_count) {
+        _inline_count_defer = false; // allocate path counts in place
+        inline_count_build<HTBuildOp<true, true, false>>(_hash_map_variant, chunk_size, _group_by_columns,
+                                                         &_tmp_agg_states, &_streaming_selection, 0);
+    } else {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            hash_map_with_key->build_hash_map_with_selection_and_allocation(
+                    chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this), &_tmp_agg_states,
+                    &_streaming_selection);
+        });
+    }
     // if _streaming_selection is not all 0, means there are new group by keys,
     // we need to build the topn runtime filter
     if (_topn_runtime_filter_builder != nullptr &&
@@ -1724,6 +1892,12 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
 // so the following group keys(same as the first not found group keys) are not marked as non-founded.
 // This can be used for stream mv so no need to find multi times for the same non-found group keys.
 void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit) {
+    if (_inline_count) {
+        _inline_count_defer = false; // allocate path counts in place
+        inline_count_build<HTBuildOp<true, true, false>>(_hash_map_variant, chunk_size, _group_by_columns,
+                                                         &_tmp_agg_states, &_streaming_selection, 0);
+        return;
+    }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
@@ -1739,6 +1913,79 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
     RETURN_IF_ERROR(_hash_map_variant.visit([&, this](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
+
+        // Inline-count finalize: iterate the phmap directly (key from the cell,
+        // count from the in-slot int64), instead of the arena walk. The operators
+        // seed _it_hash with a RawHashTableIterator (arena begin); on the first
+        // inline round we replace it with the phmap begin() and resume from there.
+        if constexpr (agg_inline_count_supported<HashMapWithKey>) {
+            if (_inline_count) {
+                using MapIter = typename HashMapWithKey::HashMapType::iterator;
+                MapIter it = (_it_hash.type() == typeid(RawHashTableIterator)) ? hash_map_with_key.hash_map.begin()
+                                                                               : std::any_cast<MapIter>(_it_hash);
+                auto end = hash_map_with_key.hash_map.end();
+                const auto hash_map_size = _hash_map_variant.size();
+                auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
+                auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
+                MutableColumns group_by_columns = _create_group_by_columns(num_rows);
+                MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
+
+                using CountColumn = RunTimeColumnType<TYPE_BIGINT>; // == Int64Column
+                Column* count_col = agg_result_columns[0].get();
+                auto* count_data =
+                        count_col->is_nullable()
+                                ? down_cast<CountColumn*>(down_cast<NullableColumn*>(count_col)->data_column_raw_ptr())
+                                : down_cast<CountColumn*>(count_col);
+
+                int32_t read_index = 0;
+                hash_map_with_key.results.resize(chunk_size);
+                {
+                    SCOPED_TIMER(_agg_stat->iter_timer);
+                    while ((it != end) & (read_index < chunk_size)) {
+                        hash_map_with_key.results[read_index] = it->first;
+                        count_data->get_data().emplace_back(agg_inline_count_load(it->second));
+                        ++read_index;
+                        ++it;
+                    }
+                }
+                if (count_col->is_nullable()) {
+                    auto* nullable = down_cast<NullableColumn*>(count_col);
+                    nullable->null_column_data().resize(read_index, 0);
+                    nullable->set_has_null(false);
+                }
+                if (read_index > 0) {
+                    SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                    hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
+                }
+                _is_ht_eos = (it == end);
+                // The NULL group is kept out of the hash map in null_key_data (reused as an int64).
+                // Emit it as one extra row in the final chunk: NULL key + its count. If it does not
+                // fit this chunk, hold eos so it lands in the next round.
+                if constexpr (HashMapWithKey::has_single_null_key) {
+                    if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
+                        if (read_index < chunk_size) {
+                            DCHECK(group_by_columns.size() == 1);
+                            DCHECK(group_by_columns[0]->is_nullable());
+                            group_by_columns[0]->append_default();
+                            count_data->get_data().emplace_back(agg_inline_count_load(hash_map_with_key.null_key_data));
+                            if (count_col->is_nullable()) {
+                                down_cast<NullableColumn*>(count_col)->null_column_data().emplace_back(0);
+                            }
+                            ++read_index;
+                        } else {
+                            _is_ht_eos = false;
+                        }
+                    }
+                }
+                _it_hash = it;
+                auto result_chunk = _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns),
+                                                        use_intermediate);
+                _num_rows_returned += read_index;
+                _num_rows_processed += read_index;
+                *chunk = std::move(result_chunk);
+                return Status::OK();
+            }
+        }
 
         auto it = std::any_cast<RawHashTableIterator>(_it_hash);
         auto end = _state_allocator.end();

@@ -515,6 +515,10 @@ public:
                _query_options.enable_hash_join_range_direct_mapping_opt;
     }
 
+    bool enable_agg_inline_count() const {
+        return _query_options.__isset.enable_agg_inline_count && _query_options.enable_agg_inline_count;
+    }
+
     bool enable_hash_join_linear_chained_opt() const {
         return _query_options.__isset.enable_hash_join_linear_chained_opt &&
                _query_options.enable_hash_join_linear_chained_opt;

@@ -517,6 +517,15 @@ struct AggHashMapVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
     }
 
+    // True when the active key type can run the inline-count fast path
+    // (non-nullable fixed-size numeric key on a phmap).
+    bool supports_inline_count() const {
+        return visit([](const auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            return agg_inline_count_supported<MapType>;
+        });
+    }
+
     void init(RuntimeState* state, Type type, AggStatistics* agg_statis);
 
     void convert_to_two_level(RuntimeState* state);

@@ -398,6 +398,10 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+
+  // Inline the COUNT(*) accumulator into the group-by hash-map value slot
+  // for fixed-size keys, instead of a pointer to an arena-allocated state.
+  219: optional bool enable_agg_inline_count;
 }
 
 // A scan range plus the parameters needed to execute that scan.

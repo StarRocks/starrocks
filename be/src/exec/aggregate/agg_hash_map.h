@@ -41,6 +41,47 @@ namespace starrocks {
 DECLARE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 using AggDataPtr = uint8_t*;
+
+// Inline-count value specialization: in inline-count mode the 8-byte hash-map
+// value slot holds the int64 COUNT(*) accumulator directly instead of a pointer
+// to an arena state. The slot never holds a real pointer in this mode; the
+// counter starts at 0 and is >= 1 once a group exists.
+// Access the bytes via memcpy: aliasing the AggDataPtr (uint8_t*) slot as int64_t& is
+// strict-aliasing UB that miscompiles at -O3 (build sets -Wno-, not -fno-strict-aliasing).
+ALWAYS_INLINE inline int64_t agg_inline_count_load(const AggDataPtr& slot) {
+    static_assert(sizeof(AggDataPtr) == sizeof(int64_t));
+    int64_t v;
+    __builtin_memcpy(&v, &slot, sizeof(v));
+    return v;
+}
+ALWAYS_INLINE inline void agg_inline_count_add(AggDataPtr& slot, int64_t delta) {
+    static_assert(sizeof(AggDataPtr) == sizeof(int64_t));
+    int64_t v;
+    __builtin_memcpy(&v, &slot, sizeof(v));
+    v += delta;
+    __builtin_memcpy(&slot, &v, sizeof(v));
+}
+// Free inline-count slot helpers shared by the multi-key (serialized / compressed fixed-size)
+// hash maps; they take the map by reference so both key classes share one definition. `delta`
+// lets the merge path fold a partial count.
+template <typename HashMap, typename KeyType, typename Callback>
+ALWAYS_INLINE void inline_count_emplace(HashMap& hash_map, KeyType key, Callback&& cb, int64_t delta) {
+    auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+        cb();
+        ctor(key, AggDataPtr{});
+    });
+    agg_inline_count_add(iter->second, delta);
+}
+template <typename HashMap, typename KeyType, typename Callback>
+ALWAYS_INLINE void inline_count_emplace_with_hash(HashMap& hash_map, KeyType key, size_t hash, Callback&& cb,
+                                                  int64_t delta) {
+    auto iter = hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+        cb();
+        ctor(key, AggDataPtr{});
+    });
+    agg_inline_count_add(iter->second, delta);
+}
+
 template <typename T>
 concept HasKeyType = requires {
     typename T::KeyType;
@@ -429,6 +470,313 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
+    // ===================== inline-count fast path =========================
+    // COUNT(*) value specialization: the hash-map value slot holds the int64
+    // counter directly (no arena state, no key dup, no update_batch). For the
+    // nullable wrapper the NULL group counts into null_key_data (reused as an
+    // int64). Only reached for supported numeric wrappers (gated by
+    // agg_inline_count_supported<> at the visit site); compiles for all so the
+    // std::variant visit stays well-formed. `agg_states` is reused only as the
+    // hash-precompute scratch (never as state pointers here).
+    template <typename HTBuildOp>
+    ALWAYS_NOINLINE void build_inline_count(size_t chunk_size, const Columns& key_columns,
+                                            Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        const Column* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            // NULL rows count into null_key_data (an int64 reused like a slot); non-null rows go
+            // through the hash map. only_null / no-null are shortcuts over the general case.
+            if (key_column->only_null()) {
+                if constexpr (HTBuildOp::fill_not_found && !HTBuildOp::allocate && !HTBuildOp::process_limit) {
+                    // Selective classify-only: the NULL group is a hit if it already exists (commit
+                    // counts it later), otherwise a miss to be streamed -- never created here.
+                    if (agg_inline_count_load(null_key_data) == 0) {
+                        std::fill_n(extra->not_founds->begin(), chunk_size, 1);
+                    }
+                } else {
+                    // Allocate or group-by-limit build: the NULL group always counts. The general path
+                    // never streams an all-null chunk, even under a limit, so neither do we.
+                    agg_inline_count_add(null_key_data, static_cast<int64_t>(chunk_size));
+                }
+                return;
+            }
+            const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+            const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
+            if (!nullable_column->has_null()) {
+                build_inline_count_impl<HTBuildOp>(data_column, agg_states, extra);
+            } else {
+                inline_count_through_null<HTBuildOp>(chunk_size, nullable_column, agg_states, extra);
+            }
+        } else {
+            build_inline_count_impl<HTBuildOp>(down_cast<const ColumnType*>(key_column), agg_states, extra);
+        }
+    }
+
+    template <typename HTBuildOp>
+    ALWAYS_NOINLINE void build_inline_count_impl(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
+                                                 ExtraAggParam* extra) {
+        if constexpr (is_no_prefetch_map<HashMap>) {
+            inline_count_noprefetch<HTBuildOp>(column, agg_states, extra);
+        } else if (!agg_should_prefetch_table(this->hash_map)) {
+            inline_count_noprefetch<HTBuildOp>(column, agg_states, extra);
+        } else {
+            inline_count_prefetch<HTBuildOp>(column, agg_states, extra);
+        }
+    }
+
+    // Nullable build with mixed null/non-null rows.
+    //  - Pure selective build (fill_not_found, no allocate, no limit): classify-only. An existing
+    //    group (incl. the NULL group) is a hit committed later; a new key is a miss to be streamed,
+    //    neither created nor counted here.
+    //  - Group-by-limit build (process_limit): the NULL group always counts (the general path never
+    //    streams nulls); a non-null key counts in place if it exists or there is room, else it is a
+    //    miss. _inline_count_defer is false here, so the count must land during the build.
+    //  - Allocate (fused) build: count everything in place.
+    template <typename HTBuildOp>
+    ALWAYS_NOINLINE void inline_count_through_null(size_t chunk_size, const NullableColumn* nullable_column,
+                                                   Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
+        const auto container = data_column->immutable_data();
+        const auto& null_data = nullable_column->null_column_data();
+        if constexpr (HTBuildOp::fill_not_found && !HTBuildOp::allocate && !HTBuildOp::process_limit) {
+            auto* __restrict not_founds = extra->not_founds;
+            const bool null_group_exists = agg_inline_count_load(null_key_data) != 0;
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (!null_group_exists) (*not_founds)[i] = 1;
+                } else {
+                    _probe_inline_nohash(container[i], (*not_founds)[i]);
+                }
+            }
+        } else if constexpr (HTBuildOp::process_limit) {
+            [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+            auto* __restrict not_founds = extra->not_founds;
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    agg_inline_count_add(null_key_data, 1);
+                } else if (hash_table_size < extra->limits) {
+                    _emplace_inline(container[i], [&] { hash_table_size++; });
+                } else {
+                    _find_inline_nohash(container[i], (*not_founds)[i]);
+                }
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    agg_inline_count_add(null_key_data, 1);
+                } else {
+                    _emplace_inline(container[i], [] {});
+                }
+            }
+        }
+    }
+
+    // Merge fold: slot += partials[i] for each kept row, in one emplace pass. `selection` is the
+    // spill preaggregation miss mask; rows with selection[i] != 0 are streamed unchanged and must
+    // not be folded into the local hash table. A null selection folds every row (non-selective merge).
+    void build_inline_count_merge(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                                  const int64_t* partials, const Filter* selection = nullptr) {
+        const Column* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            if (key_column->only_null()) {
+                int64_t s = 0;
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (selection == nullptr || (*selection)[i] == 0) s += partials[i];
+                }
+                agg_inline_count_add(null_key_data, s);
+                return;
+            }
+            DCHECK(key_column->is_nullable());
+            const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+            const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
+            if (nullable_column->has_null()) {
+                const auto container = data_column->immutable_data();
+                const auto& null_data = nullable_column->null_column_data();
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (selection != nullptr && (*selection)[i] != 0) continue;
+                    if (null_data[i]) {
+                        agg_inline_count_add(null_key_data, partials[i]);
+                    } else {
+                        _emplace_inline(
+                                container[i], [] {}, partials[i]);
+                    }
+                }
+                return;
+            }
+            build_inline_count_merge_impl(data_column, chunk_size, agg_states, partials, selection);
+        } else {
+            DCHECK(!key_column->is_nullable());
+            build_inline_count_merge_impl(down_cast<const ColumnType*>(key_column), chunk_size, agg_states, partials,
+                                          selection);
+        }
+    }
+
+    void build_inline_count_merge_impl(const ColumnType* column, size_t chunk_size, Buffer<AggDataPtr>* agg_states,
+                                       const int64_t* partials, const Filter* selection) {
+        if constexpr (is_no_prefetch_map<HashMap>) {
+            const auto& data = column->immutable_data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                _emplace_inline(
+                        data[i], [] {}, partials[i]);
+            }
+        } else if (!agg_should_prefetch_table(this->hash_map)) {
+            const auto& data = column->immutable_data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                _emplace_inline(
+                        data[i], [] {}, partials[i]);
+            }
+        } else {
+            DCHECK_GE(agg_states->size(), chunk_size);
+            size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());
+            const auto data = column->immutable_data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                hash_values[i] = this->hash_map.hash_function()(data[i]);
+            }
+            const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+            size_t __prefetch_index = __prefetch_dist;
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (__prefetch_dist != 0 && __prefetch_index < chunk_size) {
+                    this->hash_map.prefetch_hash(hash_values[__prefetch_index++]);
+                }
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                FieldType key = data[i];
+                _emplace_inline_with_hash(
+                        key, hash_values[i], [] {}, partials[i]);
+            }
+        }
+    }
+
+    template <typename HTBuildOp>
+    ALWAYS_NOINLINE void inline_count_prefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
+                                               ExtraAggParam* extra) {
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, agg_hash_map_default_prefetch_dist());
+        for (size_t i = 0; i < column_size; i++) {
+            AGG_HASH_MAP_PREFETCH_HASH_VALUE();
+            FieldType key = column->immutable_data()[i];
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    _emplace_inline_with_hash(key, hash_values[i], [&] { hash_table_size++; });
+                } else {
+                    _find_inline(key, hash_values[i], (*not_founds)[i]);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                _emplace_inline_with_hash(key, hash_values[i], FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                // Selective build is a speculative classifier, not a commit: it only marks misses
+                // (new keys) for streaming and never counts. The +1 is committed later by
+                // commit_inline_count (re-probing the key), so nothing fragile is stashed across the
+                // streaming-sink decision (stream / force-preagg / spill) that follows.
+                _probe_inline(key, hash_values[i], (*not_founds)[i]);
+            }
+        }
+    }
+
+    template <typename HTBuildOp>
+    ALWAYS_NOINLINE void inline_count_noprefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
+                                                 ExtraAggParam* extra) {
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        size_t num_rows = column->size();
+        auto container = column->immutable_data();
+        for (size_t i = 0; i < num_rows; i++) {
+            FieldType key = container[i];
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    _emplace_inline(key, [&] { hash_table_size++; });
+                } else {
+                    _find_inline_nohash(key, (*not_founds)[i]);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                _emplace_inline(key, FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                // Selective build: classify only (see the prefetch branch); commit happens later.
+                _probe_inline_nohash(key, (*not_founds)[i]);
+            }
+        }
+    }
+
+    template <typename Callback>
+    ALWAYS_INLINE void _emplace_inline_with_hash(KeyType key, size_t hash, Callback&& cb, int64_t delta = 1) {
+        auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+            cb();
+            ctor(key, AggDataPtr{});
+        });
+        agg_inline_count_add(iter->second, delta);
+    }
+    template <typename Callback>
+    ALWAYS_INLINE void _emplace_inline(KeyType key, Callback&& cb, int64_t delta = 1) {
+        auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
+            cb();
+            ctor(key, AggDataPtr{});
+        });
+        agg_inline_count_add(iter->second, delta);
+    }
+    // Counting find (limit overflow): the group already exists, so count straight into the slot.
+    ALWAYS_INLINE void _find_inline(KeyType key, size_t hash, uint8_t& not_found) {
+        if (auto iter = this->hash_map.find(key, hash); iter != this->hash_map.end()) {
+            agg_inline_count_add(iter->second, 1);
+        } else {
+            not_found = 1;
+        }
+    }
+    ALWAYS_INLINE void _find_inline_nohash(KeyType key, uint8_t& not_found) {
+        if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
+            agg_inline_count_add(iter->second, 1);
+        } else {
+            not_found = 1;
+        }
+    }
+    // Probing find (selective build): mark a miss, count nothing, store nothing.
+    ALWAYS_INLINE void _probe_inline(KeyType key, size_t hash, uint8_t& not_found) {
+        if (this->hash_map.find(key, hash) == this->hash_map.end()) {
+            not_found = 1;
+        }
+    }
+    ALWAYS_INLINE void _probe_inline_nohash(KeyType key, uint8_t& not_found) {
+        if (this->hash_map.find(key) == this->hash_map.end()) {
+            not_found = 1;
+        }
+    }
+
+    // Commit pass for the selective path: re-probe each non-streamed row (selection[i] == 0) and add
+    // +1 to its slot. Re-looking-up the key instead of replaying a stashed slot address keeps the
+    // count valid even if the hash table was rehashed/spilled after the classifying build. `selection`
+    // may be null when the caller wants every row committed (the all-hit branch).
+    void commit_inline_count(size_t chunk_size, const Columns& key_columns, const Filter* selection) {
+        const Column* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            if (key_column->only_null()) {
+                int64_t n = 0;
+                for (size_t i = 0; i < chunk_size; i++) n += (selection == nullptr || (*selection)[i] == 0);
+                agg_inline_count_add(null_key_data, n);
+                return;
+            }
+            const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+            const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
+            const auto container = data_column->immutable_data();
+            const auto& null_data = nullable_column->null_column_data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                if (null_data[i]) {
+                    agg_inline_count_add(null_key_data, 1);
+                } else {
+                    _find_inline_nohash(container[i], _ignore_not_found);
+                }
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(key_column);
+            const auto container = column->immutable_data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                _find_inline_nohash(container[i], _ignore_not_found);
+            }
+        }
+    }
+    uint8_t _ignore_not_found = 0;
+
     void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
@@ -451,6 +799,36 @@ template <LogicalType logical_type, typename HashMap>
 using AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, false>;
 template <LogicalType logical_type, typename HashMap>
 using AggHashMapWithOneNullableNumberKey = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, true>;
+
+template <typename HashMap>
+struct AggHashMapWithSerializedKeyFixedSize;
+template <typename HashMap>
+struct AggHashMapWithCompressedKeyFixedSize;
+
+// Selects, at the variant visit site, which key types run the inline-count path. The qualifier is
+// that the value slot is a raw AggDataPtr the int64 counter can occupy directly.
+template <typename T>
+struct AggInlineCountSupported : std::false_type {};
+// Single numeric key, nullable or not. The no-prefetch SmallFixedSizeHashMap (int8/int16 keys)
+// is excluded -- its value slot is a direct-array pointer sentinel, not a per-group counter cell.
+// For the nullable wrapper the NULL group's counter rides in the null_key_data field (reused as an
+// int64 the same way a slot is), so it needs no hash-map cell.
+template <LogicalType lt, typename HashMap, bool is_nullable>
+struct AggInlineCountSupported<AggHashMapWithOneNumberKeyWithNullable<lt, HashMap, is_nullable>>
+        : std::bool_constant<!is_no_prefetch_map<HashMap>> {};
+// Multi-column fixed-size keys (serialized and compressed) also keep a raw AggDataPtr slot. A wide
+// key is backed by a phmap, but a key that compresses to a single byte (cx1) is backed by the
+// direct-array SmallFixedSizeHashMap, whose value cell is a pointer sentinel and which the inline
+// build/finalize cannot iterate -- so, like the single-number key, the no-prefetch map is excluded
+// and that key falls back to the general aggregation path.
+template <typename HashMap>
+struct AggInlineCountSupported<AggHashMapWithSerializedKeyFixedSize<HashMap>>
+        : std::bool_constant<!is_no_prefetch_map<HashMap>> {};
+template <typename HashMap>
+struct AggInlineCountSupported<AggHashMapWithCompressedKeyFixedSize<HashMap>>
+        : std::bool_constant<!is_no_prefetch_map<HashMap>> {};
+template <typename T>
+inline constexpr bool agg_inline_count_supported = AggInlineCountSupported<std::remove_reference_t<T>>::value;
 
 template <typename HashMap, bool is_nullable>
 struct AggHashMapWithOneStringKeyWithNullable
@@ -1056,6 +1434,162 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
+    // ===================== inline-count fast path =========================
+    // COUNT(*) over a multi-column fixed-size key: serialize the key columns the same way the
+    // general path does, then keep the int64 counter in the value slot instead of an arena state.
+    // Selective build (fill_not_found, no allocate) only classifies hit vs miss; the +1 for the rows
+    // the operator keeps is applied later in commit_inline_count (re-probing the key).
+    void _inline_serialize_keys(size_t chunk_size, const Columns& key_columns, size_t stride) {
+        slice_sizes.assign(chunk_size, 0);
+        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        if (has_null_column) {
+            memset(buffer, 0x0, max_fixed_size * chunk_size);
+        }
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, stride);
+        }
+    }
+
+    template <typename HTBuildOp>
+    void build_inline_count(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                            ExtraAggParam* extra) {
+        DCHECK(fixed_byte_size != -1);
+        (void)agg_states; // selective build only classifies; the +1 is applied in commit_inline_count
+        auto* __restrict not_founds = extra->not_founds;
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        if (!agg_should_prefetch_table(this->hash_map)) {
+            _inline_serialize_keys(chunk_size, key_columns, sizeof(FixedSizeSliceKey));
+            auto* keys = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
+            if (has_null_column) {
+                for (size_t i = 0; i < chunk_size; ++i) keys[i].u.size = slice_sizes[i];
+            }
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if constexpr (HTBuildOp::process_limit) {
+                    if (hash_table_size < extra->limits) {
+                        inline_count_emplace(
+                                this->hash_map, keys[i], [&] { hash_table_size++; }, 1);
+                    } else {
+                        _find_inline_count(keys[i], (*not_founds)[i]);
+                    }
+                } else if constexpr (HTBuildOp::allocate) {
+                    inline_count_emplace(this->hash_map, keys[i],
+                                         FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i), 1);
+                } else if constexpr (HTBuildOp::fill_not_found) {
+                    _probe_inline_nohash(keys[i], (*not_founds)[i]);
+                }
+            }
+        } else {
+            _inline_serialize_keys(chunk_size, key_columns, max_fixed_size);
+            if (has_null_column) {
+                for (size_t i = 0; i < chunk_size; ++i) caches[i].key.u.size = slice_sizes[i];
+            }
+            for (size_t i = 0; i < chunk_size; ++i) caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
+            const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+            size_t __prefetch_index = __prefetch_dist;
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (__prefetch_dist != 0 && __prefetch_index < chunk_size)
+                    this->hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
+                FixedSizeSliceKey& key = caches[i].key;
+                if constexpr (HTBuildOp::process_limit) {
+                    if (hash_table_size < extra->limits) {
+                        inline_count_emplace_with_hash(
+                                this->hash_map, key, caches[i].hashval, [&] { hash_table_size++; }, 1);
+                    } else {
+                        _find_inline_count_hash(key, caches[i].hashval, (*not_founds)[i]);
+                    }
+                } else if constexpr (HTBuildOp::allocate) {
+                    inline_count_emplace_with_hash(this->hash_map, key, caches[i].hashval,
+                                                   FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i), 1);
+                } else if constexpr (HTBuildOp::fill_not_found) {
+                    _probe_inline(key, caches[i].hashval, (*not_founds)[i]);
+                }
+            }
+        }
+    }
+
+    void build_inline_count_merge(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                                  const int64_t* partials, const Filter* selection = nullptr) {
+        DCHECK(fixed_byte_size != -1);
+        if (!agg_should_prefetch_table(this->hash_map)) {
+            _inline_serialize_keys(chunk_size, key_columns, sizeof(FixedSizeSliceKey));
+            auto* keys = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
+            if (has_null_column) {
+                for (size_t i = 0; i < chunk_size; ++i) keys[i].u.size = slice_sizes[i];
+            }
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                inline_count_emplace(
+                        this->hash_map, keys[i], [] {}, partials[i]);
+            }
+        } else {
+            _inline_serialize_keys(chunk_size, key_columns, max_fixed_size);
+            if (has_null_column) {
+                for (size_t i = 0; i < chunk_size; ++i) caches[i].key.u.size = slice_sizes[i];
+            }
+            for (size_t i = 0; i < chunk_size; ++i) caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
+            const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+            size_t __prefetch_index = __prefetch_dist;
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (__prefetch_dist != 0 && __prefetch_index < chunk_size)
+                    this->hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                inline_count_emplace_with_hash(
+                        this->hash_map, caches[i].key, caches[i].hashval, [] {}, partials[i]);
+            }
+        }
+    }
+
+    ALWAYS_INLINE void _find_inline_count(FixedSizeSliceKey key, uint8_t& not_found) {
+        if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
+            agg_inline_count_add(iter->second, 1);
+        } else {
+            not_found = 1;
+        }
+    }
+    ALWAYS_INLINE void _find_inline_count_hash(FixedSizeSliceKey key, size_t hash, uint8_t& not_found) {
+        if (auto iter = this->hash_map.find(key, hash); iter != this->hash_map.end()) {
+            agg_inline_count_add(iter->second, 1);
+        } else {
+            not_found = 1;
+        }
+    }
+    // Probing find (selective build): mark a miss, count nothing, store nothing.
+    ALWAYS_INLINE void _probe_inline(FixedSizeSliceKey key, size_t hash, uint8_t& not_found) {
+        if (this->hash_map.find(key, hash) == this->hash_map.end()) not_found = 1;
+    }
+    ALWAYS_INLINE void _probe_inline_nohash(FixedSizeSliceKey key, uint8_t& not_found) {
+        if (this->hash_map.find(key) == this->hash_map.end()) not_found = 1;
+    }
+
+    // Commit pass for the selective path: re-serialize the key columns (same as the classifying
+    // build) and re-probe each row the operator kept (selection[i] == 0, or all rows when selection
+    // is null), adding +1 to its slot. Re-looking-up the key instead of replaying a stashed slot
+    // address keeps the count valid even if the hash table was rehashed/spilled after the build.
+    void commit_inline_count(size_t chunk_size, const Columns& key_columns, const Filter* selection) {
+        DCHECK(fixed_byte_size != -1);
+        if (!agg_should_prefetch_table(this->hash_map)) {
+            _inline_serialize_keys(chunk_size, key_columns, sizeof(FixedSizeSliceKey));
+            auto* keys = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
+            if (has_null_column) {
+                for (size_t i = 0; i < chunk_size; ++i) keys[i].u.size = slice_sizes[i];
+            }
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                _find_inline_count(keys[i], _ignore_not_found);
+            }
+        } else {
+            _inline_serialize_keys(chunk_size, key_columns, max_fixed_size);
+            if (has_null_column) {
+                for (size_t i = 0; i < chunk_size; ++i) caches[i].key.u.size = slice_sizes[i];
+            }
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                _find_inline_count(caches[i].key, _ignore_not_found);
+            }
+        }
+    }
+    uint8_t _ignore_not_found = 0;
+
     template <AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key(KeyType key, AggDataPtr& target_state, Func&& allocate_func,
                                     EmplaceCallBack&& callback) {
@@ -1219,6 +1753,130 @@ struct AggHashMapWithCompressedKeyFixedSize
                                                                  std::forward<Func>(allocate_func), agg_states, extra);
         }
     }
+
+    // ===== inline-count fast path (multi-column compressed fixed-size key) =====
+    // Keys are bit-compressed (bitcompress_serialize) into the fixed-size value; the int64 COUNT(*)
+    // counter then lives in the value slot. Selective build only classifies hit vs miss; the +1 is
+    // applied later in commit_inline_count. Only the phmap-backed widths (cx4/cx8/cx16) reach here:
+    // a key that compresses to one byte (cx1) is backed by the no-prefetch SmallFixedSizeHashMap and
+    // is excluded by AggInlineCountSupported, so it falls back to the general path. The
+    // is_no_prefetch_map guard on the prefetch loop is kept so the template stays well-formed.
+    template <typename HTBuildOp>
+    void build_inline_count(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                            ExtraAggParam* extra) {
+        (void)agg_states; // selective build only classifies; the +1 is applied in commit_inline_count
+        auto* __restrict not_founds = extra->not_founds;
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        _inline_compress_keys(chunk_size, key_columns);
+        if constexpr (!is_no_prefetch_map<HashMap>) {
+            if (agg_should_prefetch_table(this->hash_map)) {
+                hashs.resize(chunk_size);
+                for (size_t i = 0; i < chunk_size; ++i) hashs[i] = this->hash_map.hash_function()(fixed_keys[i]);
+                const size_t prefetch_dist = agg_hash_map_default_prefetch_dist();
+                size_t prefetch_index = prefetch_dist;
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (prefetch_dist != 0 && prefetch_index < chunk_size)
+                        this->hash_map.prefetch_hash(hashs[prefetch_index++]);
+                    if constexpr (HTBuildOp::process_limit) {
+                        if (hash_table_size < extra->limits) {
+                            inline_count_emplace_with_hash(
+                                    this->hash_map, fixed_keys[i], hashs[i], [&] { hash_table_size++; }, 1);
+                        } else {
+                            _find_inline_count_hash(fixed_keys[i], hashs[i], (*not_founds)[i]);
+                        }
+                    } else if constexpr (HTBuildOp::allocate) {
+                        inline_count_emplace_with_hash(this->hash_map, fixed_keys[i], hashs[i],
+                                                       FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i), 1);
+                    } else if constexpr (HTBuildOp::fill_not_found) {
+                        _probe_inline(fixed_keys[i], hashs[i], (*not_founds)[i]);
+                    }
+                }
+                return;
+            }
+        }
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    inline_count_emplace(
+                            this->hash_map, fixed_keys[i], [&] { hash_table_size++; }, 1);
+                } else {
+                    _find_inline_count(fixed_keys[i], (*not_founds)[i]);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                inline_count_emplace(this->hash_map, fixed_keys[i],
+                                     FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i), 1);
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                _probe_inline_nohash(fixed_keys[i], (*not_founds)[i]);
+            }
+        }
+    }
+
+    void build_inline_count_merge(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                                  const int64_t* partials, const Filter* selection = nullptr) {
+        _inline_compress_keys(chunk_size, key_columns);
+        if constexpr (!is_no_prefetch_map<HashMap>) {
+            if (agg_should_prefetch_table(this->hash_map)) {
+                hashs.resize(chunk_size);
+                for (size_t i = 0; i < chunk_size; ++i) hashs[i] = this->hash_map.hash_function()(fixed_keys[i]);
+                const size_t prefetch_dist = agg_hash_map_default_prefetch_dist();
+                size_t prefetch_index = prefetch_dist;
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (prefetch_dist != 0 && prefetch_index < chunk_size)
+                        this->hash_map.prefetch_hash(hashs[prefetch_index++]);
+                    if (selection != nullptr && (*selection)[i] != 0) continue;
+                    inline_count_emplace_with_hash(
+                            this->hash_map, fixed_keys[i], hashs[i], [] {}, partials[i]);
+                }
+                return;
+            }
+        }
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (selection != nullptr && (*selection)[i] != 0) continue;
+            inline_count_emplace(
+                    this->hash_map, fixed_keys[i], [] {}, partials[i]);
+        }
+    }
+
+    void _inline_compress_keys(size_t chunk_size, const Columns& key_columns) {
+        auto* buffer = reinterpret_cast<uint8_t*>(fixed_keys.data());
+        memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
+        bitcompress_serialize(key_columns, bases, offsets, chunk_size, sizeof(FixedSizeSliceKey), fixed_keys.data());
+    }
+
+    ALWAYS_INLINE void _find_inline_count(FixedSizeSliceKey key, uint8_t& not_found) {
+        if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
+            agg_inline_count_add(iter->second, 1);
+        } else {
+            not_found = 1;
+        }
+    }
+    ALWAYS_INLINE void _find_inline_count_hash(FixedSizeSliceKey key, size_t hash, uint8_t& not_found) {
+        if (auto iter = this->hash_map.find(key, hash); iter != this->hash_map.end()) {
+            agg_inline_count_add(iter->second, 1);
+        } else {
+            not_found = 1;
+        }
+    }
+    // Probing find (selective build): mark a miss, count nothing, store nothing.
+    ALWAYS_INLINE void _probe_inline(FixedSizeSliceKey key, size_t hash, uint8_t& not_found) {
+        if (this->hash_map.find(key, hash) == this->hash_map.end()) not_found = 1;
+    }
+    ALWAYS_INLINE void _probe_inline_nohash(FixedSizeSliceKey key, uint8_t& not_found) {
+        if (this->hash_map.find(key) == this->hash_map.end()) not_found = 1;
+    }
+
+    // Commit pass for the selective path: re-compress the key columns (same as the classifying build)
+    // and re-probe each row the operator kept (selection[i] == 0, or all rows when selection is null),
+    // adding +1 to its slot. Re-looking-up the key instead of replaying a stashed slot address keeps
+    // the count valid even if the hash table was rehashed/spilled after the build.
+    void commit_inline_count(size_t chunk_size, const Columns& key_columns, const Filter* selection) {
+        _inline_compress_keys(chunk_size, key_columns);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (selection != nullptr && (*selection)[i] != 0) continue;
+            _find_inline_count(fixed_keys[i], _ignore_not_found);
+        }
+    }
+    uint8_t _ignore_not_found = 0;
 
     template <AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key(KeyType key, AggDataPtr& target_state, Func&& allocate_func,
