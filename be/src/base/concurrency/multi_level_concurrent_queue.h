@@ -14,12 +14,14 @@
 
 #pragma once
 
+#include <cstddef>
+#include <utility>
 #include <vector>
 
 #include "base/concurrency/moodycamel/concurrentqueue.h"
-#include "common/logging.h"
+#include "base/logging.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
 
 // MultiLevelConcurrentQueue is a multi-level concurrent queue built on top of
 // moodycamel::ConcurrentQueue. Each level is an independent ConcurrentQueue.
@@ -119,4 +121,4 @@ private:
     std::vector<ConsumerToken> _consumer_tokens; // flat: [worker_id * NUM_LEVELS + level]
 };
 
-} // namespace starrocks::pipeline
+} // namespace starrocks

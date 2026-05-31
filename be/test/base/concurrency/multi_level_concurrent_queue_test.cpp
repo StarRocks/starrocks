@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/multi_level_concurrent_queue.h"
+#include "base/concurrency/multi_level_concurrent_queue.h"
 
 #include <gtest/gtest.h>
 
@@ -23,7 +23,7 @@
 
 #include "base/testutil/parallel_test.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
 
 PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_single_level_basic) {
     MultiLevelConcurrentQueue<int, 1> queue(2);
@@ -146,7 +146,7 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_multithread_correctness) {
     std::vector<std::thread> consumers;
     consumers.reserve(kNumWorkers);
     for (int w = 0; w < kNumWorkers; ++w) {
-        consumers.emplace_back([&queue, &total_sum, &total_count]() {
+        consumers.emplace_back([&queue, &total_sum, &total_count, w]() {
             int64_t local_sum = 0;
             int64_t local_count = 0;
             int item = 0;
@@ -154,7 +154,7 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_multithread_correctness) {
             while (found) {
                 found = false;
                 for (int l = 0; l < kNumLevels; ++l) {
-                    while (queue.try_dequeue(l, item)) {
+                    while (queue.try_dequeue(l, item, w)) {
                         local_sum += item;
                         local_count++;
                         found = true;
@@ -194,4 +194,4 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_move_only_type) {
     ASSERT_TRUE(queue.empty_approx(1));
 }
 
-} // namespace starrocks::pipeline
+} // namespace starrocks
