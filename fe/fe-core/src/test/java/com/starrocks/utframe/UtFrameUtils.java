@@ -1446,11 +1446,19 @@ public class UtFrameUtils {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
+<<<<<<< HEAD
                     TableName tableName = insertStmt.getTableName();
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(testDb.getFullName(), tableName.getTbl()));
                     if (tbl != null) {
+=======
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        OlapTable tbl = (OlapTable) table;
+>>>>>>> 0c04630ef1 ([UT] Resolve mockDML targets against analyzed db, not hardcoded "test" (#74070))
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
                             setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
@@ -1458,11 +1466,20 @@ public class UtFrameUtils {
                     }
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
+<<<<<<< HEAD
                     TableName tableName = delete.getTableName();
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(testDb.getFullName(), tableName.getTbl()));
                     tbl.setHasDelete();
+=======
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(delete.getTableRef());
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        ((OlapTable) table).setHasDelete();
+                    }
+>>>>>>> 0c04630ef1 ([UT] Resolve mockDML targets against analyzed db, not hardcoded "test" (#74070))
                 }
             }
         };
