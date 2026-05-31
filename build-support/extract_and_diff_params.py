@@ -349,17 +349,21 @@ def parse_doc_params(doc_paths: list[Path]) -> set[str]:
 
 # ── Git diff filter ───────────────────────────────────────────────────────────
 
-def get_new_param_names_from_diff(source_paths: list[Path]) -> set[str]:
+def get_new_param_names_from_diff(
+    source_paths: list[Path], diff_base: str = "origin/main"
+) -> set[str]:
     """
     Return parameter names that appear in the added lines (+) of
-    'git diff origin/main' for the given source files.
+    'git diff <diff_base>' for the given source files.
 
     Used by --new-params-only to restrict the report to params
     introduced in the current branch, avoiding noise from the pre-existing backlog.
+    Pass --diff-base to override the comparison ref (e.g. origin/branch-4.1 for
+    release-branch PRs, or HEAD^1 when running against a merge commit).
     """
     try:
         result = subprocess.run(
-            ["git", "diff", "origin/main", "--"] + [str(p) for p in source_paths],
+            ["git", "diff", diff_base, "--"] + [str(p) for p in source_paths],
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
@@ -544,6 +548,15 @@ def main() -> int:
         help="Output format (default: text)",
     )
     ap.add_argument(
+        "--diff-base",
+        default="origin/main",
+        help=(
+            "Git ref to diff against for --new-params-only "
+            "(default: origin/main). Use origin/<base_ref> for release-branch PRs "
+            "or HEAD^1 when running against a merge commit."
+        ),
+    )
+    ap.add_argument(
         "--fe-config", type=Path, default=FE_CONFIG_PATH,
         help="Path to Config.java",
     )
@@ -582,7 +595,8 @@ def main() -> int:
     # In --new-params-only mode, restrict to params visible in the current git diff
     if args.new_params_only:
         new_names = get_new_param_names_from_diff(
-            [args.fe_config, args.be_config, args.session_var, args.global_var]
+            [args.fe_config, args.be_config, args.session_var, args.global_var],
+            diff_base=args.diff_base,
         )
         fe_missing_names &= new_names
         be_missing_names &= new_names

@@ -88,13 +88,16 @@ jobs:
           printf "%b" "$change_types" > /tmp/change_types.txt
           echo "saved to /tmp/change_types.txt"
 
-      # Run the extraction script against the merged commit to find new undocumented params
+      # Run the extraction script against the merged commit to find new undocumented params.
+      # The merge commit is already checked out; diff against its first parent (HEAD^1).
+      # set +e so the step continues even when the script exits 1 (gaps found).
       - name: Detect new undocumented parameters
         id: params
-        # The merge commit is already checked out; diff against its first parent
         run: |
+          set +e
           python3 build-support/extract_and_diff_params.py \
             --new-params-only \
+            --diff-base HEAD^1 \
             --output json \
             > /tmp/param_drift.json 2>&1
           echo "exitcode=$?" >> $GITHUB_OUTPUT

@@ -113,7 +113,7 @@ def extract_samples(docs_root: Path) -> list[SqlSample]:
         i = 0
         while i < n:
             if _FENCE_OPEN_RE.match(lines[i].strip()):
-                start = i + 1  # 1-indexed: fence is at line i, content starts at i+1
+                start = i + 1  # 1-indexed line number of the opening fence
                 i += 1
                 body_lines: list[str] = []
                 while i < n and not _FENCE_CLOSE_RE.match(lines[i].strip()):

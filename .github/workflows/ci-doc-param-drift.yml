@@ -39,25 +39,19 @@ jobs:
         id: branch
         run: echo "branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
 
+      # Check out the base branch only. This is intentional: pull_request_target
+      # runs with a write-scoped token, so we must not execute scripts from the
+      # PR head (which is untrusted). We run the checker from the trusted base
+      # checkout and separately fetch the PR diff to identify new params.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.base_ref }}
           fetch-depth: 0
 
-      # Check out the PR head merged with the base branch, matching the pattern
-      # used by ci-doc-checker.yml.
-      - name: Checkout PR
+      # Fetch the PR head so git diff can compare against it
+      - name: Fetch PR head for diffing
         run: |
-          BRANCH=${{ steps.branch.outputs.branch }}
-          git config --global user.name "docs-automation[bot]"
-          git config --global user.email "docs-automation[bot]@starrocks.io"
-          git checkout $BRANCH
-          git pull
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
-          git checkout $BRANCH_NAME
-          git checkout -b merge_pr
-          git merge --squash --no-edit ${BRANCH} || \
-            (echo "::error::Merge conflict — cannot check param drift." && exit 1)
+          git fetch origin pull/${{ env.PR_NUMBER }}/head:pr-head
 
       - uses: actions/setup-python@v5
         with:
@@ -65,12 +59,11 @@ jobs:
 
       - name: Run param drift check
         id: drift
-        # Exit code 0 = no new undocumented params; 1 = gaps found.
-        # Continue so the comment step always runs (to clear stale comments).
-        continue-on-error: true
         run: |
+          set +e
           python3 build-support/extract_and_diff_params.py \
             --new-params-only \
+            --diff-base "origin/${{ steps.branch.outputs.branch }}" \
             --output github-comment \
             > drift_report.md 2>&1
           echo "exitcode=$?" >> $GITHUB_OUTPUT
