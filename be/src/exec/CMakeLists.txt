@@ -179,6 +179,8 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
+    pipeline/lock_free_driver_queue.cpp
+    pipeline/lock_free_work_group_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp

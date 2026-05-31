@@ -66,6 +66,8 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_metrics_test.cpp
         ./exec/pipeline/multi_level_concurrent_queue_test.cpp
+        ./exec/pipeline/lock_free_driver_queue_test.cpp
+        ./exec/pipeline/lock_free_work_group_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp

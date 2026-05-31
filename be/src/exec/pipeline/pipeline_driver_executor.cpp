@@ -18,10 +18,12 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/lock_free_work_group_driver_queue.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
@@ -37,14 +39,23 @@ namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_failed_status);
 DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
+static std::unique_ptr<DriverQueue> create_driver_queue(bool enable_resource_group, DriverQueueMetrics* queue_metrics,
+                                                        int num_workers) {
+    if (enable_resource_group && config::enable_lock_free_driver_queue) {
+        return std::make_unique<LockFreeWorkGroupDriverQueue>(queue_metrics, num_workers);
+    } else if (enable_resource_group) {
+        return std::make_unique<WorkGroupDriverQueue>(queue_metrics);
+    } else {
+        return std::make_unique<QuerySharedDriverQueue>(queue_metrics);
+    }
+}
+
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
                                            PipelineExecutorMetrics* metrics)
         : Base("pip_exec_" + name),
-          _driver_queue(enable_resource_group
-                                ? std::unique_ptr<DriverQueue>(
-                                          std::make_unique<WorkGroupDriverQueue>(metrics->get_driver_queue_metrics()))
-                                : std::make_unique<QuerySharedDriverQueue>(metrics->get_driver_queue_metrics())),
+          _driver_queue(create_driver_queue(enable_resource_group, metrics->get_driver_queue_metrics(),
+                                            static_cast<int>(thread_pool->max_threads()))),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),

@@ -2091,4 +2091,9 @@ CONF_mInt32(table_schema_service_max_retries, "3");
 // to potentially find a better predicate order. When selectivity is already good (low), sampling
 // is unlikely to help and will be skipped.
 CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
+
+// Use lock-free work-stealing queue for pipeline driver scheduling.
+// When enabled, replaces WorkGroupDriverQueue with LockFreeWorkGroupDriverQueue.
+// Read once at BE startup; flipping at runtime has no effect.
+CONF_Bool(enable_lock_free_driver_queue, "true");
 } // namespace starrocks::config
