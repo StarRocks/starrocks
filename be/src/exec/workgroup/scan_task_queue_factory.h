@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/config_exec_flow_fwd.h"
-#include "exec/workgroup/priority_scan_task_queue.h"
-#include "exec/workgroup/scan_task_queue_factory.h"
+#pragma once
+
+#include <memory>
+
+#include "exec/workgroup/scan_task_queue.h"
 
 namespace starrocks::workgroup {
 
-std::unique_ptr<ScanTaskQueue> create_scan_task_queue() {
-    return std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
-}
+std::unique_ptr<ScanTaskQueue> create_scan_task_queue();
 
 } // namespace starrocks::workgroup

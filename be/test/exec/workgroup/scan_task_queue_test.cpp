@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/workgroup/scan_task_queue.h"
-
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -27,6 +25,7 @@
 #include "base/testutil/parallel_test.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/workgroup/priority_scan_task_queue.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 
