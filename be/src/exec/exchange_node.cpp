@@ -47,6 +47,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 

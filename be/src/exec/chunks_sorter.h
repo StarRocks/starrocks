@@ -24,7 +24,6 @@
 #include "compute_env/sorting/sorting.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"

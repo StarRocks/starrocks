@@ -24,6 +24,7 @@
 #include "compute_env/sorting/sorting.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"
