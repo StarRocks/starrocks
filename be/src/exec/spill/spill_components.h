@@ -29,7 +29,7 @@
 #include "exec/spill/options.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/serde.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state_fwd.h"

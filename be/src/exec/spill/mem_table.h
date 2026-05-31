@@ -25,7 +25,7 @@
 #include "compute_env/sorting/sorting.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spill_fwd.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"

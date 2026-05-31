@@ -26,7 +26,7 @@
 #include "exec/sort_exec_exprs.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task.h"
 
 namespace starrocks::spill {
 

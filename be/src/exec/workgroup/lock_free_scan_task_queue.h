@@ -17,7 +17,7 @@
 #include <atomic>
 
 #include "exec/pipeline/multi_level_concurrent_queue.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task.h"
 
 namespace starrocks::workgroup {
 

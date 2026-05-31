@@ -31,7 +31,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/lookup_stream_mgr.h"
