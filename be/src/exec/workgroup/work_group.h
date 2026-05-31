@@ -47,6 +47,7 @@ public:
     ~WorkGroupSchedEntity();
 
     WorkGroup* workgroup() { return _workgroup; }
+    const WorkGroup* workgroup() const { return _workgroup; }
 
     Q* queue() { return _my_queue.get(); }
     void set_queue(std::unique_ptr<Q> my_queue);

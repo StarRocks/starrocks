@@ -184,11 +184,25 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_refreshes_min_wg_on
     auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(_wg2->scan_sched_entity());
     entity2->incr_runtime_ns(1'000'000'000L);
 
-    ASSERT_FALSE(queue.should_yield(_wg2.get(), 0));
+    ASSERT_FALSE(queue.should_yield(_wg2->scan_sched_entity(), 0));
 
     queue.force_put(make_wg_task(_wg1, 5));
 
-    ASSERT_TRUE(queue.should_yield(_wg2.get(), 0));
+    ASSERT_TRUE(queue.should_yield(_wg2->scan_sched_entity(), 0));
+}
+
+TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_accepts_connector_scan_entity) {
+    constexpr int kNumWorkers = 4;
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::CONNECTOR, kNumWorkers);
+
+    auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(_wg2->connector_scan_sched_entity());
+    entity2->incr_runtime_ns(1'000'000'000L);
+
+    ASSERT_FALSE(queue.should_yield(_wg2->connector_scan_sched_entity(), 0));
+
+    queue.force_put(make_wg_task(_wg1, 5));
+
+    ASSERT_TRUE(queue.should_yield(_wg2->connector_scan_sched_entity(), 0));
 }
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_skips_yield_blocked_workgroups) {

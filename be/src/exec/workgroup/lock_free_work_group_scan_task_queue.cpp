@@ -126,11 +126,12 @@ void LockFreeWorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t r
     entity->incr_runtime_ns(runtime_ns);
 }
 
-bool LockFreeWorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const {
-    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg)) {
+bool LockFreeWorkGroupScanTaskQueue::should_yield(const WorkGroupScanSchedEntity* wg_entity,
+                                                  int64_t unaccounted_runtime_ns) const {
+    DCHECK(wg_entity != nullptr);
+    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
         return true;
     }
-    const auto* wg_entity = _sched_entity(wg);
     const auto* min_entity = _min_wg_entity.load();
     return min_entity != wg_entity && min_entity &&
            min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_weight();
