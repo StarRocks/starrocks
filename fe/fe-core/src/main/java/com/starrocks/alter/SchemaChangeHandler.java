@@ -2793,6 +2793,9 @@ public class SchemaChangeHandler extends AlterHandler {
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), tableName);
+        if (olapTable == null) {
+            throw new DdlException("Table[" + tableName + "] does not exist");
+        }
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
