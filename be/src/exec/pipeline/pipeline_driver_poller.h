@@ -24,8 +24,8 @@
 
 #include "common/thread/cpu_util.h"
 #include "common/thread/thread.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "pipeline_driver.h"
-#include "pipeline_driver_queue.h"
 
 namespace starrocks::pipeline {
 
