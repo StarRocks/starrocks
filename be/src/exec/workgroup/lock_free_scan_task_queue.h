@@ -16,7 +16,7 @@
 
 #include <atomic>
 
-#include "exec/pipeline/multi_level_concurrent_queue.h"
+#include "base/concurrency/multi_level_concurrent_queue.h"
 #include "exec/workgroup/scan_task.h"
 
 namespace starrocks::workgroup {
@@ -72,7 +72,7 @@ private:
     template <typename DequeueFunc>
     bool _fallback_try_take(ScanTask& task, DequeueFunc&& dequeue);
 
-    pipeline::MultiLevelConcurrentQueue<ScanTask, NUM_PRIORITY_LEVELS> _queue;
+    MultiLevelConcurrentQueue<ScanTask, NUM_PRIORITY_LEVELS> _queue;
 
     // Bitmap of levels that are known to be non-empty.
     // bit i = 1 means level i MAY have items (no false negatives).

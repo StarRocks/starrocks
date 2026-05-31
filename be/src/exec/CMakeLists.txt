@@ -482,7 +482,7 @@ set(EXEC_NON_PIPELINE_FILES
     workgroup/work_group_manager.cpp
     workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
-    workgroup/scan_task_queue.cpp
+    workgroup/scan_task_queue_factory.cpp
     workgroup/priority_scan_task_queue.cpp
     workgroup/work_group_scan_task_queue.cpp
     workgroup/lock_free_scan_task_queue.cpp

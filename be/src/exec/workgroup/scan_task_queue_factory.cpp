@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exec/workgroup/scan_task_queue_factory.h"
+
 #include "common/config_exec_flow_fwd.h"
 #include "exec/workgroup/priority_scan_task_queue.h"
-#include "exec/workgroup/scan_task_queue_factory.h"
 
 namespace starrocks::workgroup {
 
