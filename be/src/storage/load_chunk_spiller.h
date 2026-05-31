@@ -114,10 +114,6 @@ public:
 
     size_t total_bytes() const;
 
-    // Read-only probe for whether generate_pipeline_merge_task would produce a non-empty task.
-    // May yield false positives on slot gaps; safe to ignore — caller just pays the old cost.
-    bool has_enough_for_pipeline_merge_task(size_t target_size, size_t memory_usage_per_merge);
-
     RuntimeProfile* profile() const { return _profile; }
 
 private:

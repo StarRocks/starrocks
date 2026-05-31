@@ -484,25 +484,4 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     return result_task;
 }
 
-// Cheap pre-check before task_iterator.init(). Approximate (no sorting) and may
-// false-positive; the caller is responsible for the precise check.
-bool LoadChunkSpiller::has_enough_for_pipeline_merge_task(size_t target_size, size_t memory_usage_per_merge) {
-    std::lock_guard<std::mutex> lg(*_block_manager->block_container()->block_groups_mutex());
-    auto& groups = _block_manager->block_container()->block_groups();
-    if (groups.empty()) {
-        return false;
-    }
-    size_t cumulative_bytes = 0;
-    size_t group_count = 0;
-    for (const auto& g : groups) {
-        cumulative_bytes += g.block_group->data_size();
-        ++group_count;
-        if (cumulative_bytes >= target_size ||
-            group_count * config::load_spill_max_chunk_bytes >= memory_usage_per_merge) {
-            return true;
-        }
-    }
-    return false;
-}
-
 } // namespace starrocks
