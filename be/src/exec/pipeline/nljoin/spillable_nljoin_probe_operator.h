@@ -21,7 +21,6 @@
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"

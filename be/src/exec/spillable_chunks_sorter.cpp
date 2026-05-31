@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "exec/chunks_sorter_full_sort.h"
-#include "exec/spill/executor.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"

@@ -33,6 +33,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 

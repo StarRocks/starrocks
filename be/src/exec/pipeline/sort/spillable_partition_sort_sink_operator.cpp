@@ -20,7 +20,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/common.h"
-#include "exec/spill/executor.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"

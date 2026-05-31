@@ -15,11 +15,14 @@
 #include "exec/spill/data_stream.h"
 
 #include "common/status.h"
+#include "exec/spill/block_group.h"
 #include "exec/spill/block_manager.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
+#include "exec/spill/restore_task.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
+#include "exec/spill/task_executor.h"
+#include "exec/spill/yield.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {

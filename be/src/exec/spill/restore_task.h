@@ -14,17 +14,24 @@
 
 #pragma once
 
-namespace starrocks::workgroup {
-struct YieldContext;
-};
+#include <utility>
+#include <vector>
+
+#include "common/status.h"
+#include "exec/spill/input_stream.h"
 
 namespace starrocks::spill {
-class Spiller;
-class BlockGroup;
-class BlockGroupSet;
-class BlockManager;
-class SpillInputStream;
-class Serde;
-class ChunkBuilder;
-struct SpilledOptions;
+
+class YieldableRestoreTask {
+public:
+    YieldableRestoreTask(InputStreamPtr input_stream) : _input_stream(std::move(input_stream)) {
+        _input_stream->get_io_stream(&_sub_stream);
+    }
+    Status do_read(workgroup::YieldContext& ctx, SerdeContext& context);
+
+private:
+    InputStreamPtr _input_stream;
+    std::vector<SpillInputStream*> _sub_stream;
+};
+
 } // namespace starrocks::spill

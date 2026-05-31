@@ -324,12 +324,15 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
     spill/spill_components.cpp
-    spill/executor.cpp
+    spill/runtime_context.cpp
+    spill/task_executor.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
     spill/mem_table.cpp
     spill/serde.cpp
+    spill/block_group.cpp
     spill/input_stream.cpp
+    spill/restore_task.cpp
     spill/data_stream.cpp
 )
 

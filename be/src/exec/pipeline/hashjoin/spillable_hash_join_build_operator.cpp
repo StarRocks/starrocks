@@ -30,6 +30,7 @@
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"

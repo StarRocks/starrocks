@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"

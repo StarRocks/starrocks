@@ -29,7 +29,6 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/dir_manager.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
 #include "fmt/format.h"

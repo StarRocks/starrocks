@@ -28,6 +28,7 @@
 #include "exec/join/join_hash_table.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"

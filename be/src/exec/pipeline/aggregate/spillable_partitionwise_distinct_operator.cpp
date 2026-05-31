@@ -17,6 +17,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
