@@ -23,7 +23,7 @@
 
 use std::path::Path;
 
-use tantivy::schema::{IndexRecordOption, Field, Schema, TextFieldIndexing, TextOptions};
+use tantivy::schema::{FAST, IndexRecordOption, Field, Schema, TextFieldIndexing, TextOptions};
 use tantivy::{Index, IndexWriter, TantivyDocument};
 
 use crate::error::Result;
@@ -44,6 +44,11 @@ const WRITER_NUM_THREADS: usize = 1;
 pub struct IndexWriterWrapper {
     pub(crate) writer: IndexWriter,
     pub(crate) text_field: Field,
+    // Explicit BE row id (segment-local insertion order). tantivy may split docs
+    // across internal segments whose reader order is not insertion order, so the
+    // row id must be stored, not inferred from segment offsets.
+    row_id_field: Field,
+    next_row_id: u64,
 }
 
 impl IndexWriterWrapper {
@@ -61,6 +66,7 @@ impl IndexWriterWrapper {
                 .set_index_option(IndexRecordOption::WithFreqsAndPositions),
         );
         let text_field = schema_builder.add_text_field(field_name, text_options);
+        let row_id_field = schema_builder.add_u64_field("row_id", FAST);
         let schema = schema_builder.build();
 
         let index = Index::create_in_dir(path, schema)?;
@@ -68,7 +74,7 @@ impl IndexWriterWrapper {
         let writer: IndexWriter =
             index.writer_with_num_threads(WRITER_NUM_THREADS, WRITER_MEMORY_BUDGET_BYTES)?;
 
-        Ok(Self { writer, text_field })
+        Ok(Self { writer, text_field, row_id_field, next_row_id: 0 })
     }
 
     /// Append `values.len()` documents in order. Use `""` (empty string) for rows that are null on the BE side; 
@@ -78,6 +84,8 @@ impl IndexWriterWrapper {
         for v in values {
             let mut doc = TantivyDocument::default();
             doc.add_text(self.text_field, v);
+            doc.add_u64(self.row_id_field, self.next_row_id);
+            self.next_row_id += 1;
             self.writer.add_document(doc)?;
         }
         Ok(())
