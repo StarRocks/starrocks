@@ -48,6 +48,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
@@ -1727,11 +1728,79 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (eqOnPredicates.isEmpty()) {
             return statistics;
         }
+        double mcRowCount = estimateInnerRowCountByMultiColumnNDV(statistics, eqOnPredicates);
+        if (mcRowCount >= 0) {
+            return statistics.withOutputRowCount(Math.max(1, mcRowCount));
+        }
         if (ConnectContext.get().getSessionVariable().isUseCorrelatedJoinEstimate()) {
             return estimatedInnerJoinStatisticsAssumeCorrelated(statistics, eqOnPredicates);
         } else {
             return statistics.withOutputRowCount(estimateInnerRowCountMiddleGround(statistics, eqOnPredicates));
         }
+    }
+
+    // Estimate inner-join row count from the multi-column combined NDV of the join key:
+    // |t1 join t2| ~= crossRows / max(ndv(leftKeyCols), ndv(rightKeyCols)), where ndv(cols) is the number of
+    // distinct value-combinations across that side's key columns (the combined NDV of the column set, not a single
+    // scalar key). The per-predicate heuristic instead derives the denominator from single-column NDV (the driving
+    // predicate plus a fixed auxiliary coefficient, or sqrt damping), never from the number of distinct key
+    // combinations, so it drifts on composite keys. Returns -1 when not applicable so the caller falls back to
+    // that heuristic. Restricted to the safe case: every equi-predicate is a plain '=' column-to-column comparison
+    // (null-safe '<=>' is left to the per-predicate path, which keeps NULL-matching rows), the key spans exactly two
+    // relations, and each relation's full key is covered by a combined-NDV statistic, so max() needs no independence
+    // guess.
+    private double estimateInnerRowCountByMultiColumnNDV(Statistics statistics,
+                                                         List<BinaryPredicateOperator> eqOnPredicates) {
+        if (eqOnPredicates.size() < 2 || columnRefFactory == null) {
+            return -1;
+        }
+        // Group join-key columns by their source relation rather than by predicate side: the equi-predicate
+        // operands are not normalized to (left-table, right-table) order, so child(0) may come from either side.
+        // A clean two-table composite key yields exactly two groups, each holding one table's key columns.
+        Map<Integer, Set<ColumnRefOperator>> relationToKeyColumns = new HashMap<>();
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            // Only plain '=' is safe here. Null-safe '<=>' (EQ_FOR_NULL) matches NULL key values, so the NULL
+            // discount applied below would drop those matches; leave it to the per-predicate estimator.
+            if (predicate.getBinaryType() != BinaryType.EQ) {
+                return -1;
+            }
+            for (ScalarOperator child : predicate.getChildren()) {
+                if (!(child instanceof ColumnRefOperator)) {
+                    return -1;
+                }
+                int relationId = columnRefFactory.getRelationId(((ColumnRefOperator) child).getId());
+                if (relationId == -1) {
+                    return -1;
+                }
+                relationToKeyColumns.computeIfAbsent(relationId, k -> new HashSet<>()).add((ColumnRefOperator) child);
+            }
+        }
+        if (relationToKeyColumns.size() != 2) {
+            return -1;
+        }
+
+        double ndv = 1.0;
+        double nonNullFactor = 1.0;
+        for (Set<ColumnRefOperator> keyColumns : relationToKeyColumns.values()) {
+            Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> mc = statistics.getLargestSubsetMCStats(keyColumns);
+            if (mc == null || mc.first.size() != keyColumns.size()) {
+                // this relation's full key is not covered by a combined-NDV statistic
+                return -1;
+            }
+            ndv = Math.max(ndv, mc.second.getNdv());
+            // NULLs never satisfy an equi-join, so discount the most NULL-heavy key column on this side,
+            // mirroring estimateColumnEqualToColumn's single-column (1 - nullsFraction) factor.
+            nonNullFactor *= (1.0 - maxNullsFraction(statistics, keyColumns));
+        }
+        return statistics.getOutputRowCount() / ndv * nonNullFactor;
+    }
+
+    private static double maxNullsFraction(Statistics statistics, Set<ColumnRefOperator> columns) {
+        return columns.stream()
+                .map(statistics::getColumnStatistic)
+                .mapToDouble(ColumnStatistic::getNullsFraction)
+                .max()
+                .orElse(0.0);
     }
 
     // The implementation here refers to Presto
