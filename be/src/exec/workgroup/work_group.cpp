@@ -21,7 +21,7 @@
 
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_task_queue_factory.h"

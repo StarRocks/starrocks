@@ -22,6 +22,7 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/workgroup/pipeline_executor_set.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

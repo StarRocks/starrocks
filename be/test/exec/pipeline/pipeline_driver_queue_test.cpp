@@ -20,7 +20,7 @@
 
 #include "base/testutil/parallel_test.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_manager.h"

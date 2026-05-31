@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/pipeline_metrics.h"
-
 #include <gtest/gtest.h>
 
 #include <string>
+
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 
 namespace starrocks::pipeline {
 

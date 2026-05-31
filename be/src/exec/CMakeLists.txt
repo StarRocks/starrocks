@@ -28,6 +28,7 @@ set(EXEC_PRIMITIVE_FILES
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
     pipeline/operator.cpp
+    pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
@@ -176,7 +177,6 @@ set(PIPELINE_GRAPH_SRCS
 )
 
 set(PIPELINE_RUNTIME_SRCS
-    pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
