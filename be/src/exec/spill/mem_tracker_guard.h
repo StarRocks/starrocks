@@ -20,8 +20,8 @@
 #include <utility>
 
 #include "base/utility/defer_op.h"
-#include "gutil/macros.h"
 #include "exec/spill/runtime_context.h"
+#include "gutil/macros.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 
