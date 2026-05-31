@@ -108,6 +108,7 @@ jobs:
       - name: Build package
         run: |
           read -r -a nix_build_flags <<< "$NIX_BUILD_FLAGS"
+          nix build .#starrocks-maven-deps "${nix_build_flags[@]}"
           nix build .#starrocks-thirdparty "${nix_build_flags[@]}"
           nix build .#starrocks "${nix_build_flags[@]}"
 

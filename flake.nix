@@ -71,6 +71,8 @@
             pkgs.runCommand "starrocks-nix-env-check"
               {
                 nativeBuildInputs = env.checkInputs;
+                buildInputs = env.checkLinkInputs;
+                strictDeps = true;
                 src = self;
               }
               ''
@@ -81,11 +83,24 @@
                 bash -n build-support/build_helpers.sh
                 . build-support/build_helpers.sh
 
+                cp nix/thirdparty-archives.nix thirdparty-archives.generated-check
+                python3 nix/generate-thirdparty-archives.py
+                diff -u thirdparty-archives.generated-check nix/thirdparty-archives.nix
+
                 OSTYPE=darwin
                 getopt_path="$(starrocks_resolve_getopt_bin)"
                 test -x "$getopt_path"
 
                 starrocks-build-env --print > "$out"
+
+                ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+                  cxx="$(grep '^CXX=' "$out" | cut -d= -f2-)"
+                  export LIBRARY_PATH="$(grep '^LIBRARY_PATH=' "$out" | cut -d= -f2-)"
+                  export NIX_LDFLAGS="$(grep '^NIX_LDFLAGS=' "$out" | cut -d= -f2-)"
+                  printf 'int main() { return 0; }\n' > libiberty-check.cc
+                  "$cxx" libiberty-check.cc -liberty -o libiberty-check
+                  ./libiberty-check
+                ''}
               '';
         }
       );

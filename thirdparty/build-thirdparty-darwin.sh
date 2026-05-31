@@ -178,26 +178,6 @@ check_if_source_exist() {
     fi
 }
 
-find_cmake_package_dir() {
-    local package="$1"
-    local dir
-
-    for dir in \
-        "${TP_INSTALL_DIR}/lib/cmake/${package}" \
-        "${TP_INSTALL_DIR}/lib64/cmake/${package}" \
-        "${TP_INSTALL_DIR}/share/${package}" \
-        "${TP_INSTALL_DIR}/share/cmake/${package}" \
-        "${TP_INSTALL_DIR}/share/${package}/cmake"
-    do
-        if [[ -f "${dir}/${package}Config.cmake" || -f "${dir}/${package}-config.cmake" ]]; then
-            echo "${dir}"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 find_libevent_pkg_config_dir() {
     local prefix="$1"
     local dir
@@ -1952,9 +1932,6 @@ build_arrow() {
     export ARROW_ZSTD_URL="${TP_SOURCE_DIR}/${ZSTD_NAME}"
     export ARROW_THRIFT_URL="${TP_SOURCE_DIR}/${THRIFT_NAME}"
 
-    build_xsimd
-    cd "${TP_SOURCE_DIR}/${ARROW_SOURCE}/cpp/release"
-
     # Pin pkg-config to TP's protobuf to keep arrow-flight's static-link probe
     # from picking up Homebrew's v33.x. Saved/restored so it does not leak.
     local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
@@ -2694,7 +2671,6 @@ build_re2() {
 build_s2() {
     check_if_source_exist "${S2_SOURCE}"
     cd "${TP_SOURCE_DIR}/${S2_SOURCE}"
-    perl -0pi -e 's/add_library\(s2testing STATIC/add_library(s2testing EXCLUDE_FROM_ALL STATIC/; s/install\(TARGETS s2 s2testing DESTINATION lib\)/install(TARGETS s2 DESTINATION lib)/' CMakeLists.txt
     mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
     rm -rf CMakeCache.txt CMakeFiles/
@@ -2840,17 +2816,11 @@ build_avro_cpp() {
     mkdir -p build
     cd build
     rm -rf CMakeCache.txt CMakeFiles/
-    local fmt_dir
-    if ! fmt_dir="$(find_cmake_package_dir fmt)"; then
-        echo "Failed to locate fmt CMake package under ${TP_INSTALL_DIR}"
-        exit 1
-    fi
     "${CMAKE_CMD}" .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DBOOST_ROOT="${TP_INSTALL_DIR}" \
         -DBoost_USE_STATIC_RUNTIME=ON \
         -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
-        -Dfmt_DIR="${fmt_dir}" \
         -DSNAPPY_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
         -DSNAPPY_LIBRARIES="${TP_INSTALL_DIR}/lib" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5

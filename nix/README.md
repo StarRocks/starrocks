@@ -61,6 +61,9 @@ The package build disables the optional binary payloads that are not native
 source inputs here: starcache, tenann, Jindo SDK, GCS connector, pprof, and the
 bundled JDK.
 
+After changing third-party archive variables or the package manifest, run
+`./nix/generate-thirdparty-archives.py`.
+
 ## Single node and multi node
 
 The flake builds one StarRocks output tree. For local single-node use, run FE and

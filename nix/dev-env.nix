@@ -58,6 +58,7 @@ let
     "brotli"
   ];
   thirdpartyFormatsPackages = [
+    "xsimd"
     "arrow"
     "librdkafka"
     "pulsar"
@@ -88,7 +89,6 @@ let
     "simdutf"
     "poco"
     "icu"
-    "xsimd"
     "libxml2"
     "azure"
     "libdivide"
@@ -117,16 +117,16 @@ let
     archive: ''ln -sf "${archive.path}" "thirdparty/src/aws-crt-archives/${archive.name}.zip"''
   ) awsCrtArchiveInputs;
   mavenDepsHashes = {
-    "x86_64-linux" = "sha256-Nul/cHmI8F/YrgEHo203PFbzEgDhTT3oCx0SAkgNDqk=";
-    "aarch64-linux" = "sha256-1NPTt1zskdIGa5LQd1C7xrGbAAwItx0smLCVi9nCHco=";
-    "aarch64-darwin" = "sha256-Nul/cHmI8F/YrgEHo203PFbzEgDhTT3oCx0SAkgNDqk=";
+    "x86_64-linux" = "sha256-9kFycfLpxOwtSDqbjkIfWxKGVCZ8ig7h1stG5HK4Awo=";
+    "aarch64-linux" = "sha256-Y3JNy/QVDFtprV5+7htzS3pHIi4vzqNW7T2EfF3zXaY=";
+    "aarch64-darwin" = "sha256-9kFycfLpxOwtSDqbjkIfWxKGVCZ8ig7h1stG5HK4Awo=";
   };
   mavenDepsHash = mavenDepsHashes.${system} or (throw unsupportedSystemMessage);
-  packageBuildParallelism =
+  packageBuildParallelismLimit =
     {
       "x86_64-linux" = 2;
-      "aarch64-linux" = 2;
-      "aarch64-darwin" = 2;
+      "aarch64-linux" = 1;
+      "aarch64-darwin" = 4;
     }
     .${system} or (throw unsupportedSystemMessage);
 
@@ -359,6 +359,7 @@ let
       util-linux
     ]
   );
+  linuxLinkInputs = lib.optionals isLinux [ pkgs.libiberty.out ];
 
   darwinInputs = lib.optionals isDarwin ([
     llvmToolchain
@@ -370,6 +371,7 @@ let
   allInputs = commonInputs ++ linuxInputs ++ darwinInputs;
   packageBuildInputs =
     allInputs
+    ++ linuxLinkInputs
     ++ lib.optionals isDarwin [
       pkgs.sysctl
     ];
@@ -444,6 +446,8 @@ let
         export STARROCKS_GCC_HOME="${linuxGcc}"
         export CC="${linuxGcc}/bin/gcc"
         export CXX="${linuxGcc}/bin/g++"
+        export LIBRARY_PATH="${pkgs.libiberty.out}/lib''${LIBRARY_PATH:+:$LIBRARY_PATH}"
+        export NIX_LDFLAGS="-L${pkgs.libiberty.out}/lib ''${NIX_LDFLAGS:-}"
       '';
 
   commonExports = ''
@@ -463,6 +467,20 @@ let
     export BUILD_TYPE="''${BUILD_TYPE:-Release}"
     export PARALLEL="''${NIX_BUILD_CORES:-1}"
     export CCACHE_DISABLE=1
+  '';
+  packageParallelBuildExports = ''
+    ${parallelBuildExports}
+    starrocks_nix_parallel_limit=${toString packageBuildParallelismLimit}
+    starrocks_nix_parallel_default="$starrocks_nix_parallel_limit"
+    case "''${NIX_BUILD_CORES:-}" in
+      "" | *[!0-9]* | 0) ;;
+      *)
+        if (( NIX_BUILD_CORES < starrocks_nix_parallel_default )); then
+          starrocks_nix_parallel_default="$NIX_BUILD_CORES"
+        fi
+        ;;
+    esac
+    export PARALLEL="''${STARROCKS_NIX_PACKAGE_PARALLEL:-$starrocks_nix_parallel_default}"
   '';
   thirdpartyPkgConfigLibdir =
     thirdpartyRoot:
@@ -487,6 +505,8 @@ let
       printf 'AR=%s\n' "''${AR:-}"
       printf 'RANLIB=%s\n' "''${RANLIB:-}"
       printf 'STRIP=%s\n' "''${STRIP:-}"
+      printf 'LIBRARY_PATH=%s\n' "''${LIBRARY_PATH:-}"
+      printf 'NIX_LDFLAGS=%s\n' "''${NIX_LDFLAGS:-}"
       printf 'STARROCKS_USE_NIX_DEPS=%s\n' "''${STARROCKS_USE_NIX_DEPS:-}"
       printf 'STARROCKS_THIRDPARTY=%s\n' "''${STARROCKS_THIRDPARTY:-}"
       printf 'STARROCKS_LLVM_HOME=%s\n' "''${STARROCKS_LLVM_HOME:-}"
@@ -555,7 +575,7 @@ let
       mvn_go_offline -pl plugin/hive-udf,fe-testing,plugin/spark-dpp,fe-server -am
 
       cd ../java-extensions
-      mvn_go_offline -pl hadoop-ext -am
+      mvn_go_offline
 
       find "$out/.m2" -type f \( \
         -name "*.lastUpdated" \
@@ -706,6 +726,7 @@ let
     src = source;
 
     nativeBuildInputs = packageBuildInputs ++ [ buildWrapper ];
+    buildInputs = linuxLinkInputs;
 
     dontConfigure = true;
     dontFixup = true;
@@ -722,8 +743,7 @@ let
       export STARROCKS_VERSION="${version}"
       export STARROCKS_COMMIT_HASH="${commitHash}"
       export STARROCKS_OUTPUT="$TMPDIR/starrocks-output"
-      ${parallelBuildExports}
-      export PARALLEL="''${STARROCKS_NIX_PACKAGE_PARALLEL:-${toString packageBuildParallelism}}"
+      ${packageParallelBuildExports}
 
       mkdir -p \
         "$HOME" \
@@ -787,6 +807,8 @@ let
       message,
     }:
     pkgs.mkShell {
+      buildInputs = linuxLinkInputs;
+
       packages =
         (if thirdpartyRoot == null then allInputs else packageBuildInputs)
         ++ devOnlyInputs
@@ -819,11 +841,15 @@ assert lib.assertMsg supportedSystem unsupportedSystemMessage;
   checkInputs = [
     pkgs.bash
     pkgs.coreutils
+    pkgs.diffutils
     pkgs.gnugrep
+    pkgs.python3
     buildWrapper
   ]
+  ++ linuxLinkInputs
   ++ lib.optionals isDarwin [ pkgs.getopt ]
   ++ lib.optionals isLinux [ pkgs.util-linux ];
+  checkLinkInputs = linuxLinkInputs;
 
   devShell = mkDevShell {
     message = "StarRocks Nix shell ready. Run: starrocks-build-env --print";

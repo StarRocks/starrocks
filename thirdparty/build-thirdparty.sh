@@ -142,26 +142,6 @@ clean_sources() {
     echo "Clean completed!"
 }
 
-find_cmake_package_dir() {
-    local package="$1"
-    local dir
-
-    for dir in \
-        "${TP_INSTALL_DIR}/lib/cmake/${package}" \
-        "${TP_INSTALL_DIR}/lib64/cmake/${package}" \
-        "${TP_INSTALL_DIR}/share/${package}" \
-        "${TP_INSTALL_DIR}/share/cmake/${package}" \
-        "${TP_INSTALL_DIR}/share/${package}/cmake"
-    do
-        if [[ -f "${dir}/${package}Config.cmake" || -f "${dir}/${package}-config.cmake" ]]; then
-            echo "${dir}"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 if ! OPTS="$(getopt \
     -n "$0" \
     -o 'hj:' \
@@ -257,8 +237,6 @@ fi
 
 # prepare installed prefix
 mkdir -p ${TP_DIR}/installed
-
-export CMAKE_CMD="${CMAKE_CMD:-cmake}"
 
 check_prerequest() {
     local CMD=$1
@@ -933,8 +911,6 @@ build_arrow() {
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export ARROW_THRIFT_URL=${TP_SOURCE_DIR}/${THRIFT_NAME}
-    build_xsimd
-    cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp/release
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
     if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
         # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
@@ -1010,7 +986,6 @@ build_arrow() {
 build_s2() {
     check_if_source_exist $S2_SOURCE
     cd $TP_SOURCE_DIR/$S2_SOURCE
-    perl -0pi -e 's/add_library\(s2testing STATIC/add_library(s2testing EXCLUDE_FROM_ALL STATIC/; s/install\(TARGETS s2 s2testing DESTINATION lib\)/install(TARGETS s2 DESTINATION lib)/' CMakeLists.txt
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
@@ -1151,7 +1126,7 @@ build_fmt() {
     mkdir -p build
     cd build
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
-            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
+            -DCMAKE_INSTALL_LIBDIR=lib -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1197,7 +1172,7 @@ build_hadoop_src() {
     check_if_source_exist $HADOOPSRC_SOURCE
     cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
     cd hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs
-    make CC="${CC:-gcc}" AR="${AR:-ar}"
+    make
     mkdir -p $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a $TP_INSTALL_DIR/lib
@@ -1454,14 +1429,9 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
-    local fmt_dir
-    if ! fmt_dir="$(find_cmake_package_dir fmt)"; then
-        echo "Failed to locate fmt CMake package under ${TP_INSTALL_DIR}"
-        exit 1
-    fi
 
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -Dfmt_DIR="${fmt_dir}" -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
     # cp include and lib
