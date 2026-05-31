@@ -49,12 +49,12 @@ public:
     int64_t get_flat_json_config_version() const { return _flat_json_config_version; }
     void set_flat_json_config_version(int64_t version) { _flat_json_config_version = version; }
 
-    void to_pb(FlatJsonConfigPB* binlog_config_pb) {
-        binlog_config_pb->set_flat_json_enable(_flat_json_enable);
-        binlog_config_pb->set_flat_json_null_factor(_flat_json_null_factor);
-        binlog_config_pb->set_flat_json_sparsity_factor(_flat_json_sparsity_factor);
-        binlog_config_pb->set_flat_json_max_column_max(_flat_json_max_column_max);
-        binlog_config_pb->set_version(_flat_json_config_version);
+    void to_pb(FlatJsonConfigPB* flat_json_config_pb) {
+        flat_json_config_pb->set_flat_json_enable(_flat_json_enable);
+        flat_json_config_pb->set_flat_json_null_factor(_flat_json_null_factor);
+        flat_json_config_pb->set_flat_json_sparsity_factor(_flat_json_sparsity_factor);
+        flat_json_config_pb->set_flat_json_max_column_max(_flat_json_max_column_max);
+        flat_json_config_pb->set_version(_flat_json_config_version);
     }
 
     // Update function using another FlatJsonConfig
