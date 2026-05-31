@@ -23,6 +23,7 @@
 #include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group_scan_task_queue.h"
 
 namespace starrocks::workgroup {
 

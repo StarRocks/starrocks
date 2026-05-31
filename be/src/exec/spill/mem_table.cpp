@@ -25,7 +25,7 @@
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/serde.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 

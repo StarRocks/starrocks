@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "exec/workgroup/lock_free_scan_task_queue.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/priority_scan_task_queue.h"
 
 namespace starrocks::workgroup {
 

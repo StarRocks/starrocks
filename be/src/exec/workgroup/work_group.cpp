@@ -24,7 +24,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/pipeline_executor_set.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task_queue_factory.h"
 #include "glog/logging.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
