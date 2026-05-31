@@ -252,6 +252,11 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         extra->has_default_value = true;
         extra->default_value = column.default_value();
     }
+    if (column.has_origin_default_value()) {
+        ExtraFields* extra = _get_or_alloc_extra_fields();
+        extra->has_origin_default_value = true;
+        extra->origin_default_value = column.origin_default_value();
+    }
     for (size_t i = 0; i < column.children_columns_size(); ++i) {
         TabletColumn sub_column;
         sub_column.init_from_pb(column.children_columns(i));
@@ -286,6 +291,9 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_is_auto_increment(is_auto_increment());
     if (has_default_value()) {
         column->set_default_value(default_value());
+    }
+    if (has_origin_default_value()) {
+        column->set_origin_default_value(origin_default_value());
     }
     if (has_precision()) {
         column->set_precision(_precision);

@@ -164,6 +164,78 @@ TEST_F(TabletMgrTest, CreateTablet) {
     ASSERT_TRUE(create_st.ok());
 }
 
+// A MODIFY ... DEFAULT that runs as a linked/heavy schema change goes through
+// _create_tablet_meta_unlocked. The new-write default (default_value) must come from the request,
+// while the frozen backfill default (origin_default_value) for rows older than the column is
+// preserved from the base tablet. Regression guard: the old code unconditionally copied the base
+// default_value over the request, reverting the user's new default for BE-side default filling.
+TEST_F(TabletMgrTest, SchemaChangeKeepsModifiedDefault) {
+    std::vector<DataDir*> data_dirs;
+    data_dirs.push_back(_data_dirs[0]);
+
+    auto make_req = [](int64_t tablet_id, int32_t schema_hash, int32_t schema_version, const std::string& c_default) {
+        TColumnType key_type;
+        key_type.__set_type(TPrimitiveType::SMALLINT);
+        TColumn key;
+        key.__set_column_name("col1");
+        key.__set_column_type(key_type);
+        key.__set_is_key(true);
+
+        TColumnType val_type;
+        val_type.__set_type(TPrimitiveType::INT);
+        TColumn val;
+        val.__set_column_name("c");
+        val.__set_column_type(val_type);
+        val.__set_is_key(false);
+        val.__set_aggregation_type(TAggregationType::REPLACE);
+        val.__set_is_allow_null(true);
+        val.__set_default_value(c_default);
+
+        std::vector<TColumn> cols{key, val};
+        TTabletSchema schema;
+        schema.__set_short_key_column_count(1);
+        schema.__set_schema_hash(schema_hash);
+        schema.__set_schema_version(schema_version);
+        schema.__set_keys_type(TKeysType::AGG_KEYS);
+        schema.__set_storage_type(TStorageType::COLUMN);
+        schema.__set_columns(cols);
+
+        TCreateTabletReq req;
+        req.__set_tablet_schema(schema);
+        req.__set_tablet_id(tablet_id);
+        req.__set_version(2);
+        req.__set_version_hash(0);
+        return req;
+    };
+
+    // Base tablet: column c has add-time default "1".
+    TCreateTabletReq base_req = make_req(20001, 3333, 0, "1");
+    ASSERT_TRUE(_tablet_mgr->create_tablet(base_req, data_dirs).ok());
+
+    // Schema change: MODIFY c default 1 -> 2 (base_tablet_id set => linked/heavy path).
+    TCreateTabletReq sc_req = make_req(20002, 3334, 1, "2");
+    sc_req.__set_base_tablet_id(20001);
+    ASSERT_TRUE(_tablet_mgr->create_tablet(sc_req, data_dirs).ok());
+
+    TabletMetaSharedPtr meta(new TabletMeta());
+    ASSERT_TRUE(TabletMetaManager::get_tablet_meta(_data_dirs[0], 20002, 3334, meta.get()).ok());
+    const auto& tschema = meta->tablet_schema();
+    int c_idx = -1;
+    for (size_t i = 0; i < tschema.num_columns(); ++i) {
+        if (tschema.column(i).name() == "c") {
+            c_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    ASSERT_GE(c_idx, 0);
+    const TabletColumn& c = tschema.column(c_idx);
+    // New writes get the modified default, not the reverted old one.
+    EXPECT_EQ("2", c.default_value());
+    // Rows older than the column keep the add-time default via the frozen origin.
+    ASSERT_TRUE(c.has_origin_default_value());
+    EXPECT_EQ("1", c.origin_default_value());
+}
+
 TEST_F(TabletMgrTest, DropTablet) {
     TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
     std::vector<DataDir*> data_dirs;

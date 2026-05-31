@@ -41,9 +41,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TColumn;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterEach;
@@ -79,6 +82,46 @@ public class ColumnGsonSerializationTest {
             Text.writeString(out, json);
         }
 
+    }
+
+    @Test
+    public void testFrozenComplexDefaultAcrossNullAndSerialization() {
+        ArrayType type = new ArrayType(IntegerType.INT);
+        Column complex = new Column("c", type, false, null, true,
+                new ColumnDef.DefaultValueDef(true,
+                        new ArrayExpr(type, Lists.newArrayList(new IntLiteral(1)))), "");
+        Column nullDefault = new Column("c", type, false, null, true,
+                ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE, "");
+        nullDefault.setOriginDefaultValue(complex.getOriginDefaultValue());
+        nullDefault.setOriginDefaultExpr(complex.getOriginDefaultExpr());
+        Column restored = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(nullDefault), Column.class);
+        TColumn thrift = restored.toThrift();
+        Assertions.assertFalse(thrift.isSetOrigin_default_value());
+        Assertions.assertTrue(thrift.isSetOrigin_default_expr());
+        Assertions.assertEquals(complex.getDefaultExpr().toSql(), restored.getOriginDefaultExpr().toSql());
+
+        // A later complex default must preserve the same frozen expression.
+        complex.setOriginDefaultValue(restored.getOriginDefaultValue());
+        complex.setOriginDefaultExpr(restored.getOriginDefaultExpr());
+        Assertions.assertNull(complex.getOriginDefaultValue());
+        Assertions.assertEquals(restored.getOriginDefaultExpr().toSql(), complex.getOriginDefaultExpr().toSql());
+    }
+
+    @Test
+    public void testFrozenNullDefaultSuppressesNewComplexExpression() {
+        ArrayType type = new ArrayType(IntegerType.INT);
+        Column original = new Column("c", type, false, null, true,
+                ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE, "");
+        Column modified = new Column("c", type, false, null, true,
+                new ColumnDef.DefaultValueDef(true,
+                        new ArrayExpr(type, Lists.newArrayList(new IntLiteral(2)))), "");
+        modified.setOriginDefaultValue(original.getOriginDefaultValue());
+        modified.setOriginDefaultExpr(original.getOriginDefaultExpr());
+        Column restored = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(modified), Column.class);
+        TColumn thrift = restored.toThrift();
+        Assertions.assertEquals("NULL", thrift.getOrigin_default_value());
+        Assertions.assertFalse(thrift.isSetOrigin_default_expr());
+        Assertions.assertNull(restored.getOriginDefaultExpr());
     }
 
     @Test

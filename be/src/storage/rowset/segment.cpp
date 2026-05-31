@@ -516,14 +516,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         return _new_extended_column_iterator(column, path);
     }
 
-    if (!column.has_default_value() && !column.is_nullable()) {
+    if (!column.has_backfill_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
     } else {
+        // Use the frozen origin default (falls back to default_value) so rows older than this
+        // column keep the default in effect when it was added, not a later MODIFY DEFAULT value.
         const TypeInfoPtr& type_info = get_type_info(column);
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-                column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
-                num_rows(), path);
+                column.has_backfill_default_value(), column.backfill_default_value(), column.is_nullable(), type_info,
+                column.length(), num_rows(), path);
         return default_value_iter;
     }
 }
@@ -545,9 +547,9 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         // The root column does not exist in this segment (e.g., added by schema change later).
         // Fall back to column default/nullability.
         const TypeInfoPtr& type_info = get_type_info(column);
-        auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
-                                                                         column.default_value(), column.is_nullable(),
-                                                                         type_info, column.length(), num_rows());
+        auto default_iter = std::make_unique<DefaultValueColumnIterator>(
+                column.has_backfill_default_value(), column.backfill_default_value(), column.is_nullable(), type_info,
+                column.length(), num_rows());
         VLOG(2) << "root column '" << col_name << "' not found in segment, return default for path: " << full_path;
         return default_iter;
     }

@@ -1,0 +1,77 @@
+-- name: test_array_default_through_null
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+insert into t values (1);
+alter table t add column c ARRAY<INT> DEFAULT [1,2,3];
+function: wait_alter_table_finish()
+insert into t (id) values (2);
+alter table t modify column c ARRAY<INT> DEFAULT NULL;
+function: wait_alter_table_finish()
+insert into t (id) values (3);
+-- Row 1 physically lacks c; row 2 stores the first default.
+select id, c[1] from t order by id;
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+function: wait_alter_table_finish()
+insert into t (id) values (4);
+select id, c[1] from t order by id;
+drop database db_${uuid0};
+
+-- name: test_map_default_through_null
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+insert into t values (1);
+alter table t add column c MAP<VARCHAR(10), INT> DEFAULT map{'a':1};
+function: wait_alter_table_finish()
+insert into t (id) values (2);
+alter table t modify column c MAP<VARCHAR(10), INT> DEFAULT NULL;
+function: wait_alter_table_finish()
+insert into t (id) values (3);
+-- Row 1 physically lacks c; row 2 stores the first default.
+select id, c['a'] from t order by id;
+alter table t modify column c MAP<VARCHAR(10), INT> DEFAULT map{'a':4};
+function: wait_alter_table_finish()
+insert into t (id) values (4);
+select id, c['a'] from t order by id;
+drop database db_${uuid0};
+
+-- name: test_struct_default_through_null
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+insert into t values (1);
+alter table t add column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(1, 'a');
+function: wait_alter_table_finish()
+insert into t (id) values (2);
+alter table t modify column c STRUCT<x INT, y VARCHAR(10)> DEFAULT NULL;
+function: wait_alter_table_finish()
+insert into t (id) values (3);
+-- Row 1 physically lacks c; row 2 stores the first default.
+select id, c.x from t order by id;
+alter table t modify column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(4, 'b');
+function: wait_alter_table_finish()
+insert into t (id) values (4);
+select id, c.x from t order by id;
+drop database db_${uuid0};
+
+-- name: test_null_default_to_array
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+insert into t values (1);
+alter table t add column c ARRAY<INT> DEFAULT NULL;
+function: wait_alter_table_finish()
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+function: wait_alter_table_finish()
+insert into t (id) values (2);
+select id, c[1] from t order by id;
+drop database db_${uuid0};

@@ -1,0 +1,315 @@
+-- name: test_modify_column_default_retroactive
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- row written before column c exists: physically lacks c, backfilled on read
+insert into t values (1);
+
+-- add c with default 1 (fast schema evolution: metadata-only, no data rewrite)
+alter table t add column c INT DEFAULT "1";
+function: wait_alter_table_finish()
+
+-- row written while the default is 1: physically stores c=1
+insert into t (id) values (2);
+
+-- change the default to 2 (now allowed; old rows must keep the add-time default)
+alter table t modify column c INT DEFAULT "2";
+function: wait_alter_table_finish()
+
+-- row written after the change: physically stores c=2
+insert into t (id) values (3);
+
+-- id=1 predates the column, so it keeps 1 (default when c was added), not 2.
+-- id=2 stays 1, id=3 is 2.
+select * from t order by id;
+
+-- count must agree with the read path (all three rows are non-null)
+select count(c) from t;
+
+drop database db_${uuid0};
+
+
+-- name: test_add_default_keeps_old_rows_null
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- row written before column c exists
+insert into t values (1);
+
+-- add c with NO default (nullable): rows older than c read NULL
+alter table t add column c INT;
+function: wait_alter_table_finish()
+
+-- row written while c has no default: physically stores NULL
+insert into t (id) values (2);
+
+-- add a default where none existed: must NOT retroactively change older rows to 9
+alter table t modify column c INT DEFAULT "9";
+function: wait_alter_table_finish()
+
+-- row written after the default was added: physically stores c=9
+insert into t (id) values (3);
+
+-- id=1 and id=2 had no default when written, so they stay NULL; only id=3 is 9.
+select * from t order by id;
+
+-- count(c) must match: only id=3 is non-null (regression guard for the meta count fast path)
+select count(c) from t;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_complex_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- row written before column c exists
+insert into t values (1);
+
+-- add an ARRAY column with a complex default (constant literal)
+alter table t add column c ARRAY<INT> DEFAULT [1,2,3];
+function: wait_alter_table_finish()
+
+-- row written while the default is [1,2,3]: physically stores it
+insert into t (id) values (2);
+
+-- change the complex default; older rows must keep the add-time [1,2,3]
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+function: wait_alter_table_finish()
+
+-- row written after the change: physically stores [4,5,6]
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time default [1,2,3]; only id=3 is [4,5,6]
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_default_keeps_original_across_multiple_changes
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c INT DEFAULT "1";
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+alter table t modify column c INT DEFAULT "2";
+function: wait_alter_table_finish()
+
+alter table t modify column c INT DEFAULT "3";
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 keeps the ORIGINAL add-time default 1 across two changes (not 2); id=2 stays 1; id=3 is 3
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_default_on_create_table_column
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT,
+    c INT DEFAULT "1"
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t (id) values (1);
+
+-- c exists from CREATE TABLE, so changing its default is allowed too
+alter table t modify column c INT DEFAULT "2";
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+-- c is always physical for CREATE-table columns: id=1 keeps 1, id=2 gets 2
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_default_rejected_for_key_and_aggregate_columns
+create database db_${uuid0};
+use db_${uuid0};
+
+create table tk (
+    id INT DEFAULT "0",
+    v INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- modifying the sole key column is rejected before the default check (no key column would remain)
+alter table tk modify column id INT DEFAULT "1";
+
+create table ta (
+    id INT,
+    s INT SUM
+)
+AGGREGATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+-- SUM aggregate columns have a constrained default and stay immutable
+alter table ta modify column s INT SUM DEFAULT "5";
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_map_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c MAP<VARCHAR(10), INT> DEFAULT map{'a':1};
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+alter table t modify column c MAP<VARCHAR(10), INT> DEFAULT map{'b':2};
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time map; only id=3 is the new map
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_struct_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(1, 'a');
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+alter table t modify column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(2, 'b');
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time struct; only id=3 is the new struct
+select * from t order by id;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_default_literal_to_current_timestamp
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c DATETIME DEFAULT "2020-01-01 00:00:00";
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+-- changing a literal default to now()/current_timestamp must be allowed
+alter table t modify column c DATETIME DEFAULT CURRENT_TIMESTAMP;
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- older rows keep the add-time literal (deterministic); the new now() value is not asserted
+select c from t where id in (1, 2) order by id;
+
+-- all three rows are non-null (id=3 got a now() value)
+select count(c) from t;
+
+drop database db_${uuid0};
+
+
+-- name: test_modify_remove_default_keeps_old_rows
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+
+insert into t values (1);
+
+alter table t add column c INT NULL DEFAULT "5";
+function: wait_alter_table_finish()
+
+insert into t (id) values (2);
+
+-- removing the default (MODIFY without DEFAULT) must keep older rows and only drop it for new writes
+alter table t modify column c INT NULL;
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+-- id=1 and id=2 keep the add-time 5; id=3 has no default now, so it is NULL
+select * from t order by id;
+
+drop database db_${uuid0};

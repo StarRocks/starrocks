@@ -74,8 +74,11 @@ struct ExtendedColumnInfo {
 class TabletColumn {
     struct ExtraFields {
         std::string default_value;
+        // Frozen backfill default for rows that physically lack this column; see origin_default_value().
+        std::string origin_default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        bool has_origin_default_value = false;
         bool is_virtual_column = false;
     };
 
@@ -170,6 +173,30 @@ public:
         ExtraFields* ext = _get_or_alloc_extra_fields();
         ext->has_default_value = true;
         ext->default_value = std::move(value);
+    }
+
+    // Default frozen at column-add time, used to backfill rows that physically predate this
+    // column (added via fast schema evolution). Unlike default_value(), ALTER MODIFY DEFAULT
+    // does not change it, so older rows keep the default in effect when the column was added.
+    bool has_origin_default_value() const { return _extra_fields && _extra_fields->has_origin_default_value; }
+
+    const std::string& origin_default_value() const {
+        return _extra_fields ? _extra_fields->origin_default_value : kEmptyDefaultValue;
+    }
+
+    void set_origin_default_value(std::string value) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->has_origin_default_value = true;
+        ext->origin_default_value = std::move(value);
+    }
+
+    // Default value to use when filling a column that is absent from a segment. Prefers the
+    // frozen origin default; falls back to default_value() for schemas written before the
+    // origin field existed.
+    bool has_backfill_default_value() const { return has_origin_default_value() || has_default_value(); }
+
+    const std::string& backfill_default_value() const {
+        return has_origin_default_value() ? origin_default_value() : default_value();
     }
 
     bool is_virtual_column() const { return _extra_fields && _extra_fields->is_virtual_column; }

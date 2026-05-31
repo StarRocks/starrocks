@@ -546,7 +546,7 @@ Status SegmentMetaCollecter::_append_default_column_value(ColumnId cid, Column* 
         column->append_nulls(1);
         return Status::OK();
     }
-    if (!tablet_column->has_default_value()) {
+    if (!tablet_column->has_backfill_default_value()) {
         column->append_nulls(1);
         return Status::OK();
     }
@@ -561,12 +561,17 @@ Status SegmentMetaCollecter::_append_default_column_value(ColumnId cid, Column* 
 
 Status SegmentMetaCollecter::_collect_count_for_default_column(ColumnId cid, Column* column) {
     ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
-    if (!tablet_column->has_default_value() && !tablet_column->is_nullable()) {
+    if (!tablet_column->has_backfill_default_value() && !tablet_column->is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", tablet_column->name()));
     }
 
-    bool is_null_default = !tablet_column->has_default_value();
+    // Match the read path (DefaultValueColumnIterator): missing-column rows take the frozen origin
+    // default (falling back to default_value), which is NULL when there is no backfill default or
+    // the value is the "NULL" sentinel. Counting by the current default_value alone would
+    // over-count rows that read as NULL after a default change.
+    bool is_null_default =
+            !tablet_column->has_backfill_default_value() || tablet_column->backfill_default_value() == "NULL";
     column->append_datum(int64_t(is_null_default ? 0 : _segment->num_rows()));
     return Status::OK();
 }

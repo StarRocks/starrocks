@@ -1,0 +1,229 @@
+-- name: test_array_default_through_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c ARRAY<INT> DEFAULT [1,2,3];
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+alter table t modify column c ARRAY<INT> DEFAULT NULL;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+-- Row 1 physically lacks c; row 2 stores the first default.
+select id, c[1] from t order by id;
+-- result:
+1	1
+2	1
+3	None
+-- !result
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (4);
+-- result:
+-- !result
+select id, c[1] from t order by id;
+-- result:
+1	1
+2	1
+3	None
+4	4
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+
+-- name: test_map_default_through_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c MAP<VARCHAR(10), INT> DEFAULT map{'a':1};
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+alter table t modify column c MAP<VARCHAR(10), INT> DEFAULT NULL;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+-- Row 1 physically lacks c; row 2 stores the first default.
+select id, c['a'] from t order by id;
+-- result:
+1	1
+2	1
+3	None
+-- !result
+alter table t modify column c MAP<VARCHAR(10), INT> DEFAULT map{'a':4};
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (4);
+-- result:
+-- !result
+select id, c['a'] from t order by id;
+-- result:
+1	1
+2	1
+3	None
+4	4
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+
+-- name: test_struct_default_through_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(1, 'a');
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+alter table t modify column c STRUCT<x INT, y VARCHAR(10)> DEFAULT NULL;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+-- Row 1 physically lacks c; row 2 stores the first default.
+select id, c.x from t order by id;
+-- result:
+1	1
+2	1
+3	None
+-- !result
+alter table t modify column c STRUCT<x INT, y VARCHAR(10)> DEFAULT row(4, 'b');
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (4);
+-- result:
+-- !result
+select id, c.x from t order by id;
+-- result:
+1	1
+2	1
+3	None
+4	4
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+
+-- name: test_null_default_to_array
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+alter table t add column c ARRAY<INT> DEFAULT NULL;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table t modify column c ARRAY<INT> DEFAULT [4,5,6];
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (2);
+-- result:
+-- !result
+select id, c[1] from t order by id;
+-- result:
+1	None
+2	4
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
