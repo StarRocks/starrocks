@@ -31,6 +31,7 @@
 #include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"

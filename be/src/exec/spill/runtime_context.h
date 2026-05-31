@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/spill/executor.h"
+#pragma once
 
-#include "runtime/runtime_state.h"
+#include <memory>
+
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
 
-TraceInfo::TraceInfo(RuntimeState* state) : query_id(state->query_id()), fragment_id(state->fragment_instance_id()) {}
+struct TraceInfo {
+    explicit TraceInfo(RuntimeState* state);
+    TUniqueId query_id;
+    TUniqueId fragment_id;
+};
 
-std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state) {
-    return state->query_ctx()->weak_from_this();
-}
+std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state);
 
 } // namespace starrocks::spill

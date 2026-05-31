@@ -25,7 +25,6 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"

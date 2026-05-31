@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "exec/spill/runtime_context.h"
 
-namespace starrocks::workgroup {
-struct YieldContext;
-};
+#include "exec/pipeline/query_context.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
-class Spiller;
-class BlockGroup;
-class BlockGroupSet;
-class BlockManager;
-class SpillInputStream;
-class Serde;
-class ChunkBuilder;
-struct SpilledOptions;
+
+TraceInfo::TraceInfo(RuntimeState* state) : query_id(state->query_id()), fragment_id(state->fragment_instance_id()) {}
+
+std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state) {
+    return state->query_ctx()->weak_from_this();
+}
+
 } // namespace starrocks::spill

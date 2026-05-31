@@ -38,6 +38,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/bucket_aware_partition.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"

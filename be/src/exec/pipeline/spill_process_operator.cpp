@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/executor.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/spiller.hpp"
 #include "runtime/runtime_state.h"
 

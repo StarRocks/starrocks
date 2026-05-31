@@ -17,6 +17,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"

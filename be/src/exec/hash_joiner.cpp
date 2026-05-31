@@ -27,6 +27,7 @@
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/join/join_hash_table.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_ref.h"
