@@ -1,0 +1,95 @@
+name: CI Doc Param Drift
+
+# Runs when a PR modifies any of the config source-of-truth files.
+# Posts a PR comment listing any new parameters that have no documentation entry.
+# Does NOT block merge — the comment is informational only.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+      - 'branch*'
+    paths:
+      - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
+      - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
+      - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
+      - 'be/src/common/config.h'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  param-drift-check:
+    runs-on: ubuntu-latest
+    name: Check new params for missing docs
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+
+    steps:
+      - name: Clean workspace
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Record base branch
+        id: branch
+        run: echo "branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Check out the PR head merged with the base branch, matching the pattern
+      # used by ci-doc-checker.yml.
+      - name: Checkout PR
+        run: |
+          BRANCH=${{ steps.branch.outputs.branch }}
+          git config --global user.name "docs-automation[bot]"
+          git config --global user.email "docs-automation[bot]@starrocks.io"
+          git checkout $BRANCH
+          git pull
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
+          git checkout $BRANCH_NAME
+          git checkout -b merge_pr
+          git merge --squash --no-edit ${BRANCH} || \
+            (echo "::error::Merge conflict — cannot check param drift." && exit 1)
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run param drift check
+        id: drift
+        # Exit code 0 = no new undocumented params; 1 = gaps found.
+        # Continue so the comment step always runs (to clear stale comments).
+        continue-on-error: true
+        run: |
+          python3 build-support/extract_and_diff_params.py \
+            --new-params-only \
+            --output github-comment \
+            > drift_report.md 2>&1
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      - name: Post or update PR comment (gaps found)
+        if: steps.drift.outputs.exitcode == '1'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          filePath: drift_report.md
+          comment_tag: param-drift
+          mode: upsert
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clear PR comment (no gaps)
+        if: steps.drift.outputs.exitcode != '1'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            No new undocumented parameters detected by the param-drift check.
+          comment_tag: param-drift
+          mode: upsert
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
