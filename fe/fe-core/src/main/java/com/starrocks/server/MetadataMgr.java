@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.api.client.util.Lists;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -798,8 +799,50 @@ public class MetadataMgr {
             }
         } else {
             session.setObtainedFromInternalStatistics(true);
+            // Internal stats can mix collected columns with uncollected ones, which are left unknown here.
+            // Those unknown columns would otherwise carry no min/max at all - worse than the connector/manifest
+            // min/max they inherit when there are no internal stats. Backfill them from connector metadata,
+            // respecting the same guards that gate metadata access in the branch above.
+            boolean hasUnknownColumn = internalStatistics.getColumnStatistics().values().stream()
+                    .anyMatch(ColumnStatistic::isUnknown);
+            boolean metadataStatsAllowed = !StatisticUtils.statisticTableBlackListCheck(table.getId()) &&
+                    !(session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
+                            session.getSourceTablesCount() == 1);
+            if (hasUnknownColumn && metadataStatsAllowed) {
+                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                        session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
+                if (connectorBasicStats != null) {
+                    return backfillUnknownColumnsFromConnector(internalStatistics, connectorBasicStats);
+                }
+            }
             return internalStatistics;
         }
+    }
+
+    // Partial ANALYZE leaves uncollected columns as unknown in the internal stats. Without backfill they carry
+    // no min/max, which is worse than the connector/manifest min/max they would inherit with no internal stats
+    // at all. Take the row count and the unknown columns from the connector stats (the queried snapshot), keep
+    // collected columns as-is, and preserve any histogram already attached to a backfilled column.
+    @VisibleForTesting
+    static Statistics backfillUnknownColumnsFromConnector(Statistics internalStatistics,
+                                                          Statistics connectorStatistics) {
+        Map<ColumnRefOperator, ColumnStatistic> connectorColumnStats = connectorStatistics.getColumnStatistics();
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(connectorStatistics.getOutputRowCount());
+        internalStatistics.getColumnStatistics().forEach((columnRef, columnStatistic) -> {
+            ColumnStatistic connectorStat = connectorColumnStats.get(columnRef);
+            if (columnStatistic.isUnknown() && connectorStat != null) {
+                if (columnStatistic.getHistogram() != null) {
+                    connectorStat = ColumnStatistic.buildFrom(connectorStat)
+                            .setHistogram(columnStatistic.getHistogram()).build();
+                }
+                builder.addColumnStatistic(columnRef, connectorStat);
+            } else {
+                builder.addColumnStatistic(columnRef, columnStatistic);
+            }
+        });
+        return builder.build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
