@@ -21,6 +21,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "glog/logging.h"
 #include "runtime/mem_tracker.h"
@@ -55,10 +56,18 @@ struct WorkGroupMetrics {
 // WorkGroupManager
 // ------------------------------------------------------------------------------------
 
-WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics)
-        : _executors_manager(std::move(executors_manager_conf)),
+WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics,
+                                   DriverQueueFactory driver_queue_factory)
+        : _driver_queue_metrics((executors_manager_conf.metrics != nullptr
+                                         ? executors_manager_conf.metrics
+                                         : pipeline::PipelineExecutorMetrics::instance())
+                                        ->get_driver_queue_metrics()),
+          _driver_queue_factory(std::move(driver_queue_factory)),
+          _executors_manager(std::move(executors_manager_conf)),
           _metrics(metrics),
-          _shared_mem_tracker_manager(metrics) {}
+          _shared_mem_tracker_manager(metrics) {
+    DCHECK(_driver_queue_factory != nullptr);
+}
 
 WorkGroupManager::~WorkGroupManager() = default;
 
@@ -337,7 +346,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
     }
 
     auto parent_mem_tracker = _shared_mem_tracker_manager.register_workgroup(wg);
-    wg->init(parent_mem_tracker);
+    wg->init(parent_mem_tracker, _driver_queue_factory(_driver_queue_metrics));
     _workgroups[unique_id] = wg;
 
     _sum_cpu_weight += wg->cpu_weight();

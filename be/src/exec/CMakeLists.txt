@@ -178,6 +178,7 @@ set(PIPELINE_GRAPH_SRCS
 
 set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver_executor.cpp
+    pipeline/primitives/driver_queue_factory.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp

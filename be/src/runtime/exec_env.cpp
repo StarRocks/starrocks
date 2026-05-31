@@ -55,6 +55,7 @@
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_queue_factory.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
@@ -290,8 +291,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
             CpuInfo::num_cores(), max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
             pipeline::PipelineExecutorMetrics::instance());
-    _workgroup_manager =
-            std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts), process_metrics);
+    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(
+            std::move(executors_manager_opts), process_metrics, pipeline::create_query_shared_driver_queue);
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), max_executor_threads);
 
