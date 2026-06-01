@@ -63,7 +63,6 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
@@ -467,8 +466,13 @@ public class AlterJobMgr {
         MaterializedView oldMaterializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getId(), materializedViewId);
         if (oldMaterializedView != null) {
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
-                    Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE)) {
+            // Rename drops and re-registers the MV in the db's nameToTable/idToTable maps (DB-level
+            // state), so it needs the DB WRITE lock, not an intensive table lock (IX is compatible with
+            // IS/IX and would let a follower query thread observe the torn maps). Mirrors the live
+            // rename lock and the existing replayRenameTable.
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
                 db.dropTable(oldMaterializedView.getName());
                 oldMaterializedView.setName(newMaterializedViewName);
                 db.registerTableUnlocked(oldMaterializedView);
@@ -478,6 +482,8 @@ public class AlterJobMgr {
             } catch (Throwable e) {
                 oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
     }
@@ -545,15 +551,26 @@ public class AlterJobMgr {
     }
 
     public void replaySwapTable(SwapTableOperationLog log) {
-        swapTableInternal(log);
         long dbId = log.getDbId();
         long origTblId = log.getOrigTblId();
         long newTblId = log.getNewTblId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        OlapTable origTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), origTblId);
-        OlapTable newTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
-        LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
-                newTbl.getName());
+        // swapTableInternal drops and re-registers both tables in the db's nameToTable/idToTable maps
+        // (DB-level state), racing follower query threads, so hold the DB WRITE lock for the whole
+        // sequence (the live swap path also runs under DB WRITE).
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            swapTableInternal(log);
+            OlapTable origTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), origTblId);
+            OlapTable newTbl =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
+            LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
+                    newTbl.getName());
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
     }
 
     /**
