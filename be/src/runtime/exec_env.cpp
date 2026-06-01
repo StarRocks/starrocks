@@ -42,6 +42,7 @@
 #include "base/time/time.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
@@ -95,6 +96,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -104,6 +106,9 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#ifdef WITH_TENANN
+#include "tenann/index/index_cache.h"
+#endif
 #include "udf/python/env.h"
 
 #ifdef USE_STAROS
@@ -440,6 +445,21 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     PythonEnvManager::getInstance().start_background_cleanup_thread();
 
     _refresh_service_contexts();
+#ifdef WITH_TENANN
+    // Install before any vector query runs; tear down in destroy() before
+    // GlobalEnv::stop() so the entry deleter can still reach the tracker.
+    const int64_t proc_mem = GlobalEnv::GetInstance()->process_mem_limit();
+    ASSIGN_OR_RETURN(int64_t vi_capacity, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
+    if (vi_capacity <= 0) {
+        LOG(WARNING) << "vector_query_cache_capacity resolved to " << vi_capacity
+                     << " bytes (raw=" << config::vector_query_cache_capacity << ", process_mem_limit=" << proc_mem
+                     << "); vector index cache disabled";
+        vi_capacity = 0;
+    }
+    _vector_index_cache = std::make_unique<VectorIndexCache>(static_cast<size_t>(vi_capacity),
+                                                             GlobalEnv::GetInstance()->vector_index_mem_tracker());
+    tenann::SetGlobalIndexCache(_vector_index_cache.get());
+#endif
 
     return Status::OK();
 }
@@ -715,6 +735,13 @@ void ExecEnv::destroy() {
     _query_execution_services.process_metrics = nullptr;
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;
+}
+
+void ExecEnv::destroy_vector_index_cache() {
+#ifdef WITH_TENANN
+    tenann::SetGlobalIndexCache(nullptr);
+#endif
+    _vector_index_cache.reset();
 }
 
 void ExecEnv::_wait_for_fragments_finish() {

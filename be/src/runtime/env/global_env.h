@@ -58,6 +58,7 @@ public:
     MemTracker* bitmap_index_mem_tracker() const { return _bitmap_index_mem_tracker.get(); }
     MemTracker* bloom_filter_index_mem_tracker() const { return _bloom_filter_index_mem_tracker.get(); }
     MemTracker* builtin_inverted_index_mem_tracker() const { return _builtin_inverted_index_mem_tracker.get(); }
+    MemTracker* vector_index_mem_tracker() const { return _vector_index_mem_tracker.get(); }
     MemTracker* segment_zonemap_mem_tracker() const { return _segment_zonemap_mem_tracker.get(); }
     MemTracker* short_key_index_mem_tracker() const { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() const { return _compaction_mem_tracker.get(); }
@@ -156,6 +157,9 @@ private:
     std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
     std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
     std::shared_ptr<MemTracker> _builtin_inverted_index_mem_tracker;
+
+    // Memory held by the SR-owned VectorIndexCache
+    std::shared_ptr<MemTracker> _vector_index_mem_tracker;
 
     // The memory used for compaction
     std::shared_ptr<MemTracker> _compaction_mem_tracker;

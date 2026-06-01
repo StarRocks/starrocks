@@ -18,12 +18,14 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_update_registry.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
@@ -31,6 +33,7 @@
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -162,5 +165,43 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     CHECK_OK(st);
     ASSERT_EQ(1, thread_pool->max_threads());
 }
+
+#ifndef __APPLE__
+// Re-registers the hooks with a null exec_env to verify the
+// `vector_query_cache_capacity` callback short-circuits to InternalError instead
+// of dereferencing exec_env. The override of SetUp's registration is OK because
+// TearDown's TEST_reset() restores a clean registry for the next test.
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
+    ConfigUpdateRegistry::instance()->TEST_reset();
+    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
+    ConfigUpdateRegistry::instance()->set_ready();
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
+    EXPECT_FALSE(st.ok()) << st.to_string();
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cache) {
+    auto* cache = ExecEnv::GetInstance()->vector_index_cache();
+    ASSERT_NE(cache, nullptr) << "test_main must initialize ExecEnv with vector_index_cache";
+    const std::string saved = config::vector_query_cache_capacity;
+
+    // Absolute bytes.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "4294967296"));
+    EXPECT_EQ(cache->capacity(), 4294967296u);
+
+    // Unit-suffixed.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "512M"));
+    EXPECT_EQ(cache->capacity(), 512u * 1024 * 1024);
+
+    // Percentage of process_mem_limit — exact value depends on test env, just
+    // sanity-check it parses and resizes to something positive.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "10%"));
+    EXPECT_GT(cache->capacity(), 0u);
+
+    // Restore for downstream tests/files.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", saved));
+}
+#endif
 
 } // namespace starrocks
