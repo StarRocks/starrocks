@@ -283,21 +283,45 @@ def parse_session_vars(session_path: Path, global_path: Path) -> dict[str, Param
                 i += 1
                 continue
 
-            # Resolve name
+            # Resolve name= (internal storage name)
             name_m = re.search(r'\bname\s*=\s*(\w+|"[^"]+")', ann_text)
             if not name_m:
                 i += 1
                 continue
 
-            raw = name_m.group(1)
-            if raw.startswith('"'):
-                var_name = raw.strip('"')
-            else:
-                # Constant reference: look up in const_map, fall back to lowercasing
-                var_name = const_map.get(raw, raw.lower())
+            def _resolve(raw: str) -> str:
+                if raw.startswith('"'):
+                    return raw.strip('"')
+                return const_map.get(raw, raw.lower())
 
-            # Skip names that look like class references or non-variable identifiers
-            if not re.fullmatch(r"[a-z_][a-z0-9_]*", var_name):
+            primary_name = _resolve(name_m.group(1))
+
+            # Resolve show= (user-visible name used in SHOW VARIABLES and docs).
+            # Many variables rename internals with a _v2 suffix while keeping the
+            # original name as the show/alias value — docs always use the show name.
+            show_m = re.search(r'\bshow\s*=\s*(\w+|"[^"]+")', ann_text)
+            show_name = _resolve(show_m.group(1)) if show_m else None
+
+            # Resolve alias= (backward-compat names, also user-visible)
+            alias_names = [
+                _resolve(m.group(1))
+                for m in re.finditer(r'\balias\s*=\s*(\w+|"[^"]+")', ann_text)
+            ]
+
+            # Collect user-visible names for doc comparison.
+            # When show= is present it is the name users see in SHOW VARIABLES and
+            # docs — the primary name is an internal implementation detail (_v2 etc.)
+            # and does not need its own doc entry.
+            all_names: list[str] = []
+            if show_name and re.fullmatch(r"[a-z_][a-z0-9_]*", show_name):
+                all_names.append(show_name)
+            elif re.fullmatch(r"[a-z_][a-z0-9_]*", primary_name):
+                all_names.append(primary_name)
+            for alias in alias_names:
+                if re.fullmatch(r"[a-z_][a-z0-9_]*", alias) and alias not in all_names:
+                    all_names.append(alias)
+
+            if not all_names:
                 i += 1
                 continue
 
@@ -311,15 +335,16 @@ def parse_session_vars(session_path: Path, global_path: Path) -> dict[str, Param
                     default = fd.group(2).strip().rstrip(";")
                     break
 
-            params[var_name] = ParamInfo(
-                name=var_name,
-                param_type="session_var",
-                code_type=code_type,
-                default=default,
-                mutable=True,
-                description="",
-                suggested_doc="docs/en/sql-reference/System_variable.md",
-            )
+            for var_name in all_names:
+                params[var_name] = ParamInfo(
+                    name=var_name,
+                    param_type="session_var",
+                    code_type=code_type,
+                    default=default,
+                    mutable=True,
+                    description="",
+                    suggested_doc="docs/en/sql-reference/System_variable.md",
+                )
             i += 1
 
     return params
