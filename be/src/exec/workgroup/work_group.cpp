@@ -33,8 +33,18 @@ namespace starrocks::workgroup {
 // WorkGroupSchedEntity
 // ------------------------------------------------------------------------------------
 
+void WorkGroupSchedState::incr_runtime_ns(int64_t runtime_ns, size_t cpu_weight) {
+    _vruntime_ns.fetch_add(runtime_ns / int64_t(cpu_weight), std::memory_order_relaxed);
+    _unadjusted_runtime_ns.fetch_add(runtime_ns, std::memory_order_relaxed);
+}
+
+void WorkGroupSchedState::adjust_runtime_ns(int64_t runtime_ns, size_t cpu_weight) {
+    _vruntime_ns.fetch_add(runtime_ns / int64_t(cpu_weight), std::memory_order_relaxed);
+}
+
 template <typename Q>
-WorkGroupSchedEntity<Q>::WorkGroupSchedEntity(WorkGroup* workgroup) : _workgroup(workgroup) {}
+WorkGroupSchedEntity<Q>::WorkGroupSchedEntity(WorkGroup* workgroup, WorkGroupSchedState* sched_state)
+        : _workgroup(workgroup), _sched_state(sched_state) {}
 
 template <typename Q>
 WorkGroupSchedEntity<Q>::~WorkGroupSchedEntity() = default;
@@ -51,13 +61,12 @@ int64_t WorkGroupSchedEntity<Q>::cpu_weight() const {
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns.fetch_add(runtime_ns / cpu_weight(), std::memory_order_relaxed);
-    _unadjusted_runtime_ns.fetch_add(runtime_ns, std::memory_order_relaxed);
+    _sched_state->incr_runtime_ns(runtime_ns, cpu_weight());
 }
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns.fetch_add(runtime_ns / cpu_weight(), std::memory_order_relaxed);
+    _sched_state->adjust_runtime_ns(runtime_ns, cpu_weight());
 }
 
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -82,18 +91,18 @@ WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_l
           _concurrency_limit(concurrency),
           _spill_mem_limit_threshold(spill_mem_limit_threshold),
           _mem_pool(std::move(mem_pool)),
-          _driver_sched_entity(this),
-          _scan_sched_entity(this),
-          _connector_scan_sched_entity(this) {}
+          _driver_sched_entity(this, &_driver_sched_state),
+          _scan_sched_entity(this, &_scan_sched_state),
+          _connector_scan_sched_entity(this, &_connector_scan_sched_state) {}
 
 WorkGroup::~WorkGroup() = default;
 
 WorkGroup::WorkGroup(const TWorkGroup& twg)
         : _name(twg.name),
           _id(twg.id),
-          _driver_sched_entity(this),
-          _scan_sched_entity(this),
-          _connector_scan_sched_entity(this) {
+          _driver_sched_entity(this, &_driver_sched_state),
+          _scan_sched_entity(this, &_scan_sched_state),
+          _connector_scan_sched_entity(this, &_connector_scan_sched_state) {
     const int num_cores = CpuInfo::num_cores();
     if (twg.__isset.cpu_weight_percent && twg.cpu_weight_percent > 0) {
         _cpu_weight = std::max<size_t>(1, num_cores * twg.cpu_weight_percent / 100);

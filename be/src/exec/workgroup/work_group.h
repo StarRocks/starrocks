@@ -46,26 +46,12 @@ struct WorkGroupQueryStats {
     int64_t scan_rows_limit = 0;
 };
 
-template <typename Q>
-class WorkGroupSchedEntity {
+class WorkGroupSchedState {
 public:
-    explicit WorkGroupSchedEntity(WorkGroup* workgroup);
-    ~WorkGroupSchedEntity();
-
-    WorkGroup* workgroup() { return _workgroup; }
-    const WorkGroup* workgroup() const { return _workgroup; }
-
-    Q* queue() { return _my_queue.get(); }
-    void set_queue(std::unique_ptr<Q> my_queue);
-
-    Q* in_queue() { return _in_queue; }
-    const Q* in_queue() const { return _in_queue; }
-    void set_in_queue(Q* in_queue) { _in_queue = in_queue; }
-
-    int64_t cpu_weight() const;
-
     int64_t vruntime_ns() const { return _vruntime_ns.load(std::memory_order_acquire); }
-    int64_t runtime_ns() const { return _vruntime_ns.load(std::memory_order_acquire) * cpu_weight(); }
+    int64_t runtime_ns(size_t cpu_weight) const {
+        return _vruntime_ns.load(std::memory_order_acquire) * int64_t(cpu_weight);
+    }
 
     /// Return the growth runtime in the range [last, curr].
     /// For example:
@@ -83,20 +69,61 @@ public:
 
     int64_t unadjusted_runtime_ns() const { return _unadjusted_runtime_ns.load(std::memory_order_acquire); }
 
-    void incr_runtime_ns(int64_t runtime_ns);
-    void adjust_runtime_ns(int64_t runtime_ns);
+    void incr_runtime_ns(int64_t runtime_ns, size_t cpu_weight);
+    void adjust_runtime_ns(int64_t runtime_ns, size_t cpu_weight);
 
 private:
-    WorkGroup* _workgroup; // The workgroup owning this entity.
-
-    std::unique_ptr<Q> _my_queue; // The queue owned by this group.
-    Q* _in_queue = nullptr;       // The queue on which this entity is queued.
-
     std::atomic<int64_t> _vruntime_ns{0};
 
     std::atomic<int64_t> _unadjusted_runtime_ns{0};
     int64_t _curr_unadjusted_runtime_ns = 0;
     int64_t _last_unadjusted_runtime_ns = 0;
+};
+
+template <typename Q>
+class WorkGroupSchedEntity {
+public:
+    WorkGroupSchedEntity(WorkGroup* workgroup, WorkGroupSchedState* sched_state);
+    ~WorkGroupSchedEntity();
+
+    WorkGroup* workgroup() { return _workgroup; }
+    const WorkGroup* workgroup() const { return _workgroup; }
+
+    Q* queue() { return _my_queue.get(); }
+    void set_queue(std::unique_ptr<Q> my_queue);
+
+    Q* in_queue() { return _in_queue; }
+    const Q* in_queue() const { return _in_queue; }
+    void set_in_queue(Q* in_queue) { _in_queue = in_queue; }
+
+    int64_t cpu_weight() const;
+
+    int64_t vruntime_ns() const { return _sched_state->vruntime_ns(); }
+    int64_t runtime_ns() const { return _sched_state->runtime_ns(cpu_weight()); }
+
+    /// Return the growth runtime in the range [last, curr].
+    /// For example:
+    ///     mark_curr_runtime_ns();           // Move curr to latest.
+    ///     auto value = growth_runtime_ns;   // Get growth value in [curr, last] multiple times.
+    ///     auto value = growth_runtime_ns;
+    ///     mark_last_runtime_ns();           // Move last to curr.
+    int64_t growth_runtime_ns() const { return _sched_state->growth_runtime_ns(); }
+    /// Update curr runtime to the latest runtime.
+    void mark_curr_runtime_ns() { _sched_state->mark_curr_runtime_ns(); }
+    /// Update last runtime to the curr runtime.
+    void mark_last_runtime_ns() { _sched_state->mark_last_runtime_ns(); }
+
+    int64_t unadjusted_runtime_ns() const { return _sched_state->unadjusted_runtime_ns(); }
+
+    void incr_runtime_ns(int64_t runtime_ns);
+    void adjust_runtime_ns(int64_t runtime_ns);
+
+private:
+    WorkGroup* _workgroup; // The workgroup owning this entity.
+    WorkGroupSchedState* _sched_state;
+
+    std::unique_ptr<Q> _my_queue; // The queue owned by this group.
+    Q* _in_queue = nullptr;       // The queue on which this entity is queued.
 };
 
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -145,6 +172,10 @@ public:
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
     int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
+
+    const WorkGroupSchedState& driver_sched_state() const { return _driver_sched_state; }
+    const WorkGroupSchedState& scan_sched_state() const { return _scan_sched_state; }
+    const WorkGroupSchedState& connector_scan_sched_state() const { return _connector_scan_sched_state; }
 
     WorkGroupDriverSchedEntity* driver_sched_entity() { return &_driver_sched_entity; }
     const WorkGroupDriverSchedEntity* driver_sched_entity() const { return &_driver_sched_entity; }
@@ -252,6 +283,9 @@ private:
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 
+    WorkGroupSchedState _driver_sched_state;
+    WorkGroupSchedState _scan_sched_state;
+    WorkGroupSchedState _connector_scan_sched_state;
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;
     WorkGroupScanSchedEntity _connector_scan_sched_entity;
