@@ -22,6 +22,7 @@ set(EXEC_FILES
         ./column/object_column_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
+        ./common/util/bthreads/executor_test.cpp
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp

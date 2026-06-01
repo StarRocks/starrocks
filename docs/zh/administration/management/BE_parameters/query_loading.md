@@ -896,6 +896,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：导入用的 tablet writer 线程数, 用于 Stream Load、Broker Load、Insert 等。当参数设置为小于等于 0 时，系统使用 CPU 核数的二分之一，最小为 16。当参数设置为大于 0 时，系统使用该值。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
+### enable_load_fail_fast_when_disk_write_hang
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当 async delta writer 线程池持续饱和（队列写满且没有任务完成）的时间超过 `be_exit_after_disk_write_hang_second`（通常意味着磁盘变慢或挂起）时，是否对导入写入快速失败并返回可重试的错误。设置为 `true` 时，BE 会继续为其他健康磁盘提供服务，并让 FE 重试或重新路由该导入。设置为 `false` 时，BE 保持旧行为，在超时后退出进程。
+- 引入版本：-
+
 ### push_worker_count_high_priority
 
 - 默认值：3

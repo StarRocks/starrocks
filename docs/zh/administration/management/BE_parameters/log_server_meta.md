@@ -162,7 +162,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：秒
 - 是否动态：否
-- 描述：磁盘挂起后触发 BE 进程退出的等待时间。
+- 描述：async delta writer 线程池在 BE 做出反应前允许持续饱和（通常由磁盘变慢或挂起引起）的时长。当 `enable_load_fail_fast_when_disk_write_hang` 为 `true`（默认）时，超过该时长后对导入写入快速失败并返回可重试的错误；当 `enable_load_fail_fast_when_disk_write_hang` 为 `false` 时，超过该时长后 BE 退出进程。
 - 引入版本：-
 
 ### be_http_num_workers

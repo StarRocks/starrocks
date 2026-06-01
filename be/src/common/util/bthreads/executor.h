@@ -61,6 +61,14 @@ public:
 
     int submit(void* (*fn)(void*), void* args) override;
 
+    // Returns true when the underlying thread pool looks stuck on a slow/hung disk:
+    // the task queue is full AND no task has completed for at least
+    // be_exit_after_disk_write_hang_second. Used by the load write path to shed load
+    // (fail fast with a retryable error) instead of buffering until the pool is at
+    // capacity. Always returns false when enable_load_fail_fast_when_disk_write_hang
+    // is disabled.
+    bool is_overloaded() const;
+
 private:
     ThreadPool* _thread_pool;
     Ownership _ownership;

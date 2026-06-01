@@ -894,6 +894,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of tablet writer threads used in ingestion, such as Stream Load, Broker Load and Insert. When the parameter is set to less than or equal to 0, the system uses half of the number of CPU cores, with a minimum of 16. When the parameter is set to greater than 0, the system uses that value. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
+### enable_load_fail_fast_when_disk_write_hang
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to fail load writes fast with a retryable error when the async delta writer thread pool stays saturated (its queue is full and no task completes) for longer than `be_exit_after_disk_write_hang_second`, which usually indicates a slow or hung disk. When set to `true`, the BE keeps serving the other healthy disks and lets the FE retry or reroute the load. When set to `false`, the BE keeps the legacy behavior and exits the process after the timeout.
+- Introduced in: -
+
 ### push_worker_count_high_priority
 
 - Default: 3

@@ -913,6 +913,7 @@
       "path": "be/src/common/config_diagnostic_fwd.h",
       "configs": [
         "be_exit_after_disk_write_hang_second",
+        "enable_load_fail_fast_when_disk_write_hang",
         "jaeger_endpoint",
         "web_log_bytes",
         "sys_log_verbose_level",

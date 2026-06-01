@@ -22,6 +22,7 @@
 
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
+#include "common/util/bthreads/executor.h"
 #include "common/util/stack_trace_mutex.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
@@ -29,6 +30,20 @@
 #include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
+
+namespace {
+// Returns true when the shared async delta writer thread pool is saturated and has made
+// no progress for be_exit_after_disk_write_hang_second (a slow or hung disk). Used to fail
+// load writes fast with a retryable error instead of letting them pile up in the queue.
+bool async_delta_writer_overloaded() {
+    auto* engine = StorageEngine::instance();
+    if (engine == nullptr) {
+        return false;
+    }
+    auto* executor = static_cast<bthreads::ThreadPoolExecutor*>(engine->async_delta_writer_executor());
+    return executor != nullptr && executor->is_overloaded();
+}
+} // namespace
 
 class AsyncDeltaWriterImpl {
     friend class MergeBlockTask;
@@ -297,6 +312,13 @@ inline Status AsyncDeltaWriterImpl::do_open() {
 
 inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size,
                                         Callback cb) {
+    if (async_delta_writer_overloaded()) {
+        LOG_EVERY_N(WARNING, 100) << "Reject write because async delta writer thread pool is overloaded, tablet_id: "
+                                  << _writer->tablet_id();
+        cb(Status::ServiceUnavailable(
+                "async delta writer thread pool is overloaded, the disk may be slow or hung; please retry the load"));
+        return;
+    }
     auto task = std::make_shared<WriteTask>();
     task->chunk = chunk;
     task->indexes = indexes;
@@ -317,6 +339,13 @@ inline void AsyncDeltaWriterImpl::flush(Callback cb) {
 }
 
 inline void AsyncDeltaWriterImpl::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
+    if (async_delta_writer_overloaded()) {
+        LOG_EVERY_N(WARNING, 100) << "Reject finish because async delta writer thread pool is overloaded, tablet_id: "
+                                  << _writer->tablet_id();
+        cb(Status::ServiceUnavailable(
+                "async delta writer thread pool is overloaded, the disk may be slow or hung; please retry the load"));
+        return;
+    }
     auto task = std::make_shared<FinishTask>();
     task->cb = std::move(cb); // Do NOT touch |cb| since here
     task->finish_mode = mode;

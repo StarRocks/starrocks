@@ -147,7 +147,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: 秒
 - 変更可能: いいえ
-- 説明: ディスクがハングした後、BE が終了するまでの待機時間。
+- 説明: async delta writer スレッドプールが（通常はディスクの低速またはハングにより）飽和状態を維持できる、BE が反応するまでの時間。`enable_load_fail_fast_when_disk_write_hang` が `true`（デフォルト）の場合、このタイムアウト後に取り込みの書き込みを再試行可能なエラーで即座に失敗させます。`enable_load_fail_fast_when_disk_write_hang` が `false` の場合、このタイムアウト後に BE はプロセスを終了します。
 - 導入バージョン: -
 
 ### be_http_num_workers
