@@ -272,6 +272,75 @@ public class TransactionGraphTest {
     }
 
     @Test
+    public void testMultiTableTxnPrevWriterAmbiguity() {
+        // Regression: when a multi-table txn's predecessor set contains both
+        // the immediate T-predecessor and a transitive T-ancestor, removing
+        // the tail must restore lastTableWriter[T] to the immediate one.
+        //
+        // Sequence: txn100 writes {T1,T2}; txn101 writes {T1}; txn102 writes {T1,T2}.
+        //   T1 chain: 100 -> 101 -> 102
+        //   T2 chain: 100 -> 102
+        // The (flat, unlabeled) predecessor set of 102 is {100, 101}, both
+        // writing T1. The immediate T1-predecessor of 102 is 101.
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(100, Lists.newArrayList(1L, 2L));
+        graph.add(101, Lists.newArrayList(1L));
+        graph.add(102, Lists.newArrayList(1L, 2L));
+
+        // Only txn100 is a root.
+        List<Long> roots = graph.getTxnsWithoutDependency();
+        Collections.sort(roots);
+        assertEquals(Lists.newArrayList(100L), roots);
+
+        // Remove the T1 tail (102). lastTableWriter[T1] must retreat to 101,
+        // not to 100 (the transitive T1-ancestor).
+        graph.remove(102);
+
+        // Add 103 writing T1. It must depend on 101 (still in graph), hence
+        // NOT appear as a root. If lastTableWriter[T1] was wrongly restored
+        // to 100, then 103 would pick 100 as its predecessor while 101 stays
+        // orphaned of the chain tail -- leading to incorrect publish order.
+        graph.add(103, Lists.newArrayList(1L));
+        roots = graph.getTxnsWithoutDependency();
+        Collections.sort(roots);
+        assertEquals(Lists.newArrayList(100L), roots);
+    }
+
+    @Test
+    public void testRemoveMiddleMultiTableNoCrossTableEdge() {
+        // Regression: removing a multi-table middle node must splice each
+        // table chain independently and must NOT create cross-table edges
+        // (e.g. linking a T1-only predecessor to a T2-only successor).
+        //
+        // Sequence: txn1 writes {T1}; txn2 writes {T2}; txn3 writes {T1,T2};
+        //           txn4 writes {T1}; txn5 writes {T2}.
+        //   T1 chain: 1 -> 3 -> 4
+        //   T2 chain: 2 -> 3 -> 5
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(2L));
+        graph.add(3, Lists.newArrayList(1L, 2L));
+        graph.add(4, Lists.newArrayList(1L));
+        graph.add(5, Lists.newArrayList(2L));
+
+        // Roots before removing 3: {1, 2}.
+        List<Long> roots = graph.getTxnsWithoutDependency();
+        Collections.sort(roots);
+        assertEquals(Lists.newArrayList(1L, 2L), roots);
+
+        // Remove the multi-table middle node. After splice the chains become
+        // T1: 1 -> 4 and T2: 2 -> 5, with no cross-table edges.
+        graph.remove(3);
+
+        // Drain: {1, 2} together, then {4, 5} together. If cross-table edges
+        // had been created (1->5 or 2->4) then 4 and 5 would not become
+        // roots at the same step.
+        expectNextBatch(graph, Lists.newArrayList(1L, 2L));
+        expectNextBatch(graph, Lists.newArrayList(4L, 5L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
     public void testPrintGraph() {
         TransactionGraph graph = new TransactionGraph();
         graph.add(1, Lists.newArrayList(1L));
