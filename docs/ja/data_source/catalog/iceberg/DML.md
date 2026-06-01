@@ -237,7 +237,7 @@ WHERE <condition>
 
 ### 使用上の注意
 
-- **format-version 2** の Iceberg テーブルのみサポートされます。V1 テーブルへの UPDATE は解析時に拒否されます。
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1 と V3 テーブルへの UPDATE は解析時に拒否されます。
 - フルテーブル更新を防ぐため、`WHERE` 句は **必須** です。
 - パーティション列は更新できません。 パーティション割り当てを変更する必要がある場合は、`INSERT OVERWRITE` を使用してください。
 - 隠しメタデータ列 `_file` および `_pos` は `SET` で代入できません。
