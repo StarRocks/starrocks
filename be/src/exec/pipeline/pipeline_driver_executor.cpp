@@ -548,4 +548,12 @@ void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
     _exec_state_reporter->bind_cpus(cpuids);
 }
 
+Status GlobalDriverExecutor::update_exec_state_report_max_threads(int max_threads) {
+    return _exec_state_reporter->update_max_threads(max_threads);
+}
+
+Status GlobalDriverExecutor::update_priority_exec_state_report_max_threads(int max_threads) {
+    return _exec_state_reporter->update_priority_max_threads(max_threads);
+}
+
 } // namespace starrocks::pipeline

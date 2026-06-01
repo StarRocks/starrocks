@@ -56,7 +56,6 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
-using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
