@@ -29,6 +29,7 @@
 
 #include "base/types/int128.h"
 #include "common/status.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/workgroup/mem_tracker_manager.h"
 #include "exec/workgroup/pipeline_executor_set_manager.h"
 #include "exec/workgroup/work_group.h"
@@ -46,7 +47,10 @@ using WorkGroupMetricsPtr = std::shared_ptr<WorkGroupMetrics>;
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
 public:
-    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics = nullptr);
+    using DriverQueueFactory = std::function<pipeline::DriverQueuePtr(pipeline::DriverQueueMetrics*)>;
+
+    WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics,
+                     DriverQueueFactory driver_queue_factory);
 
     ~WorkGroupManager();
 
@@ -100,7 +104,9 @@ private:
 
 private:
     mutable std::shared_mutex _mutex;
-    // Place it before _workgroups to ensure the shared executors is destructed after all the dedicated executors for
+    pipeline::DriverQueueMetrics* _driver_queue_metrics = nullptr;
+    DriverQueueFactory _driver_queue_factory;
+    // Keep it before _workgroups to ensure the shared executors is destructed after all the dedicated executors for
     // workgroups, since _executors_manager owns the shared executors, and WorkGroup owns the dedicated executors.
     ExecutorsManager _executors_manager;
 

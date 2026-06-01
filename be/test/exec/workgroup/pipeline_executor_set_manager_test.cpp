@@ -19,6 +19,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
@@ -61,7 +62,7 @@ TEST(ExecutorsManagerTest, for_each_executors_visits_only_shared_when_no_exclusi
     // With null metrics and empty CPUIDs, no exclusive executor can be created,
     // so for_each_executors should visit exactly the one shared executor set.
     PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr);
-    auto manager = std::make_unique<WorkGroupManager>(config);
+    auto manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue);
 
     int visit_count = 0;
     manager->for_each_executors([&visit_count](PipelineExecutorSet&) { ++visit_count; });
@@ -75,7 +76,7 @@ TEST(ExecutorsManagerTest, for_each_executors_still_one_when_shared_workgroups_e
     // Workgroups that cannot obtain exclusive CPUs (empty total_cpuids) use the
     // shared executor set, so the visit count stays 1.
     PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr);
-    auto manager = std::make_unique<WorkGroupManager>(config);
+    auto manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue);
 
     // Add two workgroups that would request exclusive cores but cannot get them.
     TWorkGroup twg1 = make_exclusive_twg(10, 4);
@@ -121,7 +122,7 @@ protected:
         // which avoids requiring actual core-binding privileges in CI.
         _config = std::make_unique<PipelineExecutorSetConfig>(kTotalCores, 2, 2, kInitConnScanThreads, cpuids, false,
                                                               false, _metrics.get());
-        _manager = std::make_unique<WorkGroupManager>(*_config);
+        _manager = std::make_unique<WorkGroupManager>(*_config, nullptr, pipeline::create_query_shared_driver_queue);
         ASSERT_OK(_manager->start());
     }
 
