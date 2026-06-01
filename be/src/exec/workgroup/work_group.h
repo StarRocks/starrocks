@@ -27,6 +27,7 @@
 #include "base/types/int128.h"
 #include "common/statusor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/WorkGroup_types.h"
 #include "runtime/mem_tracker.h"
@@ -47,6 +48,7 @@ public:
     ~WorkGroupSchedEntity();
 
     WorkGroup* workgroup() { return _workgroup; }
+    const WorkGroup* workgroup() const { return _workgroup; }
 
     Q* queue() { return _my_queue.get(); }
     void set_queue(std::unique_ptr<Q> my_queue);
@@ -115,7 +117,7 @@ public:
     explicit WorkGroup(const TWorkGroup& twg);
     ~WorkGroup();
 
-    void init(std::shared_ptr<MemTracker>& parent_mem_tracker);
+    void init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::DriverQueuePtr driver_queue);
 
     TWorkGroup to_thrift() const;
     std::string to_string() const;

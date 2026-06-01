@@ -20,11 +20,10 @@
 #include <utility>
 
 #include "common/system/cpu_info.h"
-#include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/pipeline_executor_set.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/scan_task_queue_factory.h"
 #include "glog/logging.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
@@ -169,7 +168,9 @@ TWorkGroup WorkGroup::to_thrift() const {
     return twg;
 }
 
-void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
+void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::DriverQueuePtr driver_queue) {
+    DCHECK(driver_queue != nullptr);
+
     if (parent_mem_tracker->type() == MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL) {
         _memory_limit_bytes = parent_mem_tracker->limit();
         _shared_mem_tracker = parent_mem_tracker;
@@ -185,8 +186,7 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
                                                 parent_mem_tracker.get());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
 
-    _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>(
-            pipeline::PipelineExecutorMetrics::instance()->get_driver_queue_metrics()));
+    _driver_sched_entity.set_queue(std::move(driver_queue));
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 

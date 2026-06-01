@@ -12,48 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group_scan_task_queue.h"
 
-#include "common/config_exec_flow_fwd.h"
+#include <algorithm>
+#include <chrono>
+#include <utility>
+
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "exec/workgroup/work_group_manager.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
-/// PriorityScanTaskQueue.
-PriorityScanTaskQueue::PriorityScanTaskQueue(size_t max_elements) : _queue(max_elements) {}
-
-StatusOr<ScanTask> PriorityScanTaskQueue::take() {
-    ScanTask task;
-    if (_queue.blocking_get(&task)) {
-        return task;
-    }
-
-    return Status::Cancelled("Shutdown");
-}
-
-bool PriorityScanTaskQueue::try_take(ScanTask* task) {
-    return _queue.non_blocking_get(task);
-}
-
-bool PriorityScanTaskQueue::try_offer(ScanTask task) {
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
-    }
-    return _queue.try_put(std::move(task));
-}
-
-void PriorityScanTaskQueue::force_put(ScanTask task) {
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
-    }
-    _queue.force_put(std::move(task));
-}
-
-/// WorkGroupScanTaskQueue.
 bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
         const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const {
     int64_t lhs_val = lhs_ptr->vruntime_ns();
@@ -175,13 +147,14 @@ void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_n
     }
 }
 
-bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const {
-    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg)) {
+bool WorkGroupScanTaskQueue::should_yield(const WorkGroupScanSchedEntity* wg_entity,
+                                          int64_t unaccounted_runtime_ns) const {
+    DCHECK(wg_entity != nullptr);
+    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
         return true;
     }
 
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
-    const auto* wg_entity = _sched_entity(wg);
     const auto* min_entity = _min_wg_entity.load();
     return min_entity != wg_entity && min_entity &&
            min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_weight();
@@ -245,10 +218,6 @@ const WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(const Work
     } else {
         return wg->scan_sched_entity();
     }
-}
-
-std::unique_ptr<ScanTaskQueue> create_scan_task_queue() {
-    return std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
 }
 
 } // namespace starrocks::workgroup

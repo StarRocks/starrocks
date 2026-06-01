@@ -19,9 +19,11 @@
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/workgroup/pipeline_executor_set.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

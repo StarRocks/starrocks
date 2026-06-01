@@ -64,8 +64,6 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
-        ./exec/pipeline/pipeline_metrics_test.cpp
-        ./exec/pipeline/multi_level_concurrent_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
@@ -289,6 +287,7 @@ set(EXEC_FILES
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
         ./runtime/batch_write/txn_state_cache_test.cpp
+        ./runtime/stream_load/stream_load_context_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
@@ -388,6 +387,14 @@ if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif ()
 
+# Tests that link against ServiceBE / Cache. Append before add_library so the
+# object library actually picks them up (CMake evaluates EXEC_FILES by value
+# at add_library call time).
+if ("${WITH_STARCACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
+    list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
+endif ()
+
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 if (NOT STARROCKS_JIT_ENABLE)
@@ -437,6 +444,7 @@ SET(DW_TEST_FILES
     ./storage/get_use_pk_index_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
+    ./storage/index/vector/vector_index_cache_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
@@ -582,11 +590,6 @@ SET(DW_TEST_FILES
     ./storage/lake/table_schema_service_test.cpp
     ./storage/lake/fast_schema_evolution_v2_test.cpp
 )
-
-if ("${WITH_STARCACHE}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
-    list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
-endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND DW_TEST_FILES ./fs/fs_starlet_test.cpp)

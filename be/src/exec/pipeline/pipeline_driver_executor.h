@@ -24,9 +24,8 @@
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
-#include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -35,6 +34,7 @@ namespace starrocks::pipeline {
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 
+struct DriverExecutorMetrics;
 class PipelineExecutorMetrics;
 
 class DriverExecutor {

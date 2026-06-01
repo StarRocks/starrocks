@@ -87,6 +87,7 @@ class GlobalSpillManager;
 
 class HeartbeatFlags;
 class DiagnoseDaemon;
+class VectorIndexCache;
 
 namespace pipeline {
 class DriverExecutor;
@@ -121,6 +122,12 @@ public:
                 GlobalEnv* global_env, bool as_cn = false);
     void stop();
     void destroy();
+    // Tears down the SR-owned VectorIndexCache. Kept out of destroy() so the
+    // call site can be placed before GlobalEnv::stop() — the entry deleters
+    // need vector_index_mem_tracker alive to account for the release.
+    // ~VectorIndexCache itself handles the IVF-PQ self-cascade safely; see
+    // the destructor for the FUTEX_WAIT_PRIVATE deadlock the cascade triggers.
+    void destroy_vector_index_cache();
     void wait_for_finish();
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -216,6 +223,8 @@ public:
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
+    VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
+
 private:
     void _refresh_service_contexts();
     void _wait_for_fragments_finish();
@@ -275,6 +284,12 @@ private:
     AgentServices _agent_services;
     QueryExecutionServices _query_execution_services;
     AdminServices _admin_services;
+
+    // SR-owned LRU behind tenann::IndexCache. Must be destructed before the
+    // mem tracker hierarchy (see ExecEnv::destroy()). Only constructed when
+    // WITH_TENANN is on; the type is always declared so callers don't need
+    // their own WITH_TENANN guards to hold a pointer.
+    std::unique_ptr<VectorIndexCache> _vector_index_cache;
 };
 
 } // namespace starrocks

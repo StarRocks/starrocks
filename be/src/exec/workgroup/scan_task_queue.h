@@ -14,115 +14,14 @@
 
 #pragma once
 
-#include <any>
-#include <atomic>
-#include <condition_variable>
-#include <mutex>
-#include <queue>
-#include <set>
-#include <unordered_set>
-#include <utility>
+#include <cstddef>
+#include <cstdint>
 
-#include "base/concurrency/race_detect.h"
-#include "base/utility/defer_op.h"
-#include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "common/thread/blocking_priority_queue.hpp"
+#include "exec/workgroup/scan_task.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "gen_cpp/InternalService_types.h"
 
 namespace starrocks::workgroup {
-
-struct ScanTaskGroup {
-    int64_t runtime_ns = 0;
-    int sub_queue_level = 0;
-};
-
-#define TO_NEXT_STAGE(yield_point) yield_point++;
-
-struct YieldContext {
-    YieldContext() = default;
-    YieldContext(size_t total_yield_point_cnt) : total_yield_point_cnt(total_yield_point_cnt) {}
-
-    ~YieldContext() = default;
-
-    DISALLOW_COPY(YieldContext);
-    YieldContext(YieldContext&&) = default;
-    YieldContext& operator=(YieldContext&&) = default;
-
-    bool is_finished() const { return yield_point >= total_yield_point_cnt; }
-    void set_finished() {
-        yield_point = total_yield_point_cnt = 0;
-        task_context_data.reset();
-    }
-    auto defer_finished() {
-        return CancelableDefer([this]() { set_finished(); });
-    }
-
-    std::any task_context_data;
-    size_t yield_point{};
-    size_t total_yield_point_cnt{};
-    const WorkGroup* wg = nullptr;
-    // used to record the runtime information of a single call in order to decide whether to trigger yield.
-    // It needs to be reset every time when the task is executed.
-    int64_t time_spent_ns = 0;
-    bool need_yield = false;
-};
-
-struct ScanTask {
-public:
-    using WorkFunction = std::function<void(YieldContext&)>;
-    using YieldFunction = std::function<void(ScanTask&&)>;
-
-    ScanTask() : ScanTask(nullptr, nullptr) {}
-    explicit ScanTask(WorkFunction work_function) : ScanTask(nullptr, std::move(work_function)) {}
-    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
-            : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
-    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function, YieldFunction yield_function)
-            : workgroup(std::move(workgroup)),
-              work_function(std::move(work_function)),
-              yield_function(std::move(yield_function)) {}
-    ~ScanTask() = default;
-
-    DISALLOW_COPY(ScanTask);
-    // Enable move constructor and assignment.
-    ScanTask(ScanTask&&) = default;
-    ScanTask& operator=(ScanTask&&) = default;
-
-    bool operator<(const ScanTask& rhs) const { return priority < rhs.priority; }
-    ScanTask& operator++() {
-        priority += 2;
-        return *this;
-    }
-
-    void run() { work_function(work_context); }
-
-    bool is_finished() const { return work_context.is_finished(); }
-
-    bool has_yield_function() const { return yield_function != nullptr; }
-
-    void execute_yield_function() {
-        DCHECK(yield_function != nullptr) << "yield function must be set";
-        yield_function(std::move(*this));
-    }
-
-    const YieldContext& get_work_context() const { return work_context; }
-
-    void set_query_type(TQueryType::type type) { _query_type = type; }
-    TQueryType::type query_type() const { return _query_type; }
-
-public:
-    WorkGroupPtr workgroup;
-    YieldContext work_context;
-    WorkFunction work_function;
-    YieldFunction yield_function;
-    int priority = 0;
-    std::shared_ptr<ScanTaskGroup> task_group = nullptr;
-    RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
-
-private:
-    TQueryType::type _query_type = TQueryType::EXTERNAL;
-};
 
 /// There are two types of ScanTaskQueue:
 /// - WorkGroupScanTaskQueue, which is a two-level queue.
@@ -145,89 +44,8 @@ public:
     bool empty() const { return size() == 0; }
 
     virtual void update_statistics(ScanTask& task, int64_t runtime_ns) = 0;
-    virtual bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const = 0;
+    virtual bool should_yield(const WorkGroupScanSchedEntity* scan_sched_entity,
+                              int64_t unaccounted_runtime_ns) const = 0;
 };
-
-class PriorityScanTaskQueue final : public ScanTaskQueue {
-public:
-    explicit PriorityScanTaskQueue(size_t max_elements);
-    ~PriorityScanTaskQueue() override = default;
-
-    void close() override { _queue.shutdown(); }
-
-    StatusOr<ScanTask> take() override;
-    bool try_take(ScanTask* task);
-    bool try_offer(ScanTask task) override;
-    void force_put(ScanTask task) override;
-
-    size_t size() const override { return _queue.get_size(); }
-
-    void update_statistics(ScanTask& task, int64_t runtime_ns) override {}
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override { return false; }
-
-private:
-    BlockingPriorityQueue<ScanTask> _queue;
-};
-
-class WorkGroupScanTaskQueue final : public ScanTaskQueue {
-public:
-    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
-    ~WorkGroupScanTaskQueue() override = default;
-
-    void close() override;
-
-    StatusOr<ScanTask> take() override;
-    bool try_offer(ScanTask task) override;
-    void force_put(ScanTask task) override;
-
-    size_t size() const override { return _num_tasks.load(std::memory_order_acquire); }
-
-    void update_statistics(ScanTask& task, int64_t runtime_ns) override;
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
-
-private:
-    /// These methods should be guarded by the outside _global_mutex.
-    WorkGroupScanSchedEntity* _pick_next_wg() const;
-    // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
-    void _update_min_wg();
-    void _enqueue_workgroup(WorkGroupScanSchedEntity* wg_entity);
-    void _dequeue_workgroup(WorkGroupScanSchedEntity* wg_entity);
-
-    // The ideal runtime of a work group is the weighted average of the schedule period.
-    int64_t _ideal_runtime_ns(WorkGroupScanSchedEntity* wg_entity) const;
-
-    WorkGroupScanSchedEntity* _sched_entity(WorkGroup* wg);
-    const WorkGroupScanSchedEntity* _sched_entity(const WorkGroup* wg) const;
-
-private:
-    static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
-
-    struct WorkGroupScanSchedEntityComparator {
-        using WorkGroupScanSchedEntityPtr = WorkGroupScanSchedEntity*;
-        bool operator()(const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const;
-    };
-    using WorkgroupSet = std::set<WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
-
-    const ScanSchedEntityType _sched_entity_type;
-
-    mutable std::mutex _global_mutex;
-    std::condition_variable _cv;
-    std::condition_variable _cv_for_borrowed_cpus;
-    bool _is_closed = false;
-
-    // Contains the workgroups which include the tasks ready to be run.
-    // Entities are sorted by vruntime in set.
-    // MUST guarantee the entity is not in set, when updating its vruntime.
-    WorkgroupSet _wg_entities;
-
-    size_t _sum_cpu_weight = 0;
-
-    // Cache the minimum entity, used to check should_yield() without lock.
-    std::atomic<WorkGroupScanSchedEntity*> _min_wg_entity = nullptr;
-
-    std::atomic<size_t> _num_tasks = 0;
-};
-
-std::unique_ptr<ScanTaskQueue> create_scan_task_queue();
 
 } // namespace starrocks::workgroup

@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <memory>
 #include <numeric>
+#include <random>
 
 #include "base/bit/bit_util.h"
 #include "block_manager.h"
@@ -29,11 +30,13 @@
 #include "exec/aggregator.h"
 #include "exec/spill/common.h"
 #include "exec/spill/data_stream.h"
-#include "exec/spill/executor.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/spill/task_executor.h"
+#include "exec/spill/yield.h"
+#include "exec/workgroup/scan_task.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/current_thread.h"

@@ -35,7 +35,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/disk_info.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

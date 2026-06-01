@@ -19,10 +19,11 @@
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group_scan_task_queue.h"
 
 namespace starrocks::workgroup {
 

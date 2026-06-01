@@ -28,6 +28,7 @@ set(EXEC_PRIMITIVE_FILES
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
     pipeline/operator.cpp
+    pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
@@ -176,7 +177,7 @@ set(PIPELINE_GRAPH_SRCS
 )
 
 set(PIPELINE_RUNTIME_SRCS
-    pipeline/pipeline_metrics.cpp
+    pipeline/driver_queue_factory.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -324,12 +325,15 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
     spill/spill_components.cpp
-    spill/executor.cpp
+    spill/runtime_context.cpp
+    spill/task_executor.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
     spill/mem_table.cpp
     spill/serde.cpp
+    spill/block_group.cpp
     spill/input_stream.cpp
+    spill/restore_task.cpp
     spill/data_stream.cpp
 )
 
@@ -482,7 +486,9 @@ set(EXEC_NON_PIPELINE_FILES
     workgroup/work_group_manager.cpp
     workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
-    workgroup/scan_task_queue.cpp
+    workgroup/scan_task_queue_factory.cpp
+    workgroup/priority_scan_task_queue.cpp
+    workgroup/work_group_scan_task_queue.cpp
     workgroup/lock_free_scan_task_queue.cpp
     workgroup/lock_free_work_group_scan_task_queue.cpp
 )
