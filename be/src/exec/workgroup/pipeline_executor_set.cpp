@@ -17,13 +17,13 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_scan_task_queue.h"
+#include "glog/logging.h"
 
 namespace starrocks::workgroup {
 
@@ -87,23 +87,14 @@ std::string PipelineExecutorSet::to_string() const {
             _conf.to_string());
 }
 
-Status PipelineExecutorSet::start() {
+Status PipelineExecutorSet::start(std::unique_ptr<pipeline::DriverExecutor> driver_executor) {
     if (_stage >= Stage::STARTED) {
         return Status::OK();
     }
+    DCHECK(driver_executor != nullptr);
     _stage = Stage::STARTED;
 
-    std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_exec_" + _name)
-                            .set_min_threads(0)
-                            .set_max_threads(num_driver_threads())
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .set_cpuids(_cpuids)
-                            .set_borrowed_cpuids(_borrowed_cpu_ids)
-                            .build(&driver_executor_thread_pool));
-    _driver_executor = std::make_unique<pipeline::GlobalDriverExecutor>(_name, std::move(driver_executor_thread_pool),
-                                                                        true, _cpuids, _conf.metrics);
+    _driver_executor = std::move(driver_executor);
     _driver_executor->initialize(num_driver_threads());
 
     std::unique_ptr<ThreadPool> scan_thread_pool;
@@ -197,17 +188,15 @@ void PipelineExecutorSet::notify_config_changed() const {
 }
 
 Status PipelineExecutorSet::update_exec_state_report_max_threads(int max_threads) const {
-    auto* executor = dynamic_cast<pipeline::GlobalDriverExecutor*>(_driver_executor.get());
-    if (executor != nullptr && executor->exec_state_reporter() != nullptr) {
-        return executor->exec_state_reporter()->update_max_threads(max_threads);
+    if (_driver_executor != nullptr) {
+        return _driver_executor->update_exec_state_report_max_threads(max_threads);
     }
     return Status::OK();
 }
 
 Status PipelineExecutorSet::update_priority_exec_state_report_max_threads(int max_threads) const {
-    auto* executor = dynamic_cast<pipeline::GlobalDriverExecutor*>(_driver_executor.get());
-    if (executor != nullptr && executor->exec_state_reporter() != nullptr) {
-        return executor->exec_state_reporter()->update_priority_max_threads(max_threads);
+    if (_driver_executor != nullptr) {
+        return _driver_executor->update_priority_exec_state_report_max_threads(max_threads);
     }
     return Status::OK();
 }

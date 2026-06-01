@@ -22,7 +22,9 @@
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_manager.h"
@@ -32,6 +34,7 @@
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
+#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 

@@ -14,10 +14,38 @@
 
 #include "exec/workgroup/pipeline_executor_set_manager.h"
 
+#include "common/statusor.h"
 #include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 
 namespace starrocks::workgroup {
+
+namespace {
+
+StatusOr<std::unique_ptr<pipeline::DriverExecutor>> create_driver_executor(
+        const PipelineExecutorSetConfig& conf, const std::string& name, const CpuUtil::CpuIds& cpuids,
+        const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads) {
+    std::unique_ptr<ThreadPool> thread_pool;
+    const Status status = ThreadPoolBuilder("pip_exec_" + name)
+                                  .set_min_threads(0)
+                                  .set_max_threads(num_driver_threads)
+                                  .set_max_queue_size(1000)
+                                  .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                                  .set_cpuids(cpuids)
+                                  .set_borrowed_cpuids(borrowed_cpuids)
+                                  .build(&thread_pool);
+    if (!status.ok()) {
+        return status;
+    }
+
+    std::unique_ptr<pipeline::DriverExecutor> driver_executor =
+            std::make_unique<pipeline::GlobalDriverExecutor>(name, std::move(thread_pool), true, cpuids, conf.metrics);
+    return driver_executor;
+}
+
+} // namespace
 
 ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf)
         : _conf(std::move(conf)),
@@ -30,7 +58,12 @@ ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf)
 }
 
 Status ExecutorsManager::start_shared_executors_unlocked() const {
-    return _shared_executors->start();
+    auto driver_executor = create_driver_executor(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{},
+                                                  _shared_executors->num_driver_threads());
+    if (!driver_executor.ok()) {
+        return driver_executor.status();
+    }
+    return _shared_executors->start(std::move(driver_executor).value());
 }
 
 void ExecutorsManager::update_shared_executors() const {
@@ -114,9 +147,21 @@ std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_ex
         return nullptr;
     }
 
-    auto executors = std::make_unique<PipelineExecutorSet>(_conf, std::to_string(wg->id()), cpuids,
-                                                           std::vector<CpuUtil::CpuIds>{});
-    if (const Status status = executors->start(); !status.ok()) {
+    const std::string name = std::to_string(wg->id());
+    auto executors = std::make_unique<PipelineExecutorSet>(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{});
+    auto driver_executor = create_driver_executor(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{},
+                                                  executors->num_driver_threads());
+    if (!driver_executor.ok()) {
+        LOG(WARNING) << "[WORKGROUP] failed to create driver executor for workgroup "
+                     << "[workgroup=" << wg->to_string() << "] "
+                     << "[conf=" << _conf.to_string() << "] "
+                     << "[cpuids=" << CpuUtil::to_string(cpuids) << "] "
+                     << "[status=" << driver_executor.status() << "]";
+        LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
+                  << "[workgroup=" << wg->to_string() << "] ";
+        return nullptr;
+    }
+    if (const Status status = executors->start(std::move(driver_executor).value()); !status.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to start executors for workgroup "
                      << "[workgroup=" << wg->to_string() << "] "
                      << "[conf=" << _conf.to_string() << "] "
