@@ -1,0 +1,326 @@
+-- name: test_ivm_dup_projection @cloud
+CREATE TABLE base_dup_a1 (
+    k INT, v INT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_dup_a1 VALUES (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dup_a1
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM base_dup_a1 WHERE v > 15;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dup_a1 WITH SYNC MODE;
+SELECT k, v FROM mv_dup_a1 ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+INSERT INTO base_dup_a1 VALUES (4, 40), (5, 50);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dup_a1 WITH SYNC MODE;
+SELECT k, v FROM mv_dup_a1 ORDER BY k;
+-- result:
+2	20
+3	30
+4	40
+5	50
+-- !result
+INSERT INTO base_dup_a1 VALUES (6, 5), (7, 12);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dup_a1 WITH SYNC MODE;
+SELECT k, v FROM mv_dup_a1 ORDER BY k;
+-- result:
+2	20
+3	30
+4	40
+5	50
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_dup_a1;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS base_rows FROM base_dup_a1 WHERE v > 15;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_dup_a1 EXCEPT SELECT k, v FROM base_dup_a1 WHERE v > 15) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM base_dup_a1 WHERE v > 15 EXCEPT SELECT k, v FROM mv_dup_a1) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_dup_a1%' OR DEFINITION LIKE '%mv_dup_a1%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_dup_aggregate @cloud
+CREATE TABLE base_dup_a2 (
+    order_id BIGINT, region VARCHAR(8),
+    amount DECIMAL(10,2), score BIGINT, nullable_score INT,
+    flag BOOLEAN, uid INT
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_dup_a2 VALUES
+    (1001,'CN',99.90,10,5,FALSE,1),
+    (1002,'US',20.50,20,NULL,FALSE,10),
+    (1003,'CN',15.50,30,NULL,TRUE,1),
+    (1004,'US',75.00,40,8,FALSE,10);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dup_a2
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region,
+       SUM(amount) AS s,
+       COUNT(*) AS c_all,
+       COUNT(nullable_score) AS c_non_null,
+       AVG(amount) AS avg_dec,
+       AVG(score) AS avg_int,
+       MIN(amount) AS mn_dec,
+       MAX(amount) AS mx_dec,
+       MIN(region) AS mn_str,
+       MAX(region) AS mx_str,
+       APPROX_COUNT_DISTINCT(uid) AS acd,
+       NDV(uid) AS ndv_uid,
+       BOOL_OR(flag) AS any_flag
+FROM base_dup_a2 GROUP BY region;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dup_a2 WITH SYNC MODE;
+SELECT region, s, c_all, c_non_null, avg_dec, avg_int, mn_dec, mx_dec, mn_str, mx_str, acd, ndv_uid, any_flag FROM mv_dup_a2 ORDER BY region;
+-- result:
+CN	115.40	2	1	57.70000000	20.0	15.50	99.90	CN	CN	1	1	1
+US	95.50	2	1	47.75000000	30.0	20.50	75.00	US	US	1	1	0
+-- !result
+INSERT INTO base_dup_a2 VALUES
+    (1005,'JP',100.00,50,12,FALSE,99),
+    (1006,'CN',25.00,60,NULL,FALSE,2);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dup_a2 WITH SYNC MODE;
+SELECT region, s, c_all, c_non_null, avg_dec, avg_int, mn_dec, mx_dec, mn_str, mx_str, acd, ndv_uid, any_flag FROM mv_dup_a2 ORDER BY region;
+-- result:
+CN	140.40	3	1	46.80000000	33.333333333333336	15.50	99.90	CN	CN	2	2	1
+JP	100.00	1	1	100.00000000	50.0	100.00	100.00	JP	JP	1	1	0
+US	95.50	2	1	47.75000000	30.0	20.50	75.00	US	US	1	1	0
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_dup_a2;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT region FROM base_dup_a2 GROUP BY region
+) t;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, s, c_all, c_non_null, avg_dec, avg_int, mn_dec, mx_dec, mn_str, mx_str, acd, ndv_uid, any_flag FROM mv_dup_a2
+    EXCEPT
+    SELECT region, SUM(amount), COUNT(*), COUNT(nullable_score), AVG(amount), AVG(score),
+           MIN(amount), MAX(amount), MIN(region), MAX(region),
+           APPROX_COUNT_DISTINCT(uid), NDV(uid), BOOL_OR(flag)
+    FROM base_dup_a2 GROUP BY region
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, SUM(amount), COUNT(*), COUNT(nullable_score), AVG(amount), AVG(score),
+           MIN(amount), MAX(amount), MIN(region), MAX(region),
+           APPROX_COUNT_DISTINCT(uid), NDV(uid), BOOL_OR(flag)
+    FROM base_dup_a2 GROUP BY region
+    EXCEPT
+    SELECT region, s, c_all, c_non_null, avg_dec, avg_int, mn_dec, mx_dec, mn_str, mx_str, acd, ndv_uid, any_flag FROM mv_dup_a2
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_dup_a2%' OR DEFINITION LIKE '%mv_dup_a2%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_dup_multi_group @cloud
+CREATE TABLE base_mg (
+    region VARCHAR(8), category VARCHAR(8), amount DECIMAL(10,2)
+) DUPLICATE KEY(region) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_mg VALUES
+    ('CN','A',10.00),('CN','B',20.00),('US','A',30.00),('CN','A',5.00);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mg
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, category, SUM(amount) AS s, COUNT(*) AS c
+   FROM base_mg GROUP BY region, category;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mg WITH SYNC MODE;
+SELECT region, category, s, c FROM mv_mg ORDER BY region, category;
+-- result:
+CN	A	15.00	2
+CN	B	20.00	1
+US	A	30.00	1
+-- !result
+INSERT INTO base_mg VALUES ('JP','A',100.00),('CN','B',8.00),('US','C',1.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mg WITH SYNC MODE;
+SELECT region, category, s, c FROM mv_mg ORDER BY region, category;
+-- result:
+CN	A	15.00	2
+CN	B	28.00	2
+JP	A	100.00	1
+US	A	30.00	1
+US	C	1.00	1
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_mg;
+-- result:
+5
+-- !result
+SELECT COUNT(*) AS base_rows FROM (SELECT region, category FROM base_mg GROUP BY region, category) t;
+-- result:
+5
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, category, s, c FROM mv_mg
+    EXCEPT
+    SELECT region, category, SUM(amount), COUNT(*) FROM base_mg GROUP BY region, category
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, category, SUM(amount), COUNT(*) FROM base_mg GROUP BY region, category
+    EXCEPT
+    SELECT region, category, s, c FROM mv_mg
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_mg%' OR DEFINITION LIKE '%mv_mg%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_dup_inner_join @cloud
+CREATE TABLE orders_a3 (
+    order_id BIGINT, uid BIGINT, amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE users_a3 (
+    user_id BIGINT, country VARCHAR(8)
+) DUPLICATE KEY(user_id) DISTRIBUTED BY HASH(user_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO users_a3 VALUES (1,'CN'),(2,'US');
+-- result:
+-- !result
+INSERT INTO orders_a3 VALUES (1001,1,99.90),(1002,2,20.50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_a3
+DISTRIBUTED BY HASH(order_id) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT o.order_id, u.country, o.amount
+   FROM orders_a3 o JOIN users_a3 u ON o.uid = u.user_id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_a3 WITH SYNC MODE;
+SELECT order_id, country, amount FROM mv_a3 ORDER BY order_id;
+-- result:
+1001	CN	99.90
+1002	US	20.50
+-- !result
+INSERT INTO orders_a3 VALUES (1003,1,15.50);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_a3 WITH SYNC MODE;
+SELECT order_id, country, amount FROM mv_a3 ORDER BY order_id;
+-- result:
+1001	CN	99.90
+1002	US	20.50
+1003	CN	15.50
+-- !result
+INSERT INTO users_a3 VALUES (3,'JP');
+-- result:
+-- !result
+INSERT INTO orders_a3 VALUES (1004,3,200.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_a3 WITH SYNC MODE;
+SELECT order_id, country, amount FROM mv_a3 ORDER BY order_id;
+-- result:
+1001	CN	99.90
+1002	US	20.50
+1003	CN	15.50
+1004	JP	200.00
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_a3;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT o.order_id FROM orders_a3 o JOIN users_a3 u ON o.uid = u.user_id
+) t;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT order_id, country, amount FROM mv_a3
+    EXCEPT
+    SELECT o.order_id, u.country, o.amount
+    FROM orders_a3 o JOIN users_a3 u ON o.uid = u.user_id
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT o.order_id, u.country, o.amount
+    FROM orders_a3 o JOIN users_a3 u ON o.uid = u.user_id
+    EXCEPT
+    SELECT order_id, country, amount FROM mv_a3
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_a3%' OR DEFINITION LIKE '%mv_a3%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result

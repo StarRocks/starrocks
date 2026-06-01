@@ -1,0 +1,21 @@
+-- name: test_ivm_dup_having_reject @cloud
+CREATE TABLE base_having (
+    order_id BIGINT, region VARCHAR(8), amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_having VALUES (1001,'CN',99.90),(1002,'US',20.50),(1003,'CN',15.50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_having
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, SUM(amount) AS s FROM base_having GROUP BY region HAVING SUM(amount) > 50;
+-- result:
+[REGEX].*IVMAnalyzer does not support HAVING with aggregate functions.*
+-- !result
+DROP TABLE base_having;
+-- result:
+-- !result

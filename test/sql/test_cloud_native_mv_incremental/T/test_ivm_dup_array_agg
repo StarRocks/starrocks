@@ -1,0 +1,39 @@
+-- name: test_ivm_dup_array_agg @cloud
+CREATE TABLE base_array (
+    region VARCHAR(8),
+    val INT
+) DUPLICATE KEY(region) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_array VALUES
+    ('CN', 10),
+    ('CN', 20),
+    ('US', 30),
+    ('US', 40);
+CREATE MATERIALIZED VIEW mv_array
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, array_agg(val) AS vals FROM base_array GROUP BY region;
+REFRESH MATERIALIZED VIEW mv_array WITH SYNC MODE;
+SELECT region, array_sort(vals) AS vals_sorted FROM mv_array ORDER BY region;
+INSERT INTO base_array VALUES
+    ('CN', 5),
+    ('JP', 100);
+REFRESH MATERIALIZED VIEW mv_array WITH SYNC MODE;
+SELECT region, array_sort(vals) AS vals_sorted FROM mv_array ORDER BY region;
+SELECT COUNT(*) AS mv_rows FROM mv_array;
+SELECT COUNT(*) AS base_rows FROM (SELECT region FROM base_array GROUP BY region) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, array_join(array_sort(vals), ',') AS vs FROM mv_array
+    EXCEPT
+    SELECT region, array_join(array_sort(array_agg(val)), ',') FROM base_array GROUP BY region
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, array_join(array_sort(array_agg(val)), ',') FROM base_array GROUP BY region
+    EXCEPT
+    SELECT region, array_join(array_sort(vals), ',') AS vs FROM mv_array
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_array%' OR DEFINITION LIKE '%mv_array%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
