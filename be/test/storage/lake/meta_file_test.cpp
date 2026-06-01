@@ -2259,4 +2259,120 @@ TEST_F(MetaFileTest, test_apply_drop_index_unknown_id_noop) {
     EXPECT_EQ(0, schema->dropped_table_indices_size());
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_second_bitmap_with_sentinel_id_lands) {
+    // BITMAP / NGRAMBF / BLOOM_FILTER all share index_id=-1 in FE-sent
+    // protos. Dedup by id alone would skip every additional same-class
+    // index after the first. Verify a second BITMAP on a different column
+    // (also id=-1) actually gets added to schema.table_indices.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20200);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20200);
+    auto* schema = metadata->mutable_schema();
+    auto* existing = schema->add_table_indices();
+    existing->set_index_id(-1);
+    existing->set_index_name("idx_a");
+    existing->set_index_type(BITMAP);
+    existing->add_col_unique_id(101);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("idx_b");
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(102);
+    builder.apply_add_index(op);
+
+    ASSERT_EQ(2, schema->table_indices_size());
+    EXPECT_EQ("idx_a", schema->table_indices(0).index_name());
+    EXPECT_EQ("idx_b", schema->table_indices(1).index_name());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_same_name_with_sentinel_id_dedups) {
+    // The defensive idempotent reconciliation must still skip a re-apply of
+    // the *same* index (FE may have pushed the schema, then publish replays
+    // the OpAddIndex). For id=-1 entries the dedup key is index_name.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20201);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20201);
+    auto* schema = metadata->mutable_schema();
+    auto* existing = schema->add_table_indices();
+    existing->set_index_id(-1);
+    existing->set_index_name("idx_a");
+    existing->set_index_type(BITMAP);
+    existing->add_col_unique_id(101);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("idx_a"); // same name
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(101);
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(1, schema->table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_drops_only_target) {
+    // Schema has two BITMAP indexes both at index_id=-1 (idx_a on col 201,
+    // idx_b on col 202). Dropping idx_a must remove only idx_a; idx_b
+    // must remain. Pre-fix, an id-only match removed every TabletIndexPB
+    // whose id was -1, wiping idx_b too.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20202);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20202);
+    auto* schema = metadata->mutable_schema();
+    auto* a = schema->add_table_indices();
+    a->set_index_id(-1);
+    a->set_index_name("idx_a");
+    a->set_index_type(BITMAP);
+    a->add_col_unique_id(201);
+    auto* b = schema->add_table_indices();
+    b->set_index_id(-1);
+    b->set_index_name("idx_b");
+    b->set_index_type(BITMAP);
+    b->add_col_unique_id(202);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/-1, /*col_uid=*/201, BITMAP);
+    builder.apply_drop_index(op);
+
+    ASSERT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ("idx_b", schema->table_indices(0).index_name());
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ("idx_a", schema->dropped_table_indices(0).index_name());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
+    // (col_uid=300, BITMAP) and (col_uid=300, NGRAMBF) live as two
+    // TabletIndexPB with id=-1. Dropping BITMAP must not touch NGRAMBF
+    // and vice versa.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20203);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20203);
+    auto* schema = metadata->mutable_schema();
+    auto* a = schema->add_table_indices();
+    a->set_index_id(-1);
+    a->set_index_name("bm_300");
+    a->set_index_type(BITMAP);
+    a->add_col_unique_id(300);
+    auto* b = schema->add_table_indices();
+    b->set_index_id(-1);
+    b->set_index_name("bf_300");
+    b->set_index_type(NGRAMBF);
+    b->add_col_unique_id(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/-1, /*col_uid=*/300, NGRAMBF);
+    builder.apply_drop_index(op);
+
+    ASSERT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ(BITMAP, schema->table_indices(0).index_type());
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+}
+
 } // namespace starrocks::lake

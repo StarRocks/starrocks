@@ -265,14 +265,26 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         ver.Swap(&merged);
     }
 
-    // 2. Reconcile table_indices: add any new index not already present by
-    //    index_id. FE typically has pushed the new schema already, so this
-    //    is a defensive idempotent step. We do not overwrite existing
+    // 2. Reconcile table_indices: add any new index not already present.
+    //    FE typically has pushed the new schema already, so this is a
+    //    defensive idempotent step. We do not overwrite existing
     //    TabletIndexPB (schema is authoritative for non-IDG fields).
+    //
+    //    Dedup key: real index_id (>=0) when present (compatible indexes —
+    //    GIN/VECTOR/etc.); otherwise index_name (FE guarantees unique
+    //    names within a table). Non-compatible types (BITMAP/NGRAMBF/
+    //    BLOOM_FILTER) share the sentinel id=-1, so id-only dedup would
+    //    silently skip every additional index after the first.
     auto* schema = _tablet_meta->mutable_schema();
-    std::unordered_set<int64_t> have_ids;
+    auto present_key = [](const TabletIndexPB& ix) -> std::string {
+        if (ix.has_index_id() && ix.index_id() >= 0) {
+            return "id:" + std::to_string(ix.index_id());
+        }
+        return "n:" + ix.index_name();
+    };
+    std::unordered_set<std::string> have_keys;
     for (const auto& ix : schema->table_indices()) {
-        if (ix.has_index_id()) have_ids.insert(ix.index_id());
+        have_keys.insert(present_key(ix));
     }
     // 3. Mirror the per-column flags that metadata_util::convert_t_schema_to_pb_schema
     //    sets at initial create. SegmentWriter gates bitmap / bloom-filter
@@ -293,8 +305,7 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         }
     };
     for (const auto& new_ix : op.new_indexes()) {
-        bool added = !new_ix.has_index_id() || have_ids.count(new_ix.index_id()) == 0;
-        if (added) {
+        if (have_keys.insert(present_key(new_ix)).second) {
             schema->add_table_indices()->CopyFrom(new_ix);
         }
         // Apply the per-column flags whether or not the table_indices entry
@@ -342,17 +353,39 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
     //    of that index (if any — e.g. a legacy NGRAMBF that predates the IDG
     //    fast path) must not be reinterpreted. Compaction that rewrites the
     //    segment eventually obsoletes the tombstone.
+    //
+    //    Match policy: real index_id (>=0) is used for compatible indexes
+    //    (GIN/VECTOR/etc.); otherwise the (col_unique_id, index_type) key
+    //    we built above identifies the entry. Non-compatible types
+    //    (BITMAP/NGRAMBF/BLOOM_FILTER) all carry the sentinel id=-1, so an
+    //    id-only match would erase every same-class index in the schema.
     auto* schema = _tablet_meta->mutable_schema();
     auto* indices = schema->mutable_table_indices();
     auto* dropped_indices = schema->mutable_dropped_table_indices();
-    std::unordered_set<int64_t> existing_dropped_ids;
+    auto dropped_key_of = [](const TabletIndexPB& ix) -> std::string {
+        if (ix.has_index_id() && ix.index_id() >= 0) {
+            return "id:" + std::to_string(ix.index_id());
+        }
+        return "n:" + ix.index_name();
+    };
+    std::unordered_set<std::string> existing_dropped_keys;
     for (const auto& d : *dropped_indices) {
-        if (d.has_index_id()) existing_dropped_ids.insert(d.index_id());
+        existing_dropped_keys.insert(dropped_key_of(d));
     }
     for (int i = indices->size() - 1; i >= 0; --i) {
         const auto& cur = indices->Get(i);
-        if (cur.has_index_id() && drop_ids.count(cur.index_id()) > 0) {
-            if (existing_dropped_ids.insert(cur.index_id()).second) {
+        bool match = false;
+        if (cur.has_index_id() && cur.index_id() >= 0 && drop_ids.count(cur.index_id()) > 0) {
+            match = true;
+        } else if (cur.col_unique_id_size() == 1 && cur.has_index_type()) {
+            // Non-compatible (BITMAP/NGRAMBF/BLOOM_FILTER) share id=-1;
+            // match each by its unique (col_uid, type) key in drop_keys.
+            uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(cur.col_unique_id(0))) << 32) |
+                         static_cast<uint32_t>(cur.index_type());
+            if (drop_keys.count(k) > 0) match = true;
+        }
+        if (match) {
+            if (existing_dropped_keys.insert(dropped_key_of(cur)).second) {
                 dropped_indices->Add()->CopyFrom(cur);
             }
             indices->DeleteSubrange(i, 1);
