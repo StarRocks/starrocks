@@ -95,11 +95,10 @@ private:
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
     void add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock);
     void update_metrics_unlocked();
+    void for_each_executors_unlocked(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     WorkGroupPtr get_default_workgroup_unlocked();
 
 private:
-    friend class ExecutorsManager;
-
     mutable std::shared_mutex _mutex;
     // Place it before _workgroups to ensure the shared executors is destructed after all the dedicated executors for
     // workgroups, since _executors_manager owns the shared executors, and WorkGroup owns the dedicated executors.
