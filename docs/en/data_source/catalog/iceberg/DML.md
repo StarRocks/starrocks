@@ -248,7 +248,7 @@ WHERE <condition>
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. UPDATE on V1 tables is rejected the query analysis phase.
+- Only Iceberg tables with **format version 2** are supported. UPDATE on V1 and V3 tables is rejected the query analysis phase.
 - A `WHERE` clause is **required** to prevent accidental full-table updates.
 - Partition columns cannot be updated. Use `INSERT OVERWRITE` if you need to rewrite partition columns.
 - The hidden metadata columns `_file` and `_pos` cannot be assigned in `SET`.
