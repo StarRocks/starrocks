@@ -1069,7 +1069,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper bound on how many partitions a load can open up front. The value is used as a cap in two scenarios: (1) for LIST-partitioned tables (which open all partitions by default) and (2) for RANGE-partitioned tables loaded via INSERT / Broker Load / Spark Load (which also open all partitions by default). Stream Load and Routine Load on RANGE-partitioned tables ignore this cap and keep the conservative latest-32 default. The per-table property `load_initial_open_partition_number` overrides this value, bypasses this cap, and is the highest-priority setting. From v3.6 onwards, the default value is increased from 32 to 4096.
+- Description: The upper bound on how many partitions a load can open up front. The value is used as a cap in two scenarios: (1) for LIST-partitioned tables (which open all partitions by default) and (2) for RANGE-partitioned tables loaded via INSERT / Broker Load / Spark Load (which also open all partitions by default). Stream Load and Routine Load on RANGE-partitioned tables ignore this cap and keep the conservative latest-32 default. The per-table property `load_initial_open_partition_number` overrides this value, bypasses this cap, and is the highest-priority setting. From v4.0 onwards, the default value is increased from 32 to 4096.
 - Introduced in: -
 
 ### `max_load_timeout_second`

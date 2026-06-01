@@ -1069,7 +1069,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: -
 - 是否可变: Yes
-- 描述: 单次导入开始时最多预先打开的分区数。该值在以下两种场景作为上限生效:(1) LIST 分区表(默认全部打开);(2) RANGE 分区表通过 INSERT / Broker Load / Spark Load 导入(默认全部打开)。Stream Load 与 Routine Load 写入 RANGE 分区表时不受该上限限制,保留更保守的「最新 32」默认行为。表属性 `load_initial_open_partition_number` 优先级最高,可覆盖该值并突破此上限。从 v3.6 起,默认值从 32 调整为 4096。
+- 描述: 单次导入开始时最多预先打开的分区数。该值在以下两种场景作为上限生效:(1) LIST 分区表(默认全部打开);(2) RANGE 分区表通过 INSERT / Broker Load / Spark Load 导入(默认全部打开)。Stream Load 与 Routine Load 写入 RANGE 分区表时不受该上限限制,保留更保守的「最新 32」默认行为。表属性 `load_initial_open_partition_number` 优先级最高,可覆盖该值并突破此上限。从 v4.0 起,默认值从 32 调整为 4096。
 - 引入版本: -
 
 ### `max_load_timeout_second`
