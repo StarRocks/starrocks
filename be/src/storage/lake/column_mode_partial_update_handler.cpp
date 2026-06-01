@@ -549,8 +549,8 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     }
     // 1. find all segments that have been compacted
     for (const auto& rowset : metadata.rowsets()) {
-        if (input_rowsets.count(rowset.id()) > 0 && rowset.segments_size() > 0) {
-            for (int i = 0; i < rowset.segments_size(); ++i) {
+        if (input_rowsets.count(rowset.id()) > 0 && rowset.segment_metas_size() > 0) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                 input_segments.push_back(get_rssid(rowset, i));
             }
         }

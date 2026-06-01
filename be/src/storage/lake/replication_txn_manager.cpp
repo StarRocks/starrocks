@@ -467,11 +467,12 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string old_segment_filename = rowset_id + '_' + std::to_string(segment_id) + ".dat";
         std::string new_segment_filename = gen_segment_filename(transaction_id);
 
-        rowset_metadata->add_segments(new_segment_filename);
+        auto* segment_meta = rowset_metadata->add_segment_metas();
+        segment_meta->set_filename(new_segment_filename);
         FileEncryptionPair encryption_pair;
         if (config::enable_transparent_data_encryption) {
             ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-            rowset_metadata->add_segment_encryption_metas(encryption_pair.encryption_meta);
+            segment_meta->set_encryption_meta(encryption_pair.encryption_meta);
         }
         auto pair = filename_map->emplace(std::move(old_segment_filename),
                                           std::pair(std::move(new_segment_filename), std::move(encryption_pair)));
@@ -491,11 +492,12 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string old_del_filename = rowset_id + '_' + std::to_string(del_id) + ".del";
         std::string new_del_filename = gen_del_filename(transaction_id);
 
-        op_write->add_dels(new_del_filename);
+        auto* del_meta = op_write->add_dels_meta();
+        del_meta->set_name(new_del_filename);
         FileEncryptionPair encryption_pair;
         if (config::enable_transparent_data_encryption) {
             ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-            op_write->add_del_encryption_metas(encryption_pair.encryption_meta);
+            del_meta->set_encryption_meta(encryption_pair.encryption_meta);
         }
         auto pair = filename_map->emplace(std::move(old_del_filename),
                                           std::pair(std::move(new_del_filename), std::move(encryption_pair)));
@@ -646,9 +648,9 @@ Status ReplicationTxnManager::convert_dcg_meta_for_pk(
 Status ReplicationTxnManager::convert_dcg_column_unique_ids(
         DeltaColumnGroupMetadataPB* dcg_meta, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
     for (auto& [seg_id, dcg_ver] : *dcg_meta->mutable_dcgs()) {
-        for (int i = 0; i < dcg_ver.unique_column_ids_size(); i++) {
-            RETURN_IF_ERROR(ReplicationUtils::convert_column_unique_ids(
-                    dcg_ver.mutable_unique_column_ids(i)->mutable_column_ids(), column_unique_id_map));
+        for (auto& unique_column_ids : *dcg_ver.mutable_unique_column_ids()) {
+            RETURN_IF_ERROR(ReplicationUtils::convert_column_unique_ids(unique_column_ids.mutable_column_ids(),
+                                                                        column_unique_id_map));
         }
     }
     return Status::OK();
