@@ -190,6 +190,16 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
 
+            // A skew join is split into a partitioned shuffle friend and a broadcast friend that share the
+            // same probe side and the same equi-conjuncts (both built from the same on-predicate, so conjunct
+            // indices line up). Only the shuffle friend is size-gated, so without this the broadcast friend
+            // would build a filter for a conjunct the shuffle friend dropped; PlanFragment#collectNodes then
+            // sees the per-conjunct count mismatch and clears the runtime filters on BOTH friends, discarding
+            // the selective filter the gate kept. Mirror the shuffle friend's kept conjuncts here.
+            if (skewBroadcastFriendSkipsConjunct(i)) {
+                continue;
+            }
+
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setBuildPlanNode(this);
@@ -275,6 +285,20 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         long ndv = inner.getColumnNdv(buildKey);
         long buildSize = (ndv > 0) ? ndv : inner.getCardinality();
         return buildSize <= 0 || buildSize > buildMaxSize;
+    }
+
+    // For a skew join's broadcast friend, report whether the corresponding shuffle friend declined to
+    // build a filter for this conjunct. The shuffle friend records the conjunct indices it kept in
+    // eqJoinConjunctsIndexToRfId; it is populated before the broadcast friend is visited, and both friends
+    // share the same equi-conjunct order, so a missing index means the shuffle friend dropped that conjunct
+    // and the broadcast friend must drop it too to keep the two filter sets the same size.
+    private boolean skewBroadcastFriendSkipsConjunct(int conjunctIndex) {
+        if (!(this instanceof HashJoinNode hashJoinNode) || !hashJoinNode.isSkewBroadJoin()) {
+            return false;
+        }
+        HashJoinNode shuffleFriend = hashJoinNode.getSkewJoinFriend();
+        return shuffleFriend != null &&
+                !shuffleFriend.getEqJoinConjunctsIndexToRfId().containsKey(conjunctIndex);
     }
 
     /**
