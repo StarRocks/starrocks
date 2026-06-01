@@ -220,6 +220,7 @@ Status GlobalEnv::_init_mem_tracker(MetricRegistry* metrics) {
             regist_tracker(MemTrackerType::CONSISTENCY, consistency_mem_limit, process_mem_tracker());
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
+    _vector_index_mem_tracker = regist_tracker(MemTrackerType::VECTOR_INDEX, -1, process_mem_tracker());
 
     register_hll_registers_allocator();
     if (metrics != nullptr) {

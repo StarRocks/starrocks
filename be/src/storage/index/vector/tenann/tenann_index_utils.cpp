@@ -213,6 +213,15 @@ void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, 
     }
 }
 
+Status tenann_error_to_status(const tenann::Error& e) {
+    const std::string& msg = e.message();
+    if (msg.find("Not found") != std::string::npos || msg.find("not found") != std::string::npos ||
+        msg.find("No such file") != std::string::npos) {
+        return Status::NotFound(msg);
+    }
+    return Status::InternalError(msg);
+}
+
 } // namespace starrocks
 
 #endif

@@ -78,6 +78,7 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::DEL_VEC_CACHE, "del_vec_cache"},
         {MemTrackerType::COMPACTION_STATE, "compaction_state"},
         {MemTrackerType::BUILTIN_INVERTED_INDEX, "builtin_inverted_index"},
+        {MemTrackerType::VECTOR_INDEX, "vector_index"},
 };
 
 static std::map<MemTrackerType, std::string> s_type_to_label_map;

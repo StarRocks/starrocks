@@ -25,6 +25,7 @@
 #include "common/config_vector_index_fwd.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "tenann/factory/index_factory.h"
+#include "tenann/index/index_cache.h"
 
 namespace starrocks {
 
@@ -56,7 +57,7 @@ Status TenAnnIndexBuilderProxy::init() {
     try {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
-        _index_builder->index_writer()->SetIndexCache(tenann::IndexCache::GetGlobalInstance());
+        _index_builder->index_writer()->SetIndexCache(tenann::GetGlobalIndexCache());
         // Bound the per-builder row buffer (no-op for builders that don't buffer).
         // Tunable via BE config vector_index_build_flush_threshold_rows; lower it
         // when BE memory is tight, set 0 to disable intermediate flushing.

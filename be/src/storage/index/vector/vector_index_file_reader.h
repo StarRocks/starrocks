@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "common/statusor.h"
 #include "fs/fs.h"
 #include "tenann/store/index_file_reader.h"
 
@@ -28,6 +29,12 @@ namespace starrocks {
 // enabling TenANN to read vector index files from remote storage (S3/HDFS/OSS).
 class VectorIndexFileReader : public tenann::IndexFileReader {
 public:
+    // Static factory: opens the `.vi` at `path` through `fs`, resolves size,
+    // returns a ready-to-use reader. Fails Status::NotFound if the file is
+    // missing, propagated from the filesystem layer. Prefer this over
+    // manually constructing the triplet (new_random_access_file + get_size + ctor).
+    static StatusOr<std::unique_ptr<VectorIndexFileReader>> open(FileSystem* fs, const std::string& path);
+
     VectorIndexFileReader(std::unique_ptr<RandomAccessFile> file, int64_t file_size)
             : _file(std::move(file)), _file_size(file_size), _filename(_file->filename()) {}
 
