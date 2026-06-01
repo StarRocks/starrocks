@@ -170,19 +170,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
-        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
-            // If it's partitioned join, and we can not get correct ndv
-            // then it's hard to estimate right bloom filter size, or it's too big.
-            // so we'd better to skip this global runtime filter.
-            // If buildMaxSize == 0, the filter must be used
-            // Otherwise would decide based on cardinality
-            long card = inner.getCardinality();
-            long buildMaxSize = sessionVariable.getGlobalRuntimeFilterBuildMaxSize();
-            if (buildMaxSize > 0 && (card <= 0 || card > buildMaxSize)) {
-                return;
-            }
-        }
-
         // if this is skew join's broadcast join and corresponding shuffle join decide not to generate grf
         // this join node should not generate grf either
         if (this instanceof HashJoinNode) {
@@ -224,6 +211,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                     right = temp;
                 }
 
+                // Gate per conjunct by build-filter size (NDV of the build key, see buildSizeExceedsLimit),
+                // so a selective narrow key is not dropped together with a wide one.
+                if (buildSizeExceedsLimit(inner, sessionVariable, left)) {
+                    continue;
+                }
+
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
@@ -248,6 +241,9 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 if (!ExprUtils.isBoundByTupleIds(right, getChild(1).getTupleIds())) {
                     continue;
                 }
+                if (buildSizeExceedsLimit(inner, sessionVariable, right)) {
+                    continue;
+                }
 
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
@@ -259,6 +255,24 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 }
             }
         }
+    }
+
+    // The build-side bloom filter is sized by the number of distinct keys it holds, so gate on the build
+    // key's NDV, falling back to the build row count when the NDV is unknown (matches the previous
+    // row-count behavior when no stats are present). Only shuffle/partitioned joins are gated; broadcast
+    // and colocate joins keep a small build side by construction and are left ungated as before.
+    private boolean buildSizeExceedsLimit(PlanNode inner, SessionVariable sessionVariable, Expr buildKey) {
+        if (!distrMode.equals(DistributionMode.PARTITIONED) &&
+                !distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
+            return false;
+        }
+        long buildMaxSize = sessionVariable.getGlobalRuntimeFilterBuildMaxSize();
+        if (buildMaxSize <= 0) {
+            return false;
+        }
+        long ndv = inner.getColumnNdv(buildKey);
+        long buildSize = (ndv > 0) ? ndv : inner.getCardinality();
+        return buildSize <= 0 || buildSize > buildMaxSize;
     }
 
     /**

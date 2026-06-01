@@ -268,6 +268,38 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return cardinality;
     }
 
+    // Returns the NDV (distinct value count) of the column referenced by expr, or -1 if expr is not a slot
+    // ref or no known statistic is found. The build/probe key often sits above its scan (e.g. behind an
+    // exchange) whose own column statistics are empty, so search this node and then its children; the slot
+    // id is preserved across such nodes and equals the ColumnRefOperator id (see PlanFragmentBuilder).
+    public long getColumnNdv(Expr expr) {
+        if (!(expr instanceof SlotRef)) {
+            return -1;
+        }
+        return getColumnNdvBySlotId(((SlotRef) expr).getSlotId().asInt());
+    }
+
+    private long getColumnNdvBySlotId(int slotId) {
+        if (columnStatistics != null) {
+            for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+                if (entry.getKey().getId() == slotId) {
+                    ColumnStatistic stat = entry.getValue();
+                    if (stat != null && !stat.isUnknown() && stat.getDistinctValuesCount() > 0) {
+                        return (long) stat.getDistinctValuesCount();
+                    }
+                    break;
+                }
+            }
+        }
+        for (PlanNode child : children) {
+            long ndv = child.getColumnNdvBySlotId(slotId);
+            if (ndv > 0) {
+                return ndv;
+            }
+        }
+        return -1;
+    }
+
     public float getAvgRowSize() {
         return avgRowSize;
     }
