@@ -338,8 +338,15 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     return false;
                 }
                 long commitVersion = e.getValue();
-                Utils.publishVersion(pp.getLatestBaseIndex().getTablets(), txnInfo, commitVersion - 1,
-                        commitVersion, computeResource, false);
+                // dispatchAllTasks() iterates pp.getAllMaterializedIndices(VISIBLE)
+                // so every base + rollup + sync-MV tablet has an in-flight alter
+                // task. Publish must mirror that set or non-base indexes get left
+                // on stale visible versions while FE/base advance, eventually
+                // causing read/planning inconsistencies on those indexes.
+                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
+                            commitVersion, computeResource, false);
+                }
             }
             return true;
         } catch (Exception e) {
