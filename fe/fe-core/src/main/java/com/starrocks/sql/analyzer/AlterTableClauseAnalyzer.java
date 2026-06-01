@@ -500,6 +500,18 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
                                 " must be bool type(false/true)");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                                " must be bool type(false/true)");
+            }
+            if (!table.isCloudNativeTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                                " can only be set for cloud native tables");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

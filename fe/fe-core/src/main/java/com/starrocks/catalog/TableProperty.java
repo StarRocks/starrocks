@@ -506,6 +506,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
+                buildLightWeightTabletCreation();
                 buildTableQueryTimeout();
                 buildDataCacheEnable();
                 break;

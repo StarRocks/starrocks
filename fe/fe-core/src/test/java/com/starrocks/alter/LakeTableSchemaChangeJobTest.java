@@ -248,6 +248,35 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testLightWeightTabletCreationSkipsSendTask() throws Exception {
+        // Flip the table to light-weight tablet creation; the schema-change PENDING phase
+        // must skip CreateReplicaTask building and sendAgentTaskAndWait while still
+        // advancing the job to WAITING_TXN.
+        alterTable(connectContext,
+                "ALTER TABLE t0 SET ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+
+        AtomicBoolean sendCalled = new AtomicBoolean(false);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
+                sendCalled.set(true);
+            }
+        };
+
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        schemaChangeJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertFalse(sendCalled.get(),
+                "sendAgentTaskAndWait must not be invoked when light_weight_tablet_creation is enabled");
+
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    @Test
     public void testPreviousTxnNotFinished() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {

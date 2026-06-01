@@ -36,6 +36,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -84,6 +85,11 @@ public class CreateLakeTableTest {
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+    }
+
+    private static void alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
@@ -860,5 +866,33 @@ public class CreateLakeTableTest {
         } finally {
             Config.lake_enable_light_weight_tablet_creation = saved;
         }
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreation() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.alter_lw (c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('light_weight_tablet_creation' = 'false')"));
+        LakeTable table = getLakeTable("lake_test", "alter_lw");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // false -> true
+        alterTable("alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+
+        // true -> false
+        alterTable("alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'false')");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // No-op (same value) is a successful no-op, not an error.
+        ExceptionChecker.expectThrowsNoException(() -> alterTable(
+                "alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'false')"));
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // Invalid value rejected by analyzer.
+        ExceptionChecker.expectThrowsWithMsg(Exception.class, "must be bool type", () -> alterTable(
+                "alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'maybe')"));
     }
 }
