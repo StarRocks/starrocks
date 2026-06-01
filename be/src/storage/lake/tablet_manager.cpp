@@ -317,7 +317,7 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     int64_t partition_id = -1;
     int64_t index_id = -1;
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    auto worker = get_staros_worker();
+    auto worker = g_worker;
     if (worker == nullptr) {
         // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
         // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
