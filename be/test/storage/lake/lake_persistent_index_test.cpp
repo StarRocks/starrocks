@@ -16,11 +16,6 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
->>>>>>> aa98e4ac4d ([BugFix] Pass tablet metadata when applying PK index compaction output sstables (#74037))
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/datum.h"
@@ -33,6 +28,7 @@
 #include "storage/primary_key_encoder.h"
 #include "test_util.h"
 #include "testutil/assert.h"
+#include "utility/defer_op.h"
 #include "testutil/sync_point.h"
 
 namespace starrocks::lake {
