@@ -751,7 +751,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction)
         // Apply compaction result
         auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
         ASSERT_OK(index->init(_tablet_metadata));
-        ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
+        ASSERT_OK(index->apply_opcompaction(tablet_metadata_ptr, txn_log->op_compaction()));
 
         // Update metadata
         Tablet tablet(_tablet_mgr.get(), tablet_id);

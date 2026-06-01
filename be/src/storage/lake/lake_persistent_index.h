@@ -119,7 +119,7 @@ public:
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
                                          const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
-    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+    Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
     Status commit(MetaFileBuilder* builder);
 
