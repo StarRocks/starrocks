@@ -29,6 +29,8 @@ class ScanTaskQueue;
 
 enum class ScanSchedEntityType : uint8_t { OLAP, CONNECTOR };
 
+class WorkGroupSchedState;
+
 template <typename Q>
 class WorkGroupSchedEntity;
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;

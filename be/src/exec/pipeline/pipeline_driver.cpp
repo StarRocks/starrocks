@@ -531,11 +531,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             if (_workgroup != nullptr &&
                 (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT_NS ||
-                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS) &&
-                _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
-                should_yield = true;
-                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
-                break;
+                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS)) {
+                DCHECK(_in_queue != nullptr);
+                if (_in_queue->should_yield(this, time_spent)) {
+                    should_yield = true;
+                    COUNTER_UPDATE(_yield_by_preempt_counter, 1);
+                    break;
+                }
             }
         }
         // close finished operators and update _first_unfinished index

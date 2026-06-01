@@ -76,4 +76,62 @@ PARALLEL_TEST(WorkGroupTest, check_big_query_uses_query_scan_limit_when_present)
     EXPECT_EQ(1, workgroup.bigquery_count());
 }
 
+PARALLEL_TEST(WorkGroupTest, sched_entity_updates_workgroup_owned_sched_state) {
+    WorkGroup workgroup("sched_wg", 201, WorkGroup::DEFAULT_VERSION, 2, 0.5, 10, 1.0, WorkGroupType::WG_NORMAL,
+                        WorkGroup::DEFAULT_MEM_POOL);
+
+    workgroup.driver_sched_entity()->incr_runtime_ns(1'000);
+
+    EXPECT_EQ(500, workgroup.driver_sched_state().vruntime_ns());
+    EXPECT_EQ(1'000, workgroup.driver_sched_state().runtime_ns(workgroup.cpu_weight()));
+    EXPECT_EQ(1'000, workgroup.driver_sched_state().unadjusted_runtime_ns());
+    EXPECT_EQ(workgroup.driver_sched_state().vruntime_ns(), workgroup.driver_sched_entity()->vruntime_ns());
+    EXPECT_EQ(workgroup.driver_sched_state().unadjusted_runtime_ns(),
+              workgroup.driver_sched_entity()->unadjusted_runtime_ns());
+}
+
+PARALLEL_TEST(WorkGroupTest, sched_states_are_independent) {
+    WorkGroup workgroup("sched_wg", 202, WorkGroup::DEFAULT_VERSION, 1, 0.5, 10, 1.0, WorkGroupType::WG_NORMAL,
+                        WorkGroup::DEFAULT_MEM_POOL);
+
+    workgroup.driver_sched_entity()->incr_runtime_ns(100);
+    workgroup.scan_sched_entity()->incr_runtime_ns(200);
+    workgroup.connector_scan_sched_entity()->incr_runtime_ns(300);
+
+    EXPECT_EQ(100, workgroup.driver_sched_state().vruntime_ns());
+    EXPECT_EQ(200, workgroup.scan_sched_state().vruntime_ns());
+    EXPECT_EQ(300, workgroup.connector_scan_sched_state().vruntime_ns());
+    EXPECT_EQ(100, workgroup.driver_sched_state().unadjusted_runtime_ns());
+    EXPECT_EQ(200, workgroup.scan_sched_state().unadjusted_runtime_ns());
+    EXPECT_EQ(300, workgroup.connector_scan_sched_state().unadjusted_runtime_ns());
+}
+
+PARALLEL_TEST(WorkGroupTest, sched_entity_adjust_runtime_does_not_change_unadjusted_runtime) {
+    WorkGroup workgroup("sched_wg", 203, WorkGroup::DEFAULT_VERSION, 4, 0.5, 10, 1.0, WorkGroupType::WG_NORMAL,
+                        WorkGroup::DEFAULT_MEM_POOL);
+
+    workgroup.driver_sched_entity()->incr_runtime_ns(800);
+    workgroup.driver_sched_entity()->adjust_runtime_ns(400);
+
+    EXPECT_EQ(300, workgroup.driver_sched_state().vruntime_ns());
+    EXPECT_EQ(800, workgroup.driver_sched_state().unadjusted_runtime_ns());
+}
+
+PARALLEL_TEST(WorkGroupTest, sched_state_preserves_growth_runtime_marks) {
+    WorkGroup workgroup("sched_wg", 204, WorkGroup::DEFAULT_VERSION, 1, 0.5, 10, 1.0, WorkGroupType::WG_NORMAL,
+                        WorkGroup::DEFAULT_MEM_POOL);
+
+    auto* sched_entity = workgroup.driver_sched_entity();
+    sched_entity->incr_runtime_ns(100);
+    sched_entity->mark_curr_runtime_ns();
+    EXPECT_EQ(100, workgroup.driver_sched_state().growth_runtime_ns());
+
+    sched_entity->mark_last_runtime_ns();
+    EXPECT_EQ(0, workgroup.driver_sched_state().growth_runtime_ns());
+
+    sched_entity->incr_runtime_ns(50);
+    sched_entity->mark_curr_runtime_ns();
+    EXPECT_EQ(50, workgroup.driver_sched_state().growth_runtime_ns());
+}
+
 } // namespace starrocks::workgroup
