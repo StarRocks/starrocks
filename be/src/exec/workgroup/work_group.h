@@ -38,8 +38,13 @@ namespace workgroup {
 
 using steady_clock = std::chrono::steady_clock;
 
-using pipeline::QueryContext;
 using WorkGroupType = TWorkGroupType::type;
+
+struct WorkGroupQueryStats {
+    int64_t cpu_runtime_ns = 0;
+    int64_t scan_rows = 0;
+    int64_t scan_rows_limit = 0;
+};
 
 template <typename Q>
 class WorkGroupSchedEntity {
@@ -177,7 +182,7 @@ public:
     int128_t unique_id() const { return create_unique_id(_id, _version); }
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
-    Status check_big_query(const QueryContext& query_context);
+    Status check_big_query(const WorkGroupQueryStats& query_stats);
     StatusOr<RunningQueryTokenPtr> acquire_running_query_token(bool enable_group_level_query_queue);
     void decr_num_queries();
     int64_t num_running_queries() const { return _num_running_queries; }

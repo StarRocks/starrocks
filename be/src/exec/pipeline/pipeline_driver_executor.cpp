@@ -180,7 +180,11 @@ void GlobalDriverExecutor::_worker_thread() {
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
-                status = driver->workgroup()->check_big_query(*query_ctx);
+                workgroup::WorkGroupQueryStats query_stats;
+                query_stats.cpu_runtime_ns = query_ctx->cpu_cost();
+                query_stats.scan_rows = query_ctx->cur_scan_rows_num();
+                query_stats.scan_rows_limit = query_ctx->get_scan_limit();
+                status = driver->workgroup()->check_big_query(query_stats);
             }
 
             FAIL_POINT_TRIGGER_EXECUTE(operator_return_failed_status, {
