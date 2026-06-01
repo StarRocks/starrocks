@@ -212,9 +212,9 @@ DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inact
 
 ## UPDATE
 
-您可以使用 UPDATE 语句根据指定条件更新 Iceberg 表中的数据。此功能从 StarRocks v4.2 起支持。
+您可以使用 UPDATE 语句根据指定条件更新 Iceberg 表中的数据。此功能从 v4.2 起支持。
 
-StarRocks 通过 Iceberg V2 的 **Merge-On-Read** 模型实现 UPDATE：每次 UPDATE 会在同一个 Iceberg 快照中原子提交位置删除文件（position delete file，用于标记被更新的旧行）和新数据文件（包含更新后的新行）。读者始终只能看到 UPDATE 前或 UPDATE 后的完整状态，不会出现中间态，结果表对 Spark 等其它 Iceberg 引擎完全兼容。
+UPDATE 通过 Iceberg V2 的 **Merge-On-Read** 模型实现：每次 UPDATE 会在同一个 Iceberg 快照中原子提交位置删除文件（position delete file，用于标记被更新的旧行）和新数据文件（包含更新后的新行）。读者始终只能看到 UPDATE 前或 UPDATE 后的完整状态，不会出现中间态，结果表对 Spark 等其它 Iceberg 引擎完全兼容。
 
 ### 语法
 
@@ -231,7 +231,7 @@ WHERE <condition>
   - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
   - 仅表名（设置 catalog 和数据库后）：`table_name`
 
-- `column_name = expression`：要更新的列以及新值。表达式可以引用同一行的其它列，以及 StarRocks 支持的标量函数。
+- `column_name = expression`：要更新的列以及新值。表达式可以引用同一行的其它列，以及系统支持的标量函数。
 
 - `condition`：用于标识需要更新的行的谓词。支持的运算符与 `DELETE` 一致（比较运算符、逻辑运算符、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`，以及 `IN` / `EXISTS` 子查询）。
 
@@ -304,7 +304,7 @@ WHERE email_verified = false;
 
 ### 监控指标
 
-针对 Iceberg 表的每条 UPDATE 语句都会更新以下 FE 端指标。它们与现有的 `iceberg_write_*`、`iceberg_delete_*` 共用 `iceberg_*` 命名空间，可通过标准 FE 指标接口拉取。完整说明请参考[Metrics](../../../administration/management/monitoring/metric_details/i-p.md)。
+针对 Iceberg 表的每条 UPDATE 语句都会更新以下 FE 端指标。它们与现有的 `iceberg_write_*`、`iceberg_delete_*` 共用 `iceberg_*` 命名空间，可通过标准 FE 指标接口拉取。完整说明请参考 [监控指标](../../../administration/management/monitoring/metric_details/i-p.md)。
 
 | 指标 | 单位 | 标签 | 描述 |
 | --- | --- | --- | --- |
