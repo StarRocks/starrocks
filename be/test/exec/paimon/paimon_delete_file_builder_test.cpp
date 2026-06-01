@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <fstream>
+
 #include "base/testutil/assert.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -27,6 +30,36 @@ public:
     PaimonDeleteFileBuilderTest() = default;
     ~PaimonDeleteFileBuilderTest() override = default;
 };
+
+namespace {
+
+constexpr int32_t kMagicV1 = 1581511376;
+constexpr int32_t kMagicV2 = 1681511377;
+
+std::string be32(int32_t v) {
+    char b[4];
+    b[0] = static_cast<char>((v >> 24) & 0xff);
+    b[1] = static_cast<char>((v >> 16) & 0xff);
+    b[2] = static_cast<char>((v >> 8) & 0xff);
+    b[3] = static_cast<char>(v & 0xff);
+    return std::string(b, 4);
+}
+
+std::string le32(int32_t v) {
+    char b[4];
+    b[0] = static_cast<char>(v & 0xff);
+    b[1] = static_cast<char>((v >> 8) & 0xff);
+    b[2] = static_cast<char>((v >> 16) & 0xff);
+    b[3] = static_cast<char>((v >> 24) & 0xff);
+    return std::string(b, 4);
+}
+
+void write_tmp_file(const std::string& path, const std::string& bytes) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out.write(bytes.data(), bytes.size());
+}
+
+} // namespace
 
 // v1 (BitmapDeletionVector): 1 deleted row
 TEST_F(PaimonDeleteFileBuilderTest, TestDeletionVectorV1) {
@@ -62,6 +95,111 @@ TEST_F(PaimonDeleteFileBuilderTest, TestDeletionVectorV2) {
     ASSERT_EQ(2, deleted_rows.size());
     ASSERT_EQ(3, deleted_rows[0]);
     ASSERT_EQ(7, deleted_rows[1]);
+}
+
+// Magic number matches neither v1 (BE) nor v2 (LE) -> InternalError.
+TEST_F(PaimonDeleteFileBuilderTest, TestInvalidMagicNumber) {
+    const std::string path = "/tmp/paimon_dv_invalid_magic_test";
+    std::string content;
+    content.push_back('\1');                                // version byte
+    content += be32(12);                                    // size field
+    content += be32(static_cast<int32_t>(0xDEADBEEF));      // bogus magic
+    content.append(4, '\0');                                // padding
+    write_tmp_file(path, content);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    PaimonDeleteFileBuilder builder(FileSystem::Default(), skip_rows_ctx);
+
+    TPaimonDeletionFile paimon_deletion_file;
+    paimon_deletion_file.__set_path(path);
+    paimon_deletion_file.__set_offset(1);
+    paimon_deletion_file.__set_length(12);
+
+    Status st = builder.build(&paimon_deletion_file);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find("invalid paimon deletion vector magic number")) << st;
+
+    std::remove(path.c_str());
+}
+
+// size field in the file does not match the expected size derived from DeletionFile.length -> InternalError.
+TEST_F(PaimonDeleteFileBuilderTest, TestLengthMismatch) {
+    const std::string path = "/tmp/paimon_dv_length_mismatch_test";
+    std::string content;
+    content.push_back('\1');
+    content += be32(999);            // wrong size field
+    content += be32(kMagicV1);       // valid v1 magic
+    content.append(4, '\0');         // bitmap placeholder
+    write_tmp_file(path, content);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    PaimonDeleteFileBuilder builder(FileSystem::Default(), skip_rows_ctx);
+
+    TPaimonDeletionFile paimon_deletion_file;
+    paimon_deletion_file.__set_path(path);
+    paimon_deletion_file.__set_offset(1);
+    paimon_deletion_file.__set_length(8); // expected_size_from_file = 8, file says 999
+
+    Status st = builder.build(&paimon_deletion_file);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find("length mismatch")) << st;
+
+    std::remove(path.c_str());
+}
+
+// v1 path: valid magic + size, but bitmap bytes are not a valid roaring portable cookie -> RuntimeError.
+TEST_F(PaimonDeleteFileBuilderTest, TestCorruptV1Bitmap) {
+    const std::string path = "/tmp/paimon_dv_corrupt_v1_test";
+    std::string content;
+    content.push_back('\1');
+    content += be32(8);              // size = magic(4) + bitmap(4)
+    content += be32(kMagicV1);       // v1 magic in BE
+    content.append(4, '\0');         // 4 zero bytes -> invalid roaring cookie
+    write_tmp_file(path, content);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    PaimonDeleteFileBuilder builder(FileSystem::Default(), skip_rows_ctx);
+
+    TPaimonDeletionFile paimon_deletion_file;
+    paimon_deletion_file.__set_path(path);
+    paimon_deletion_file.__set_offset(1);
+    paimon_deletion_file.__set_length(8);
+
+    Status st = builder.build(&paimon_deletion_file);
+    ASSERT_FALSE(st.ok());
+    ASSERT_EQ(TStatusCode::RUNTIME_ERROR, st.code()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find("deserialize roaring bitmap error")) << st;
+
+    std::remove(path.c_str());
+}
+
+// v2 path: valid magic + size, but bitmap bytes are not a valid roaring64 portable header -> RuntimeError.
+TEST_F(PaimonDeleteFileBuilderTest, TestCorruptV2Bitmap) {
+    const std::string path = "/tmp/paimon_dv_corrupt_v2_test";
+    std::string content;
+    content.push_back('\1');
+    content += be32(8);              // size field = magic(4) + bitmap(4)
+    content += le32(kMagicV2);       // v2 magic in LE
+    content.append(4, '\0');         // garbage bitmap body
+    content.append(4, '\0');         // CRC placeholder (not validated by reader)
+    write_tmp_file(path, content);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    PaimonDeleteFileBuilder builder(FileSystem::Default(), skip_rows_ctx);
+
+    TPaimonDeletionFile paimon_deletion_file;
+    paimon_deletion_file.__set_path(path);
+    paimon_deletion_file.__set_offset(1);
+    paimon_deletion_file.__set_length(16); // 4(size) + 4(magic) + 4(bitmap) + 4(crc)
+
+    Status st = builder.build(&paimon_deletion_file);
+    ASSERT_FALSE(st.ok());
+    ASSERT_EQ(TStatusCode::RUNTIME_ERROR, st.code()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find("deserialize roaring64 bitmap error")) << st;
+
+    std::remove(path.c_str());
 }
 
 } // namespace starrocks
