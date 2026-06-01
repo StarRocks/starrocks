@@ -31,11 +31,12 @@
 
 use std::path::Path;
 
-use tantivy::collector::DocSetCollector;
+use tantivy::collector::{Collector, SegmentCollector};
+use tantivy::columnar::Column;
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption};
-use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Term};
+use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader, Term};
 
 use crate::error::{Result, TantivyBindingError};
 
@@ -136,26 +137,49 @@ impl IndexReaderWrapper {
 
     fn collect_doc_ids(&self, query: &dyn Query) -> Result<Vec<u32>> {
         let searcher = self.reader.searcher();
-        let doc_set = searcher.search(query, &DocSetCollector)?;
+        Ok(searcher.search(query, &RowIdCollector)?)
+    }
+}
 
-        let segment_readers = searcher.segment_readers();
-        let mut offsets: Vec<u32> = Vec::with_capacity(segment_readers.len());
-        let mut acc: u32 = 0;
-        for sr in segment_readers {
-            offsets.push(acc);
-            acc = acc.checked_add(sr.max_doc()).ok_or_else(|| {
-                TantivyBindingError::Internal("doc id overflow (segment too large)".into())
-            })?;
-        }
+// Resolve hits to BE row ids via the stored `row_id` fast field, not segment
+// offsets: tantivy's internal segment order is not insertion order, so offset
+// arithmetic mis-maps rows once a BE segment spills into >1 tantivy segment.
+struct RowIdCollector;
 
-        let mut out: Vec<u32> = Vec::with_capacity(doc_set.len());
-        for addr in &doc_set {
-            let off = *offsets
-                .get(addr.segment_ord as usize)
-                .ok_or_else(|| TantivyBindingError::Internal("segment_ord out of range".into()))?;
-            out.push(off + addr.doc_id);
-        }
+struct RowIdSegmentCollector {
+    row_id: Column<u64>,
+    ids: Vec<u32>,
+}
+
+impl Collector for RowIdCollector {
+    type Fruit = Vec<u32>;
+    type Child = RowIdSegmentCollector;
+
+    fn for_segment(&self, _ord: SegmentOrdinal, seg: &SegmentReader) -> tantivy::Result<RowIdSegmentCollector> {
+        Ok(RowIdSegmentCollector { row_id: seg.fast_fields().u64("row_id")?, ids: Vec::new() })
+    }
+
+    fn requires_scoring(&self) -> bool {
+        false
+    }
+
+    fn merge_fruits(&self, segs: Vec<Vec<u32>>) -> tantivy::Result<Vec<u32>> {
+        let mut out: Vec<u32> = segs.into_iter().flatten().collect();
         out.sort_unstable();
         Ok(out)
+    }
+}
+
+impl SegmentCollector for RowIdSegmentCollector {
+    type Fruit = Vec<u32>;
+
+    fn collect(&mut self, doc: u32, _score: Score) {
+        if let Some(rid) = self.row_id.values_for_doc(doc).next() {
+            self.ids.push(rid as u32);
+        }
+    }
+
+    fn harvest(self) -> Vec<u32> {
+        self.ids
     }
 }
