@@ -14,6 +14,7 @@
 
 #include "storage/lake/vacuum.h"
 
+#include <butil/fast_rand.h>
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
@@ -99,6 +100,29 @@ static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_d
                                                            get_num_delete_file_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
                                                            get_num_active_file_queued_tasks, nullptr);
+
+// Decorrelated jitter (AWS Architecture Blog "Exponential Backoff And Jitter"):
+//   next_delay = min(cap, rand([base, last_delay * 3]))
+// where cap = base * 2^max_retries.
+//
+// Pure helper: all knobs (base, max_retries) are passed in by the caller so the function has no
+// hidden dependencies on global config and is trivial to unit-test. Caller passes
+// last_delay (= base on the first attempt) and feeds the returned value back on the next call.
+//
+// Compared to deterministic backoff, retry timestamps of independent CNs grow decorrelated over
+// successive attempts even when they all start throttled at the same moment, keeping the
+// per-prefix request rate below the remote storage's limit. The returned value is always
+// in [base, cap], so the caller-configured minimum delay is preserved as a floor.
+int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries) {
+    int64_t cap = base * (1L << max_retries);
+    int64_t upper = std::min(cap, last_delay * 3);
+    if (upper <= base) {
+        return base;
+    }
+    int64_t range = upper - base + 1;
+    return base + static_cast<int64_t>(butil::fast_rand_less_than(range));
+}
+
 namespace {
 
 // Delete .vi files for segments in a rowset using segment_metas metadata.
@@ -135,18 +159,16 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
 }
 
-int64_t calculate_retry_delay(int64_t attempted_retries) {
-    int64_t min_delay = config::lake_vacuum_retry_min_delay_ms;
-    return min_delay * (1 << attempted_retries);
-}
-
 Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
+    const int64_t base = config::lake_vacuum_retry_min_delay_ms;
+    const int64_t max_retries = config::lake_vacuum_retry_max_attempts;
+    int64_t last_delay = base;
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
-            int64_t delay = calculate_retry_delay(attempted_retries);
-            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
-            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            last_delay = calculate_retry_delay(last_delay, base, max_retries);
+            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << last_delay << "ms";
+            std::this_thread::sleep_for(std::chrono::milliseconds(last_delay));
         } else {
             return st;
         }
