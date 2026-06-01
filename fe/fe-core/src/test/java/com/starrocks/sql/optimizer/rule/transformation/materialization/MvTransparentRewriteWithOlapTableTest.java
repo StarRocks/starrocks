@@ -1172,7 +1172,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                             " PROPERTIES (\n" +
                             " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
-                            " AS SELECT k1, k2, sum(v1) as agg1 from m1 group by k1, k2 having sum(v1) > 1;",
+                            " AS SELECT k1, k2, sum(v1) as agg1 from m1 group by k1, k2;",
                     () -> {
                         starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
