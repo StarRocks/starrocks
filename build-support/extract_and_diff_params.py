@@ -613,8 +613,12 @@ def get_new_param_names_from_diff(
             r"public\s+static\s+(?:final\s+)?\S+\s+([a-z_][a-z0-9_]+)\s*=", line
         ):
             names.add(m.group(1))
-        # Java: String constant value = "actual_var_name"
+        # Java: single-line constant  = "actual_var_name"
         for m in re.finditer(r'=\s*"([a-z_][a-z0-9_]+)"', line):
+            names.add(m.group(1))
+        # Java: two-line constant continuation — the added line is just "name";
+        # e.g. +            "enable_optimize_skew_join_v1";
+        for m in re.finditer(r'^\s*"([a-z_][a-z0-9_]+)"\s*;', line[1:]):
             names.add(m.group(1))
         # C++ CONF macro first argument
         for m in re.finditer(
