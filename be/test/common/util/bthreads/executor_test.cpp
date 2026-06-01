@@ -43,12 +43,7 @@ protected:
     // far-past default value, keeping the "not hung yet" assertions independent of uptime.
     std::unique_ptr<ThreadPool> build_saturated_pool(const std::string& name, std::atomic<bool>* release) {
         std::unique_ptr<ThreadPool> pool;
-        CHECK(ThreadPoolBuilder(name)
-                      .set_min_threads(1)
-                      .set_max_threads(1)
-                      .set_max_queue_size(1)
-                      .build(&pool)
-                      .ok());
+        CHECK(ThreadPoolBuilder(name).set_min_threads(1).set_max_threads(1).set_max_queue_size(1).build(&pool).ok());
 
         // Stamp last_active_timestamp() to ~now by running one task to completion.
         MonoTime before = MonoTime::Now();
@@ -64,8 +59,7 @@ protected:
                       while (!release->load()) {
                           std::this_thread::sleep_for(std::chrono::milliseconds(1));
                       }
-                  })
-                      .ok());
+                  }).ok());
         while (!started->load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
