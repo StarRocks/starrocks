@@ -1854,6 +1854,10 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         handleSetTabletBinlogConfig(backendId, backendTablets);
     }
 
+    public static void testHandleSetTabletFlatJsonConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetTabletFlatJsonConfig(backendId, backendTablets);
+    }
+
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
         List<Pair<Long, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
 
