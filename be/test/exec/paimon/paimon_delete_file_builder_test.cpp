@@ -101,10 +101,10 @@ TEST_F(PaimonDeleteFileBuilderTest, TestDeletionVectorV2) {
 TEST_F(PaimonDeleteFileBuilderTest, TestInvalidMagicNumber) {
     const std::string path = "/tmp/paimon_dv_invalid_magic_test";
     std::string content;
-    content.push_back('\1');                                // version byte
-    content += be32(12);                                    // size field
-    content += be32(static_cast<int32_t>(0xDEADBEEF));      // bogus magic
-    content.append(4, '\0');                                // padding
+    content.push_back('\1');                           // version byte
+    content += be32(12);                               // size field
+    content += be32(static_cast<int32_t>(0xDEADBEEF)); // bogus magic
+    content.append(4, '\0');                           // padding
     write_tmp_file(path, content);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
@@ -128,9 +128,9 @@ TEST_F(PaimonDeleteFileBuilderTest, TestLengthMismatch) {
     const std::string path = "/tmp/paimon_dv_length_mismatch_test";
     std::string content;
     content.push_back('\1');
-    content += be32(999);            // wrong size field
-    content += be32(kMagicV1);       // valid v1 magic
-    content.append(4, '\0');         // bitmap placeholder
+    content += be32(999);      // wrong size field
+    content += be32(kMagicV1); // valid v1 magic
+    content.append(4, '\0');   // bitmap placeholder
     write_tmp_file(path, content);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
@@ -154,9 +154,9 @@ TEST_F(PaimonDeleteFileBuilderTest, TestCorruptV1Bitmap) {
     const std::string path = "/tmp/paimon_dv_corrupt_v1_test";
     std::string content;
     content.push_back('\1');
-    content += be32(8);              // size = magic(4) + bitmap(4)
-    content += be32(kMagicV1);       // v1 magic in BE
-    content.append(4, '\0');         // 4 zero bytes -> invalid roaring cookie
+    content += be32(8);        // size = magic(4) + bitmap(4)
+    content += be32(kMagicV1); // v1 magic in BE
+    content.append(4, '\0');   // 4 zero bytes -> invalid roaring cookie
     write_tmp_file(path, content);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
@@ -180,10 +180,10 @@ TEST_F(PaimonDeleteFileBuilderTest, TestCorruptV2Bitmap) {
     const std::string path = "/tmp/paimon_dv_corrupt_v2_test";
     std::string content;
     content.push_back('\1');
-    content += be32(8);              // size field = magic(4) + bitmap(4)
-    content += le32(kMagicV2);       // v2 magic in LE
-    content.append(4, '\0');         // garbage bitmap body
-    content.append(4, '\0');         // CRC placeholder (not validated by reader)
+    content += be32(8);        // size field = magic(4) + bitmap(4)
+    content += le32(kMagicV2); // v2 magic in LE
+    content.append(4, '\0');   // garbage bitmap body
+    content.append(4, '\0');   // CRC placeholder (not validated by reader)
     write_tmp_file(path, content);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
