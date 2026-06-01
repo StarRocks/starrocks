@@ -1447,10 +1447,10 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(testDb.getFullName(), tableName.getTbl()));
-                    if (tbl != null) {
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        OlapTable tbl = (OlapTable) table;
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
                             setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
@@ -1459,10 +1459,11 @@ public class UtFrameUtils {
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
                     TableName tableName = delete.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(testDb.getFullName(), tableName.getTbl()));
-                    tbl.setHasDelete();
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        ((OlapTable) table).setHasDelete();
+                    }
                 }
             }
         };
