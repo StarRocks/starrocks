@@ -22,6 +22,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/push_utils.h"
 #include "storage/storage_engine.h"
@@ -125,6 +126,8 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
     op_write->mutable_rowset()->set_overlapped(false);
+    // Fresh uid for the (newly built) bulk-load rowset.
+    tablet_reshard_helper::set_rowset_uid(op_write->mutable_rowset());
     RETURN_IF_ERROR(cur_tablet.tablet_manager()->put_txn_log(std::move(txn_log)));
 
     _write_bytes += static_cast<int64_t>(writer->data_size());
