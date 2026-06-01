@@ -30,18 +30,12 @@ namespace starrocks {
 class TenAnnIndexBuilderProxy final : public VectorIndexBuilder {
 public:
     TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
-                            bool is_element_nullable, int omp_threads)
+                            bool is_element_nullable, int omp_threads,
+                            std::unique_ptr<VectorIndexFileWriter> file_writer)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
               _is_element_nullable(is_element_nullable),
               _omp_threads(omp_threads),
-              _file_writer(nullptr) {}
-
-    TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
-                            bool is_element_nullable, int omp_threads, VectorIndexFileWriter* file_writer)
-            : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
-              _is_element_nullable(is_element_nullable),
-              _omp_threads(omp_threads),
-              _file_writer(file_writer) {}
+              _file_writer(std::move(file_writer)) {}
 
     // proxy should not clean index builder resource
     ~TenAnnIndexBuilderProxy() override { (void)close(); };
@@ -60,7 +54,7 @@ private:
 
     const bool _is_element_nullable;
     const int _omp_threads;
-    VectorIndexFileWriter* _file_writer = nullptr;
+    std::unique_ptr<VectorIndexFileWriter> _file_writer;
 };
 
 } // namespace starrocks

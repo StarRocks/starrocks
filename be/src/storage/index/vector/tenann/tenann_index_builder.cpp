@@ -69,7 +69,7 @@ Status TenAnnIndexBuilderProxy::init() {
         // Use tenann file writer for remote FS (S3/HDFS) in shared-data mode
         if (_file_writer != nullptr) {
             _index_builder->index_writer()->SetFileWriter(
-                    std::shared_ptr<tenann::IndexFileWriter>(_file_writer, [](tenann::IndexFileWriter*) {}));
+                    std::shared_ptr<tenann::IndexFileWriter>(_file_writer.get(), [](tenann::IndexFileWriter*) {}));
         }
         if (_is_element_nullable) {
             _index_builder->EnableCustomRowId();

@@ -23,7 +23,6 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/index/vector/vector_index_file_writer.h"
 
 namespace starrocks {
 
@@ -150,21 +149,11 @@ Status VectorIndexWriter::_prepare_index_builder() {
     ASSIGN_OR_RETURN(auto index_builder_type,
                      VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index));
     const int omp_threads = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
-#ifdef WITH_TENANN
-    // Create VectorIndexFileWriter to support remote FS (S3/HDFS) in shared-data mode.
-    // TenANN doesn't understand staros:// scheme, so we create a WritableFile through
-    // StarRocks FS and bridge it to tenann via VectorIndexFileWriter.
-    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(_vector_index_file_path));
-    auto file_writer = std::make_unique<VectorIndexFileWriter>(std::move(wfile));
-    ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
-                                             _tablet_index, _vector_index_file_path, index_builder_type,
-                                             _is_element_nullable, omp_threads, file_writer.get()));
-    _file_writer_holder = std::move(file_writer);
-#else
+    // The builder bridges its file IO through StarRocks FS internally (remote schemes in
+    // shared-data mode), so no VectorIndexFileWriter is constructed here.
     ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
                                              _tablet_index, _vector_index_file_path, index_builder_type,
                                              _is_element_nullable, omp_threads));
-#endif
     RETURN_IF_ERROR(_index_builder->init());
 
     if (_buffer_column != nullptr) {

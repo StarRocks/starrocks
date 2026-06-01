@@ -22,13 +22,19 @@ namespace starrocks {
 // =============== IndexBuilderFactory =============
 StatusOr<std::unique_ptr<VectorIndexBuilder>> VectorIndexBuilderFactory::create_index_builder(
         const std::shared_ptr<TabletIndex>& tablet_index, const std::string& segment_index_path,
-        const IndexBuilderType index_builder_type, const bool is_element_nullable, [[maybe_unused]] int omp_threads,
-        [[maybe_unused]] VectorIndexFileWriter* file_writer) {
+        const IndexBuilderType index_builder_type, const bool is_element_nullable, [[maybe_unused]] int omp_threads) {
     switch (index_builder_type) {
     case TEN_ANN:
 #ifdef WITH_TENANN
+    {
+        // Bridge tenann's file IO through StarRocks FS so remote schemes (staros://, s3://,
+        // hdfs://) work in shared-data mode. The builder owns the writer for its full lifetime,
+        // so the proxy's Close() (which finalizes remote uploads) runs before the writer dies.
+        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(segment_index_path));
+        auto file_writer = std::make_unique<VectorIndexFileWriter>(std::move(wfile));
         return std::make_unique<TenAnnIndexBuilderProxy>(tablet_index, segment_index_path, is_element_nullable,
-                                                         omp_threads, file_writer);
+                                                         omp_threads, std::move(file_writer));
+    }
 #else
         return std::make_unique<EmptyVectorIndexBuilder>(tablet_index, segment_index_path);
 #endif

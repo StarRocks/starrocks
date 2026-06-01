@@ -27,7 +27,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/index/vector/vector_index_builder.h"
 #include "storage/index/vector/vector_index_builder_factory.h"
-#include "storage/index/vector/vector_index_file_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
@@ -298,16 +297,8 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
         ASSIGN_OR_RETURN(auto builder_type,
                          VectorIndexBuilderFactory::get_index_builder_type_from_config(tablet_index));
 
-#ifdef WITH_TENANN
-        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(vi_path));
-        auto file_writer = std::make_unique<VectorIndexFileWriter>(std::move(wfile));
-        ASSIGN_OR_RETURN(auto builder,
-                         VectorIndexBuilderFactory::create_index_builder(tablet_index, vi_path, builder_type, true,
-                                                                         _omp_threads, file_writer.get()));
-#else
         ASSIGN_OR_RETURN(auto builder, VectorIndexBuilderFactory::create_index_builder(
                                                tablet_index, vi_path, builder_type, true, _omp_threads));
-#endif
         RETURN_IF_ERROR(builder->init());
 
         // Read column data in batches and add to builder
