@@ -246,7 +246,12 @@ private:
     // IDG entry that supersedes the segment footer's bitmap meta. The
     // returned iterator owns its file handle and reader; the cached
     // _bitmap_index footer reader is left untouched.
+    // `encryption_meta` is the IDG entry's serialized EncryptionMetaPB
+    // (empty when encryption is off); when non-empty it is unwrapped and
+    // passed through RandomAccessFileOptions so that the .idx file is
+    // read as cleartext rather than ciphertext.
     Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
+                                                 const std::string& encryption_meta,
                                                  BitmapIndexIterator** iterator);
 
     // Determines the logical type to use when parsing zone map values for predicate filtering,

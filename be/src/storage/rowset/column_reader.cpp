@@ -50,6 +50,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -375,7 +376,7 @@ Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, Bit
             for (const auto& e : list) {
                 for (const auto& k : e.keys) {
                     if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::BITMAP) {
-                        return _new_idg_backed_bitmap_index_iterator(opts, e.index_file, iterator);
+                        return _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
                     }
                 }
             }
@@ -396,6 +397,7 @@ Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, Bit
 
 Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts,
                                                            const std::string& idx_filename,
+                                                           const std::string& encryption_meta,
                                                            BitmapIndexIterator** iterator) {
     // Resolve the .idx file path. IDG entries store relative filenames
     // (matching the gen_idx_filename UUID-based scheme) under the same
@@ -404,8 +406,18 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
     auto pos = seg_path.find_last_of('/');
     std::string idx_path = (pos == std::string::npos) ? idx_filename : seg_path.substr(0, pos + 1) + idx_filename;
 
+    // When transparent data encryption is on, AddIndexSchemaChange writes
+    // the .idx file with an EncryptionMetaPB and stores the serialized
+    // bytes on the IDG entry. The read side must unwrap the meta back
+    // into a FileEncryptionInfo and pass it through RandomAccessFileOptions,
+    // otherwise the underlying file is read raw and the .idx footer parse
+    // sees ciphertext.
+    RandomAccessFileOptions raf_opts;
+    if (!encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(raf_opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+    }
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
-    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(idx_path));
+    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(raf_opts, idx_path));
 
     // Parse the .idx footer and look up the bitmap meta for this column.
     lake::IndexFileReader idx_reader;
@@ -559,8 +571,17 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 auto pos = seg_path.find_last_of('/');
                 std::string idx_path =
                         (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
+                // Same encryption plumbing as the bitmap IDG path: when the
+                // entry carries a non-empty EncryptionMetaPB, unwrap it back
+                // into a FileEncryptionInfo so the .idx file is decrypted at
+                // read time.
+                RandomAccessFileOptions raf_opts;
+                if (!e.encryption_meta.empty()) {
+                    ASSIGN_OR_RETURN(raf_opts.encryption_info,
+                                     KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
+                }
                 ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
-                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(idx_path));
+                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
 
                 lake::IndexFileReader idx_reader;
                 RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
