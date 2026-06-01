@@ -163,6 +163,11 @@ public class OlapTableSink extends DataSink {
     private boolean enableDynamicOverwrite = false;
     private boolean isFromOverwrite = false;
     private boolean isMultiStatementTxn = false;
+    private boolean isStreamingLoad = false;
+
+    // Conservative default for RANGE-partitioned tables under stream / routine load.
+    // Stream and routine load both go through StreamLoadPlanner and call setIsStreamingLoad(true).
+    private static final int STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER = 32;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -271,6 +276,10 @@ public class OlapTableSink extends DataSink {
         this.isMultiStatementTxn = isMultiStatementTxn;
     }
 
+    public void setIsStreamingLoad(boolean isStreamingLoad) {
+        this.isStreamingLoad = isStreamingLoad;
+    }
+
     public void complete(String mergeCondition) throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -294,20 +303,37 @@ public class OlapTableSink extends DataSink {
             return partitionIds;
         }
 
-        // Resolve the initial-open limit:
-        //   1. Table property load_initial_open_partition_number wins when set.
-        //   2. LIST-partitioned tables default to opening all partitions because partition ids
-        //      carry no time/access-locality signal (e.g. tenant_id), so "latest N" degenerates
-        //      to random sampling and causes incremental_open churn.
-        //   3. Everything else falls back to the global Config.max_load_initial_open_partition_number.
-        int limit;
+        // Resolve the initial-open limit. Priority:
+        //   1. Table property `load_initial_open_partition_number` — highest; bypasses the
+        //      global Config.max_load_initial_open_partition_number ceiling.
+        //   2. LIST partition: open all, capped by max_load_initial_open_partition_number.
+        //   3. RANGE partition:
+        //        - Stream / routine load: keep the conservative 32 (id ordering correlates
+        //          well with write recency for time-based ranges, and large fan-out hurts
+        //          continuous-ingest paths).
+        //        - Other load types: open all, capped by max_load_initial_open_partition_number.
         int tableLimit = dstTable.getLoadInitialOpenPartitionNumber();
+        int limit;
+        boolean capByGlobalMax;
         if (tableLimit != TableProperty.INVALID) {
             limit = tableLimit;
+            capByGlobalMax = false;
         } else if (dstTable.getPartitionInfo().isListPartition()) {
-            return partitionIds;
+            limit = 0;
+            capByGlobalMax = true;
+        } else if (isStreamingLoad) {
+            limit = STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER;
+            capByGlobalMax = false;
         } else {
-            limit = (int) Config.max_load_initial_open_partition_number;
+            limit = 0;
+            capByGlobalMax = true;
+        }
+
+        if (capByGlobalMax) {
+            int globalMax = (int) Config.max_load_initial_open_partition_number;
+            if (globalMax > 0 && (limit <= 0 || limit > globalMax)) {
+                limit = globalMax;
+            }
         }
 
         if (limit <= 0 || partitionIds.size() < limit) {
