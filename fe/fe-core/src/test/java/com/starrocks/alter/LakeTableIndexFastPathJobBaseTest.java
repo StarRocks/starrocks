@@ -864,7 +864,10 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        when(pp.getLatestBaseIndex()).thenReturn(idx);
+        // lakePublishVersion now iterates all visible MV indices on the
+        // partition to publish base + rollup/sync-MV tablets together.
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
@@ -896,7 +899,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        when(pp.getLatestBaseIndex()).thenReturn(idx);
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
