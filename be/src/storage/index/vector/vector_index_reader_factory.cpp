@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_reader_factory.h"
+
+#ifdef WITH_TENANN
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "fs/fs.h"
 #include "storage/index/vector/empty_index_reader.h"
+#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "tenann/index/index_cache.h"
+#endif
 
 namespace starrocks {
+
+#ifdef WITH_TENANN
 
 static Status create_from_file_impl(const std::string& index_path,
                                     const std::shared_ptr<tenann::IndexMeta>& /*index_meta*/,
@@ -84,5 +90,38 @@ Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
     return create_from_file_impl(index_path, index_meta, vector_index_reader, fs);
 }
 
-} // namespace starrocks
+Status VectorIndexReaderFactory::create_and_init(const std::string& index_path,
+                                                 const std::shared_ptr<TabletIndex>& tablet_index,
+                                                 const std::map<std::string, std::string>& query_params, FileSystem* fs,
+                                                 size_t segment_num_rows, int query_k,
+                                                 std::shared_ptr<VectorIndexReader>* reader) {
+    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index, query_params));
+    auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
+    RETURN_IF_ERROR(create_from_file(index_path, index_meta, reader, fs));
+    // Enable per-segment adaptive ef_search. query_params carries a user-explicit efSearch iff the
+    // user set one via query hint / session var; that disables adaptive scaling so user intent is
+    // honored. FE preserves the user-typed key casing (e.g. "efsearch", "EFSEARCH"), so the check
+    // must be case-insensitive.
+    bool user_set_ef = false;
+    for (const auto& entry : query_params) {
+        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
+            user_set_ef = true;
+            break;
+        }
+    }
+    return (*reader)->init_searcher(*index_meta, index_path, fs, segment_num_rows, query_k, user_set_ef);
+}
+
+#else // !WITH_TENANN
+
+Status VectorIndexReaderFactory::create_and_init(const std::string& /*index_path*/,
+                                                 const std::shared_ptr<TabletIndex>& /*tablet_index*/,
+                                                 const std::map<std::string, std::string>& /*query_params*/,
+                                                 FileSystem* /*fs*/, size_t /*segment_num_rows*/, int /*query_k*/,
+                                                 std::shared_ptr<VectorIndexReader>* /*reader*/) {
+    return Status::NotSupported("vector index requires the TENANN build");
+}
+
 #endif
+
+} // namespace starrocks
