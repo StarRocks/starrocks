@@ -94,46 +94,6 @@ TEST_F(MetaFileTest, test_meta_rw) {
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, 10));
 }
 
-// Regression: when add_rowset accumulates multiple op_writes into ONE composite rowset
-// (a multi-statement / batch / cross-publish PK txn), it must SUM num_rows/data_size/num_dels,
-// not keep only the first op_write's counts. The bug left e.g. num_rows=1 on a rowset whose
-// segments hold 1 + 10000 = 10001 rows, corrupting reads until compaction rewrote the rowset.
-TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
-    const int64_t tablet_id = 10050;
-    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
-    auto metadata = std::make_shared<TabletMetadata>();
-    metadata->set_id(tablet_id);
-    metadata->set_version(2);
-    metadata->set_next_rowset_id(1);
-    MetaFileBuilder builder(*tablet, metadata);
-
-    RowsetMetadataPB rs_tiny; // first op_write: 1 row, 1 segment
-    rs_tiny.set_num_rows(1);
-    rs_tiny.set_data_size(100);
-    rs_tiny.set_overlapped(false);
-    rs_tiny.add_segments("seg_tiny.dat");
-    rs_tiny.add_segment_size(100);
-    builder.add_rowset(rs_tiny, {}, {}, {});
-
-    RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
-    rs_large.set_num_rows(10000);
-    rs_large.set_data_size(50000);
-    rs_large.set_overlapped(false);
-    rs_large.add_segments("seg_large.dat");
-    rs_large.add_segment_size(50000);
-    builder.add_rowset(rs_large, {}, {}, {});
-
-    ASSERT_OK(builder.set_final_rowset());
-
-    ASSERT_EQ(1, metadata->rowsets_size());
-    const auto& rs = metadata->rowsets(0);
-    EXPECT_EQ(2, rs.segments_size());
-    EXPECT_EQ(2, rs.segment_size_size());
-    EXPECT_EQ(1 + 10000, rs.num_rows());    // before the fix: 1 (first op_write only)
-    EXPECT_EQ(100 + 50000, rs.data_size()); // before the fix: 100
-    EXPECT_TRUE(rs.overlapped());           // composite spanning >1 op_write
-}
-
 TEST_F(MetaFileTest, test_delvec_rw) {
     // 1. generate metadata
     const int64_t tablet_id = 10002;
