@@ -52,6 +52,7 @@ import org.apache.commons.lang3.mutable.MutableInt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +85,10 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
             FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
+
+    private static final List<String> NON_GROUP_BY_WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
+            FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.HLL_RAW, FunctionSet.BITMAP_UNION,
+            FunctionSet.PERCENTILE_UNION, FunctionSet.COUNT);
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
@@ -149,6 +154,15 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
     private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
         return context.isEmpty() || optExpression.getOp().hasLimit();
+    }
+
+    private static boolean isOriginallyNonGroupBy(AggregatePushDownContext context) {
+        return context.origAggregator != null && context.origAggregator.getGroupingKeys().isEmpty();
+    }
+
+    private static boolean allConstantAggregations(Collection<CallOperator> aggregations) {
+        return !aggregations.isEmpty()
+                && aggregations.stream().allMatch(c -> !c.getChildren().isEmpty() && c.isConstant());
     }
 
     @Override
@@ -249,8 +263,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         }
 
         // check has constant aggregate, forbidden
-        if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
+        if (allConstantAggregations(context.aggregations.values())) {
             return visit(optExpression, context);
         }
 
@@ -260,19 +273,13 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
     @Override
     public Void visitLogicalAggregate(OptExpression optExpression, AggregatePushDownContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
-        // distinct/count* aggregate can't push down
-        if (aggregate.getAggregations().values().stream().anyMatch(c -> c.isDistinct() || c.isCountStar())) {
+        // distinct aggregate can't push down
+        if (aggregate.getAggregations().values().stream().anyMatch(c -> c.isDistinct())) {
             return visit(optExpression, context);
         }
 
         // all constant can't push down
-        if (!aggregate.getAggregations().isEmpty() &&
-                aggregate.getAggregations().values().stream().allMatch(ScalarOperator::isConstant)) {
-            return visit(optExpression, context);
-        }
-
-        // none group by don't push down
-        if (aggregate.getGroupingKeys().isEmpty()) {
+        if (allConstantAggregations(aggregate.getAggregations().values())) {
             return visit(optExpression, context);
         }
 
@@ -287,8 +294,12 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return visit(optExpression, context);
         }
         // constant aggregate can't push down
-        if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
+        if (allConstantAggregations(context.aggregations.values())) {
+            return visit(optExpression, context);
+        }
+
+        // non-group-by agg can't push down through join
+        if (isOriginallyNonGroupBy(context) && !context.aggregations.isEmpty()) {
             return visit(optExpression, context);
         }
 
@@ -383,6 +394,11 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         List<PushDownAggregateCollector> collectors = Lists.newArrayList();
         LogicalUnionOperator union = (LogicalUnionOperator) optExpression.getOp();
+        // non-group-by agg can't push down through union distinct
+        if (!union.isUnionAll() && isOriginallyNonGroupBy(context) && !context.aggregations.isEmpty()) {
+            return visit(optExpression, context);
+        }
+
         for (int i = 0; i < optExpression.getInputs().size(); i++) {
             List<ColumnRefOperator> childOutput = union.getChildOutputColumns().get(i);
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
@@ -486,6 +502,10 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         if (pushDownMode == DISABLE_PUSH_DOWN_AGG) {
             return false;
+        }
+
+        if (isOriginallyNonGroupBy(context)) {
+            return statistics.getOutputRowCount() >= StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
         }
 
         List<ColumnStatistic> lower = Lists.newArrayList();
@@ -706,8 +726,10 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         }
 
         // distinct function, not support function can't push down
+        List<String> allowedFns = isOriginallyNonGroupBy(context)
+                ? NON_GROUP_BY_WHITE_FNS : WHITE_FNS;
         if (context.aggregations.values().stream()
-                .anyMatch(v -> v.isDistinct() || !WHITE_FNS.contains(v.getFnName()))) {
+                .anyMatch(v -> v.isDistinct() || !allowedFns.contains(v.getFnName()))) {
             return false;
         }
 
