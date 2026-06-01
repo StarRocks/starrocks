@@ -34,7 +34,7 @@ Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
 class JavaWindowFunction final : public JavaUDAFAggregateFunction {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        get_java_udaf_context(ctx)->_func->reset(data(state).handle);
+        ctx->udaf_ctxs()->_func->reset(data(state).handle);
     }
 
     std::string get_name() const override { return "java_window"; }
@@ -64,8 +64,8 @@ public:
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
-        get_java_udaf_context(ctx)->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end,
-                                                               frame_start, frame_end, num_args, args.data());
+        ctx->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end, frame_start,
+                                                     frame_end, num_args, args.data());
         // release input cols
         for (int i = 0; i < num_args; ++i) {
             env->DeleteLocalRef(args[i]);
@@ -75,7 +75,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        jvalue val = get_java_udaf_context(ctx)->_func->finalize(this->data(state).handle);
+        jvalue val = ctx->udaf_ctxs()->_func->finalize(this->data(state).handle);
         // insert values to column
         JNIEnv* env = helper.getEnv();
         const auto& return_type = ctx->get_return_type();
