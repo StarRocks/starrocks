@@ -212,9 +212,9 @@ DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inact
 
 ## UPDATE
 
-指定された条件に基づいて Iceberg テーブルの行を更新するには、UPDATE ステートメントを使用できます。この機能は StarRocks v4.2 以降でサポートされています。
+指定された条件に基づいて Iceberg テーブルの行を更新するには、UPDATE ステートメントを使用できます。この機能は v4.2 以降でサポートされています。
 
-StarRocks は Iceberg V2 の **Merge-On-Read** モデルで UPDATE を実装しています。各 UPDATE は、古い行をマークする position delete ファイルと、更新後の行を含む新しいデータファイルを、単一の Iceberg スナップショットで原子的にコミットします。読み取り側は常に UPDATE 前または UPDATE 後の状態のみを観測し、中間状態を観測することはありません。書き込み結果は Spark などの他の Iceberg 対応エンジンとも相互運用可能です。
+UPDATE は Iceberg V2 の **Merge-On-Read** モデルで実装しています。各 UPDATE は、古い行をマークする position delete ファイルと、更新後の行を含む新しいデータファイルを、単一の Iceberg スナップショットで原子的にコミットします。読み取り側は常に UPDATE 前または UPDATE 後の状態のみを観測し、中間状態を観測することはありません。書き込み結果は Spark などの他の Iceberg 対応エンジンとも相互運用可能です。
 
 ### 構文
 
@@ -231,7 +231,7 @@ WHERE <condition>
   - データベース修飾名（catalog 設定後）：`database_name.table_name`
   - テーブル名のみ（catalog とデータベース設定後）：`table_name`
 
-- `column_name = expression`: 更新対象列と新しい値。式は同一行の他の列、および StarRocks がサポートする任意のスカラー関数を参照できます。
+- `column_name = expression`: 更新対象列と新しい値。式は同一行の他の列、およびほかのサポートされている任意のスカラー関数を参照できます。
 
 - `condition`: 更新する行を識別する述語。サポートされる演算子は `DELETE` と同じです（比較演算子、論理演算子、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`、`IN` / `EXISTS` サブクエリ）。
 
