@@ -46,9 +46,13 @@ namespace starrocks::lake {
 // that no in-flight task references stack-captured state from the caller.
 class SegmentTaskRunner {
 public:
-    // `pool` must outlive this runner. `max_concurrency` should normally be
-    // `config::lake_schema_change_per_tablet_parallelism`; values <= 0 are
-    // clamped to 1.
+    // `pool` must outlive this runner. `max_concurrency` is informational —
+    // the outer pool is already sized to
+    // `alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism`,
+    // so concurrency is enforced by the pool itself rather than per-runner
+    // throttling. Kept on the signature so callers can pass the config knob
+    // verbatim and so a future per-runner throttle can be wired in without
+    // breaking the ABI.
     SegmentTaskRunner(ThreadPool* pool, int max_concurrency);
     ~SegmentTaskRunner();
 
