@@ -418,7 +418,7 @@
         "write_buffer_size",
         "load_process_max_memory_hard_limit_ratio",
         "enable_new_load_on_memory_limit_exceeded",
-        "txn_commit_rpc_timeout_ms",
+        "stream_load_thrift_rpc_timeout_ms",
         "max_tablet_write_chunk_bytes",
         "max_load_dop",
         "enable_load_colocate_mv",

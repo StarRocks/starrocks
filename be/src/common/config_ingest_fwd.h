@@ -142,8 +142,12 @@ CONF_mDouble(load_process_max_memory_hard_limit_ratio, "2");
 
 CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 
-// txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
+// The Thrift RPC timeout (in milliseconds) used by BE stream-load plan (put) and
+// txn prepare/commit calls sent to the FE.
+// NOTE: renamed from `txn_commit_rpc_timeout_ms`, which is kept as a backward-compatible alias.
+CONF_mInt32(stream_load_thrift_rpc_timeout_ms, "60000");
+
+CONF_Alias(stream_load_thrift_rpc_timeout_ms, txn_commit_rpc_timeout_ms);
 
 // Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
