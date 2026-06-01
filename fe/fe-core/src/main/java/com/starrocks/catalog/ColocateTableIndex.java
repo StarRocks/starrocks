@@ -164,6 +164,24 @@ public class ColocateTableIndex implements Writable {
         return colocateRangeMgr;
     }
 
+    /**
+     * Returns all PACK shard group ids tracked by the range-colocate metadata.
+     *
+     * <p>PACK shard groups are created by FE but not attached to any {@code PhysicalPartition},
+     * so {@code StarMgrMetaSyncer} must union these into its FE-known shard group set to avoid
+     * reaping live PACK shard groups as orphans.
+     *
+     * @return a new set of PACK shard group ids (empty if none); never null
+     */
+    public Set<Long> getAllPackShardGroupIds() {
+        readLock();
+        try {
+            return colocateRangeMgr.getAllPackShardGroupIds();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public static String getFullGroupName(long dbId, String colocateGroup) {
         return dbId + "_" + ColocatePropertyInfo.getColocateGroupName(colocateGroup);
     }
