@@ -246,6 +246,10 @@ struct AggregatorParams {
 
     bool has_nullable_key;
 
+    // FE NDV estimate of the group-by key, safe to reserve from per the FE gate. -1
+    // means absent/unsafe; the BE only reserves the hash table when this is > 0.
+    int64_t estimated_cardinality = -1;
+
     void init();
 };
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
@@ -265,6 +269,24 @@ public:
     virtual Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
+
+    // Local degree of parallelism of the agg pipeline, set idempotently from the
+    // operator factory's create(dop, seq). Used as the reserve divisor: on a single
+    // BE it is the exact number of drivers sharing the keyspace after local-shuffle.
+    void set_degree_of_parallelism(int32_t dop) {
+        if (_degree_of_parallelism <= 0) {
+            _degree_of_parallelism = dop;
+        } else {
+            DCHECK_EQ(_degree_of_parallelism, dop);
+        }
+    }
+
+    // Reserve the hash map's initial capacity once from the FE NDV estimate, capped by
+    // config::agg_hashtable_reserve_max_bytes. Triggered from the hash-blocking sink
+    // after open(); a no-op for streaming, distinct (set), or unsafe variants.
+    // Returns a MemoryLimitExceeded status if the (best-effort) reserve hit the
+    // mem limit; the caller treats that as non-fatal and falls back to growth.
+    Status reserve_hash_table_from_estimate();
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
@@ -533,6 +555,14 @@ protected:
     bool _is_prepared = false;
     int64_t _agg_state_mem_usage = 0;
 
+    // Local DOP of the agg pipeline (reserve divisor); 0 until set by the factory.
+    int32_t _degree_of_parallelism = 0;
+    // Guards the initial-capacity reserve so it runs at most once over the
+    // aggregator's life.
+    bool _initial_reserve_applied = false;
+    // Last observed hash-map capacity, to count rehashes (HashTableGrowCount).
+    size_t _prev_hash_map_capacity = 0;
+
     // aggregate combinator functions since they are not persisted in agg hash map
     std::vector<const AggregateFunction*> _combinator_function;
 
@@ -560,6 +590,10 @@ protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     void _build_hash_map_with_shared_limit(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown);
+
+    // Count hash-map capacity growths (rehashes) into HashTableGrowCount. Idempotent:
+    // capacity is monotonic, so a repeat call with no growth adds nothing.
+    void _update_hash_table_grow_count();
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {

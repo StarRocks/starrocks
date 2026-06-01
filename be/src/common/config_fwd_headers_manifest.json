@@ -196,6 +196,7 @@
         "big_query_sec",
         "split_exchanger_buffer_chunk_num",
         "two_level_memory_threshold",
+        "agg_hashtable_reserve_max_bytes",
         "enable_pipeline_driver_parallel_prepare",
         "enable_lock_free_scan_task_queue",
         "fetch_max_buffer_chunk_num",

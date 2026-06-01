@@ -953,6 +953,13 @@ struct TAggregationNode {
 
   31: optional list<Exprs.TExpr> group_by_min_max
 
+  // FE NDV (cardinality) estimate of the group-by key, set only when the FE
+  // proves the estimate is safe to reserve from (global/merged-local agg, known
+  // stats, above the min-reserve threshold). BE uses it to reserve the aggregation
+  // hash table once, avoiding incremental rehashing on high-cardinality keys.
+  // Absent => no estimate; BE must not reserve.
+  32: optional i64 estimated_cardinality
+
 }
 
 struct TRepeatNode {

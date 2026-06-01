@@ -382,6 +382,44 @@ size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     });
 }
 
+void AggHashMapVariant::reserve(size_t count) {
+    visit([count](auto& hash_map_with_key) {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        // Fixed-size maps have a hard-coded full keyspace and never rehash.
+        if constexpr (!is_fixed_hash_map_v<HashMap>) {
+            hash_map_with_key->hash_map.reserve(count);
+        }
+    });
+}
+
+size_t AggHashMapVariant::reserve_bytes_estimate(size_t count) const {
+    return visit([count](const auto& hash_map_with_key) -> size_t {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            return 0;
+        } else {
+            // phmap raw_hash_set holds one slot plus one control byte per bucket.
+            // reserve(count) first grows capacity to count*8/7 (the 7/8 load factor)
+            // then rounds up to a power-of-two minus one, so the worst case (just past
+            // a power-of-two boundary) approaches 16/7*count -- NOT < 2*count. Bound by
+            // that worst case so the byte cap stays a real upper bound on real memory.
+            const size_t per_slot = sizeof(typename HashMap::value_type) + 1;
+            return (count * 16 / 7 + 1) * per_slot;
+        }
+    });
+}
+
+bool AggHashMapVariant::supports_reserve() const {
+    // Every phmap-backed map (flat or two-level; numeric, slice/string, and the
+    // compressed-key / fixed-size-slice variants the optimizer picks once min-max
+    // stats are known) can be reserved. Only SmallFixedSizeHashMap has a hard-coded
+    // full keyspace and no reserve -- the same trait reserve() keys off.
+    return visit([](const auto& hash_map_with_key) {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        return !is_fixed_hash_map_v<HashMap>;
+    });
+}
+
 void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
     _type = type;
     _agg_stat = agg_stat;
