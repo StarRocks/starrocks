@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <future>
 #include <memory>
 #include <vector>
@@ -39,6 +40,7 @@ using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
 using DriverConstRawPtr = const PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
 class OperatorFactory;
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
 using OpFactories = std::vector<OpFactoryPtr>;

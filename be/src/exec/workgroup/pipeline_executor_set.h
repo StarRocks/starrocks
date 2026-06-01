@@ -51,7 +51,7 @@ public:
                         std::vector<CpuUtil::CpuIds> borrowed_cpuids);
     ~PipelineExecutorSet();
 
-    Status start();
+    Status start(std::unique_ptr<pipeline::DriverExecutor> driver_executor);
     void close();
 
     void change_cpus(CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids);
@@ -65,10 +65,11 @@ public:
     ScanExecutor* scan_executor() const { return _scan_executor.get(); }
     ScanExecutor* connector_scan_executor() const { return _connector_scan_executor.get(); }
 
+    uint32_t num_driver_threads() const { return calculate_num_threads(_conf.num_total_driver_threads); }
+
     std::string to_string() const;
 
 private:
-    uint32_t num_driver_threads() const { return calculate_num_threads(_conf.num_total_driver_threads); }
     uint32_t num_scan_threads() const { return calculate_num_threads(_conf.num_total_scan_threads); }
     uint32_t num_connector_scan_threads() const {
         return calculate_num_threads(_conf.num_total_connector_scan_threads);
