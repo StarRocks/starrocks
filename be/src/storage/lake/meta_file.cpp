@@ -375,11 +375,14 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
     for (int i = indices->size() - 1; i >= 0; --i) {
         const auto& cur = indices->Get(i);
         bool match = false;
-        if (cur.has_index_id() && cur.index_id() >= 0 && drop_ids.count(cur.index_id()) > 0) {
+        bool cur_has_real_id = cur.has_index_id() && cur.index_id() >= 0;
+        if (cur_has_real_id && drop_ids.count(cur.index_id()) > 0) {
             match = true;
-        } else if (cur.col_unique_id_size() == 1 && cur.has_index_type()) {
-            // Non-compatible (BITMAP/NGRAMBF/BLOOM_FILTER) share id=-1;
-            // match each by its unique (col_uid, type) key in drop_keys.
+        } else if (!cur_has_real_id && cur.col_unique_id_size() == 1 && cur.has_index_type()) {
+            // (col_uid, type) match is only for sentinel-id entries
+            // (BITMAP / NGRAMBF / BLOOM_FILTER share index_id=-1). Entries
+            // with a real id stay strictly id-keyed so an unrelated drop
+            // can't accidentally remove them via column-and-type collision.
             uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(cur.col_unique_id(0))) << 32) |
                          static_cast<uint32_t>(cur.index_type());
             if (drop_keys.count(k) > 0) match = true;
