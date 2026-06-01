@@ -748,6 +748,19 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     if (_pending_rowset_data.rowset_pb.segments_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
     } else {
+        // The first op_write was CopyFrom'd above (carrying its num_rows/data_size/num_dels);
+        // subsequent op_writes only append their segments below, so their row/size/del counts
+        // must be SUMMED into the composite rowset. Otherwise the rowset keeps just the first
+        // op_write's counts while holding every op_write's segments — a multi-statement / batch
+        // (incl. cross-publish) PK txn would then report e.g. num_rows=1 for a 10001-row rowset,
+        // corrupting reads until compaction rewrites the rowset. A composite spanning multiple
+        // op_writes can also carry overlapping keys, so mark it overlapped (as the non-PK batch
+        // path does via set_overlapped(all_segments.size() > 1)).
+        _pending_rowset_data.rowset_pb.set_num_rows(_pending_rowset_data.rowset_pb.num_rows() + rowset_pb.num_rows());
+        _pending_rowset_data.rowset_pb.set_data_size(_pending_rowset_data.rowset_pb.data_size() +
+                                                     rowset_pb.data_size());
+        _pending_rowset_data.rowset_pb.set_num_dels(_pending_rowset_data.rowset_pb.num_dels() + rowset_pb.num_dels());
+        _pending_rowset_data.rowset_pb.set_overlapped(true);
         // Merge segments
         for (int i = 0; i < rowset_pb.segments_size(); i++) {
             _pending_rowset_data.rowset_pb.add_segments(rowset_pb.segments(i));
