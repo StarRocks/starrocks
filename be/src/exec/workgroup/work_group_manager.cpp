@@ -56,7 +56,7 @@ struct WorkGroupMetrics {
 // ------------------------------------------------------------------------------------
 
 WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics)
-        : _executors_manager(this, std::move(executors_manager_conf)),
+        : _executors_manager(std::move(executors_manager_conf)),
           _metrics(metrics),
           _shared_mem_tracker_manager(metrics) {}
 
@@ -442,7 +442,7 @@ Status WorkGroupManager::start() {
 
 void WorkGroupManager::close() {
     std::unique_lock write_lock(_mutex);
-    _executors_manager.close();
+    for_each_executors_unlocked([](auto& executors) { executors.close(); });
 }
 
 bool WorkGroupManager::should_yield(const WorkGroup* wg) const {
@@ -451,12 +451,15 @@ bool WorkGroupManager::should_yield(const WorkGroup* wg) const {
 
 void WorkGroupManager::for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const {
     std::shared_lock read_lock(_mutex);
-    _executors_manager.for_each_executors(consumer);
+    for_each_executors_unlocked(consumer);
 }
 
 void WorkGroupManager::change_num_connector_scan_threads(uint32_t num_connector_scan_threads) {
     std::unique_lock write_lock(_mutex);
-    _executors_manager.change_num_connector_scan_threads(num_connector_scan_threads);
+    if (_executors_manager.change_num_connector_scan_threads(num_connector_scan_threads)) {
+        for_each_executors_unlocked(
+                [](auto& executors) { executors.notify_num_total_connector_scan_threads_changed(); });
+    }
 }
 
 void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val) {
@@ -466,17 +469,34 @@ void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val
 
 void WorkGroupManager::change_exec_state_report_max_threads(int max_threads) {
     std::shared_lock read_lock(_mutex);
-    _executors_manager.change_exec_state_report_max_threads(max_threads);
+    for_each_executors_unlocked([max_threads](auto& executors) {
+        auto st = executors.update_exec_state_report_max_threads(max_threads);
+        LOG_IF(WARNING, !st.ok()) << "[WORKGROUP] change exec_state_report_max_threads failed: " << st;
+    });
 }
 
 void WorkGroupManager::change_priority_exec_state_report_max_threads(int max_threads) {
     std::shared_lock read_lock(_mutex);
-    _executors_manager.change_priority_exec_state_report_max_threads(max_threads);
+    for_each_executors_unlocked([max_threads](auto& executors) {
+        auto st = executors.update_priority_exec_state_report_max_threads(max_threads);
+        LOG_IF(WARNING, !st.ok()) << "[WORKGROUP] change priority_exec_state_report_max_threads failed: " << st;
+    });
 }
 
 void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds value) {
     std::unique_lock write_lock(_mutex);
     _workgroup_expiration_time = value;
+}
+
+void WorkGroupManager::for_each_executors_unlocked(const ExecutorsManager::ExecutorsConsumer& consumer) const {
+    for (const auto& [_, wg] : _workgroups) {
+        if (wg != nullptr && wg->exclusive_executors() != nullptr) {
+            consumer(*wg->exclusive_executors());
+        }
+    }
+    if (_executors_manager.shared_executors() != nullptr) {
+        consumer(*_executors_manager.shared_executors());
+    }
 }
 
 // ------------------------------------------------------------------------------------
