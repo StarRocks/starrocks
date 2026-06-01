@@ -707,4 +707,151 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
+<<<<<<< HEAD
+=======
+void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
+                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
+                                 const std::vector<std::string>& del_encryption_metas) {
+    // If this is the first call, copy rowset_pb directly
+    if (_pending_rowset_data.rowset_pb.segments_size() == 0) {
+        _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
+    } else {
+        // The first op_write was CopyFrom'd above (carrying its num_rows/data_size/num_dels);
+        // subsequent op_writes only append their segments below, so their row/size/del counts
+        // must be SUMMED into the composite rowset. Otherwise the rowset keeps just the first
+        // op_write's counts while holding every op_write's segments — a multi-statement / batch
+        // (incl. cross-publish) PK txn would then report e.g. num_rows=1 for a 10001-row rowset,
+        // corrupting reads until compaction rewrites the rowset. A composite spanning multiple
+        // op_writes can also carry overlapping keys, so mark it overlapped (as the non-PK batch
+        // path does via set_overlapped(all_segments.size() > 1)).
+        _pending_rowset_data.rowset_pb.set_num_rows(_pending_rowset_data.rowset_pb.num_rows() + rowset_pb.num_rows());
+        _pending_rowset_data.rowset_pb.set_data_size(_pending_rowset_data.rowset_pb.data_size() +
+                                                     rowset_pb.data_size());
+        _pending_rowset_data.rowset_pb.set_num_dels(_pending_rowset_data.rowset_pb.num_dels() + rowset_pb.num_dels());
+        _pending_rowset_data.rowset_pb.set_overlapped(true);
+        // Merge segments
+        for (int i = 0; i < rowset_pb.segments_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segments(rowset_pb.segments(i));
+        }
+        // Merge segment_size
+        for (int i = 0; i < rowset_pb.segment_size_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_size(rowset_pb.segment_size(i));
+        }
+        // Merge segment_encryption_metas
+        for (int i = 0; i < rowset_pb.segment_encryption_metas_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_encryption_metas(rowset_pb.segment_encryption_metas(i));
+        }
+        // Merge shared_segments
+        for (int i = 0; i < rowset_pb.shared_segments_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
+        }
+    }
+
+    // Merge replace_segments
+    for (const auto& replace_seg : replace_segments) {
+        _pending_rowset_data.replace_segments[replace_seg.first] = replace_seg.second;
+    }
+
+    // Merge orphan_files
+    _pending_rowset_data.orphan_files.insert(_pending_rowset_data.orphan_files.end(), orphan_files.begin(),
+                                             orphan_files.end());
+
+    // Merge delete files
+    _pending_rowset_data.dels.insert(_pending_rowset_data.dels.end(), dels.begin(), dels.end());
+    _pending_rowset_data.del_encryption_metas.insert(_pending_rowset_data.del_encryption_metas.end(),
+                                                     del_encryption_metas.begin(), del_encryption_metas.end());
+
+    // Track cumulative number of segments already added when batch applying multiple opwrites.
+    _pending_rowset_data.assigned_segment_id += rowset_pb.segments_size();
+}
+
+void MetaFileBuilder::set_final_rowset() {
+    if (_pending_rowset_data.rowset_pb.segments_size() == 0 && _pending_rowset_data.dels.empty()) {
+        return; // Nothing to do
+    }
+
+    auto rowset = _tablet_meta->add_rowsets();
+    rowset->CopyFrom(_pending_rowset_data.rowset_pb);
+
+    auto segment_size_size = rowset->segment_size_size();
+    auto segment_file_size = rowset->segments_size();
+    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
+            << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
+            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
+    // Apply replace_segments
+    for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
+        rowset->set_segments(replace_seg.first, replace_seg.second.path);
+        rowset->set_segment_size(replace_seg.first, replace_seg.second.size.value());
+        if (replace_seg.first < rowset->segment_encryption_metas_size()) {
+            rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
+        }
+        rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
+    }
+
+    rowset->set_id(_tablet_meta->next_rowset_id());
+    rowset->set_version(_tablet_meta->version());
+
+    // Handle delete files (same logic as apply_opwrite)
+    for (int i = 0; i < _pending_rowset_data.dels.size(); i++) {
+        DelfileWithRowsetId del_file_with_rid;
+        del_file_with_rid.set_name(_pending_rowset_data.dels[i]);
+        del_file_with_rid.set_origin_rowset_id(rowset->id());
+        // For now, op_offset is always max segment's id
+        del_file_with_rid.set_op_offset(std::max(rowset->segments_size(), 1) - 1);
+        if (i < _pending_rowset_data.del_encryption_metas.size()) {
+            del_file_with_rid.set_encryption_meta(_pending_rowset_data.del_encryption_metas[i]);
+        }
+        rowset->add_del_files()->CopyFrom(del_file_with_rid);
+    }
+
+    // If rowset doesn't contain segment files, still increment next_rowset_id
+    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+
+    // Collect orphan files
+    for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
+        DCHECK(is_segment(orphan_file.name()));
+        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
+    }
+
+    // Handle schema mapping (same logic as apply_opwrite)
+    if (!_tablet_meta->rowset_to_schema().empty()) {
+        auto schema_id = _tablet_meta->schema().id();
+        (*_tablet_meta->mutable_rowset_to_schema())[rowset->id()] = schema_id;
+        if (_tablet_meta->historical_schemas().count(schema_id) <= 0) {
+            auto& item = (*_tablet_meta->mutable_historical_schemas())[schema_id];
+            item.CopyFrom(_tablet_meta->schema());
+        }
+    }
+
+    // Clear pending cache
+    _pending_rowset_data = PendingRowsetData{};
+}
+
+void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                          const std::map<int, FileInfo>& replace_segments,
+                                          const std::vector<FileMetaPB>& orphan_files) {
+    // Extract del files and encryption metas similar to apply_opwrite
+    std::vector<std::string> dels;
+    std::vector<std::string> del_encryption_metas;
+
+    // Collect del files
+    for (int i = 0; i < op_write.dels_size(); i++) {
+        dels.push_back(op_write.dels(i));
+    }
+
+    if (op_write.del_encryption_metas_size() > 0) {
+        CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
+                << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
+                               op_write.dels_size());
+        for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
+            del_encryption_metas.push_back(op_write.del_encryption_metas(i));
+        }
+    }
+
+    // Accumulate into pending rowset
+    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_encryption_metas);
+}
+
+>>>>>>> df0176e9d5 ([BugFix] Sum composite-rowset stats when batching op_writes in PK multi-statement (backport #74059) (#74097))
 } // namespace starrocks::lake
