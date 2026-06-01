@@ -722,7 +722,7 @@ description: "Alphabetical q - z"
 
 - 单位：毫秒
 - 类型：直方图
-- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。INSERT-from-FILES 生产路径上触发（hook 同步等待 FINISHED，使本次 INSERT 直接看到分裂后的 tablet 布局）；测试用的 `runPreSplit` 同步包装路径也触发。Broker Load 生产路径采用 fire-and-forget，不会更新此直方图。
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。在两条生产路径上均触发 —— INSERT-from-FILES 的 hook（在 `StmtExecutor` 中、`StatementPlanner.plan` 打开导入 txn 之前调用）与 Broker Load 的 hook（在 `BrokerLoadJob.createLoadingTask` 中、`beginTxn` 打开 `T_load` 之前调用）；测试用的 `runPreSplit` 同步包装路径也触发。两种路径下触发导入本身均按分裂后的 tablet 布局做计划。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 

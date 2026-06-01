@@ -31,6 +31,7 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
@@ -49,7 +50,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         StringBuilder capturedSql = new StringBuilder();
 
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of(jsonResultBatch(
                             "{\"data\":[100],\"meta\":[{\"name\":\"sort_key\",\"type\":\"BIGINT\"}]}",
@@ -77,10 +78,39 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
+    void executeForwardsRequestQueryTimeoutToRunner() throws Exception {
+        // Make the soft pre-submit deadline hard: the data-tier pipeline caps the
+        // sample via SampleRequest.queryTimeoutSeconds, and execute() must forward
+        // that to the runner. Production applies it as query_timeout on the sample
+        // context (see FilesSampleSubqueryExecutor.configureSampleContext); an
+        // uncapped request forwards 0 (no cap).
+        BrokerDesc brokerDesc = new BrokerDesc(Map.of("fs.s3a.endpoint", "s3.us-west-2.amazonaws.com"));
+        List<BrokerFileGroup> fileGroups = List.of(mockFileGroup("parquet"));
+        List<List<TBrokerFileStatus>> fileStatusesPerGroup = List.of(List.of(
+                brokerFileStatus("s3://bucket/a.parquet", 2L * 1024L * 1024L)));
+
+        AtomicInteger capturedTimeout = new AtomicInteger(-1);
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, queryTimeoutSeconds) -> {
+                    capturedTimeout.set(queryTimeoutSeconds);
+                    return List.of();
+                });
+
+        executor.execute(bigintRequest(brokerDesc, fileGroups, fileStatusesPerGroup)
+                .withQueryTimeoutSeconds(45));
+        Assertions.assertEquals(45, capturedTimeout.get(),
+                "execute() must forward the request's query-timeout cap to the runner");
+
+        executor.execute(bigintRequest(brokerDesc, fileGroups, fileStatusesPerGroup));
+        Assertions.assertEquals(0, capturedTimeout.get(),
+                "an uncapped request forwards 0 (no cap)");
+    }
+
+    @Test
     void brokerBackedSourceIsRejected() {
         BrokerDesc brokerBacked = new BrokerDesc("the_broker", Map.of());
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -94,7 +124,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     @Test
     void missingBrokerDescIsRejected() {
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -106,7 +136,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     @Test
     void missingFormatIsRejected() {
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -120,7 +150,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     @Test
     void conflictingFormatsAreRejected() {
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -136,7 +166,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     @Test
     void unsupportedFormatIsRejected() {
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -151,7 +181,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     void caseInsensitiveFormatAgreement() throws Exception {
         StringBuilder capturedSql = new StringBuilder();
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of();
                 });
@@ -172,7 +202,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         TBrokerFileStatus directoryEntry = new TBrokerFileStatus(
                 "s3://b/dir", /*isDir=*/ true, /*size=*/ 999_999L, /*isSplitable=*/ false);
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(bigintRequest(
                 new BrokerDesc(Map.of()),
@@ -185,7 +215,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     @Test
     void emptyResolvedFileListIsRejected() {
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -199,7 +229,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     @Test
     void pathContainingCommaIsRejected() {
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -215,7 +245,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         BrokerFileGroup fileGroup = mockFileGroup("parquet");
         Mockito.when(fileGroup.getWhereExpr()).thenReturn(Mockito.mock(Expr.class));
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -231,7 +261,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         BrokerFileGroup fileGroup = mockFileGroup("parquet");
         Mockito.when(fileGroup.isNegative()).thenReturn(true);
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -247,7 +277,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         BrokerFileGroup fileGroup = mockFileGroup("parquet");
         Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("partition_col"));
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -263,7 +293,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         BrokerFileGroup fileGroup = mockFileGroup("parquet");
         Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(Mockito.mock(ImportColumnDesc.class)));
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
@@ -284,7 +314,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
     }
@@ -293,7 +323,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
     void compositeSortKeyProjectsAllColumnsAndDecodesTuples() throws Exception {
         StringBuilder capturedSql = new StringBuilder();
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of(jsonResultBatch(
                             "{\"data\":[10, 20]}",
@@ -326,7 +356,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         // is valid, and null cells in the nullable column must decode to
         // NullVariant rather than failing SAMPLE_FAILED.
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[1, null]}",
                         "{\"data\":[2, 42]}")));
         Column groupId = bigintColumn("group_id");
@@ -356,7 +386,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         ComputeResource expectedComputeResource = Mockito.mock(ComputeResource.class);
         List<ComputeResource> capturedResources = new ArrayList<>();
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedResources.add(computeResource);
                     return List.of();
                 });
