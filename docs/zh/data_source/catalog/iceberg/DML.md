@@ -237,7 +237,7 @@ WHERE <condition>
 
 ### 使用说明
 
-- 仅支持 **format-version 2** 的 Iceberg 表。对 V1 表执行 UPDATE 会在分析阶段被拒绝。
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1 和 V3 表执行 UPDATE 会在分析阶段被拒绝。
 - 必须指定 `WHERE` 子句，以防误更新全表。
 - 不支持更新分区列。 如需修改分区归属，请使用 `INSERT OVERWRITE`。
 - 不允许在 `SET` 中赋值给隐藏的元数据列 `_file` 和 `_pos`。
