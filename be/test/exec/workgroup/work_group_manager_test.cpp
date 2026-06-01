@@ -71,6 +71,8 @@ PARALLEL_TEST(WorkGroupManagerTest, injects_driver_queue_factory_for_accepted_wo
 
     EXPECT_EQ(1, create_count);
     EXPECT_NE(nullptr, accepted->driver_sched_entity()->queue());
+    EXPECT_NE(nullptr, accepted->scan_sched_entity()->queue());
+    EXPECT_NE(nullptr, accepted->connector_scan_sched_entity()->queue());
 
     auto stale = create_twg(120, 1, "wg120_stale", WorkGroup::DEFAULT_MEM_POOL, 0.5);
     manager.apply({make_twg_op(stale, TWorkGroupOpType::WORKGROUP_OP_CREATE)});

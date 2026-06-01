@@ -110,6 +110,9 @@ private:
     // workgroups, since _executors_manager owns the shared executors, and WorkGroup owns the dedicated executors.
     ExecutorsManager _executors_manager;
 
+    struct WorkGroupQueueSet;
+    // Internal queue owners keyed the same way as _workgroups. This is not the user-facing resource group id.
+    std::unordered_map<int128_t, std::unique_ptr<WorkGroupQueueSet>> _workgroup_queue_sets;
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;

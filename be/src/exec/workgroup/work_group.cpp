@@ -22,7 +22,6 @@
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/workgroup/pipeline_executor_set.h"
-#include "exec/workgroup/scan_task_queue_factory.h"
 #include "glog/logging.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
@@ -48,11 +47,6 @@ WorkGroupSchedEntity<Q>::WorkGroupSchedEntity(WorkGroup* workgroup, WorkGroupSch
 
 template <typename Q>
 WorkGroupSchedEntity<Q>::~WorkGroupSchedEntity() = default;
-
-template <typename Q>
-void WorkGroupSchedEntity<Q>::set_queue(std::unique_ptr<Q> my_queue) {
-    _my_queue = std::move(my_queue);
-}
 
 template <typename Q>
 int64_t WorkGroupSchedEntity<Q>::cpu_weight() const {
@@ -176,9 +170,7 @@ TWorkGroup WorkGroup::to_thrift() const {
     return twg;
 }
 
-void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::DriverQueuePtr driver_queue) {
-    DCHECK(driver_queue != nullptr);
-
+void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
     if (parent_mem_tracker->type() == MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL) {
         _memory_limit_bytes = parent_mem_tracker->limit();
         _shared_mem_tracker = parent_mem_tracker;
@@ -193,10 +185,6 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::
     _mem_tracker = std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                 parent_mem_tracker.get());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
-
-    _driver_sched_entity.set_queue(std::move(driver_queue));
-    _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
-    _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 
     _connector_scan_mem_tracker =
             std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, _memory_limit_bytes, _name + "/connector_scan",

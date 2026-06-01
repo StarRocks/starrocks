@@ -23,6 +23,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
+#include "exec/workgroup/scan_task_queue_factory.h"
 #include "glog/logging.h"
 #include "runtime/mem_tracker.h"
 
@@ -56,6 +57,12 @@ struct WorkGroupMetrics {
 // WorkGroupManager
 // ------------------------------------------------------------------------------------
 
+struct WorkGroupManager::WorkGroupQueueSet {
+    pipeline::DriverQueuePtr driver_queue;
+    std::unique_ptr<ScanTaskQueue> scan_queue;
+    std::unique_ptr<ScanTaskQueue> connector_scan_queue;
+};
+
 WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics,
                                    DriverQueueFactory driver_queue_factory)
         : _driver_queue_metrics((executors_manager_conf.metrics != nullptr
@@ -76,6 +83,7 @@ void WorkGroupManager::destroy() {
 
     update_metrics_unlocked();
     _workgroups.clear();
+    _workgroup_queue_sets.clear();
 }
 
 WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
@@ -302,13 +310,15 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     auto it = _workgroup_expired_versions.begin();
     // collect removable workgroups
     while (it != _workgroup_expired_versions.end()) {
-        auto wg_it = _workgroups.find(*it);
+        const auto expired_unique_id = *it;
+        auto wg_it = _workgroups.find(expired_unique_id);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
             const auto id = wg_it->second->id();
             const auto version = wg_it->second->version();
             const auto mem_pool = wg_it->second->mem_pool();
             _sum_cpu_weight -= wg_it->second->cpu_weight();
             _workgroups.erase(wg_it);
+            _workgroup_queue_sets.erase(expired_unique_id);
             _shared_mem_tracker_manager.deregister_workgroup(mem_pool);
             auto version_it = _workgroup_versions.find(id);
             if (version_it != _workgroup_versions.end() && version_it->second <= version) {
@@ -346,8 +356,21 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
     }
 
     auto parent_mem_tracker = _shared_mem_tracker_manager.register_workgroup(wg);
-    wg->init(parent_mem_tracker, _driver_queue_factory(_driver_queue_metrics));
+    wg->init(parent_mem_tracker);
+
+    auto queue_set = std::make_unique<WorkGroupQueueSet>();
+    queue_set->driver_queue = _driver_queue_factory(_driver_queue_metrics);
+    DCHECK(queue_set->driver_queue != nullptr);
+    queue_set->scan_queue = create_scan_task_queue();
+    DCHECK(queue_set->scan_queue != nullptr);
+    queue_set->connector_scan_queue = create_scan_task_queue();
+    DCHECK(queue_set->connector_scan_queue != nullptr);
+    wg->driver_sched_entity()->set_queue(queue_set->driver_queue.get());
+    wg->scan_sched_entity()->set_queue(queue_set->scan_queue.get());
+    wg->connector_scan_sched_entity()->set_queue(queue_set->connector_scan_queue.get());
+
     _workgroups[unique_id] = wg;
+    _workgroup_queue_sets[unique_id] = std::move(queue_set);
 
     _sum_cpu_weight += wg->cpu_weight();
 

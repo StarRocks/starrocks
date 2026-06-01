@@ -27,7 +27,6 @@
 #include "base/types/int128.h"
 #include "common/statusor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/WorkGroup_types.h"
 #include "runtime/mem_tracker.h"
@@ -89,8 +88,9 @@ public:
     WorkGroup* workgroup() { return _workgroup; }
     const WorkGroup* workgroup() const { return _workgroup; }
 
-    Q* queue() { return _my_queue.get(); }
-    void set_queue(std::unique_ptr<Q> my_queue);
+    Q* queue() { return _queue; }
+    const Q* queue() const { return _queue; }
+    void set_queue(Q* queue) { _queue = queue; }
 
     Q* in_queue() { return _in_queue; }
     const Q* in_queue() const { return _in_queue; }
@@ -122,8 +122,8 @@ private:
     WorkGroup* _workgroup; // The workgroup owning this entity.
     WorkGroupSchedState* _sched_state;
 
-    std::unique_ptr<Q> _my_queue; // The queue owned by this group.
-    Q* _in_queue = nullptr;       // The queue on which this entity is queued.
+    Q* _queue = nullptr;    // The per-workgroup queue bound by WorkGroupManager.
+    Q* _in_queue = nullptr; // The queue on which this entity is queued.
 };
 
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -149,7 +149,7 @@ public:
     explicit WorkGroup(const TWorkGroup& twg);
     ~WorkGroup();
 
-    void init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::DriverQueuePtr driver_queue);
+    void init(std::shared_ptr<MemTracker>& parent_mem_tracker);
 
     TWorkGroup to_thrift() const;
     std::string to_string() const;
