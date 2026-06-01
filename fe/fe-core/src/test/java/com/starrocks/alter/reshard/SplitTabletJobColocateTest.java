@@ -433,6 +433,7 @@ public class SplitTabletJobColocateTest {
 
     private void runSplitJob(long targetSize) throws Exception {
         TabletReshardJob job = createTabletReshardJob(targetSize);
+        job.init();
         job.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
         // The classification we care about runs in the next transition (RUNNING → CLEANING).

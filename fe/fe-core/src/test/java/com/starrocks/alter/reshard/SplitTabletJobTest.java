@@ -123,6 +123,10 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
+        // Admission reserves the table.
+        tabletReshardJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
+
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
@@ -160,6 +164,10 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
+        // Admission reserves the table.
+        tabletReshardJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
+
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
@@ -195,6 +203,8 @@ public class SplitTabletJobTest {
 
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
         tabletReshardJob.replay();
+        // replayPendingJob now performs the table reservation (moved here from replayPreparingJob).
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         tabletReshardJob.setJobState(TabletReshardJob.JobState.PREPARING);
         tabletReshardJob.replay();
@@ -243,6 +253,10 @@ public class SplitTabletJobTest {
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
         Assertions.assertNotNull(tabletReshardJob);
 
+        // Admission reserves the table; abort must release it back to NORMAL.
+        tabletReshardJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
+
         tabletReshardJob.abort("test abort");
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, tabletReshardJob.getJobState());
 
@@ -270,6 +284,7 @@ public class SplitTabletJobTest {
     @Test
     public void testRunRunningUsesBackgroundComputeResource() throws Exception {
         SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         ComputeResource expectedResource = WarehouseComputeResource.of(10086L);
         AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
@@ -358,6 +373,10 @@ public class SplitTabletJobTest {
 
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        // Admission reserves the table.
+        tabletReshardJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
@@ -682,5 +701,25 @@ public class SplitTabletJobTest {
                 "expected wrap message, got: " + thrown.getMessage());
         Assertions.assertTrue(thrown.getMessage().contains("simulated StarOS failure"),
                 "expected original cause message, got: " + thrown.getMessage());
+    }
+
+    /**
+     * init() reserves the table at admission. If the table is not NORMAL (e.g. it became busy with
+     * another DDL between job creation and admission), init() fail-fasts with a StarRocksException
+     * instead of letting the job be queued and then forced to abort at execution time.
+     */
+    @Test
+    public void testInitRejectsWhenTableNotNormal() throws Exception {
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
+
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            Assertions.assertThrows(StarRocksException.class, tabletReshardJob::init);
+            // Reservation rejected, the table state is left untouched.
+            Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+        } finally {
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
     }
 }
