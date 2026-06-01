@@ -897,6 +897,15 @@ def main() -> int:
         else:
             print("All params already have descriptions — nothing to generate.", file=sys.stderr)
 
+    # ── Apply --param filter to output ───────────────────────────────────────
+    if args.param:
+        fe_missing = [p for p in fe_missing if p.name == args.param]
+        be_missing = [p for p in be_missing if p.name == args.param]
+        sv_missing = [p for p in sv_missing if p.name == args.param]
+        fe_stale = {n for n in fe_stale if n == args.param}
+        be_stale = {n for n in be_stale if n == args.param}
+        sv_stale = {n for n in sv_stale if n == args.param}
+
     has_gaps = bool(fe_missing or be_missing or sv_missing)
 
     if args.output == "json":
