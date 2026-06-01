@@ -21,7 +21,6 @@
 
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_task_queue_factory.h"
 #include "glog/logging.h"
@@ -233,10 +232,10 @@ void WorkGroup::decr_num_queries() {
     DCHECK_GT(old, 0);
 }
 
-Status WorkGroup::check_big_query(const QueryContext& query_context) {
+Status WorkGroup::check_big_query(const WorkGroupQueryStats& query_stats) {
     // Check big query run time
     if (_big_query_cpu_nanos_limit) {
-        int64_t query_runtime_ns = query_context.cpu_cost();
+        int64_t query_runtime_ns = query_stats.cpu_runtime_ns;
         if (query_runtime_ns > _big_query_cpu_nanos_limit) {
             _bigquery_count++;
             return Status::BigQueryCpuSecondLimitExceeded(
@@ -247,12 +246,12 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
 
     // Check scan rows number
     int64_t bigquery_scan_limit =
-            query_context.get_scan_limit() > 0 ? query_context.get_scan_limit() : _big_query_scan_rows_limit;
-    if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > bigquery_scan_limit) {
+            query_stats.scan_rows_limit > 0 ? query_stats.scan_rows_limit : _big_query_scan_rows_limit;
+    if (_big_query_scan_rows_limit && query_stats.scan_rows > bigquery_scan_limit) {
         _bigquery_count++;
         return Status::BigQueryScanRowsLimitExceeded(
-                fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
-                            query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
+                fmt::format("exceed big query scan_rows limit: current is {} but limit is {}", query_stats.scan_rows,
+                            _big_query_scan_rows_limit));
     }
 
     return Status::OK();
