@@ -42,6 +42,15 @@
 
 #include <cstring>
 
+<<<<<<< HEAD
+=======
+#include "base/concurrency/concurrent_limiter.h"
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
+>>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
 #include "common/process_exit.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -630,4 +639,65 @@ TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
     ASSERT_EQ(-1, action.on_header(&request));
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(StreamLoadActionTest, invalid_envelope) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_ENVELOPE, "custom");
+    request.set_handler(&action);
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
+}
+
+TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
+    struct TestCase {
+        const char* timeout_header;
+        int32_t expected_timeout_ms;
+    };
+    TestCase test_cases[] = {
+            {nullptr, config::stream_load_thrift_rpc_timeout_ms}, // default timeout
+            {"30", 15000},                                        // custom timeout: 30s -> 15000ms
+    };
+
+    for (const auto& tc : test_cases) {
+        StreamLoadAction action(&_env, _limiter.get());
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        int32_t captured_timeout = -1;
+        SyncPoint::GetInstance()->SetCallBack("StreamLoadAction::_process_put::rpc_timeout", [&](void* arg) {
+            auto* request = static_cast<TStreamLoadPutRequest*>(arg);
+            captured_timeout = request->thrift_rpc_timeout_ms;
+        });
+
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        if (tc.timeout_header != nullptr) {
+            request._headers.emplace(HTTP_TIMEOUT, tc.timeout_header);
+        }
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        EXPECT_EQ(tc.expected_timeout_ms, captured_timeout);
+    }
+}
+
+>>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
 } // namespace starrocks

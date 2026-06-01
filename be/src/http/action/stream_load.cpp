@@ -46,7 +46,18 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+<<<<<<< HEAD
 #include "agent/master_info.h"
+=======
+#include "base/auth/auth_info.h"
+#include "base/string/string_parser.hpp"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
+>>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/utils.h"
@@ -635,13 +646,12 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid log_rejected_record_num format");
         }
     }
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
     }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+    TEST_SYNC_POINT_CALLBACK("StreamLoadAction::_process_put::rpc_timeout", &request);
     if (!http_req->header(HTTP_MAX_FILTER_RATIO).empty()) {
         ctx->max_filter_ratio = strtod(http_req->header(HTTP_MAX_FILTER_RATIO).c_str(), nullptr);
     }
