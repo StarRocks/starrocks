@@ -159,7 +159,7 @@ public class LockerIntensiveLockRollbackTest {
      * Success path remains unchanged: acquire, then matching unlock, no exceptions, no leaks.
      */
     @Test
-    public void successfulLockUnlockPathUnchanged() {
+    public void successfulLockUnlockPathUnchanged() throws LockException {
         long dbId = 1_005_001L;
         long ridA = 1_005_002L;
         long ridB = 1_005_003L;
