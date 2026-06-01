@@ -40,6 +40,16 @@
 #include <future>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "base/auth/auth_info.h"
+#include "base/concurrency/concurrent_limiter.h"
+#include "base/metrics.h"
+#include "base/string/string_util.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "common/config_ingest_fwd.h"
+>>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
@@ -185,6 +195,32 @@ public:
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
     static void release(StreamLoadContext* context);
+
+    // Returns the Thrift RPC timeout (in milliseconds) shared by the stream-load plan (put)
+    // and the txn prepare/commit RPCs sent to the FE.
+    //
+    // The base value is the configurable `stream_load_thrift_rpc_timeout_ms`. When the caller
+    // specifies a load timeout (`timeout_second`), the RPC timeout is clamped into the range
+    // [timeout_ms / 4, timeout_ms / 2], so that a single RPC is never allowed to take longer
+    // than half of the whole load timeout, nor be shorter than a quarter of it.
+    //
+    // The bounds are computed in 64-bit because `timeout_second` comes from a user-supplied
+    // header and `timeout_second * 1000` would overflow int32 once timeout_second > 2147483;
+    // the result is capped at INT32_MAX before narrowing back to the int32 RPC timeout.
+    int32_t calc_put_and_commit_rpc_timeout_ms() {
+        int32_t rpc_timeout_ms = config::stream_load_thrift_rpc_timeout_ms;
+        if (timeout_second != -1) {
+            int64_t timeout_ms = static_cast<int64_t>(timeout_second) * 1000;
+            int64_t min_rpc_timeout_ms = timeout_ms / 4;
+            int64_t max_rpc_timeout_ms = timeout_ms / 2;
+            if (rpc_timeout_ms < min_rpc_timeout_ms) {
+                rpc_timeout_ms = min_rpc_timeout_ms > INT32_MAX ? INT32_MAX : static_cast<int32_t>(min_rpc_timeout_ms);
+            } else if (rpc_timeout_ms > max_rpc_timeout_ms) {
+                rpc_timeout_ms = static_cast<int32_t>(max_rpc_timeout_ms);
+            }
+        }
+        return rpc_timeout_ms;
+    }
 
     // ========================== transaction stream load ==========================
     // try to get the lock when receiving http requests.

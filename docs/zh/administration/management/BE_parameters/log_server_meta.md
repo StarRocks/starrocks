@@ -587,13 +587,13 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：事务 apply 重试的超时时间。
 - 引入版本：-
 
-### txn_commit_rpc_timeout_ms
+### stream_load_thrift_rpc_timeout_ms
 
 - 默认值：60000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
-- 描述：BE 发往 FE 的事务提交/stream load 相关 Thrift RPC 的超时时长上限，也用于连接池中超时连接的关闭。实际超时会结合请求上下文计算，但不会超过该值；需与 FE `thrift_client_timeout_ms` 保持一致以避免不匹配。
+- 描述：BE 发往 FE 的事务提交/stream load 相关 Thrift RPC 的超时时长上限，也用于连接池中超时连接的关闭。实际超时会结合请求上下文计算，但不会超过该值；需与 FE `thrift_client_timeout_ms` 保持一致以避免不匹配。旧名称 `txn_commit_rpc_timeout_ms` 仍作为向后兼容的别名保留。
 - 引入版本：v3.2.0
 
 ### enable_retry_apply
