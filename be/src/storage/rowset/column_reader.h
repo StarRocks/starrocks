@@ -251,8 +251,7 @@ private:
     // passed through RandomAccessFileOptions so that the .idx file is
     // read as cleartext rather than ciphertext.
     Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
-                                                 const std::string& encryption_meta,
-                                                 BitmapIndexIterator** iterator);
+                                                 const std::string& encryption_meta, BitmapIndexIterator** iterator);
 
     // Determines the logical type to use when parsing zone map values for predicate filtering,
     // handling type mismatches between column and predicate types after fast schema evolution
