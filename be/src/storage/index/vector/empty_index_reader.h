@@ -28,13 +28,13 @@ public:
         return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 
-    Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
-                  tenann::IdFilter* id_filter = nullptr) override {
+    Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids,
+                  uint8_t* result_distances, const SparseRange<>& scan_range) override {
         return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 
-    Status range_search(tenann::PrimitiveSeqView query_vector, int k, std::vector<int64_t>* result_ids,
-                        std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
+    Status range_search(const float* query_vector, size_t query_size, int k, std::vector<int64_t>* result_ids,
+                        std::vector<float>* result_distances, const SparseRange<>& scan_range, float range,
                         int order) override {
         return Status::NotSupported("EmptyIndexReader does not support this operation");
     }

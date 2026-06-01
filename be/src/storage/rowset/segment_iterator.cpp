@@ -53,7 +53,6 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
@@ -307,7 +306,6 @@ private:
         bool added_vector_data_column = false; // true if we appended vector column to _schema
 
 #ifdef WITH_TENANN
-        tenann::PrimitiveSeqView query_view;
         std::shared_ptr<tenann::IndexMeta> index_meta;
 #endif
 
@@ -821,12 +819,6 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         } else {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->k_factor;
         }
-#ifdef WITH_TENANN
-        _vector_index_ctx->query_view = tenann::PrimitiveSeqView{
-                .data = reinterpret_cast<uint8_t*>(_opts.vector_search_option->query_vector.data()),
-                .size = static_cast<uint32_t>(_opts.vector_search_option->query_vector.size()),
-                .elem_type = tenann::PrimitiveType::kFloatType};
-#endif
     }
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
@@ -1144,7 +1136,6 @@ Status SegmentIterator::_init_ann_reader() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_vector_index() {
-#ifdef WITH_TENANN
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
     }
@@ -1157,20 +1148,21 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     std::vector<int64_t> result_ids;
     std::vector<float> result_distances;
     std::vector<int64_t> filtered_result_ids;
-    DelIdFilter del_id_filter(_scan_range);
+    const auto& query_vector = _opts.vector_search_option->query_vector;
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
         if (_vector_index_ctx->vector_range >= 0) {
             st = _vector_index_ctx->ann_reader->range_search(
-                    _vector_index_ctx->query_view, _vector_index_ctx->k, &result_ids, &result_distances, &del_id_filter,
-                    static_cast<float>(_vector_index_ctx->vector_range), _vector_index_ctx->result_order);
+                    query_vector.data(), query_vector.size(), _vector_index_ctx->k, &result_ids, &result_distances,
+                    _scan_range, static_cast<float>(_vector_index_ctx->vector_range), _vector_index_ctx->result_order);
         } else {
             result_ids.resize(_vector_index_ctx->k);
             result_distances.resize(_vector_index_ctx->k);
-            st = _vector_index_ctx->ann_reader->search(
-                    _vector_index_ctx->query_view, _vector_index_ctx->k, (result_ids.data()),
-                    reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+            st = _vector_index_ctx->ann_reader->search(query_vector.data(), query_vector.size(), _vector_index_ctx->k,
+                                                       result_ids.data(),
+                                                       reinterpret_cast<uint8_t*>(result_distances.data()),
+                                                       _scan_range);
         }
     }
 
@@ -1206,9 +1198,6 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
                 id2distance_map[filtered_result_ids[i]];
     }
     return Status::OK();
-#else
-    return Status::OK();
-#endif
 }
 
 Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {

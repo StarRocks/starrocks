@@ -34,10 +34,13 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
 #include "common/status.h"
+#include "storage/primitive/range.h"
 #ifdef WITH_TENANN
-#include "tenann/common/seq_view.h"
-#include "tenann/searcher/id_filter.h"
 #include "tenann/store/index_meta.h"
 #endif
 
@@ -60,13 +63,17 @@ public:
                                  size_t segment_num_rows, int query_k, bool user_set_ef) {
         return init_searcher(meta, index_path, fs);
     }
-
-    virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
-                          tenann::IdFilter* id_filter = nullptr) = 0;
-    virtual Status range_search(tenann::PrimitiveSeqView query_vector, int k, std::vector<int64_t>* result_ids,
-                                std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
-                                int order) = 0;
 #endif
+
+    // Search the index for the k nearest neighbors of a float query vector. query_size is the
+    // number of float elements (the vector dimension). scan_range carries the still-live row
+    // ids; the implementation builds the per-query id filter from it. Result buffers are
+    // caller-owned and must be sized to at least k.
+    virtual Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids,
+                          uint8_t* result_distances, const SparseRange<>& scan_range) = 0;
+    virtual Status range_search(const float* query_vector, size_t query_size, int k,
+                                std::vector<int64_t>* result_ids, std::vector<float>* result_distances,
+                                const SparseRange<>& scan_range, float range, int order) = 0;
 };
 
 } // namespace starrocks

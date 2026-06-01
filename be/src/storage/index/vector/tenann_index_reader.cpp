@@ -44,6 +44,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "tenann/common/error.h"
@@ -149,22 +150,30 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     return init_searcher(adapted_meta, index_path, fs);
 }
 
-Status TenANNReader::search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids,
-                            uint8_t* result_distances, tenann::IdFilter* id_filter) {
+Status TenANNReader::search(const float* query_vector, size_t query_size, int k, int64_t* result_ids,
+                            uint8_t* result_distances, const SparseRange<>& scan_range) {
+    DelIdFilter del_id_filter(scan_range);
+    auto query_view = tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(const_cast<float*>(query_vector)),
+                                               .size = static_cast<uint32_t>(query_size),
+                                               .elem_type = tenann::PrimitiveType::kFloatType};
     try {
-        _searcher->AnnSearch(query_vector, k, result_ids, result_distances, id_filter);
+        _searcher->AnnSearch(query_view, k, result_ids, result_distances, &del_id_filter);
     } catch (tenann::Error& e) {
         return Status::InternalError(e.what());
     }
     return Status::OK();
 };
 
-Status TenANNReader::range_search(tenann::PrimitiveSeqView query_vector, int k, std::vector<int64_t>* result_ids,
-                                  std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
-                                  int order) {
+Status TenANNReader::range_search(const float* query_vector, size_t query_size, int k,
+                                  std::vector<int64_t>* result_ids, std::vector<float>* result_distances,
+                                  const SparseRange<>& scan_range, float range, int order) {
+    DelIdFilter del_id_filter(scan_range);
+    auto query_view = tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(const_cast<float*>(query_vector)),
+                                               .size = static_cast<uint32_t>(query_size),
+                                               .elem_type = tenann::PrimitiveType::kFloatType};
     try {
-        _searcher->RangeSearch(query_vector, range, k, tenann::AnnSearcher::ResultOrder(order), result_ids,
-                               result_distances, id_filter);
+        _searcher->RangeSearch(query_view, range, k, tenann::AnnSearcher::ResultOrder(order), result_ids,
+                               result_distances, &del_id_filter);
     } catch (tenann::Error& e) {
         return Status::InternalError(e.what());
     }

@@ -185,15 +185,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
         std::vector<int64_t> result_ids(kTopK);
         std::vector<float> result_distances(kTopK);
         SparseRange<> scan_range;
-        DelIdFilter del_id_filter(scan_range);
         std::vector<float> query_vector = {1.0f, 2.0f, 3.0f};
-        tenann::PrimitiveSeqView query_view =
-                tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(query_vector.data()),
-                                         .size = static_cast<uint32_t>(3),
-                                         .elem_type = tenann::PrimitiveType::kFloatType};
 
-        st = ann_reader->search(query_view, kTopK, result_ids.data(),
-                                reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+        st = ann_reader->search(query_vector.data(), query_vector.size(), kTopK, result_ids.data(),
+                                reinterpret_cast<uint8_t*>(result_distances.data()), scan_range);
         CHECK_OK(st);
         ASSERT_EQ(result_ids.size(), kTopK);
     } catch (tenann::Error& e) {
