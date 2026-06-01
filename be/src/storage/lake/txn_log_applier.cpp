@@ -35,6 +35,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
@@ -883,7 +884,12 @@ public:
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
                 RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
-                if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
+                // Decide segment contribution by SEGMENTS, not num_rows: a cross-published op_write
+                // has its num_rows scaled per child (update_rowset_data_stats), so a statement with
+                // num_rows < split_count scales to 0 on some children even though its segments carry
+                // data. Gating on num_rows would drop those segments; segment count is structural
+                // and identical across children.
+                if (op_write.has_rowset() && op_write.rowset().segment_metas_size() > 0) {
                     const auto& rowset = op_write.rowset();
 
                     // Check for delete predicate - not supported in batch mode
@@ -935,8 +941,10 @@ public:
             }
         }
 
-        // If no valid rowset data, return directly
-        if (total_num_rows == 0) {
+        // If no segments to apply, return directly. Keyed on segments (not total_num_rows)
+        // for the same reason as the per-op gate above: a fully cross-published txn can scale
+        // every contributing op_write's num_rows to 0 while its segments still carry data.
+        if (all_segment_metas.empty()) {
             VLOG(2) << "No valid rowset data to apply for tablet " << _tablet.id();
             return Status::OK();
         }
@@ -948,6 +956,10 @@ public:
         merged_rowset->set_num_rows(total_num_rows);
         merged_rowset->set_data_size(total_data_size);
         merged_rowset->set_overlapped(all_segment_metas.size() > 1);
+        // MERGE dedup identity: adopt the first log's uid. All logs of one txn share a producer
+        // version and uids are CopyFrom-preserved across cross-publish, so this is stable across
+        // cross-published split children.
+        tablet_reshard_helper::inherit_or_set_uid(merged_rowset, txn_logs.front()->op_write().rowset());
 
         // Set segment metas (each entry already carries filename/size/encryption/shared/bundle_offset).
         for (const auto& segment_meta : all_segment_metas) {

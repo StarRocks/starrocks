@@ -32,45 +32,6 @@ using namespace tablet_reshard_helper;
 
 class TabletReshardHelperTest : public ::testing::Test {};
 
-// Exercises the per-rowset uid helpers introduced for the reshard MERGE identity.
-TEST_F(TabletReshardHelperTest, RowsetUidHelpers) {
-    // make_rowset_uid: fresh, non-zero, and distinct across calls.
-    auto a = make_rowset_uid();
-    auto b = make_rowset_uid();
-    EXPECT_TRUE(a.hi() != 0 || a.lo() != 0);
-    EXPECT_FALSE(a.hi() == b.hi() && a.lo() == b.lo());
-
-    RowsetMetadataPB rs;
-    EXPECT_FALSE(has_valid_uid(rs)); // absent => invalid
-
-    ensure_rowset_uid(&rs); // mints when absent
-    EXPECT_TRUE(has_valid_uid(rs));
-    auto minted = rs.uid();
-
-    ensure_rowset_uid(&rs); // idempotent: preserves the existing uid
-    EXPECT_EQ(minted.hi(), rs.uid().hi());
-    EXPECT_EQ(minted.lo(), rs.uid().lo());
-
-    set_rowset_uid(&rs); // always re-mints (replaces)
-    EXPECT_TRUE(has_valid_uid(rs));
-    EXPECT_FALSE(rs.uid().hi() == minted.hi() && rs.uid().lo() == minted.lo());
-
-    // same_rowset_uid: equal valid uids match; differing uids do not.
-    RowsetMetadataPB x;
-    RowsetMetadataPB y;
-    x.mutable_uid()->CopyFrom(a);
-    y.mutable_uid()->CopyFrom(a);
-    EXPECT_TRUE(same_rowset_uid(x, y));
-    y.mutable_uid()->CopyFrom(b);
-    EXPECT_FALSE(same_rowset_uid(x, y));
-
-    // A present-but-zero uid is not valid and never matches.
-    RowsetMetadataPB z;
-    z.mutable_uid();
-    EXPECT_FALSE(has_valid_uid(z));
-    EXPECT_FALSE(same_rowset_uid(x, z));
-}
-
 namespace {
 
 int64_t sum_of(const std::vector<int64_t>& v) {
@@ -338,17 +299,16 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     }
 }
 
-// Verify that set_all_data_files_shared populates op_write.shared_dels (parallel to
-// op_write.dels) so that new del files produced by an in-flight write that is
-// cross-published during tablet split are persisted with shared=true in the child
-// tablets' rowset.del_files.
-TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_populates_shared_dels) {
+// Verify that set_all_data_files_shared marks every op_write.dels_meta[].shared so that
+// new del files produced by an in-flight write that is cross-published during tablet
+// split are persisted with shared=true in the child tablets' rowset.del_files.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_marks_dels_meta_shared) {
     TxnLogPB txn_log;
     auto* op_write = txn_log.mutable_op_write();
     op_write->add_dels_meta()->set_name("del1.del");
     op_write->add_dels_meta()->set_name("del2.del");
     op_write->add_dels_meta()->set_name("del3.del");
-    // Start with shared_dels empty (pre-split state).
+    // Start with each del's shared flag unset (pre-split state).
     ASSERT_FALSE(op_write->dels_meta(0).shared());
 
     set_all_data_files_shared(&txn_log);
@@ -772,34 +732,120 @@ TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_empty_childr
     EXPECT_FALSE(result.value()[0].has_upper_bound());
 }
 
-// effective_child_local_range --------------------------------------------------
+// effective_old_tablet_local_range --------------------------------------------------
 
-TEST_F(TabletReshardHelperTest, test_effective_child_local_range_rowset_present) {
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_rowset_present) {
     RowsetMetadataPB rowset;
     *rowset.mutable_range() = co_range(0, 10);
     TabletMetadataPB ctx;
     *ctx.mutable_range() = co_range(0, 30);
 
-    const auto& result = effective_child_local_range(rowset, ctx);
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
     EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result));
 }
 
-TEST_F(TabletReshardHelperTest, test_effective_child_local_range_rowset_absent_ctx_present) {
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_rowset_absent_ctx_present) {
     RowsetMetadataPB rowset; // no range
     TabletMetadataPB ctx;
     *ctx.mutable_range() = co_range(0, 30);
 
-    const auto& result = effective_child_local_range(rowset, ctx);
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
     EXPECT_TRUE(ranges_pb_equal(co_range(0, 30), result));
 }
 
-TEST_F(TabletReshardHelperTest, test_effective_child_local_range_both_absent) {
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_both_absent) {
     RowsetMetadataPB rowset;
     TabletMetadataPB ctx;
 
-    const auto& result = effective_child_local_range(rowset, ctx);
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
     EXPECT_FALSE(result.has_lower_bound());
     EXPECT_FALSE(result.has_upper_bound());
+}
+
+// -----------------------------------------------------------------------------
+// Per-segment shared refactor: set_non_segment_files_shared / rowset uid helpers /
+// the segment+non-segment wrapper.
+// -----------------------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, SetNonSegmentFilesShared_leaves_segments_untouched) {
+    TabletMetadataPB md;
+    auto* rs = md.add_rowsets();
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg0");
+        sm->set_shared(false);
+    }
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg1");
+        sm->set_shared(false);
+    }
+    auto& dv = (*md.mutable_delvec_meta()->mutable_version_to_file())[1];
+    dv.set_name("dv1");
+    dv.set_shared(false);
+
+    set_non_segment_files_shared(&md);
+
+    // shared_segments left untouched (caller handles per-segment).
+    EXPECT_FALSE(rs->segment_metas(0).shared());
+    EXPECT_FALSE(rs->segment_metas(1).shared());
+    // non-segment file (delvec) flipped to shared.
+    EXPECT_TRUE(md.delvec_meta().version_to_file().at(1).shared());
+}
+
+TEST_F(TabletReshardHelperTest, SetAllDataFilesShared_TabletMetadata_shares_segments_and_non_segment) {
+    TabletMetadataPB md;
+    auto* rs = md.add_rowsets();
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg0");
+        sm->set_shared(false);
+    }
+    auto* del = rs->add_del_files();
+    del->set_name("del0");
+    del->set_shared(false);
+    auto& dv = (*md.mutable_delvec_meta()->mutable_version_to_file())[1];
+    dv.set_shared(false);
+
+    set_all_data_files_shared(&md);
+
+    EXPECT_TRUE(rs->segment_metas(0).shared());
+    EXPECT_TRUE(rs->del_files(0).shared());
+    EXPECT_TRUE(md.delvec_meta().version_to_file().at(1).shared());
+}
+
+TEST_F(TabletReshardHelperTest, MakeRowsetUid_is_fresh_and_nonzero) {
+    auto a = make_rowset_uid();
+    auto b = make_rowset_uid();
+    EXPECT_TRUE(a.hi() != 0 || a.lo() != 0);
+    EXPECT_TRUE(b.hi() != 0 || b.lo() != 0);
+    // Two independent mints must differ.
+    EXPECT_FALSE(a.hi() == b.hi() && a.lo() == b.lo());
+}
+
+TEST_F(TabletReshardHelperTest, SetRowsetUid_set_if_absent) {
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs));
+
+    ensure_rowset_uid(&rs);
+    ASSERT_TRUE(has_valid_uid(rs));
+    auto minted = rs.uid();
+
+    // Idempotent: a second call preserves the existing uid (inherited via CopyFrom
+    // across split / cross-publish must not be overwritten).
+    ensure_rowset_uid(&rs);
+    EXPECT_EQ(minted.hi(), rs.uid().hi());
+    EXPECT_EQ(minted.lo(), rs.uid().lo());
+}
+
+TEST_F(TabletReshardHelperTest, HasValidUid_rejects_absent_and_zero) {
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs)); // absent
+    rs.mutable_uid()->set_hi(0);
+    rs.mutable_uid()->set_lo(0);
+    EXPECT_FALSE(has_valid_uid(rs)); // present but zero
+    rs.mutable_uid()->set_lo(1);
+    EXPECT_TRUE(has_valid_uid(rs));
 }
 
 } // namespace starrocks::lake

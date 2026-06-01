@@ -28,6 +28,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
@@ -604,7 +605,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             // single load_id field carried over from the first source no longer applies.
             merged->clear_load_id();
             if (txn_logs.size() > 1) {
-                // MergeFrom appends repeated fields (segments, dels, segment_size, ...)
+                // MergeFrom appends repeated fields (segment_metas, dels_meta, ...)
                 // and recursively merges optional message fields, which is what we want
                 // for the per-segment lists. But it overwrites scalar accumulators with
                 // the last source's value, so sum num_rows / data_size / num_dels back
@@ -630,6 +631,10 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     rowset->set_data_size(data_size);
                     rowset->set_num_dels(num_dels);
                     rowset->set_overlapped(rowset->segment_metas_size() > 1);
+                    // MergeFrom above overwrote the combined rowset's uid with the last source's;
+                    // restore the first log's identity by re-reading txn_logs.front() (MergeFrom
+                    // never mutates the sources) so it stays stable across cross-published children.
+                    tablet_reshard_helper::inherit_or_set_uid(rowset, txn_logs.front()->op_write().rowset());
                 }
             }
 
