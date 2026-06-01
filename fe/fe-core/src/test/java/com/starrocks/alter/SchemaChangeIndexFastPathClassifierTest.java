@@ -101,14 +101,14 @@ public class SchemaChangeIndexFastPathClassifierTest {
     }
 
     @Test
-    public void testAddIndexFastPath_GinAccepted() {
-        // Classifier accepts GIN at the type-eligibility level; the BE-side
-        // builder still rejects GIN (NotSupported) so the actual run will
-        // fall back. That's intentional: keeps the FE classifier table-type
-        // agnostic and lets BE/FE be deployed independently.
+    public void testAddIndexFastPath_GinRejected() {
+        // BE's AddIndexSchemaChange::run still returns Status::NotSupported
+        // for GIN, and the fast-path job does not auto-fall-back to the
+        // legacy path on BE rejection — routing GIN here would just fail
+        // the alter. Keep it on the legacy schema-change path.
         OlapTable t = lakeTable();
         List<AlterClause> clauses = Collections.singletonList(createIndex(IndexDef.IndexType.GIN));
-        assertTrue(SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(t, clauses));
+        assertFalse(SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(t, clauses));
     }
 
     @Test
@@ -173,7 +173,8 @@ public class SchemaChangeIndexFastPathClassifierTest {
     public void testIsSupportedIndexType() {
         assertTrue(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.BITMAP));
         assertTrue(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.NGRAMBF));
-        assertTrue(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.GIN));
+        // GIN and VECTOR are unsupported on the BE side; route them to legacy.
+        assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.GIN));
         assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.VECTOR));
         assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(null));
     }

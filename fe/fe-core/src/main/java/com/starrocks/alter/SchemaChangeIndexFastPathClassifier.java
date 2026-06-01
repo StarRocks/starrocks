@@ -257,11 +257,17 @@ public final class SchemaChangeIndexFastPathClassifier {
         if (type == null) {
             return false;
         }
+        // Only BITMAP and NGRAMBF take the lake IDG fast path. The BE
+        // builder (AddIndexSchemaChange::run) returns Status::NotSupported
+        // for GIN / VECTOR, and the fast-path job does not auto-fall-back
+        // to the legacy schema-change job on a BE rejection — routing
+        // these types here would simply fail the alter. Keep them on the
+        // legacy path until BE adds a fast-path builder for them.
         switch (type) {
             case BITMAP:
             case NGRAMBF:
-            case GIN:
                 return true;
+            case GIN:
             case VECTOR:
             default:
                 return false;
