@@ -42,16 +42,16 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
         lock = new QueryableReentrantReadWriteLock(true);
         // This class tests the slow-lock detection mechanism itself (mocking
         // getLockInfoToJson). The per-instance event throttle would suppress subsequent
-        // invocations within Config.slow_lock_log_every_ms, breaking multi-reader
+        // invocations within Config.slow_lock_log_l2_info_interval_ms, breaking multi-reader
         // expectations. Disable it for these tests; throttle behavior is covered
         // separately in QueryableReentrantReadWriteLockTest.
-        origSlowLockLogEveryMs = Config.slow_lock_log_every_ms;
-        Config.slow_lock_log_every_ms = 0;
+        origSlowLockLogEveryMs = Config.slow_lock_log_l2_info_interval_ms;
+        Config.slow_lock_log_l2_info_interval_ms = 0;
     }
 
     @AfterEach
     public void tearDown() {
-        Config.slow_lock_log_every_ms = origSlowLockLogEveryMs;
+        Config.slow_lock_log_l2_info_interval_ms = origSlowLockLogEveryMs;
     }
 
     /**

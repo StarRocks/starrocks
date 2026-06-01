@@ -36,9 +36,9 @@ public class LockManager {
 
     // GLOBAL slow-lock log throttle gates (one set across all rids, so a hot rid cannot drown out
     // signal from other rids). The three tiers are decided once per event by SlowLockLogDecision:
-    //   LAST_STACK_PRINT_MS  -> L1 (full info + stacks), Config.slow_lock_stack_print_interval_ms
-    //   LAST_EVENT_LOG_MS    -> L2 (full info, no stacks), Config.slow_lock_log_every_ms
-    //   LAST_BREADCRUMB_MS   -> L3 (plain-text breadcrumb), Config.slow_lock_breadcrumb_every_ms
+    //   LAST_STACK_PRINT_MS  -> L1 (full info + stacks), Config.slow_lock_log_l1_stack_interval_ms
+    //   LAST_EVENT_LOG_MS    -> L2 (full info, no stacks), Config.slow_lock_log_l2_info_interval_ms
+    //   LAST_BREADCRUMB_MS   -> L3 (plain-text breadcrumb), Config.slow_lock_log_l3_brief_interval_ms
     // Stack capture (Thread.getStackTrace) triggers a JVM safepoint that is expensive when
     // slow-lock events fire frequently, which is why L1 is throttled most strictly. All gates
     // init to GATE_INIT_SENTINEL so the first event always wins regardless of nanoTime origin.
@@ -408,9 +408,7 @@ public class LockManager {
         List<LockHolder> owners;
         List<LockHolder> waiters;
 
-        // Snapshot first, decide second. Cloning before touching the throttle gates means an
-        // empty-owners race (a thread woke from slow-wait but the lock was just released) cannot
-        // burn the gate quota.
+        // Snapshot first, decide second.
         synchronized (lockTableMutexes[lockTableIdx]) {
             Map<Long, Lock> lockTable = lockTables[lockTableIdx];
             Lock lock = lockTable.get(rid);
@@ -419,9 +417,11 @@ public class LockManager {
         }
 
         // One tier decision per event (the only place the GLOBAL gates are consumed). hasHolder is
-        // !owners.isEmpty() so an empty snapshot never reaches the L1 stack gate. nowMs
-        // (System.currentTimeMillis) is kept for user-facing timestamps; the gates use a monotonic
-        // clock so wall-clock adjustments cannot stretch or short-circuit the intervals.
+        // !owners.isEmpty() and gates only L1 (the owner stack): an empty-owners snapshot still
+        // emits an L2 line carrying the waiter queue (the signal when waiters are stuck with no
+        // holder), it just skips the L1 stack capture. nowMs (System.currentTimeMillis) is kept for
+        // user-facing timestamps; the gates use a monotonic clock so wall-clock adjustments cannot
+        // stretch or short-circuit the intervals.
         long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         SlowLockLogDecision decision = SlowLockLogDecision.decide(
                 !owners.isEmpty(), LAST_STACK_PRINT_MS, LAST_EVENT_LOG_MS, LAST_BREADCRUMB_MS, monoNowMs);

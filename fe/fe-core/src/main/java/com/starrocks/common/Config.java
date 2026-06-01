@@ -187,8 +187,18 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
 
-    @ConfField(mutable = true)
-    public static long slow_lock_log_every_ms = 3000L;
+    /**
+     * Minimum interval in milliseconds for the L2 slow-lock log tier — a full lock-info JSON line
+     * without stack traces. The three slow-lock log tiers are throttled progressively (strictest
+     * first): L1 full info + stacks ({@link #slow_lock_log_l1_stack_interval_ms}), L2 full info no
+     * stacks (this), L3 plain-text breadcrumb ({@link #slow_lock_log_l3_brief_interval_ms}). Tune
+     * {@code slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms}.
+     * Set to 0 or negative to disable the L2 gate (always admit a full-info line).
+     *
+     * Renamed from {@code slow_lock_log_every_ms} (kept as an alias for backward compatibility).
+     */
+    @ConfField(mutable = true, aliases = {"slow_lock_log_every_ms"})
+    public static long slow_lock_log_l2_info_interval_ms = 3000L;
 
     @ConfField(mutable = true)
     public static int slow_lock_stack_trace_reserve_levels = 15;
@@ -207,7 +217,7 @@ public class Config extends ConfigBase {
      * capture runs without suppressing the per-event warn log itself.
      */
     @ConfField(mutable = true)
-    public static long slow_lock_stack_print_interval_ms = 30000L;
+    public static long slow_lock_log_l1_stack_interval_ms = 30000L;
 
     /**
      * Maximum number of waiter entries serialized into a single LockManager slow-lock log event.
@@ -219,18 +229,19 @@ public class Config extends ConfigBase {
     public static int slow_lock_max_waiter_count_to_log = 30;
 
     /**
-     * Floor interval in milliseconds for the L3 slow-lock breadcrumb — a single plain-text
-     * warn line (no JSON, no stack) emitted when the richer tiers are throttled, so a slow-lock
-     * event never disappears entirely. This is the loosest of the three slow-lock log throttles
-     * and should be tuned smaller than {@link #slow_lock_log_every_ms} (L2) which in turn is
-     * smaller than {@link #slow_lock_stack_print_interval_ms} (L1):
-     * {@code slow_lock_breadcrumb_every_ms < slow_lock_log_every_ms < slow_lock_stack_print_interval_ms}.
-     * Set to 0 or negative to make the breadcrumb unthrottled (every otherwise-throttled event
-     * still leaves a line). There is intentionally no value that fully silences the breadcrumb —
-     * it is the always-leaves-evidence floor.
+     * Floor interval in milliseconds for the L3 slow-lock breadcrumb — a single plain-text warn
+     * line (no JSON, no stack) emitted when the richer L1/L2 tiers are throttled. The breadcrumb is
+     * emitted at most once per this interval: events arriving while the L3 gate is still closed are
+     * suppressed, so this does NOT guarantee a line per event — it bounds the worst-case silence to
+     * one breadcrumb interval during sustained contention. This is the loosest of the three
+     * slow-lock log throttles and should be tuned smaller than {@link #slow_lock_log_l2_info_interval_ms}
+     * (L2) which in turn is smaller than {@link #slow_lock_log_l1_stack_interval_ms} (L1):
+     * {@code slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms}.
+     * Set to 0 or negative to make the breadcrumb unthrottled — then every otherwise-throttled
+     * event leaves a line (predictable but potentially many per second under a storm).
      */
     @ConfField(mutable = true)
-    public static long slow_lock_breadcrumb_every_ms = 1000L;
+    public static long slow_lock_log_l3_brief_interval_ms = 1000L;
 
     @ConfField
     public static String custom_config_dir = "/conf";

@@ -51,8 +51,8 @@ public class SlowLockMetricTest {
         String histoLockWaitName = "slow_lock_wait_time_ms";
 
         long slowLockConfig = Config.slow_lock_threshold_ms;
-        long origStackInterval = Config.slow_lock_stack_print_interval_ms;
-        long origLogEvery = Config.slow_lock_log_every_ms;
+        long origStackInterval = Config.slow_lock_log_l1_stack_interval_ms;
+        long origLogEvery = Config.slow_lock_log_l2_info_interval_ms;
         long rid = 1127;
 
         Config.slow_lock_threshold_ms = 500; // 500 ms
@@ -60,8 +60,8 @@ public class SlowLockMetricTest {
         // so this metric integration test is deterministic regardless of the global gate state
         // left by sibling tests in the same JVM — the slow event always reaches L1 and bumps the
         // held-time histogram.
-        Config.slow_lock_stack_print_interval_ms = 0;
-        Config.slow_lock_log_every_ms = 0;
+        Config.slow_lock_log_l1_stack_interval_ms = 0;
+        Config.slow_lock_log_l2_info_interval_ms = 0;
         CountDownLatch syncPoint1 = new CountDownLatch(1);
         CountDownLatch syncPoint2 = new CountDownLatch(1);
         try {
@@ -107,8 +107,8 @@ public class SlowLockMetricTest {
             Assertions.fail("Test interrupted: " + exception.getMessage());
         } finally {
             Config.slow_lock_threshold_ms = slowLockConfig;
-            Config.slow_lock_stack_print_interval_ms = origStackInterval;
-            Config.slow_lock_log_every_ms = origLogEvery;
+            Config.slow_lock_log_l1_stack_interval_ms = origStackInterval;
+            Config.slow_lock_log_l2_info_interval_ms = origLogEvery;
         }
     }
 }

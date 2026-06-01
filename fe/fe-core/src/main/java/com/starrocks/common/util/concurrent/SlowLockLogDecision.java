@@ -32,9 +32,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <h3>Tiering</h3>
  * <ul>
- *   <li>L1 = full info + stacks, gated by {@code slow_lock_stack_print_interval_ms} (strictest)</li>
- *   <li>L2 = full info, no stacks, gated by {@code slow_lock_log_every_ms}</li>
- *   <li>L3 = plain-text breadcrumb, gated by {@code slow_lock_breadcrumb_every_ms} (loosest floor)</li>
+ *   <li>L1 = full info + stacks, gated by {@code slow_lock_log_l1_stack_interval_ms} (strictest)</li>
+ *   <li>L2 = full info, no stacks, gated by {@code slow_lock_log_l2_info_interval_ms}</li>
+ *   <li>L3 = plain-text breadcrumb, gated by {@code slow_lock_log_l3_brief_interval_ms} (loosest floor)</li>
  * </ul>
  * {@link #decide} probes the gates in cost order and degrades downward; the chosen tier
  * <b>subsumes</b> the looser gates (an L1 win force-advances the L2 and L3 gates, an L2 win
@@ -76,12 +76,16 @@ public final class SlowLockLogDecision {
      * Must be called at most once per logical event. The caller samples the monotonic clock
      * once and passes it in (keeps the logic deterministic and unit-testable).
      *
-     * @param hasHolder  whether the snapshot has an actual lock holder/reader to dump a stack for;
-     *                   when false the L1 stack gate is never touched (avoids burning quota on
-     *                   empty snapshots)
-     * @param lastStackMs      L1 gate (slow_lock_stack_print_interval_ms)
-     * @param lastEventMs      L2 gate (slow_lock_log_every_ms)
-     * @param lastBreadcrumbMs L3 gate (slow_lock_breadcrumb_every_ms)
+     * @param hasHolder  whether the snapshot has a lock holder (an owner, or a shared reader) whose
+     *                   stack could be dumped. Gates L1 only: when false the L1 stack gate is never
+     *                   touched (there is no thread to dump, and this avoids burning the stack quota
+     *                   on empty snapshots). L2/L3 do not depend on it — an owner-less event still
+     *                   carries the waiter/queue list, which is exactly the signal for a "waiters
+     *                   stuck with no owner" situation, so it still qualifies for the L2 full-info
+     *                   line (just without an owner stack).
+     * @param lastStackMs      L1 gate (slow_lock_log_l1_stack_interval_ms)
+     * @param lastEventMs      L2 gate (slow_lock_log_l2_info_interval_ms)
+     * @param lastBreadcrumbMs L3 gate (slow_lock_log_l3_brief_interval_ms)
      * @param monoNowMs        current time from a monotonic source, in ms
      */
     public static SlowLockLogDecision decide(boolean hasHolder,
@@ -92,20 +96,22 @@ public final class SlowLockLogDecision {
         // L1: full stack + info, strictest. Master switch + hasHolder short-circuit so empty
         // snapshots never consume the stack quota.
         if (hasHolder && Config.slow_lock_print_stack
-                && tryAdvance(lastStackMs, Config.slow_lock_stack_print_interval_ms, monoNowMs)) {
+                && tryAdvance(lastStackMs, Config.slow_lock_log_l1_stack_interval_ms, monoNowMs)) {
             // Tier subsumption: an L1 emit must also push the looser gates forward so a
             // near-immediate second event cannot additionally emit L2/L3.
             forceAdvance(lastEventMs, monoNowMs);
             forceAdvance(lastBreadcrumbMs, monoNowMs);
             return new SlowLockLogDecision(SlowLockTier.L1_STACK_INFO, true);
         }
-        // L2: full info, no stack.
-        if (tryAdvance(lastEventMs, Config.slow_lock_log_every_ms, monoNowMs)) {
+        // L2: full info, no stack. Not gated on hasHolder — even with no owner the line still
+        // carries the waiter/queue list, which is the useful signal when waiters are stuck with no
+        // holder.
+        if (tryAdvance(lastEventMs, Config.slow_lock_log_l2_info_interval_ms, monoNowMs)) {
             forceAdvance(lastBreadcrumbMs, monoNowMs);
             return new SlowLockLogDecision(SlowLockTier.L2_INFO, false);
         }
         // L3: plain-text breadcrumb, the always-leaves-evidence floor.
-        if (tryAdvance(lastBreadcrumbMs, Config.slow_lock_breadcrumb_every_ms, monoNowMs)) {
+        if (tryAdvance(lastBreadcrumbMs, Config.slow_lock_log_l3_brief_interval_ms, monoNowMs)) {
             return new SlowLockLogDecision(SlowLockTier.L3_BREADCRUMB, false);
         }
         return SUPPRESS;

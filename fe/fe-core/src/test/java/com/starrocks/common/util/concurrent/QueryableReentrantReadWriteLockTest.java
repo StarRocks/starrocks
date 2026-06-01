@@ -38,23 +38,23 @@ public class QueryableReentrantReadWriteLockTest {
     @BeforeEach
     public void setUp() {
         origPrintStack = Config.slow_lock_print_stack;
-        origStackInterval = Config.slow_lock_stack_print_interval_ms;
-        origLogEvery = Config.slow_lock_log_every_ms;
-        origBreadcrumbEvery = Config.slow_lock_breadcrumb_every_ms;
+        origStackInterval = Config.slow_lock_log_l1_stack_interval_ms;
+        origLogEvery = Config.slow_lock_log_l2_info_interval_ms;
+        origBreadcrumbEvery = Config.slow_lock_log_l3_brief_interval_ms;
         origMaxWaiter = Config.slow_lock_max_waiter_count_to_log;
         Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 30000L;
-        Config.slow_lock_log_every_ms = 3000L;
-        Config.slow_lock_breadcrumb_every_ms = 1000L;
+        Config.slow_lock_log_l1_stack_interval_ms = 30000L;
+        Config.slow_lock_log_l2_info_interval_ms = 3000L;
+        Config.slow_lock_log_l3_brief_interval_ms = 1000L;
         Config.slow_lock_max_waiter_count_to_log = 30;
     }
 
     @AfterEach
     public void tearDown() {
         Config.slow_lock_print_stack = origPrintStack;
-        Config.slow_lock_stack_print_interval_ms = origStackInterval;
-        Config.slow_lock_log_every_ms = origLogEvery;
-        Config.slow_lock_breadcrumb_every_ms = origBreadcrumbEvery;
+        Config.slow_lock_log_l1_stack_interval_ms = origStackInterval;
+        Config.slow_lock_log_l2_info_interval_ms = origLogEvery;
+        Config.slow_lock_log_l3_brief_interval_ms = origBreadcrumbEvery;
         Config.slow_lock_max_waiter_count_to_log = origMaxWaiter;
     }
 

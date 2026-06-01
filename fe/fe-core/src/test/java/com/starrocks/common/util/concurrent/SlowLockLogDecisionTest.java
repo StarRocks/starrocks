@@ -41,22 +41,22 @@ public class SlowLockLogDecisionTest {
     @BeforeEach
     public void setUp() {
         origPrintStack = Config.slow_lock_print_stack;
-        origStackInterval = Config.slow_lock_stack_print_interval_ms;
-        origLogEvery = Config.slow_lock_log_every_ms;
-        origBreadcrumbEvery = Config.slow_lock_breadcrumb_every_ms;
+        origStackInterval = Config.slow_lock_log_l1_stack_interval_ms;
+        origLogEvery = Config.slow_lock_log_l2_info_interval_ms;
+        origBreadcrumbEvery = Config.slow_lock_log_l3_brief_interval_ms;
         // Default tiering: breadcrumb(1s) < logEvery(3s) < stackInterval(30s)
         Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 30000L;
-        Config.slow_lock_log_every_ms = 3000L;
-        Config.slow_lock_breadcrumb_every_ms = 1000L;
+        Config.slow_lock_log_l1_stack_interval_ms = 30000L;
+        Config.slow_lock_log_l2_info_interval_ms = 3000L;
+        Config.slow_lock_log_l3_brief_interval_ms = 1000L;
     }
 
     @AfterEach
     public void tearDown() {
         Config.slow_lock_print_stack = origPrintStack;
-        Config.slow_lock_stack_print_interval_ms = origStackInterval;
-        Config.slow_lock_log_every_ms = origLogEvery;
-        Config.slow_lock_breadcrumb_every_ms = origBreadcrumbEvery;
+        Config.slow_lock_log_l1_stack_interval_ms = origStackInterval;
+        Config.slow_lock_log_l2_info_interval_ms = origLogEvery;
+        Config.slow_lock_log_l3_brief_interval_ms = origBreadcrumbEvery;
     }
 
     private static AtomicLong gate() {
@@ -136,17 +136,21 @@ public class SlowLockLogDecisionTest {
     }
 
     @Test
-    public void testHasHolderFalseSkipsL1AndDoesNotTouchStackGate() {
+    public void testHasHolderFalseSkipsL1ButStillReachesL2() {
         AtomicLong stack = gate();
         AtomicLong event = gate();
         AtomicLong breadcrumb = gate();
 
         SlowLockLogDecision d = SlowLockLogDecision.decide(false, stack, event, breadcrumb, T0);
 
-        Assertions.assertEquals(SlowLockTier.L2_INFO, d.tier, "no holder → L1 ineligible, falls to L2");
+        // No owner means no stack to dump, so L1 is skipped and the stack gate is left untouched.
+        // But the L2 full-info line still carries the waiter/queue list, which is exactly the
+        // signal when waiters are stuck with no holder — so an owner-less event still reaches L2
+        // (just without an owner stack), rather than being downgraded to a bare breadcrumb.
+        Assertions.assertEquals(SlowLockTier.L2_INFO, d.tier, "no owner → L1 skipped, but L2 still applies");
         Assertions.assertFalse(d.captureStack);
-        Assertions.assertEquals(SENTINEL, stack.get(),
-                "an empty/no-holder snapshot must never consume the stack-throttle quota (Codex P1)");
+        Assertions.assertEquals(SENTINEL, stack.get(), "no-holder must not consume the L1 stack gate");
+        Assertions.assertEquals(T0, event.get(), "L2 fired, so the event gate is consumed");
     }
 
     @Test
@@ -177,7 +181,7 @@ public class SlowLockLogDecisionTest {
 
     @Test
     public void testStackIntervalZeroAlwaysCapturesL1() {
-        Config.slow_lock_stack_print_interval_ms = 0;
+        Config.slow_lock_log_l1_stack_interval_ms = 0;
         // Stack gate just consumed; interval<=0 means "always admit" regardless.
         AtomicLong stack = new AtomicLong(T0);
         AtomicLong event = new AtomicLong(T0);
@@ -193,9 +197,9 @@ public class SlowLockLogDecisionTest {
     public void testBreadcrumbIntervalZeroNeverSilent() {
         // L1 and L2 throttled hard; breadcrumb disabled-as-unthrottled must still emit (the floor
         // has no off switch — <=0 means always admit, never SUPPRESS).
-        Config.slow_lock_stack_print_interval_ms = 1_000_000L;
-        Config.slow_lock_log_every_ms = 1_000_000L;
-        Config.slow_lock_breadcrumb_every_ms = 0;
+        Config.slow_lock_log_l1_stack_interval_ms = 1_000_000L;
+        Config.slow_lock_log_l2_info_interval_ms = 1_000_000L;
+        Config.slow_lock_log_l3_brief_interval_ms = 0;
         AtomicLong stack = new AtomicLong(T0);
         AtomicLong event = new AtomicLong(T0);
         AtomicLong breadcrumb = new AtomicLong(T0);
