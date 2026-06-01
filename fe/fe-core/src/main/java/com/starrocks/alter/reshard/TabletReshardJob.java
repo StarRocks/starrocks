@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -205,6 +206,14 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     public abstract long getParallelTablets();
+
+    /*
+     * Admission-time reservation. Reserve the table for this job before it is queued in
+     * TabletReshardJobMgr. Must succeed before the job becomes visible to the scheduler, so that
+     * an admitted job is guaranteed runnable and never forced to abort at execution time due to an
+     * unexpected table state. Throws if the table is not reservable (not NORMAL / dropped).
+     */
+    public abstract void init() throws StarRocksException;
 
     protected abstract void runPendingJob();
 
