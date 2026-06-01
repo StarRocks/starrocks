@@ -18,15 +18,29 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <thread>
 
 #include "base/concurrency/countdown_latch.h"
-#include "common/thread/thread.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_manager.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
+
+namespace {
+
+class FakeWorkGroupSchedulePolicy final : public WorkGroupSchedulePolicy {
+public:
+    std::function<bool(const WorkGroup*)> should_yield_func = [](const WorkGroup*) { return false; };
+    size_t num_workgroups_value = 2;
+
+    bool should_yield(const WorkGroup* wg) const override { return should_yield_func(wg); }
+    size_t num_workgroups() const override { return num_workgroups_value; }
+};
+
+} // namespace
 
 static ScanTask make_wg_task(WorkGroupPtr wg, int priority) {
     ScanTask task([](YieldContext&) {});
@@ -49,11 +63,12 @@ public:
 protected:
     WorkGroupPtr _wg1;
     WorkGroupPtr _wg2;
+    FakeWorkGroupSchedulePolicy _schedule_policy;
 };
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_single_workgroup) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     queue.force_put(make_wg_task(_wg1, 5));
     ASSERT_EQ(queue.size(), 1);
@@ -66,7 +81,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_single_workgroup) {
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_blocking_wakeup) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     std::atomic<bool> consumer_got_task{false};
     auto consumer_thread = std::thread([&]() {
@@ -87,7 +102,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_blocking_wakeup) {
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_close) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     std::atomic<bool> consumer_returned{false};
     bool take_ok = true;
@@ -109,7 +124,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_close) {
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_with_invalid_worker_id_fallback) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     queue.force_put(make_wg_task(_wg1, 5));
     auto result = queue.take(kNumWorkers);
@@ -120,7 +135,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_with_invalid_worker_id_fall
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_try_offer) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     ASSERT_TRUE(queue.try_offer(make_wg_task(_wg1, 10)));
     ASSERT_EQ(queue.size(), 1);
@@ -132,7 +147,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_try_offer) {
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_successful_dequeue_drains_wakeup_permit) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     queue.force_put(make_wg_task(_wg1, 5));
     ASSERT_EQ(queue.available_wakeup_permits_for_test(), 1u);
@@ -145,7 +160,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_successful_dequeue_drains_wakeup
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_workgroup_vruntime_selection) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(_wg2->scan_sched_entity());
     entity2->incr_runtime_ns(1'000'000'000L);
@@ -166,7 +181,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_workgroup_vruntime_selection) {
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_update_statistics) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     ScanTask task = make_wg_task(_wg1, 5);
 
@@ -179,7 +194,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_update_statistics) {
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_refreshes_min_wg_on_enqueue) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(_wg2->scan_sched_entity());
     entity2->incr_runtime_ns(1'000'000'000L);
@@ -193,7 +208,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_refreshes_min_wg_on
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_accepts_connector_scan_entity) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::CONNECTOR, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::CONNECTOR, kNumWorkers, _schedule_policy);
 
     auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(_wg2->connector_scan_sched_entity());
     entity2->incr_runtime_ns(1'000'000'000L);
@@ -207,53 +222,37 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_accepts_connector_s
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_skips_yield_blocked_workgroups) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
-
-    auto* manager = ExecEnv::GetInstance()->workgroup_manager();
-    auto& executors_manager = manager->_executors_manager;
-    const bool old_enable_cpu_borrowing = executors_manager._conf.enable_cpu_borrowing;
-    auto& cpu_owner = executors_manager._cpu_owners[0];
-    WorkGroup* old_owner = cpu_owner.raw_wg.load(std::memory_order_relaxed);
-
-    executors_manager._conf.enable_cpu_borrowing = true;
-    cpu_owner.set_wg(_wg1.get());
-    auto token = _wg1->acquire_running_query_token(false).value();
+    std::atomic<bool> block_wg2{true};
+    _schedule_policy.should_yield_func = [&](const WorkGroup* wg) {
+        return wg == _wg2.get() && block_wg2.load(std::memory_order_acquire);
+    };
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     queue.force_put(make_wg_task(_wg2, 5));
 
     CountDownLatch started(1);
     std::atomic<bool> got_task{false};
-    std::atomic<bool> got_cancelled{false};
-    scoped_refptr<Thread> worker;
-    ASSERT_TRUE(Thread::create(
-                        "test", "yield_blocked_scan_take",
-                        [&]() {
-                            Thread::current_thread()->set_first_bound_cpuid(0);
-                            started.count_down();
-                            auto result = queue.take(0);
-                            got_task.store(result.ok(), std::memory_order_release);
-                            got_cancelled.store(result.status().is_cancelled(), std::memory_order_release);
-                        },
-                        &worker)
-                        .ok());
+    std::thread worker([&]() {
+        started.count_down();
+        auto result = queue.take(0);
+        got_task.store(result.ok(), std::memory_order_release);
+    });
 
     started.wait();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     ASSERT_FALSE(got_task.load(std::memory_order_acquire));
 
-    queue.close();
-    worker->join();
+    block_wg2.store(false, std::memory_order_release);
+    worker.join();
 
-    ASSERT_TRUE(got_cancelled.load(std::memory_order_acquire));
-
-    cpu_owner.set_wg(old_owner);
-    executors_manager._conf.enable_cpu_borrowing = old_enable_cpu_borrowing;
+    ASSERT_TRUE(got_task.load(std::memory_order_acquire));
+    ASSERT_EQ(queue.size(), 0);
 }
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_rebases_returning_workgroup_vruntime_on_enqueue) {
     constexpr int kNumWorkers = 4;
-    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers, _schedule_policy);
 
     auto wg3 = std::make_shared<WorkGroup>("scan_wg3", 30, WorkGroup::DEFAULT_VERSION, 1, 0.5, 10, 1.0,
                                            WorkGroupType::WG_NORMAL, WorkGroup::DEFAULT_MEM_POOL);

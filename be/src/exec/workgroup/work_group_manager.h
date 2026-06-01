@@ -33,6 +33,7 @@
 #include "exec/workgroup/mem_tracker_manager.h"
 #include "exec/workgroup/pipeline_executor_set_manager.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks {
 
@@ -45,7 +46,7 @@ using WorkGroupMetricsPtr = std::shared_ptr<WorkGroupMetrics>;
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
 // pick next workgroup for computation and launching io tasks.
-class WorkGroupManager {
+class WorkGroupManager : public WorkGroupSchedulePolicy {
 public:
     using DriverQueueFactory = std::function<pipeline::DriverQueuePtr(pipeline::DriverQueueMetrics*)>;
 
@@ -63,7 +64,7 @@ public:
     // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
     WorkGroupPtr get_default_mv_workgroup();
 
-    size_t num_workgroups() const { return _workgroups.size(); }
+    size_t num_workgroups() const override { return _workgroups.size(); }
 
     void close();
     // destruct workgroups
@@ -78,7 +79,7 @@ public:
 
     void update_metrics();
 
-    bool should_yield(const WorkGroup* wg) const;
+    bool should_yield(const WorkGroup* wg) const override;
     PipelineExecutorSet* shared_executors() const { return _executors_manager.shared_executors(); }
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);

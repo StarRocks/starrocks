@@ -20,6 +20,7 @@
 #include "common/thread/cpu_util.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::workgroup {
 
@@ -44,7 +45,7 @@ namespace starrocks::workgroup {
 /// with `unlocked` suffix. And the methods with `unlocked`suffix should not call other protected methods.
 class ExecutorsManager {
 public:
-    explicit ExecutorsManager(PipelineExecutorSetConfig conf);
+    ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGroupSchedulePolicy& schedule_policy);
 
     Status start_shared_executors_unlocked() const;
     void update_shared_executors() const;
@@ -70,6 +71,7 @@ private:
     static constexpr WorkGroup* COMMON_WORKGROUP = nullptr;
 
     PipelineExecutorSetConfig _conf;
+    const WorkGroupSchedulePolicy& _schedule_policy;
     std::unordered_map<WorkGroup*, CpuUtil::CpuIds> _wg_to_cpuids;
     const std::unique_ptr<PipelineExecutorSet> _shared_executors;
 
