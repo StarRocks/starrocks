@@ -230,9 +230,16 @@ def parse_be_configs(path: Path) -> dict[str, ParamInfo]:
 
 # ── SessionVariable / GlobalVariable parser ──────────────────────────────────
 
+# Matches single-line:  public static final String FOO = "actual_name";
 _CONST_RE = re.compile(
     r'public\s+static\s+final\s+String\s+(\w+)\s*=\s*"([a-z][a-z0-9_]*)"'
 )
+# Matches the opening of a two-line constant: public static final String FOO =
+_CONST_MULTILINE_START_RE = re.compile(
+    r'public\s+static\s+final\s+String\s+(\w+)\s*=\s*$'
+)
+# Matches the continuation line:     "actual_name";
+_CONST_MULTILINE_VALUE_RE = re.compile(r'^\s*"([a-z][a-z0-9_]*)"\s*;')
 _VARATTR_START_RE = re.compile(r'@(?:VarAttr|VariableMgr\.VarAttr)\s*\(')
 _FIELD_DECL_RE = re.compile(
     r'(?:private|public|protected)\s+(?:static\s+)?(\w+(?:\[\])?)\s+\w+\s*=\s*(.+?)(?:;|$)'
@@ -256,12 +263,18 @@ def parse_session_vars(session_path: Path, global_path: Path) -> dict[str, Param
         lines = src_path.read_text().splitlines()
         n = len(lines)
 
-        # Pass 1: String constants
+        # Pass 1: String constants (handles both single-line and two-line definitions)
         const_map: dict[str, str] = {}
-        for line in lines:
+        for idx, line in enumerate(lines):
             m = _CONST_RE.search(line)
             if m:
                 const_map[m.group(1)] = m.group(2)
+                continue
+            m = _CONST_MULTILINE_START_RE.search(line.strip())
+            if m and idx + 1 < n:
+                vm = _CONST_MULTILINE_VALUE_RE.match(lines[idx + 1])
+                if vm:
+                    const_map[m.group(1)] = vm.group(1)
 
         # Pass 2: @VarAttr annotations
         i = 0
