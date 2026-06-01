@@ -35,6 +35,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -220,7 +221,20 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             dispatchAllTasks();
         }
         if (!batchTask.isFinished()) {
-            // Still in flight; wait for the next scheduler tick.
+            // Cancel promptly when BE reports a permanent failure for any
+            // sub-task: waiting for batchTask.isFinished() would otherwise
+            // hold the table in RUNNING until the global alter timeout.
+            // Mirrors LakeTableSchemaChangeJob's cancel-after-three-retries
+            // policy.
+            List<AgentTask> unfinished = batchTask.getUnfinishedTasks(2000);
+            AgentTask failed = unfinished.stream()
+                    .filter(t -> t.isFailed() || t.getFailedTimes() >= 3)
+                    .findAny()
+                    .orElse(null);
+            if (failed != null) {
+                throw new AlterCancelException(
+                        "fast-path index alter task failed after retries: " + failed.getErrorMsg());
+            }
             if (isTimeout()) {
                 throw new AlterCancelException("alter timeout after "
                         + timeoutMs + " ms, still " + batchTask.getTaskNum() + " task(s) in flight");
@@ -361,7 +375,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             return false;
         }
         if (batchTask != null) {
-            for (com.starrocks.task.AgentTask task : batchTask.getAllTasks()) {
+            for (AgentTask task : batchTask.getAllTasks()) {
                 AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
             }
         }
