@@ -220,6 +220,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
+                rf.setBuildNdv(inner.getColumnNdv(left));
                 RuntimeFilterPushDownContext rfPushDownCxt =
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
                 if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
@@ -247,6 +248,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
+                rf.setBuildNdv(inner.getColumnNdv(right));
                 rf.setOnlyLocal(true);
                 RuntimeFilterPushDownContext rfPushDownCxt =
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
@@ -403,7 +405,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
-            if (description.canProbeUse(this, context)) {
+            if (description.canProbeUse(this, probeExpr, context)) {
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);

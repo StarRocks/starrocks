@@ -135,6 +135,64 @@ public class RuntimeFilterTest extends PlanTestBase {
         }
     }
 
+    // Probe-side gate on a remote RF crossing the shuffle exchange. The build side (dim, 90M) is
+    // comparable in rows to the probe (fact, 100M), so the build/probe row-count ratio (~0.9) would reject
+    // the filter; but the NDV semijoin selectivity NDV(d_cust)=500K / NDV(f_cust)=100M = 0.005 is
+    // selective, so it is accepted.
+    @Test
+    public void testProbeGateUsesNdvSelectivityNotRowsRatio() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        long savedProbeMin = sv.getGlobalRuntimeFilterProbeMinSize();
+        boolean savedGrf = sv.getEnableGlobalRuntimeFilter();
+        try {
+            sv.setGlobalRuntimeFilterProbeMinSize(1); // > 0 so the selectivity formula is actually reached
+            sv.setEnableGlobalRuntimeFilter(true);    // remote RF crosses the exchange -> formula runs
+            setTableStatistics((OlapTable) getTable("rf_fact"), 100_000_000);
+            setTableStatistics((OlapTable) getTable("rf_dim"), 90_000_000); // < fact -> dim is the build side
+            // build key d_cust has few distinct values; probe key f_cust has many -> selectivity is tiny.
+            new MockUp<MockTpchStatisticStorage>() {
+                @Mock
+                public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                    return columns.stream().map(c -> c.equals("d_cust") ? colStat(500_000) : colStat(100_000_000))
+                            .collect(Collectors.toList());
+                }
+            };
+
+            String plan = getVerboseExplain("select * from rf_fact join [shuffle] rf_dim on f_cust = d_cust");
+            assertContains(plan, "probe runtime filters");
+        } finally {
+            sv.setGlobalRuntimeFilterProbeMinSize(savedProbeMin);
+            sv.setEnableGlobalRuntimeFilter(savedGrf);
+        }
+    }
+
+    // NDV unknown -> the probe gate uses the original build/probe row-count ratio (dim 90M / fact 100M =
+    // 0.9 is above the 0.5 threshold -> reject), i.e. no regression where statistics are absent.
+    @Test
+    public void testProbeGateFallsBackToRowsRatioWhenNdvUnknown() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        long savedProbeMin = sv.getGlobalRuntimeFilterProbeMinSize();
+        boolean savedGrf = sv.getEnableGlobalRuntimeFilter();
+        try {
+            sv.setGlobalRuntimeFilterProbeMinSize(1);
+            sv.setEnableGlobalRuntimeFilter(true);
+            setTableStatistics((OlapTable) getTable("rf_fact"), 100_000_000);
+            setTableStatistics((OlapTable) getTable("rf_dim"), 90_000_000);
+            new MockUp<MockTpchStatisticStorage>() {
+                @Mock
+                public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                    return columns.stream().map(c -> ColumnStatistic.unknown()).collect(Collectors.toList());
+                }
+            };
+
+            String plan = getVerboseExplain("select * from rf_fact join [shuffle] rf_dim on f_cust = d_cust");
+            assertNotContains(plan, "probe runtime filters");
+        } finally {
+            sv.setGlobalRuntimeFilterProbeMinSize(savedProbeMin);
+            sv.setEnableGlobalRuntimeFilter(savedGrf);
+        }
+    }
+
     @Test
     public void testDeterministicBroadcastJoinForColocateJoin() throws Exception {
         String sql = "select * from \n" +

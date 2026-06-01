@@ -815,7 +815,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
-        if (isBound && description.canProbeUse(this, context)) {
+        if (isBound && description.canProbeUse(this, probeExpr, context)) {
             description.addProbeExpr(id.asInt(), probeExpr);
             description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
@@ -929,7 +929,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
-        if (isBound && addProbeInfo && description.canProbeUse(this, context)) {
+        if (isBound && addProbeInfo && description.canProbeUse(this, probeExpr, context)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
