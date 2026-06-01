@@ -166,7 +166,9 @@ public class OlapTableSink extends DataSink {
     private boolean isStreamingLoad = false;
 
     // Conservative default for RANGE-partitioned tables under stream / routine load.
-    // Stream and routine load both go through StreamLoadPlanner and call setIsStreamingLoad(true).
+    // Both planner paths flag streaming ingest via setIsStreamingLoad(true): StreamLoadPlanner
+    // (legacy stream load and routine load) and LoadPlanner (transaction stream load and batch
+    // write), the latter gated on EtlJobType.STREAM_LOAD / ROUTINE_LOAD.
     private static final int STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER = 32;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
@@ -313,7 +315,9 @@ public class OlapTableSink extends DataSink {
         //          continuous-ingest paths).
         //        - Other load types: open all, capped by max_load_initial_open_partition_number.
         int tableLimit = dstTable.getLoadInitialOpenPartitionNumber();
-        int limit;
+        // Keep the limit a long: Config.max_load_initial_open_partition_number is a long, so a
+        // narrowing (int) cast would wrap values above Integer.MAX_VALUE (e.g. 4294967297 -> 1).
+        long limit;
         boolean capByGlobalMax;
         if (tableLimit != TableProperty.INVALID) {
             limit = tableLimit;
@@ -330,7 +334,7 @@ public class OlapTableSink extends DataSink {
         }
 
         if (capByGlobalMax) {
-            int globalMax = (int) Config.max_load_initial_open_partition_number;
+            long globalMax = Config.max_load_initial_open_partition_number;
             if (globalMax > 0 && (limit <= 0 || limit > globalMax)) {
                 limit = globalMax;
             }
