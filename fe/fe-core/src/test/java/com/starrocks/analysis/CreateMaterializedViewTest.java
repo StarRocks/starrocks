@@ -85,27 +85,15 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TGetTasksParams;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
->>>>>>> 564ffa28fe ([UT] Stabilize and speed up CreateMaterializedViewTest (#74068))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
-import mockit.Mocked;
-import org.apache.hadoop.hive.metastore.TableType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.junit.jupiter.api.AfterAll;
-=======
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.awaitility.Awaitility;
->>>>>>> 564ffa28fe ([UT] Stabilize and speed up CreateMaterializedViewTest (#74068))
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -3910,27 +3898,14 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
 
-<<<<<<< HEAD
             TableName mvName = createMaterializedViewStatement.getTableName();
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
-            Assertions.assertNotNull(table);
-            Assertions.assertTrue(table instanceof MaterializedView);
-=======
-            TableName mvName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             String mvTableName = mvName.getTbl();
-            // Poll for the named MV to appear in the local metastore, up to 5s with a
-            // 200ms interval. createMaterializedView is synchronous so the MV is normally
-            // visible immediately; polling tolerates any async registration delay.
-            // Periodic-refresh callers (e.g. testFullCreate) no longer rely on a fixed
-            // sleep here - the per-task-name waitingTaskFinish(mvTaskName) helper now
-            // waits for the first task run to reach a finish state instead.
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
                     .pollInterval(200, TimeUnit.MILLISECONDS)
                     .until(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), mvTableName) instanceof MaterializedView);
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvTableName);
->>>>>>> 564ffa28fe ([UT] Stabilize and speed up CreateMaterializedViewTest (#74068))
             return (MaterializedView) table;
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
