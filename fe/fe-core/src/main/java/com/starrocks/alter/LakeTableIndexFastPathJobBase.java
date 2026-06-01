@@ -67,6 +67,17 @@ import java.util.Optional;
  * {@link #populateAlterRequest(AlterReplicaTask)} and
  * {@link #applyCatalogMutation(OlapTable)}. Everything else — txn watershed,
  * replica task dispatch, timeout, publish, persist/replay — is shared.
+ *
+ * <p><b>Mixed-version invariant:</b> the dispatch shape uses
+ * {@code base_tablet_id == new_tablet_id} together with new optional Thrift
+ * flags {@code only_add_index} / {@code only_drop_index} that an old CN/BE
+ * (one not carrying this fast-path) will silently ignore. Such a BE would
+ * fall into the legacy rewrite path with {@code base==new} and end up
+ * duplicating rowsets on the tablet. There is no in-protocol detection for
+ * this case; the upgrade contract is that all CN/BE nodes must be upgraded
+ * <em>before</em> FE. Operators must not run {@code ALTER TABLE ... ADD/DROP
+ * INDEX} on lake tables while CN nodes are mid-rolling-upgrade. See the PR
+ * description for the full rationale.
  */
 public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
 
