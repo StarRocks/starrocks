@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/spill/runtime_context.h"
+#pragma once
 
-#include "runtime/runtime_state.h"
+#include <memory>
 
-namespace starrocks::spill {
+namespace starrocks {
 
-TraceInfo::TraceInfo(RuntimeState* state) : query_id(state->query_id()), fragment_id(state->fragment_instance_id()) {}
+class QueryContextLifetime {
+public:
+    QueryContextLifetime() = default;
+    QueryContextLifetime(const QueryContextLifetime&) = delete;
+    QueryContextLifetime& operator=(const QueryContextLifetime&) = delete;
+    virtual ~QueryContextLifetime() = default;
+};
 
-QueryContextLifetimeWeakPtr spill_query_ctx_lifetime(RuntimeState* state) {
-    return state->query_ctx_lifetime();
-}
+using QueryContextLifetimeWeakPtr = std::weak_ptr<QueryContextLifetime>;
 
-} // namespace starrocks::spill
+} // namespace starrocks

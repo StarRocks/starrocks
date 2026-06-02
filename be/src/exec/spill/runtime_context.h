@@ -16,8 +16,8 @@
 
 #include <memory>
 
-#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
@@ -28,6 +28,6 @@ struct TraceInfo {
     TUniqueId fragment_id;
 };
 
-std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state);
+QueryContextLifetimeWeakPtr spill_query_ctx_lifetime(RuntimeState* state);
 
 } // namespace starrocks::spill
