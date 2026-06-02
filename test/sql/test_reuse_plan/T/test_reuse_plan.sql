@@ -13,6 +13,9 @@ DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES("replication_num"
 CREATE TABLE dim (d INT, tag VARCHAR(10)) 
 DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 3 PROPERTIES("replication_num"="1");
 
+CREATE TABLE dim_gap (d INT, tag VARCHAR(10))
+DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 3 PROPERTIES("replication_num"="1");
+
 INSERT INTO t0 VALUES
   (1, 10, 100, 1, 10),
   (2, 10, 100, 2, NULL),
@@ -32,6 +35,10 @@ INSERT INTO dim VALUES
   (100, 'A'),
   (200, 'B'),
   (300, 'C');
+
+INSERT INTO dim_gap VALUES
+  (100, 'A'),
+  (200, 'B');
 
 -- ========================================
 -- Pattern 1: Simple SPJG - Scan + Project + Agg
@@ -789,9 +796,26 @@ SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 < 4 GROUP BY k2
 ORDER BY 1, 2;
 
 -- ========================================
+-- Pattern 20: LEFT JOIN residual predicate
+-- Test column-ref rewrite for join predicates left above an outer join
+-- ========================================
+
+-- 20.1 right-side IS NULL predicate must be rewritten when identical SPJG plans are fused
+SELECT t0.k2, COUNT(*) as cnt
+FROM t0 LEFT JOIN dim_gap ON t0.k3 = dim_gap.d
+WHERE dim_gap.d IS NULL
+GROUP BY t0.k2
+UNION ALL
+SELECT t0.k2, COUNT(*) as cnt
+FROM t0 LEFT JOIN dim_gap ON t0.k3 = dim_gap.d
+WHERE dim_gap.d IS NULL
+GROUP BY t0.k2
+ORDER BY 1, 2;
+
+-- ========================================
 -- Cleanup
 -- ========================================
 DROP TABLE IF EXISTS t0;
 DROP TABLE IF EXISTS t1;
 DROP TABLE IF EXISTS dim;
-
+DROP TABLE IF EXISTS dim_gap;

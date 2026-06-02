@@ -1220,6 +1220,28 @@ public class CTEPlanTest extends PlanTestBase {
         Config.enable_virtual_columns = false;
     }
 
+    @Test
+    public void testCommonPlanExtractionLeftJoinResidualPredicate() throws Exception {
+        boolean cboExtractCommonPlan = connectContext.getSessionVariable().isCboExtractCommonPlan();
+        connectContext.getSessionVariable().setCboExtractCommonPlan(true);
+        try {
+            String sql = "SELECT t0.v2, COUNT(*) AS cnt " +
+                    "FROM t0 LEFT JOIN t1 ON t0.v3 = t1.v4 " +
+                    "WHERE t1.v4 IS NULL " +
+                    "GROUP BY t0.v2 " +
+                    "UNION ALL " +
+                    "SELECT t0.v2, COUNT(*) AS cnt " +
+                    "FROM t0 LEFT JOIN t1 ON t0.v3 = t1.v4 " +
+                    "WHERE t1.v4 IS NULL " +
+                    "GROUP BY t0.v2";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "LEFT OUTER JOIN");
+        } finally {
+            connectContext.getSessionVariable().setCboExtractCommonPlan(cboExtractCommonPlan);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {0})
     public void testCTEMaterializedHintForcesReuse(int forceReuseNodeCount) throws Exception {
