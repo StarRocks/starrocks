@@ -132,12 +132,36 @@ jobs:
           check_res=$(echo $check_res | tail -n 1)
           echo RES=${check_res} >> $GITHUB_OUTPUT
 
+      - name: refresh base before cherry-pick
+        # Close the race window between "pr branch" and "cherry pick":
+        # previous-check can take 2-3 minutes (GitHub branches API), and if
+        # another sync PR merges to origin/${BRANCH} in that window, the local
+        # pr_branch is stale. Cherry-picking a follow-up commit on a stale
+        # base produces conflict markers that get committed into the PR
+        # (see #55895 / #56041). Force the pr_branch tip to current
+        # origin/${BRANCH} right before cherry-pick; it carries no commits
+        # of its own yet so reset --hard is safe.
+        #
+        # Explicit cd: the previous step ("previous check") cd'd into
+        # elastic-service. GH Actions resets cwd between steps, but staying
+        # explicit matches the surrounding convention and is robust to future
+        # reorderings.
+        run: |
+          cd ${{ github.workspace }}
+          git fetch origin ${{ inputs.BRANCH }}
+          git reset --hard origin/${{ inputs.BRANCH }}
+
       - name: cherry pick
         id: cherry-pick
         run: |
           cd ${{ github.workspace }}/elastic-service
           ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           cd ${{ github.workspace }}
+          # No --force needed: the "pr branch" step pushed pr_branch at M0
+          # (stale main); after the refresh step local pr_branch = M1
+          # (fresh main, descendant of M0 since main only advances), and
+          # cherry-pick adds X on top → local = M1+X is a descendant of M0.
+          # So this is a fast-forward push.
           git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - name: Create pull request
@@ -303,12 +327,36 @@ jobs:
           check_res=$(echo $check_res | tail -n 1)
           echo RES=${check_res} >> $GITHUB_OUTPUT
 
+      - name: refresh base before cherry-pick
+        # Close the race window between "pr branch" and "cherry pick":
+        # previous-check can take 2-3 minutes (GitHub branches API), and if
+        # another sync PR merges to origin/${BRANCH} in that window, the local
+        # pr_branch is stale. Cherry-picking a follow-up commit on a stale
+        # base produces conflict markers that get committed into the PR
+        # (see #55895 / #56041). Force the pr_branch tip to current
+        # origin/${BRANCH} right before cherry-pick; it carries no commits
+        # of its own yet so reset --hard is safe.
+        #
+        # Explicit cd: the previous step ("previous check") cd'd into
+        # elastic-service. GH Actions resets cwd between steps, but staying
+        # explicit matches the surrounding convention and is robust to future
+        # reorderings.
+        run: |
+          cd ${{ github.workspace }}
+          git fetch origin ${{ inputs.BRANCH }}
+          git reset --hard origin/${{ inputs.BRANCH }}
+
       - name: cherry pick
         id: cherry-pick
         run: |
           cd ${{ github.workspace }}/elastic-service
           ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           cd ${{ github.workspace }}
+          # No --force needed: the "pr branch" step pushed pr_branch at M0
+          # (stale main); after the refresh step local pr_branch = M1
+          # (fresh main, descendant of M0 since main only advances), and
+          # cherry-pick adds X on top → local = M1+X is a descendant of M0.
+          # So this is a fast-forward push.
           git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - name: Create pull request
