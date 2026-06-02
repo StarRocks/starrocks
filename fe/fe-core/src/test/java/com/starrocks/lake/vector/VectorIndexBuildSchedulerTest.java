@@ -1005,4 +1005,55 @@ public class VectorIndexBuildSchedulerTest {
         Assertions.assertEquals(20L, latestVersion(tabletId));
         Assertions.assertEquals(15L, latestCompactionVersion(tabletId));
     }
+
+    // ========== removeTablets tests ==========
+
+    @Test
+    public void testRemoveTabletsClearsPendingAndAuxMaps() throws Exception {
+        long tabletId = 1001L;
+        // Enqueue a tablet so pendingTablets, preferredNodes, and cooldownUntil all have an entry.
+        scheduler.addPendingTablet(tabletId, 5L, false);
+        getMap("preferredNodes").put(tabletId, Mockito.mock(ComputeNode.class));
+        getMap("cooldownUntil").put(tabletId, System.currentTimeMillis() + 60_000L);
+
+        scheduler.removeTablets(List.of(tabletId));
+
+        Assertions.assertFalse(scheduler.getPendingTabletsForTest().containsKey(tabletId),
+                "pendingTablets must no longer contain removed tabletId");
+        Assertions.assertFalse(scheduler.getPreferredNodesForTest().containsKey(tabletId),
+                "preferredNodes must be cleared for removed tabletId");
+        Assertions.assertFalse(scheduler.getCooldownUntilForTest().containsKey(tabletId),
+                "cooldownUntil must be cleared for removed tabletId");
+    }
+
+    @Test
+    public void testRemoveTabletsClearsRunningTasks() {
+        long tabletId = 1002L;
+        VectorIndexBuildTask task = createTaskWithStartTime(tabletId, 5L, System.currentTimeMillis());
+        getRunningTasks().put(tabletId, task);
+
+        scheduler.removeTablets(List.of(tabletId));
+
+        Assertions.assertFalse(getRunningTasks().containsKey(tabletId),
+                "runningTasks must be cleared for removed tabletId");
+    }
+
+    @Test
+    public void testRemoveTabletsIsIdempotentForUnknownIds() {
+        // Removing an id that was never enqueued must not throw.
+        Assertions.assertDoesNotThrow(() -> scheduler.removeTablets(List.of(9999L)));
+    }
+
+    @Test
+    public void testRemoveTabletsRemovesOnlySpecifiedIds() throws Exception {
+        scheduler.addPendingTablet(2001L, 5L, false);
+        scheduler.addPendingTablet(2002L, 7L, false);
+
+        scheduler.removeTablets(List.of(2001L));
+
+        Assertions.assertFalse(scheduler.getPendingTabletsForTest().containsKey(2001L),
+                "2001 must be removed");
+        Assertions.assertTrue(scheduler.getPendingTabletsForTest().containsKey(2002L),
+                "2002 must remain");
+    }
 }

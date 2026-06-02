@@ -25,6 +25,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -178,6 +179,19 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             if (info.tabletId != null && info.version != null) {
                 scheduler.addPendingTablet(info.tabletId, info.version, fromCompaction);
             }
+        }
+    }
+
+    /**
+     * Remove tablets from all scheduler tracking. Used when an ALTER is cancelled and its
+     * shadow tablets are discarded, so the scheduler stops trying to build them.
+     */
+    public void removeTablets(Collection<Long> tabletIds) {
+        for (Long id : tabletIds) {
+            pendingTablets.remove(id);
+            preferredNodes.remove(id);
+            cooldownUntil.remove(id);
+            runningTasks.remove(id);
         }
     }
 
