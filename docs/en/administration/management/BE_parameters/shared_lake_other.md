@@ -95,6 +95,22 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_rows_mapper_read_parallelism
+
+- Default: 32
+- Type: Int
+- Unit: sub-chunks
+- Is mutable: Yes
+- Description: Maximum number of in-flight `.lcrm` (lake compaction rows-mapper) sub-chunk reads kept by `RowsMapperIterator` during light Primary Key compaction publish in a shared-data cluster. Each sub-chunk is `lake_rows_mapper_sub_chunk_bytes` in size and never crosses a segment boundary; the iterator submits up to this many reads to the PK index execution thread pool and pipelines them against the caller's per-segment processing. Memory bound is `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`. Set to `1` to disable pipelining and fall back to sequential reads.
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- Default: 4194304
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
+
 ### loop_count_wait_fragments_finish
 
 - Default: 2
