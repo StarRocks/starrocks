@@ -2759,8 +2759,7 @@ public class OlapTable extends Table {
             // which is harmless because the next create on the same colocate_with name allocates a
             // new grpId via getNextId().
             if (colocateTableIndex.isRangeColocateGroup(groupId)) {
-                List<ColocateRange> ranges = colocateTableIndex.getColocateRangeMgr()
-                        .getColocateRanges(groupId.grpId);
+                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
                 if (!ranges.isEmpty()) {
                     GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
                             ColocateRangePersistInfo.create(groupId.grpId, ranges));
