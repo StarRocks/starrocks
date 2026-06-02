@@ -25,7 +25,6 @@
 #include <utility>
 #include <vector>
 
-#include "failpoint/fail_point.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -34,6 +33,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "failpoint/fail_point.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
