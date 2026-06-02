@@ -31,6 +31,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -71,6 +72,10 @@ public class JDBCScanner {
     private final boolean isOracleDriver;
     private final boolean isPostgresDriver;
     private final ZoneId queryTimeZone;
+    // Reusable Calendar instances for computeTimezoneOffsetMillis to avoid per-row allocation.
+    // Safe because JDBCScanner is single-threaded (bound to one JDBC connection).
+    private final Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    private final Calendar defaultCalendar = Calendar.getInstance();
     private ZoneId oracleSessionTimeZone;
     ClassLoader classLoader;
 
@@ -399,22 +404,26 @@ public class JDBCScanner {
     }
 
     private long computeTimezoneOffsetMillis(long sourceMillis) {
-        // Build the query-zone local datetime from sourceMillis, then resolve it in JVM default timezone.
-        // This matches Timestamp.valueOf(LocalDateTime) behavior, including DST gap/overlap resolution.
-        Calendar queryCalendar = Calendar.getInstance(TimeZone.getTimeZone(queryTimeZone));
-        queryCalendar.setTimeInMillis(sourceMillis);
+        // Use ZoneId rules for the query timezone to preserve historical zone offsets
+        // (e.g., LMT before timezone standardization). java.util.TimeZone may drop these.
+        Instant instant = Instant.ofEpochMilli(sourceMillis);
+        int queryOffsetSeconds = queryTimeZone.getRules().getOffset(instant).getTotalSeconds();
+        // Decompose the local time (sourceMillis + queryOffset) into calendar fields via a UTC Calendar,
+        // then resolve those fields in the JVM default timezone using lenient Calendar.
+        // This correctly handles DST gaps (shifts forward) and overlaps in the default timezone,
+        // matching Timestamp.valueOf(LocalDateTime) behavior.
+        utcCalendar.setTimeInMillis(sourceMillis + (long) queryOffsetSeconds * 1000);
 
-        Calendar defaultCalendar = Calendar.getInstance(TimeZone.getDefault());
         defaultCalendar.clear();
         defaultCalendar.setLenient(true);
-        defaultCalendar.set(Calendar.ERA, queryCalendar.get(Calendar.ERA));
-        defaultCalendar.set(queryCalendar.get(Calendar.YEAR),
-                queryCalendar.get(Calendar.MONTH),
-                queryCalendar.get(Calendar.DAY_OF_MONTH),
-                queryCalendar.get(Calendar.HOUR_OF_DAY),
-                queryCalendar.get(Calendar.MINUTE),
-                queryCalendar.get(Calendar.SECOND));
-        defaultCalendar.set(Calendar.MILLISECOND, queryCalendar.get(Calendar.MILLISECOND));
+        defaultCalendar.set(Calendar.ERA, utcCalendar.get(Calendar.ERA));
+        defaultCalendar.set(utcCalendar.get(Calendar.YEAR),
+                utcCalendar.get(Calendar.MONTH),
+                utcCalendar.get(Calendar.DAY_OF_MONTH),
+                utcCalendar.get(Calendar.HOUR_OF_DAY),
+                utcCalendar.get(Calendar.MINUTE),
+                utcCalendar.get(Calendar.SECOND));
+        defaultCalendar.set(Calendar.MILLISECOND, utcCalendar.get(Calendar.MILLISECOND));
         return defaultCalendar.getTimeInMillis() - sourceMillis;
     }
 
@@ -426,19 +435,22 @@ public class JDBCScanner {
         // so convert via epoch millis manually.
         // Avoid Time.valueOf(LocalTime) as it drops sub-second precision.
         long sourceMillis = sourceValue.getTime();
-        long offsetMillis = TimeZone.getTimeZone(queryTimeZone).getOffset(sourceMillis)
-                - TimeZone.getDefault().getOffset(sourceMillis);
-        return new Time(sourceMillis + offsetMillis);
+        return new Time(sourceMillis + computeTimezoneOffsetMillis(sourceMillis));
     }
 
     private Timestamp convertPostgresTimestampWithTimezoneValue(Timestamp sourceValue) {
         if (sourceValue == null || queryTimeZone == null) {
             return sourceValue;
         }
-        // Timestamp.toInstant() returns the absolute instant.
-        // Convert directly to the target timezone without relying on JVM/PG session timezone.
-        LocalDateTime converted = sourceValue.toInstant().atZone(queryTimeZone).toLocalDateTime();
-        return Timestamp.valueOf(converted);
+        // Avoid Timestamp.toInstant() as it uses the proleptic Gregorian calendar,
+        // while java.sql.Timestamp uses the Julian calendar for dates before October 15, 1582.
+        // This calendar mismatch causes incorrect date conversion for very old dates (e.g., year 0001).
+        // Instead, adjust via epoch millis like convertPostgresTimeWithTimezoneValue does.
+        long sourceMillis = sourceValue.getTime();
+        int nanos = sourceValue.getNanos();
+        Timestamp result = new Timestamp(sourceMillis + computeTimezoneOffsetMillis(sourceMillis));
+        result.setNanos(nanos);
+        return result;
     }
 
     private boolean isOracleTimestampWithLocalTimeZoneClass(String className) {
