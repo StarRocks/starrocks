@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/chunks_sorter_full_sort.h"
-#include "exec/spill/mem_tracker_guard.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "runtime/runtime_state_helper.h"
 

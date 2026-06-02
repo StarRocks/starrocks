@@ -17,9 +17,9 @@
 #include <utility>
 
 #include "common/thread/threadpool.h"
-#include "exec/spill/block_group.h"
-#include "exec/spill/block_manager.h"
-#include "exec/spill/dir_manager.h"
+#include "compute_env/spill/block_group.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/dir_manager.h"
 #include "fmt/format.h"
 #include "storage/lake/location_provider.h"
 

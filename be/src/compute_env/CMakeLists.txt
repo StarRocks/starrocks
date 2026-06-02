@@ -42,6 +42,28 @@ set(COMPUTE_ENV_WORKGROUP_FILES
     workgroup/work_group_scan_task_queue.cpp
 )
 
+set(COMPUTE_ENV_SPILL_FILES
+    spill/block_group.cpp
+    spill/block_reader.cpp
+    spill/data_stream.cpp
+    spill/dir_manager.cpp
+    spill/file_block_manager.cpp
+    spill/hybird_block_manager.cpp
+    spill/input_stream.cpp
+    spill/log_block_manager.cpp
+    spill/mem_table.cpp
+    spill/operator_mem_resource_manager.cpp
+    spill/query_spill_manager.cpp
+    spill/restore_task.cpp
+    spill/runtime_context.cpp
+    spill/serde.cpp
+    spill/spill_components.cpp
+    spill/spill_metrics.cpp
+    spill/spiller.cpp
+    spill/spiller_factory.cpp
+    spill/task_executor.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -55,6 +77,7 @@ ADD_BE_LIB(ComputeEnv
     result/result_queue_mgr.cpp
     ${COMPUTE_ENV_SORTING_FILES}
     ${COMPUTE_ENV_WORKGROUP_FILES}
+    ${COMPUTE_ENV_SPILL_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
@@ -65,6 +88,8 @@ target_link_libraries(ComputeEnv PUBLIC
     RuntimeEnv
     RuntimeCore
     Platform
+    FSCore
+    IO
     ChunkCore
     ColumnCore
     Types

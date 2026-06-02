@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/spill_process_channel.h"
 
-#include "exec/spill/spiller.h"
+#include "compute_env/spill/spiller.h"
 
 namespace starrocks {
 

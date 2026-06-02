@@ -19,10 +19,10 @@
 #include <memory>
 
 #include "common/statusor.h"
+#include "compute_env/spill/common.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/spill/common.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller_factory.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state_helper.h"
 

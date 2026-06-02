@@ -20,13 +20,14 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/spill/query_spill_manager.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
@@ -208,9 +209,15 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
         auto* services = runtime_services(_query_execution_services);
-        auto* g_spill_manager =
-                services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
-        auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : ExecEnv::GetInstance()->spill_dir_mgr();
+        auto* compute_env = ExecEnv::GetInstance()->compute_env();
+        auto* g_spill_manager = services != nullptr ? services->global_spill_manager : nullptr;
+        if (g_spill_manager == nullptr && compute_env != nullptr) {
+            g_spill_manager = compute_env->global_spill_manager();
+        }
+        auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : nullptr;
+        if (spill_dir_mgr == nullptr && compute_env != nullptr) {
+            spill_dir_mgr = compute_env->spill_dir_mgr();
+        }
         _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager, spill_dir_mgr);
         st = _spill_manager->init_block_manager(query_options);
     });

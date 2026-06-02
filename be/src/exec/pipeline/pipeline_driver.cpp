@@ -28,6 +28,9 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/spill/global_spill_manager.h"
+#include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
@@ -43,7 +46,6 @@
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
-#include "exec/spill/operator_mem_resource_manager.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -81,6 +83,21 @@ void update_operator_exec_stats(QueryContext* query_ctx, const OperatorExecStats
     if (snapshot.update_rf_filter_rows) {
         query_ctx->update_rf_filter_stats(snapshot.plan_node_id, snapshot.rf_filter_rows);
     }
+}
+
+size_t spill_expected_reserved_bytes(QueryContext* query_ctx) {
+    spill::GlobalSpillManager* global_spill_manager = nullptr;
+    if (query_ctx != nullptr) {
+        if (auto* query_execution_services = query_ctx->query_execution_services();
+            query_execution_services != nullptr && query_execution_services->runtime != nullptr) {
+            global_spill_manager = query_execution_services->runtime->global_spill_manager;
+        }
+    }
+    if (global_spill_manager == nullptr) {
+        auto* compute_env = ExecEnv::GetInstance()->compute_env();
+        global_spill_manager = compute_env == nullptr ? nullptr : compute_env->global_spill_manager();
+    }
+    return global_spill_manager == nullptr ? 0 : global_spill_manager->spill_expected_reserved_bytes();
 }
 
 } // namespace
@@ -783,7 +800,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
             request_reserved = op->estimated_memory_reserved(chunk);
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
-        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        size_t shared_reserved = spill_expected_reserved_bytes(_query_ctx);
 
         bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved, shared_reserved)) {
@@ -815,7 +832,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, size_t operator
         auto query_mem_limit = query_mem_tracker->lowest_limit();
         DCHECK_GT(query_mem_limit, 0);
         auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
-        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        size_t shared_reserved = spill_expected_reserved_bytes(_query_ctx);
         auto& current_thread = CurrentThread::current();
 
         if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio ||

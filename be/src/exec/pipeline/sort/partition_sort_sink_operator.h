@@ -19,12 +19,12 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/spiller_factory.h"
 #include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state_fwd.h"
 
