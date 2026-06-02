@@ -36,7 +36,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
@@ -491,8 +490,6 @@ public class DateLiteral extends LiteralExpr {
                 }
                 if (len > 7) {
                     microsecond = data.getInt();
-                    // choose the highest scale to keep microsecond value
-                    type = ScalarType.createDecimalV2Type(6);
                 }
             } else {
                 copy(MIN_DATETIME);

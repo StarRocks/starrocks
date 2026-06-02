@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
@@ -31,6 +32,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -129,6 +133,32 @@ public class PreparedStmtTest{
         Assertions.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(1)));
         Assertions.assertEquals(false, stmt.getParameters().get(1).equals(stmt.getParameters().get(2)));
         Assertions.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(2)));
+    }
+
+    @Test
+    public void testParseDatetimeParamWithMicrosecond() throws Exception {
+        LiteralExpr literal = LiteralExpr.parseLiteral(12);
+        literal.parseMysqlParam(mysqlDatetimeParam(2026, 5, 28, 14, 57, 39, 621441));
+
+        Assertions.assertTrue(literal instanceof DateLiteral);
+        assertEquals(Type.DATETIME, literal.getType());
+        assertEquals("2026-05-28 14:57:39.621441", literal.getStringValue());
+        assertEquals(LocalDateTime.of(2026, 5, 28, 14, 57, 39, 621441000), literal.getRealObjectValue());
+    }
+
+    private ByteBuffer mysqlDatetimeParam(int year, int month, int day, int hour, int minute, int second,
+                                          int microsecond) {
+        ByteBuffer buffer = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.put((byte) 11);
+        buffer.putChar((char) year);
+        buffer.put((byte) month);
+        buffer.put((byte) day);
+        buffer.put((byte) hour);
+        buffer.put((byte) minute);
+        buffer.put((byte) second);
+        buffer.putInt(microsecond);
+        buffer.flip();
+        return buffer;
     }
 
     @Test
