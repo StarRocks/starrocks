@@ -18,8 +18,8 @@
 #include <utility>
 
 #include "common/status.h"
-#include "exec/workgroup/scan_task.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/scan_task.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 
 namespace starrocks::spill {
 

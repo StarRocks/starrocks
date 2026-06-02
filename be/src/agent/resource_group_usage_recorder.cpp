@@ -16,8 +16,8 @@
 
 #include "base/time/time.h"
 #include "common/system/cpu_info.h"
-#include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_manager.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {

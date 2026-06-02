@@ -41,9 +41,9 @@
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/query_cache/cache_manager_fwd.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker_fwd.h"
 #include "runtime/service_contexts.h"

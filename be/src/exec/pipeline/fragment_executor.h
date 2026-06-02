@@ -16,9 +16,9 @@
 
 #include "common/global_types.h"
 #include "common/status.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env_fwd.h"

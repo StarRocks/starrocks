@@ -44,7 +44,7 @@
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/util/minidump.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"

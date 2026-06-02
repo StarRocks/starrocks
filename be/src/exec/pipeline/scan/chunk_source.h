@@ -20,8 +20,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/scan/scan_morsel.h"
-#include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
 

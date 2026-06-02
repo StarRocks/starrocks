@@ -18,9 +18,9 @@
 
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/sorting.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/spill/block_manager.h"
-#include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
 struct AggregatorParams;

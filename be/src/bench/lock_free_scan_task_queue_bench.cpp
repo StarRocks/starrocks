@@ -19,8 +19,8 @@
 #include <thread>
 #include <vector>
 
-#include "exec/workgroup/lock_free_scan_task_queue.h"
-#include "exec/workgroup/priority_scan_task_queue.h"
+#include "compute_env/workgroup/lock_free_scan_task_queue.h"
+#include "compute_env/workgroup/priority_scan_task_queue.h"
 
 namespace starrocks::workgroup {
 

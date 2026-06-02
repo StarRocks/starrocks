@@ -28,9 +28,9 @@
 #include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/spill/query_spill_manager.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/descriptors_fwd.h"

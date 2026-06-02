@@ -16,13 +16,13 @@
 
 #include <utility>
 
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/Partitions_types.h"
 
 namespace starrocks {
