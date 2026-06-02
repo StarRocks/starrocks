@@ -78,6 +78,11 @@ DEFAULT_CHANGED_FULL_CHECK_PATHS = {
 }
 EXEC_ENV_INCLUDE_PATTERN = re.compile(r'#include\s*[<"]runtime/exec_env\.h[>"]')
 EXEC_ENV_SINGLETON_PATTERN = re.compile(r"\bExecEnv::GetInstance\s*\(")
+SPILL_AGGREGATOR_INCLUDE_PATTERN = re.compile(r'#include\s*[<"]exec/aggregator\.h[>"]')
+SPILL_AGGREGATOR_REMEDIATION = (
+    "Keep spill code aggregate-neutral; inject aggregate-specific behavior through spill options callbacks owned by "
+    "aggregate pipeline code."
+)
 SERVICE_LAYERING_REMEDIATION = (
     "Keep Service as the shared service layer and ServiceBE as the BE-specific top layer; move the dependency upward "
     "or include generated RPC/proto types directly."
@@ -343,6 +348,26 @@ def check_service_layering(repo_root: Path) -> list[Violation]:
                         remediation=SERVICE_LAYERING_REMEDIATION,
                     )
                 )
+    return violations
+
+
+def check_spill_aggregator_includes(repo_root: Path) -> list[Violation]:
+    violations: list[Violation] = []
+    spill_root = repo_root / "be/src/exec/spill"
+    if not spill_root.exists():
+        return violations
+    for file_path in sorted(path for path in spill_root.rglob("*") if path.is_file() and path.suffix in CODE_EXTENSIONS):
+        if not SPILL_AGGREGATOR_INCLUDE_PATTERN.search(file_path.read_text(errors="ignore")):
+            continue
+        violations.append(
+            Violation(
+                module="spill",
+                path=file_path.relative_to(repo_root).as_posix(),
+                edge="exec/aggregator.h",
+                detail="spill code must not include aggregate implementation headers",
+                remediation=SPILL_AGGREGATOR_REMEDIATION,
+            )
+        )
     return violations
 
 
@@ -751,6 +776,7 @@ def main(argv: list[str] | None = None) -> int:
     violations = collect_violations(repo_root, manifest, cmake_state, selected_modules=selected_modules)
     violations = apply_baseline(violations, baseline)
     violations.include_violations.extend(check_service_layering(repo_root))
+    violations.include_violations.extend(check_spill_aggregator_includes(repo_root))
     violations.include_violations.sort(key=lambda item: (item.module, item.path, item.edge))
     if not violations.is_empty():
         _print_violations(violations)

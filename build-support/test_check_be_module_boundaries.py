@@ -86,6 +86,20 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 MODULE.collect_exec_env_singleton_paths(repo),
             )
 
+    def test_check_spill_aggregator_includes_rejects_reverse_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            spill_dir = repo / "be" / "src" / "exec" / "spill"
+            spill_dir.mkdir(parents=True)
+            (spill_dir / "spill_components.cpp").write_text('#include "exec/aggregator.h"\n')
+
+            violations = MODULE.check_spill_aggregator_includes(repo)
+
+            self.assertEqual(1, len(violations))
+            self.assertEqual("spill", violations[0].module)
+            self.assertEqual("be/src/exec/spill/spill_components.cpp", violations[0].path)
+            self.assertEqual("exec/aggregator.h", violations[0].edge)
+
     def test_diff_allowlist_reports_new_and_stale_paths(self) -> None:
         extra_paths, stale_paths = MODULE.diff_path_allowlist(
             current={"src/runtime/runtime.cpp", "src/column/hash_set.h"},
