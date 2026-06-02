@@ -646,6 +646,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     }
     ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
     FileInfo info{.path = filepath};
+    // Supplying the known size lets the segment open path skip a stat/HeadObject. A size of 0 means
+    // unknown (old data lacking column_file_sizes), in which case we fall back to discovering it.
+    if (idx < dcg.column_file_sizes().size() && dcg.column_file_sizes()[idx] > 0) {
+        info.size = dcg.column_file_sizes()[idx];
+    }
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }

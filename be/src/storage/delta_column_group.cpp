@@ -142,6 +142,9 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
     for (const auto& encryption_meta : dcg_ver_pb.encryption_metas()) {
         _encryption_metas.push_back(encryption_meta);
     }
+    for (const auto& column_file_size : dcg_ver_pb.column_file_sizes()) {
+        _column_file_sizes.push_back(column_file_size);
+    }
     for (const auto& ucids : dcg_ver_pb.unique_column_ids()) {
         _column_uids.emplace_back();
         for (const auto& cid : ucids.column_ids()) {
