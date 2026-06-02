@@ -5,7 +5,7 @@ description: "fe_locks provides information about metadata locks in StarRocks FE
 
 # fe_locks
 
-`fe_locks` provides information about metadata locks in StarRocks FE.
+`fe_locks` provides information about metadata locks in StarRocks FE. It is one of the system-defined views in the [`sys`](./sys.md) database.
 
 The following fields are provided in `fe_locks`:
 

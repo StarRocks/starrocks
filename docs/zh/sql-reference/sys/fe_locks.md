@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # fe_locks
 
-`fe_locks` 提供 StarRocks FE 中元数据锁的信息。
+`fe_locks` 提供 StarRocks FE 中元数据锁的信息。它是 [`sys`](./sys.md) 数据库中的系统视图之一。
 
 `fe_locks` 提供以下字段：
 
