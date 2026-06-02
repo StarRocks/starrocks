@@ -721,7 +721,7 @@ sidebar_label: "用户管理、查询引擎和导入导出"
 
 ### `statistic_cache_thread_pool_size`
 
-- 默认值: 10
+- 默认值: 5
 - 类型: Int
 - 单位: -
 - 是否可变: No
