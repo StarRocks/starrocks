@@ -3395,11 +3395,10 @@ public class SchemaChangeHandler extends AlterHandler {
         // Create Index object directly from IndexDef
         IndexDef indexDef = alterClause.getIndexDef();
         Index newIndex;
-        // Only assign meaningful indexId for OlapTable
-        if (olapTable.isOlapTableOrMaterializedView() ||
-                (olapTable.isCloudNativeTableOrMaterializedView() && indexDef.getIndexType() != IndexDef.IndexType.VECTOR)) {
-            long indexId = IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType()) ? 
-                    olapTable.incAndGetMaxIndexId() : -1;
+        // Compatible index types (GIN, VECTOR) require a valid index_id for both
+        // OlapTable and cloud-native tables; non-compatible types (BITMAP, NGRAMBF) use -1.
+        if (IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType())) {
+            long indexId = olapTable.incAndGetMaxIndexId();
             newIndex = new Index(indexId, indexDef.getIndexName(),
                     MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
