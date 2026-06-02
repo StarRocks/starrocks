@@ -14,11 +14,18 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Table;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -26,6 +33,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -123,5 +131,138 @@ public class LakeTableAddVectorIndexTest {
         Assertions.assertNotNull(vi, "VECTOR index must be present in the schema change job");
         Assertions.assertTrue(vi.getIndexId() >= 0,
                 "cloud-native VECTOR index must have a valid index_id (>= 0), got: " + vi.getIndexId());
+    }
+
+    /**
+     * Verify that GSON preserves a shadow tablet's {@code vectorIndexBuiltVersion} (vibv) through a
+     * serialize → deserialize round-trip.
+     *
+     * <p>This test does NOT require the full schema-change infrastructure: it builds a
+     * {@link LakeTableSchemaChangeJob} directly, plants a {@link LakeTablet} with vibv=7 inside it,
+     * serialises with {@code GsonUtils.GSON}, deserialises, and asserts the recovered vibv == 7.
+     *
+     * <p>The chain that makes this work:
+     * <pre>
+     *   LakeTableSchemaChangeJob
+     *     @SerializedName("partitionIndexMap") physicalPartitionIndexMap
+     *       → MaterializedIndex
+     *           @SerializedName("tablets") List&lt;Tablet&gt;
+     *             → LakeTablet (via RuntimeTypeAdapterFactory "clazz":"LakeTablet")
+     *                 @SerializedName("vibv") vectorIndexBuiltVersion
+     * </pre>
+     */
+    @Test
+    public void testGsonRoundTripPreservesVibv() {
+        // Build a minimal job carrying one shadow tablet with vibv = 7.
+        LakeTableSchemaChangeJob job = new LakeTableSchemaChangeJob(1L, 2L, 3L, "t", 3600_000L);
+
+        LakeTablet shadowTablet = new LakeTablet(42L);
+        shadowTablet.setVectorIndexBuiltVersion(7L);
+
+        MaterializedIndex shadowIndex =
+                new MaterializedIndex(10L, MaterializedIndex.IndexState.SHADOW, 0L);
+        TabletMeta meta = new TabletMeta(2L, 3L, 100L, 10L, TStorageMedium.SSD, true);
+        shadowIndex.addTablet(shadowTablet, meta);
+
+        // physicalPartitionId=100, shadowIndexMetaId=10
+        job.addPartitionShadowIndex(100L, 10L, shadowIndex);
+
+        // GSON round-trip
+        String json = GsonUtils.GSON.toJson(job);
+        LakeTableSchemaChangeJob recovered =
+                GsonUtils.GSON.fromJson(json, LakeTableSchemaChangeJob.class);
+
+        // Extract the shadow tablet from the recovered job's partitionIndexMap.
+        @SuppressWarnings("unchecked")
+        Table<Long, Long, MaterializedIndex> partitionIndexMap =
+                Deencapsulation.getField(recovered, "physicalPartitionIndexMap");
+        Assertions.assertNotNull(partitionIndexMap, "partitionIndexMap must not be null after deserialisation");
+
+        MaterializedIndex recoveredIndex = partitionIndexMap.get(100L, 10L);
+        Assertions.assertNotNull(recoveredIndex, "shadow MaterializedIndex must survive round-trip");
+
+        List<Tablet> tablets = recoveredIndex.getTablets();
+        Assertions.assertEquals(1, tablets.size(), "exactly one shadow tablet expected");
+
+        Tablet t = tablets.get(0);
+        Assertions.assertInstanceOf(LakeTablet.class, t,
+                "tablet must deserialise as LakeTablet (RuntimeTypeAdapterFactory must be active)");
+        Assertions.assertEquals(7L, ((LakeTablet) t).getVectorIndexBuiltVersion(),
+                "vibv must survive GSON round-trip: expected 7");
+    }
+
+    /**
+     * Verify that when a vector-index ALTER TABLE schema change job is created, the shadow
+     * tablet's {@code vectorIndexBuiltVersion} (vibv) is set to the partition's visible version
+     * (V_snap) and that vibv survives a GSON round-trip (FE-failover durability).
+     *
+     * <p>Before the implementation in {@code LakeTableSchemaChangeJob.runPendingJob()}, vibv
+     * defaults to 0, so the assertion on {@code vibv == visibleVersion} will FAIL.
+     */
+    @Test
+    public void testShadowTabletVibvSetToVsnap() throws Exception {
+        // Create a lake table with an ARRAY<FLOAT> column for the vector index.
+        LakeTable table = createTable(
+                "CREATE TABLE t_vibv (" +
+                        "  id BIGINT NOT NULL," +
+                        "  v  ARRAY<FLOAT> NOT NULL" +
+                        ") DUPLICATE KEY(id)" +
+                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
+                        " PROPERTIES('replication_num'='1')");
+
+        // Capture V_snap: the visible version of the (first) physical partition before ALTER.
+        PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
+        long vSnap = pp.getVisibleVersion();
+
+        // Issue the vector-index ALTER.
+        alterTable(
+                "ALTER TABLE t_vibv ADD INDEX idx_v (v) USING VECTOR" +
+                        " ('index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
+                        "'is_vector_normed'='false','M'='16','efconstruction'='40')");
+
+        // Retrieve the pending LakeTableSchemaChangeJob.
+        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertEquals(1, jobs.size(), "expected exactly one pending schema-change job");
+        AlterJobV2 job = jobs.get(0);
+        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job);
+
+        // Access the physicalPartitionIndexMap (private field).
+        @SuppressWarnings("unchecked")
+        Table<Long, Long, MaterializedIndex> partitionIndexMap =
+                Deencapsulation.getField(job, "physicalPartitionIndexMap");
+        Assertions.assertNotNull(partitionIndexMap);
+
+        // Find any shadow LakeTablet and assert vibv == vSnap.
+        boolean foundTablet = false;
+        for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
+            for (Tablet shadowTablet : cell.getValue().getTablets()) {
+                Assertions.assertInstanceOf(LakeTablet.class, shadowTablet);
+                long vibv = ((LakeTablet) shadowTablet).getVectorIndexBuiltVersion();
+                Assertions.assertEquals(vSnap, vibv,
+                        "shadow tablet vibv must equal V_snap=" + vSnap +
+                                " (partition visible version at job creation), got " + vibv);
+                foundTablet = true;
+            }
+        }
+        Assertions.assertTrue(foundTablet, "expected at least one shadow tablet in the job");
+
+        // Also verify GSON round-trip preserves the vibv value.
+        String json = GsonUtils.GSON.toJson(job);
+        LakeTableSchemaChangeJob recovered =
+                GsonUtils.GSON.fromJson(json, LakeTableSchemaChangeJob.class);
+
+        @SuppressWarnings("unchecked")
+        Table<Long, Long, MaterializedIndex> recoveredMap =
+                Deencapsulation.getField(recovered, "physicalPartitionIndexMap");
+        Assertions.assertNotNull(recoveredMap);
+
+        for (Table.Cell<Long, Long, MaterializedIndex> cell : recoveredMap.cellSet()) {
+            for (Tablet shadowTablet : cell.getValue().getTablets()) {
+                long vibv = ((LakeTablet) shadowTablet).getVectorIndexBuiltVersion();
+                Assertions.assertEquals(vSnap, vibv,
+                        "shadow tablet vibv must survive GSON round-trip, expected " + vSnap + " got " + vibv);
+            }
+        }
     }
 }

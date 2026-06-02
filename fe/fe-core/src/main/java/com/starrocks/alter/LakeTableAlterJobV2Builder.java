@@ -28,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -62,6 +63,9 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
+        // True when this ALTER adds a VECTOR index; used below to stamp shadow tablets with vibv.
+        boolean isVectorIndexAlter = hasIndexChanged && indexes != null &&
+                indexes.stream().anyMatch(i -> i.getIndexType() == IndexDef.IndexType.VECTOR);
         for (Map.Entry<Long, List<Column>> entry : newIndexMetaIdToSchema.entrySet()) {
             long originIndexMetaId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
@@ -97,11 +101,22 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+                // For vector-index ALTER jobs, stamp V_snap = partition visible version on every
+                // shadow tablet at creation time.  The async build scheduler uses this watermark
+                // to skip existing rowsets (version <= V_snap) that were force-inline-built by
+                // the conversion, avoiding redundant rebuild.  Setting it here — before the job
+                // is persisted via logAlterJob — makes it durable through GSON round-trips
+                // (LakeTablet.vibv is @SerializedName("vibv"); the enclosing
+                // physicalPartitionIndexMap is @SerializedName("partitionIndexMap")).
+                long vSnap = isVectorIndexAlter ? physicalPartition.getVisibleVersion() : 0L;
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
-                    Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
+                    LakeTablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     if (table.isRangeDistribution()) {
                         shadowTablet.setRange(originTablet.getRange());
+                    }
+                    if (isVectorIndexAlter) {
+                        shadowTablet.setVectorIndexBuiltVersion(vSnap);
                     }
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
