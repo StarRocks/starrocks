@@ -33,7 +33,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "failpoint/fail_point.h"
+#include "util/failpoint/fail_point.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
