@@ -70,6 +70,7 @@ StatusOr<ChunkPtr> LocalParallelMergeSortSourceOperator::pull_chunk(RuntimeState
 }
 
 Status LocalParallelMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    auto defer = _sort_context->defer_notify_sink();
     _sort_context->cancel();
     return _sort_context->set_finished();
 }
