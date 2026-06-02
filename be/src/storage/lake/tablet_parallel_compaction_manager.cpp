@@ -33,6 +33,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
@@ -1036,6 +1037,9 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 // next_compaction_offset must only be set > 0 when overlapped=true.
                 // For non-overlapped range-split output, leave it unset (defaults to 0).
                 merged_output->clear_next_compaction_offset();
+                // Fresh uid: the manager-assembled merged compaction output is a new
+                // logical rowset distinct from the per-subtask outputs it concatenates.
+                tablet_reshard_helper::set_rowset_uid(merged_output);
             }
 
             op_parallel->set_is_range_split(true);
@@ -1273,6 +1277,9 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                     merged_output->set_data_size(total_data_size);
                     merged_output->set_overlapped(true);
                     merged_output->set_next_compaction_offset(merged_output->segment_metas_size());
+                    // Fresh uid: the manager-assembled merged compaction output is a new
+                    // logical rowset distinct from the per-subtask outputs it concatenates.
+                    tablet_reshard_helper::set_rowset_uid(merged_output);
                 }
 
                 // Log segment file names for debugging data consistency

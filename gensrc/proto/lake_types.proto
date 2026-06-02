@@ -206,6 +206,12 @@ message RowsetMetadataPB {
     repeated SegmentMetadataPB segment_metas = 17;
     // Indicates the effective sort key range of this rowset for range distribution table.
     optional TabletRangePB range = 18;
+    // Global unique id of this rowset's DATA, alongside the per-tablet local `id`.
+    // Minted once at rowset creation and carried verbatim by CopyFrom across SPLIT,
+    // cross-publish, linked schema change, and replication, so that siblings produced
+    // from the same logical rowset compare equal. MERGE dedups rowsets by uid equality.
+    // Optional => backward compatible; legacy rowsets are backfilled at split time.
+    optional PUniqueId uid = 19;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
