@@ -51,7 +51,7 @@ public:
     using DriverQueueFactory = std::function<pipeline::DriverQueuePtr(pipeline::DriverQueueMetrics*)>;
 
     WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics,
-                     DriverQueueFactory driver_queue_factory);
+                     DriverQueueFactory driver_queue_factory, DriverExecutorFactory driver_executor_factory);
 
     ~WorkGroupManager();
 

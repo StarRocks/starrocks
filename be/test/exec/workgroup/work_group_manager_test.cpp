@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/mem_tracker.h"
 
@@ -58,13 +59,31 @@ public:
     }
 };
 
+DriverExecutorFactory unused_driver_executor_factory() {
+    return [](const std::string& name, const CpuUtil::CpuIds& cpuids,
+              const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
+              pipeline::PipelineExecutorMetrics* metrics,
+              const WorkGroupSchedulePolicy& schedule_policy) -> StatusOr<std::unique_ptr<pipeline::DriverExecutor>> {
+        (void)name;
+        (void)cpuids;
+        (void)borrowed_cpuids;
+        (void)num_driver_threads;
+        (void)metrics;
+        (void)schedule_policy;
+        return Status::InternalError("unexpected driver executor creation");
+    };
+}
+
 PARALLEL_TEST(WorkGroupManagerTest, injects_driver_queue_factory_for_accepted_workgroups) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
     int create_count = 0;
-    WorkGroupManager manager(config, nullptr, [&create_count](pipeline::DriverQueueMetrics*) {
-        ++create_count;
-        return std::make_unique<FakeDriverQueue>();
-    });
+    WorkGroupManager manager(
+            config, nullptr,
+            [&create_count](pipeline::DriverQueueMetrics*) {
+                ++create_count;
+                return std::make_unique<FakeDriverQueue>();
+            },
+            unused_driver_executor_factory());
 
     auto accepted = std::make_shared<WorkGroup>(create_twg(120, 2, "wg120", WorkGroup::DEFAULT_MEM_POOL, 0.5));
     manager.add_workgroup(accepted);
@@ -82,7 +101,8 @@ PARALLEL_TEST(WorkGroupManagerTest, injects_driver_queue_factory_for_accepted_wo
 
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
-    auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue);
+    auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                       unused_driver_executor_factory());
 
     {
         auto wg1 = std::make_shared<WorkGroup>(create_twg(102, 1, "wg", "test_pool", 0.5));
@@ -109,7 +129,8 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
 
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
-    auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue);
+    auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                       unused_driver_executor_factory());
 
     {
         auto wg1 = std::make_shared<WorkGroup>(create_twg(105, 1, "wg5", "test_pool", 0.5));
@@ -135,7 +156,8 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
 
 PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
-    auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue);
+    auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                       unused_driver_executor_factory());
     _manager->set_workgroup_expiration_time(std::chrono::seconds(0));
     {
         auto twg1 = create_twg(110, 1, "wg110", "test_pool_2", 0.5);

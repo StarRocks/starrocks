@@ -57,13 +57,14 @@ struct WorkGroupMetrics {
 // ------------------------------------------------------------------------------------
 
 WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics,
-                                   DriverQueueFactory driver_queue_factory)
+                                   DriverQueueFactory driver_queue_factory,
+                                   DriverExecutorFactory driver_executor_factory)
         : _driver_queue_metrics((executors_manager_conf.metrics != nullptr
                                          ? executors_manager_conf.metrics
                                          : pipeline::PipelineExecutorMetrics::instance())
                                         ->get_driver_queue_metrics()),
           _driver_queue_factory(std::move(driver_queue_factory)),
-          _executors_manager(std::move(executors_manager_conf), *this),
+          _executors_manager(std::move(executors_manager_conf), *this, std::move(driver_executor_factory)),
           _metrics(metrics),
           _shared_mem_tracker_manager(metrics) {
     DCHECK(_driver_queue_factory != nullptr);
