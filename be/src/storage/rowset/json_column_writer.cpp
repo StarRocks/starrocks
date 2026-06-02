@@ -33,7 +33,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "util/failpoint/fail_point.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
@@ -42,6 +41,7 @@
 #include "storage/rowset/json_column_compactor.h"
 #include "types/constexpr.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 #include "velocypack/vpack.h"
 
