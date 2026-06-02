@@ -19,11 +19,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Range;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Manages colocate ranges for range distribution colocate groups.
@@ -136,20 +137,29 @@ public class ColocateRangeMgr {
     }
 
     /**
-     * Returns all PACK shard group ids currently tracked across every colocate group.
+     * Returns the PACK shard group ids tracked for the given colocate groups.
      *
-     * <p>These PACK shard groups are created by FE but are not attached to any
+     * <p>PACK shard groups are created by FE but are not attached to any
      * {@code PhysicalPartition}, so callers that build the set of FE-known shard groups
-     * from partitions alone must union this in (e.g. {@code StarMgrMetaSyncer}); otherwise
+     * from partitions alone must union these in (e.g. {@code StarMgrMetaSyncer}); otherwise
      * a live PACK shard group would be misclassified as an orphan and reaped.
      *
+     * <p>The caller passes the colocate group ids that are still live (referenced by the
+     * colocate table index). Restricting to those ids skips stale range entries that can
+     * linger after a crash between the range-update and add-table journal records, so a
+     * genuinely orphaned PACK shard group is still eligible for cleanup.
+     *
+     * @param colocateGroupIds the live colocate group ids to collect PACK shard groups for
      * @return a new set of PACK shard group ids (empty if none); never null
      */
-    public Set<Long> getAllPackShardGroupIds() {
-        return colocateGroupToRanges.values().stream()
-                .flatMap(List::stream)
-                .map(ColocateRange::getShardGroupId)
-                .collect(Collectors.toSet());
+    public Set<Long> getPackShardGroupIds(Collection<Long> colocateGroupIds) {
+        Set<Long> packShardGroupIds = new HashSet<>();
+        for (Long colocateGroupId : colocateGroupIds) {
+            for (ColocateRange range : colocateGroupToRanges.getOrDefault(colocateGroupId, Collections.emptyList())) {
+                packShardGroupIds.add(range.getShardGroupId());
+            }
+        }
+        return packShardGroupIds;
     }
 
     // ---- Initialize ----

@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.staros.proto.PlacementPolicy;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Range;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
@@ -1116,5 +1117,18 @@ public class ColocateTableIndexTest {
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
         ColocateTableIndex.GroupId unknown = new ColocateTableIndex.GroupId(1L, 2L);
         Assertions.assertFalse(colocateTableIndex.isRangeColocateGroup(unknown));
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsExcludesOrphanRangeEntries() {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        // Seed a range entry for a grpId that has no live colocate group (not in group2Schema),
+        // mimicking the crash window between the range-update and add-table journal records.
+        long orphanGrpId = 9999L;
+        colocateTableIndex.getColocateRangeMgr().setColocateRanges(orphanGrpId,
+                List.of(new ColocateRange(Range.all(), 4787L)));
+        // The orphaned PACK shard group must not be reported as FE-known, so StarMgrMetaSyncer
+        // can still reap it once it is genuinely unused.
+        Assertions.assertTrue(colocateTableIndex.getAllPackShardGroupIds().isEmpty());
     }
 }

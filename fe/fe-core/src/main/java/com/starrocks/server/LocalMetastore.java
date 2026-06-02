@@ -2314,8 +2314,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                                  ColocateTableIndex.GroupId groupId)
             throws DdlException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRangeMgr()
-                .getColocateRanges(groupId.grpId);
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
         if (colocateRanges.isEmpty()) {
             throw new DdlException("Colocate range metadata is missing for group '"
                     + table.getColocateGroup() + "', cannot create range colocate tablets");

@@ -920,7 +920,8 @@ public class StarMgrMetaSyncerTest {
     // and never reaped by deleteUnusedShardAndShardGroup, even when older than the threshold.
     @Test
     public void testPackShardGroupNotReapedWhenStillReferenced() {
-        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
+        boolean oldForceDelete = Config.meta_sync_force_delete_shard_meta;
+        long oldCleanThreshold = Config.shard_group_clean_threshold_sec;
         Config.meta_sync_force_delete_shard_meta = false;
         Config.shard_group_clean_threshold_sec = 0;
 
@@ -963,7 +964,8 @@ public class StarMgrMetaSyncerTest {
         Assertions.assertFalse(deletedGroups.contains(packGroupId));
         Assertions.assertEquals(1, shardGroupInfos.size());
 
-        Config.meta_sync_force_delete_shard_meta = oldValue;
+        Config.meta_sync_force_delete_shard_meta = oldForceDelete;
+        Config.shard_group_clean_threshold_sec = oldCleanThreshold;
     }
 
     @Test

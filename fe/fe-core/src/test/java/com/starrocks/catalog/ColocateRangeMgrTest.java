@@ -303,39 +303,42 @@ public class ColocateRangeMgrTest {
         Assertions.assertEquals(2001L, found2.getShardGroupId());
     }
 
-    // ---- getAllPackShardGroupIds ----
+    // ---- getPackShardGroupIds ----
 
     @Test
-    public void testGetAllPackShardGroupIdsEmpty() {
-        Assertions.assertTrue(colocateRangeMgr.getAllPackShardGroupIds().isEmpty());
+    public void testGetPackShardGroupIdsEmpty() {
+        Assertions.assertTrue(colocateRangeMgr.getPackShardGroupIds(Set.of()).isEmpty());
+        // An unknown colocate group id contributes nothing.
+        Assertions.assertTrue(colocateRangeMgr.getPackShardGroupIds(Set.of(COLOCATE_GROUP_ID)).isEmpty());
     }
 
     @Test
-    public void testGetAllPackShardGroupIdsSingleGroup() {
+    public void testGetPackShardGroupIdsSingleGroup() {
         colocateRangeMgr.initColocateGroup(COLOCATE_GROUP_ID, 1001L);
-        Assertions.assertEquals(Set.of(1001L), colocateRangeMgr.getAllPackShardGroupIds());
+        Assertions.assertEquals(Set.of(1001L), colocateRangeMgr.getPackShardGroupIds(Set.of(COLOCATE_GROUP_ID)));
     }
 
     @Test
-    public void testGetAllPackShardGroupIdsMultiRange() {
+    public void testGetPackShardGroupIdsMultiRange() {
         List<ColocateRange> ranges = Arrays.asList(
                 new ColocateRange(Range.lt(makeTuple(100)), 1001L),
                 new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 1002L),
                 new ColocateRange(Range.ge(makeTuple(200)), 1003L));
         colocateRangeMgr.setColocateRanges(COLOCATE_GROUP_ID, ranges);
-        Assertions.assertEquals(Set.of(1001L, 1002L, 1003L), colocateRangeMgr.getAllPackShardGroupIds());
+        Assertions.assertEquals(Set.of(1001L, 1002L, 1003L),
+                colocateRangeMgr.getPackShardGroupIds(Set.of(COLOCATE_GROUP_ID)));
     }
 
     @Test
-    public void testGetAllPackShardGroupIdsMultiGroup() {
+    public void testGetPackShardGroupIdsMultiGroup() {
         colocateRangeMgr.initColocateGroup(100L, 1001L);
         colocateRangeMgr.setColocateRanges(200L, Arrays.asList(
                 new ColocateRange(Range.lt(makeTuple(50)), 2001L),
                 new ColocateRange(Range.ge(makeTuple(50)), 2002L)));
-        Assertions.assertEquals(Set.of(1001L, 2001L, 2002L), colocateRangeMgr.getAllPackShardGroupIds());
+        Assertions.assertEquals(Set.of(1001L, 2001L, 2002L),
+                colocateRangeMgr.getPackShardGroupIds(Set.of(100L, 200L)));
 
-        // After removing one group, only the other group's PACK ids remain.
-        colocateRangeMgr.removeColocateGroup(100L);
-        Assertions.assertEquals(Set.of(2001L, 2002L), colocateRangeMgr.getAllPackShardGroupIds());
+        // Only the requested groups contribute: excluding group 100 drops its PACK id.
+        Assertions.assertEquals(Set.of(2001L, 2002L), colocateRangeMgr.getPackShardGroupIds(Set.of(200L)));
     }
 }

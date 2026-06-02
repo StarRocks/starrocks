@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -160,23 +161,49 @@ public class ColocateTableIndex implements Writable {
 
     }
 
+    @VisibleForTesting
     public ColocateRangeMgr getColocateRangeMgr() {
         return colocateRangeMgr;
     }
 
     /**
-     * Returns all PACK shard group ids tracked by the range-colocate metadata.
+     * Returns the colocate ranges of the given range-colocate group.
+     *
+     * <p>Delegates to {@link ColocateRangeMgr} under this index's read lock and returns an
+     * immutable snapshot, so callers cannot mutate the range list or read it without holding
+     * the lock. {@link ColocateRangeMgr} itself is not synchronized; all access goes through
+     * this index, which owns the lock.
+     *
+     * @return an immutable copy of the colocate ranges (empty if the group is unknown)
+     */
+    public List<ColocateRange> getColocateRanges(long colocateGroupId) {
+        readLock();
+        try {
+            return List.copyOf(colocateRangeMgr.getColocateRanges(colocateGroupId));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Returns the PACK shard group ids of all live range-colocate groups.
      *
      * <p>PACK shard groups are created by FE but not attached to any {@code PhysicalPartition},
      * so {@code StarMgrMetaSyncer} must union these into its FE-known shard group set to avoid
-     * reaping live PACK shard groups as orphans.
+     * reaping live PACK shard groups as orphans. Only groups still present in {@code group2Schema}
+     * are included, so a stale range entry left by a crash between the range-update and add-table
+     * journal records does not pin a genuinely orphaned PACK shard group forever.
      *
      * @return a new set of PACK shard group ids (empty if none); never null
      */
     public Set<Long> getAllPackShardGroupIds() {
         readLock();
         try {
-            return colocateRangeMgr.getAllPackShardGroupIds();
+            Set<Long> liveColocateGroupIds = new HashSet<>();
+            for (GroupId groupId : group2Schema.keySet()) {
+                liveColocateGroupIds.add(groupId.grpId);
+            }
+            return colocateRangeMgr.getPackShardGroupIds(liveColocateGroupIds);
         } finally {
             readUnlock();
         }
