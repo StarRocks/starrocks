@@ -431,11 +431,22 @@ public:
     void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
         if (!this->support_nullable_immediate_input() && column->is_nullable()) {
-            NullableColumn* nullable_column = down_cast<NullableColumn*>(const_cast<Column*>(column));
-            DCHECK_EQ(false, nullable_column->has_null());
-            auto* data_column = nullable_column->data_column().get();
-            for (size_t i = 0; i < chunk_size; ++i) {
-                static_cast<const Derived*>(this)->merge(ctx, data_column, states[i] + state_offset, i);
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto* data_column = nullable_column->data_column().get();
+            // The immediate-state column may carry real nulls, e.g. an agg_state column
+            // produced from NULL source rows. Skip null rows instead of feeding an
+            // invalid/empty state into the nested merge. See StarRocksTest issue #11379.
+            if (nullable_column->has_null()) {
+                const auto& null_data = nullable_column->immutable_null_column_data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (!null_data[i]) {
+                        static_cast<const Derived*>(this)->merge(ctx, data_column, states[i] + state_offset, i);
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    static_cast<const Derived*>(this)->merge(ctx, data_column, states[i] + state_offset, i);
+                }
             }
         } else {
             for (size_t i = 0; i < chunk_size; ++i) {
@@ -455,10 +466,21 @@ public:
         };
 
         if (!this->support_nullable_immediate_input() && column->is_nullable()) {
-            NullableColumn* nullable_column = down_cast<NullableColumn*>(const_cast<Column*>(column));
-            DCHECK_EQ(false, nullable_column->has_null());
-            auto* data_column = nullable_column->data_column().get();
-            merge_selectively(data_column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto* data_column = nullable_column->data_column().get();
+            // The immediate-state column may carry real nulls, e.g. an agg_state column
+            // produced from NULL source rows. Skip null rows instead of feeding an
+            // invalid/empty state into the nested merge. See StarRocksTest issue #11379.
+            if (nullable_column->has_null()) {
+                const auto& null_data = nullable_column->immutable_null_column_data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (filter[i] == 0 && !null_data[i]) {
+                        static_cast<const Derived*>(this)->merge(ctx, data_column, states[i] + state_offset, i);
+                    }
+                }
+            } else {
+                merge_selectively(data_column);
+            }
         } else {
             merge_selectively(column);
         }
@@ -467,11 +489,22 @@ public:
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
                                   size_t size) const override {
         if (!this->support_nullable_immediate_input() && input->is_nullable()) {
-            NullableColumn* nullable_column = down_cast<NullableColumn*>(const_cast<Column*>(input));
-            DCHECK_EQ(false, nullable_column->has_null());
-            auto* data_column = nullable_column->data_column().get();
-            for (size_t i = start; i < start + size; ++i) {
-                static_cast<const Derived*>(this)->merge(ctx, data_column, state, i);
+            const auto* nullable_column = down_cast<const NullableColumn*>(input);
+            const auto* data_column = nullable_column->data_column().get();
+            // The immediate-state column may carry real nulls, e.g. an agg_state column
+            // produced from NULL source rows. Skip null rows instead of feeding an
+            // invalid/empty state into the nested merge. See StarRocksTest issue #11379.
+            if (nullable_column->has_null()) {
+                const auto& null_data = nullable_column->immutable_null_column_data();
+                for (size_t i = start; i < start + size; ++i) {
+                    if (!null_data[i]) {
+                        static_cast<const Derived*>(this)->merge(ctx, data_column, state, i);
+                    }
+                }
+            } else {
+                for (size_t i = start; i < start + size; ++i) {
+                    static_cast<const Derived*>(this)->merge(ctx, data_column, state, i);
+                }
             }
         } else {
             for (size_t i = start; i < start + size; ++i) {

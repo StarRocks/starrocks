@@ -2911,4 +2911,92 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
     ASSERT_EQ(5, result_column->get_data()[0]);
 }
 
+// ============================================================================
+// Regression tests for StarRocksTest issue #11379:
+// BE crash during memtable-flush aggregation of an agg_state column whose
+// aggregate function has support_nullable_immediate_input() == false (e.g. a
+// not-null ds_hll_count_distinct agg_state column), when the intermediate-state
+// column actually carries nulls.
+//
+// In that case the merge_batch* paths in AggregateFunctionBatchHelper take the
+// "non-nullable function + nullable immediate input" branch. That branch used to
+// assume the column has no nulls (DCHECK_EQ(false, has_null())), strip the null
+// wrapper and merge every row. When the immediate-state column actually contains
+// nulls this aborts under ASAN/Debug ("Check failed: false == has_null()"), or
+// feeds a null/empty slice into the nested merge under Release (SIGSEGV). After
+// the fix, null rows in the immediate-state column must be skipped.
+//
+// `sum` is used because it has support_nullable_immediate_input() == false. The
+// null row carries a non-zero value (999) so that merging it by mistake corrupts
+// the result (10 + 999 + 20 instead of 10 + 20).
+// ============================================================================
+static ColumnPtr make_nullable_state_column_with_null() {
+    auto data_column = Int64Column::create();
+    data_column->append(10);
+    data_column->append(999); // value on the null row; must NOT be merged
+    data_column->append(20);
+    auto null_column = NullColumn::create();
+    null_column->append(0);
+    null_column->append(1); // row 1 is null
+    null_column->append(0);
+    auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    nullable_column->set_has_null(true);
+    return nullable_column;
+}
+
+TEST_F(AggregateTest, test_merge_batch_single_state_skips_null_immediate_state) {
+    const AggregateFunction* func = get_aggregate_function("sum", TYPE_BIGINT, TYPE_BIGINT, false);
+    ASSERT_FALSE(func->support_nullable_immediate_input());
+
+    auto nullable_column = make_nullable_state_column_with_null();
+    auto state = ManagedAggrState::create(ctx, func);
+    func->merge_batch_single_state(ctx, state->state(), nullable_column.get(), 0, nullable_column->size());
+
+    auto result = Int64Column::create();
+    func->finalize_to_column(ctx, state->state(), result.get());
+    ASSERT_EQ(30, result->get_data()[0]); // 10 + 20, not 10 + 999 + 20
+}
+
+TEST_F(AggregateTest, test_merge_batch_skips_null_immediate_state) {
+    const AggregateFunction* func = get_aggregate_function("sum", TYPE_BIGINT, TYPE_BIGINT, false);
+
+    auto nullable_column = make_nullable_state_column_with_null();
+    auto s0 = ManagedAggrState::create(ctx, func);
+    auto s1 = ManagedAggrState::create(ctx, func);
+    auto s2 = ManagedAggrState::create(ctx, func);
+    std::vector<AggDataPtr> states{s0->state(), s1->state(), s2->state()};
+
+    func->merge_batch(ctx, nullable_column->size(), 0, nullable_column.get(), states.data());
+
+    auto result = Int64Column::create();
+    func->finalize_to_column(ctx, s0->state(), result.get());
+    func->finalize_to_column(ctx, s1->state(), result.get());
+    func->finalize_to_column(ctx, s2->state(), result.get());
+    ASSERT_EQ(10, result->get_data()[0]);
+    ASSERT_EQ(0, result->get_data()[1]); // null row skipped, state untouched
+    ASSERT_EQ(20, result->get_data()[2]);
+}
+
+TEST_F(AggregateTest, test_merge_batch_selectively_skips_null_immediate_state) {
+    const AggregateFunction* func = get_aggregate_function("sum", TYPE_BIGINT, TYPE_BIGINT, false);
+
+    auto nullable_column = make_nullable_state_column_with_null();
+    auto s0 = ManagedAggrState::create(ctx, func);
+    auto s1 = ManagedAggrState::create(ctx, func);
+    auto s2 = ManagedAggrState::create(ctx, func);
+    std::vector<AggDataPtr> states{s0->state(), s1->state(), s2->state()};
+    Filter filter;
+    filter.resize(3, 0); // all selected; the null row must still be skipped
+
+    func->merge_batch_selectively(ctx, nullable_column->size(), 0, nullable_column.get(), states.data(), filter);
+
+    auto result = Int64Column::create();
+    func->finalize_to_column(ctx, s0->state(), result.get());
+    func->finalize_to_column(ctx, s1->state(), result.get());
+    func->finalize_to_column(ctx, s2->state(), result.get());
+    ASSERT_EQ(10, result->get_data()[0]);
+    ASSERT_EQ(0, result->get_data()[1]);
+    ASSERT_EQ(20, result->get_data()[2]);
+}
+
 } // namespace starrocks
