@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "base/utility/defer_op.h"
@@ -46,10 +47,10 @@ struct MemTrackerGuard {
 template <class... WeakPtrs>
 struct ResourceMemTrackerGuard {
     ResourceMemTrackerGuard(MemTracker* scope_tracker_, WeakPtrs&&... args)
-            : scope_tracker(scope_tracker_), resources(std::make_tuple(args...)) {}
+            : scope_tracker(scope_tracker_), resources(std::forward<WeakPtrs>(args)...) {}
 
     bool scoped_begin() const {
-        auto res = capture(resources);
+        auto res = capture();
         if (!res.has_value()) {
             return false;
         }
@@ -64,10 +65,17 @@ struct ResourceMemTrackerGuard {
     }
 
 private:
-    auto capture(const std::tuple<WeakPtrs...>& weak_tup) const
-            -> std::optional<std::tuple<std::shared_ptr<typename WeakPtrs::element_type>...>> {
-        auto shared_ptrs = std::make_tuple(std::get<WeakPtrs>(weak_tup).lock()...);
-        bool all_locked = ((std::get<WeakPtrs>(weak_tup).lock() != nullptr) && ...);
+    using ResourceTuple = std::tuple<std::decay_t<WeakPtrs>...>;
+    using CapturedTuple = std::tuple<std::shared_ptr<typename std::decay_t<WeakPtrs>::element_type>...>;
+
+    auto capture() const -> std::optional<CapturedTuple> {
+        return capture_impl(std::index_sequence_for<WeakPtrs...>{});
+    }
+
+    template <size_t... Is>
+    auto capture_impl(std::index_sequence<Is...>) const -> std::optional<CapturedTuple> {
+        CapturedTuple shared_ptrs(std::get<Is>(resources).lock()...);
+        bool all_locked = ((std::get<Is>(shared_ptrs) != nullptr) && ...);
         if (all_locked) {
             return shared_ptrs;
         } else {
@@ -76,9 +84,9 @@ private:
     }
 
     MemTracker* scope_tracker;
-    std::tuple<WeakPtrs...> resources;
+    ResourceTuple resources;
 
-    mutable std::tuple<std::shared_ptr<typename WeakPtrs::element_type>...> captured;
+    mutable CapturedTuple captured;
     mutable MemTracker* old_tracker = nullptr;
 };
 
@@ -87,7 +95,7 @@ private:
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
-    spill::ResourceMemTrackerGuard(tls_mem_tracker, spill::spill_query_ctx_weak_ptr(state), ##__VA_ARGS__)
+    spill::ResourceMemTrackerGuard(tls_mem_tracker, spill::spill_query_ctx_lifetime(state), ##__VA_ARGS__)
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 

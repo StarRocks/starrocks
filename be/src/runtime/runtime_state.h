@@ -44,6 +44,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "base/debug/debug_action.h"
@@ -56,6 +57,7 @@
 #include "runtime/arena_allocator.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_context_lifetime.h"
 
 namespace starrocks {
 
@@ -136,6 +138,8 @@ public:
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
+    QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
     void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
@@ -674,6 +678,7 @@ private:
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
     const QueryExecutionServices* _query_execution_services = nullptr;
+    QueryContextLifetimeWeakPtr _query_ctx_lifetime;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.

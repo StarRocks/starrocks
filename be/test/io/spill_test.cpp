@@ -62,6 +62,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/logical_type.h"
@@ -724,6 +725,32 @@ TEST_F(SpillTest, partition_yield_with_failed) {
         ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st,
                                                     spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr(dummy))));
     }
+}
+
+TEST_F(SpillTest, resource_mem_tracker_guard_should_protect_query_lifetime) {
+    auto lifetime = std::make_shared<QueryContextLifetime>();
+    auto guard = spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr<QueryContextLifetime>(lifetime));
+
+    ASSERT_TRUE(guard.scoped_begin());
+    guard.scoped_end();
+
+    lifetime.reset();
+    ASSERT_FALSE(guard.scoped_begin());
+}
+
+TEST_F(SpillTest, resource_mem_tracker_guard_should_require_all_resources) {
+    auto lifetime = std::make_shared<QueryContextLifetime>();
+    auto first_resource = std::make_shared<int>();
+    auto second_resource = std::make_shared<int>();
+
+    auto guard =
+            spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr<QueryContextLifetime>(lifetime),
+                                           std::weak_ptr<int>(first_resource), std::weak_ptr<int>(second_resource));
+    ASSERT_TRUE(guard.scoped_begin());
+    guard.scoped_end();
+
+    second_resource.reset();
+    ASSERT_FALSE(guard.scoped_begin());
 }
 
 TEST_F(SpillTest, aligned_buffer) {

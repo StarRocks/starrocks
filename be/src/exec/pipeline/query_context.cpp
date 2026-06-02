@@ -15,6 +15,7 @@
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "common/config_exec_flow_fwd.h"
@@ -121,6 +122,14 @@ void QueryContext::count_down_fragments() {
 
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
+}
+
+void QueryContext::attach_to_runtime_state(RuntimeState* state) {
+    DCHECK(state != nullptr);
+    auto lifetime = weak_from_this();
+    DCHECK(!lifetime.expired());
+    state->set_query_ctx(this);
+    state->set_query_ctx_lifetime(std::move(lifetime));
 }
 
 void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
