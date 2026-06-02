@@ -58,6 +58,15 @@ This topic introduces the following types of BE configurations:
 - Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `hash_map_prefetch_dist`.
 - Introduced in: -
 
+### join_probe_prefetch_l2_ratio
+
+- Default: 0.4
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Controls when the hash-join probe turns on software prefetch, as a fraction of the L2 cache size: prefetch is enabled only once the join hash table grows past `join_probe_prefetch_l2_ratio × L2`. For smaller tables prefetch is disabled, since it slows the probe down there. Lower the value to enable prefetch on smaller tables, raise it to restrict it to larger ones; `0` always prefetches. The default 0.4 is where prefetch was first measured to be net positive.
+- Introduced in: -
+
 ### clear_udf_cache_when_start
 
 - Default: false

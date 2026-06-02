@@ -207,6 +207,10 @@ CONF_Alias(hash_map_prefetch_dist, agg_hash_map_prefetch_dist);
 // bucket_count * slot_bytes >= L2_size * this ratio.
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 
+// L2-residency gate for the hash-join bucket-resolution prefetch: armed only
+// once bucket_size * 4 >= L2_size * this ratio (default lower than agg's).
+CONF_mDouble(join_probe_prefetch_l2_ratio, "0.4");
+
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
 

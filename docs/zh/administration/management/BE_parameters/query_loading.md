@@ -54,6 +54,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `hash_map_prefetch_dist`。
 - 引入版本：-
 
+### join_probe_prefetch_l2_ratio
+
+- 默认值：0.4
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：以 L2 缓存大小的比例控制哈希连接探测在何时启用软件预取：仅当连接哈希表增长超过 `join_probe_prefetch_l2_ratio × L2` 时才启用预取。对于较小的表，预取会拖慢探测，因此被禁用。降低该值可在更小的表上启用预取，提高该值则仅在更大的表上启用；`0` 表示始终预取。默认值 0.4 是首次测得预取产生净收益的临界点。
+- 引入版本：-
+
 ### clear_udf_cache_when_start
 
 - 默认值：false
