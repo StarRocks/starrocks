@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW MATERIALIZED VIEWS shows all or one specific asynchronous materialized view."
 ---
 
 # SHOW MATERIALIZED VIEWS

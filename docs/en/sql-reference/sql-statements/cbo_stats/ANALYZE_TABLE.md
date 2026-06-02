@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ANALYZE TABLE creates a manual collection task for collecting CBO statistics."
 ---
 
 # ANALYZE TABLE

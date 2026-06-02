@@ -21,6 +21,7 @@ struct YieldContext;
 namespace starrocks::spill {
 class Spiller;
 class BlockGroup;
+class BlockGroupSet;
 class BlockManager;
 class SpillInputStream;
 class Serde;

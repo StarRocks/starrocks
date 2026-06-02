@@ -42,6 +42,7 @@
 #include "base/time/time.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
@@ -49,22 +50,25 @@
 #include "common/system/master_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/pipeline/driver_limiter.h"
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
-#include "exec/pipeline/driver_limiter.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/global_spill_manager.h"
 #include "exec/spill/spill_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
@@ -75,7 +79,6 @@
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
@@ -87,8 +90,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/rejected_record_sync_daemon.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
@@ -97,6 +98,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -106,6 +108,9 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#ifdef WITH_TENANN
+#include "tenann/index/index_cache.h"
+#endif
 #include "udf/python/env.h"
 
 #ifdef USE_STAROS
@@ -140,7 +145,7 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()) {
+ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()), _compute_env(std::make_unique<ComputeEnv>()) {
     _refresh_service_contexts();
 }
 ExecEnv::~ExecEnv() = default;
@@ -162,8 +167,8 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.dictionary_cache_pool = global_env->dictionary_cache_pool();
     _execution_services.automatic_partition_pool = global_env->automatic_partition_pool();
     _execution_services.workgroup_manager = _workgroup_manager.get();
-    _execution_services.driver_limiter = _driver_limiter;
-    _execution_services.pipeline_timer = _pipeline_timer;
+    _execution_services.driver_limiter = _compute_env == nullptr ? nullptr : _compute_env->driver_limiter();
+    _execution_services.pipeline_timer = _compute_env == nullptr ? nullptr : _compute_env->pipeline_timer();
     _execution_services.max_executor_threads = global_env->max_executor_threads();
 
     auto* platform_env = PlatformEnv::GetInstance();
@@ -185,10 +190,10 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.lake_partial_update_thread_pool = global_env->lake_partial_update_thread_pool();
 
     _runtime_services.external_scan_context_mgr = _external_scan_context_mgr;
-    _runtime_services.stream_mgr = _stream_mgr;
+    _runtime_services.stream_mgr = stream_mgr();
     _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
-    _runtime_services.result_mgr = _result_mgr;
-    _runtime_services.result_queue_mgr = _result_queue_mgr;
+    _runtime_services.result_mgr = result_mgr();
+    _runtime_services.result_queue_mgr = result_queue_mgr();
     _runtime_services.fragment_mgr = _fragment_mgr;
     _runtime_services.load_path_mgr = _load_path_mgr;
     _runtime_services.load_channel_mgr = _load_channel_mgr;
@@ -242,10 +247,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this, process_metrics);
-    _stream_mgr = new DataStreamMgr(process_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
-    _result_mgr = new ResultBufferMgr(process_metrics);
-    _result_queue_mgr = new ResultQueueMgr(process_metrics);
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
@@ -259,15 +261,16 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     });
 
     const int64_t max_executor_threads = global_env->max_executor_threads();
-    _driver_limiter =
-            new pipeline::DriverLimiter(max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.max_num_pipeline_drivers =
+            max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
+    compute_env_options.metrics = process_metrics;
+    RETURN_IF_ERROR(_compute_env->init(compute_env_options));
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_drivers_hook([] {
-        auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
+        auto* compute_env = ExecEnv::GetInstance()->compute_env();
+        auto* driver_limiter = compute_env == nullptr ? nullptr : compute_env->driver_limiter();
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
-
-    _pipeline_timer = new pipeline::PipelineTimer();
-    RETURN_IF_ERROR(_pipeline_timer->start());
 
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
@@ -294,8 +297,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
             CpuInfo::num_cores(), max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
             pipeline::PipelineExecutorMetrics::instance());
-    _workgroup_manager =
-            std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts), process_metrics);
+    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(
+            std::move(executors_manager_opts), process_metrics, pipeline::create_query_shared_driver_queue,
+            pipeline::create_workgroup_driver_executor);
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), max_executor_threads);
 
@@ -342,7 +346,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         return (pool == nullptr) ? 0U : pool->queue_size();
     });
 
-    RETURN_IF_ERROR(_result_mgr->init());
+    RETURN_IF_ERROR(_compute_env->start_result_mgr());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
@@ -444,12 +448,39 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     PythonEnvManager::getInstance().start_background_cleanup_thread();
 
     _refresh_service_contexts();
+#ifdef WITH_TENANN
+    // Install before any vector query runs; tear down in destroy() before
+    // GlobalEnv::stop() so the entry deleter can still reach the tracker.
+    const int64_t proc_mem = GlobalEnv::GetInstance()->process_mem_limit();
+    ASSIGN_OR_RETURN(int64_t vi_capacity, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
+    if (vi_capacity <= 0) {
+        LOG(WARNING) << "vector_query_cache_capacity resolved to " << vi_capacity
+                     << " bytes (raw=" << config::vector_query_cache_capacity << ", process_mem_limit=" << proc_mem
+                     << "); vector index cache disabled";
+        vi_capacity = 0;
+    }
+    _vector_index_cache = std::make_unique<VectorIndexCache>(static_cast<size_t>(vi_capacity),
+                                                             GlobalEnv::GetInstance()->vector_index_mem_tracker());
+    tenann::SetGlobalIndexCache(_vector_index_cache.get());
+#endif
 
     return Status::OK();
 }
 
 std::string ExecEnv::token() const {
     return get_master_token();
+}
+
+DataStreamMgr* ExecEnv::stream_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->stream_mgr();
+}
+
+ResultBufferMgr* ExecEnv::result_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->result_mgr();
+}
+
+ResultQueueMgr* ExecEnv::result_queue_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->result_queue_mgr();
 }
 
 void ExecEnv::stop() {
@@ -480,10 +511,10 @@ void ExecEnv::stop() {
         component_times.emplace_back("fragment_mgr", MonotonicMillis() - start);
     }
 
-    if (_stream_mgr != nullptr) {
+    if (_compute_env != nullptr) {
         start = MonotonicMillis();
-        _stream_mgr->close();
-        component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
+        _compute_env->stop();
+        component_times.emplace_back("compute_env", MonotonicMillis() - start);
     }
     if (_lookup_dispatcher_mgr != nullptr) {
         _lookup_dispatcher_mgr->close();
@@ -597,16 +628,10 @@ void ExecEnv::stop() {
         component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
     }
 
-    if (_result_mgr) {
+    if (_compute_env != nullptr && _compute_env->result_mgr() != nullptr) {
         start = MonotonicMillis();
-        _result_mgr->stop();
+        _compute_env->stop_result_mgr();
         component_times.emplace_back("result_mgr", MonotonicMillis() - start);
-    }
-
-    if (_stream_mgr) {
-        start = MonotonicMillis();
-        _stream_mgr->close();
-        component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
     }
 
     if (_batch_write_mgr) {
@@ -683,10 +708,14 @@ void ExecEnv::destroy() {
     }
     SAFE_DELETE(_rejected_record_sync_daemon);
     SAFE_DELETE(_load_path_mgr);
-    SAFE_DELETE(_stream_mgr);
     SAFE_DELETE(_query_context_mgr);
     _workgroup_manager->destroy();
     _workgroup_manager.reset();
+    // Query/workgroup teardown can release FragmentContext state that still uses
+    // ComputeEnv-owned timers and pass-through stream buffers.
+    if (_compute_env) {
+        _compute_env->destroy();
+    }
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
@@ -695,10 +724,6 @@ void ExecEnv::destroy() {
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
-    SAFE_DELETE(_driver_limiter);
-    SAFE_DELETE(_pipeline_timer);
-    SAFE_DELETE(_result_queue_mgr);
-    SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
@@ -713,6 +738,13 @@ void ExecEnv::destroy() {
     _query_execution_services.process_metrics = nullptr;
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;
+}
+
+void ExecEnv::destroy_vector_index_cache() {
+#ifdef WITH_TENANN
+    tenann::SetGlobalIndexCache(nullptr);
+#endif
+    _vector_index_cache.reset();
 }
 
 void ExecEnv::_wait_for_fragments_finish() {

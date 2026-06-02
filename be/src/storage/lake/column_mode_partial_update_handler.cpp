@@ -119,11 +119,14 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     RETURN_IF_ERROR(params.tablet->update_mgr()->batch_get_rss_rowids_from_pkindex(
             params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/));
 
-    // Build rss_rowid_to_update_rowid mapping for each update segment
+    // Build rss_rowid_to_update_rowid mapping for each update segment. Pass each
+    // segment's physical rowid base (range_start, captured by the iterator during
+    // the query above) so insert_rowids are physical positions in the segment file
+    // — see ColumnPartialUpdateState::build_rss_rowid_to_update_rowid.
     _partial_update_states.resize(num_segments);
     for (uint32_t i = 0; i < num_segments; i++) {
         _partial_update_states[i].src_rss_rowids = std::move(rss_rowids_per_segment[i]);
-        _partial_update_states[i].build_rss_rowid_to_update_rowid();
+        _partial_update_states[i].build_rss_rowid_to_update_rowid(pk_iters[i]->physical_rowid_base());
         _partial_update_states[i].inited = true;
     }
 
@@ -398,6 +401,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         TRACE_COUNTER_INCREMENT("pcu_insert_rows", _partial_update_states[upt_id].insert_rowids.size());
 
         if (insert_rowids_by_segment != nullptr) {
+            // insert_rowids are already physical positions in the update segment file
+            // (build_rss_rowid_to_update_rowid applied upt_segment_physical_rowid_offset),
+            // exactly what the downstream fetch_values_by_rowid reads expect.
             (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
         }
     }
@@ -543,8 +549,8 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     }
     // 1. find all segments that have been compacted
     for (const auto& rowset : metadata.rowsets()) {
-        if (input_rowsets.count(rowset.id()) > 0 && rowset.segments_size() > 0) {
-            for (int i = 0; i < rowset.segments_size(); ++i) {
+        if (input_rowsets.count(rowset.id()) > 0 && rowset.segment_metas_size() > 0) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                 input_segments.push_back(get_rssid(rowset, i));
             }
         }

@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <fmt/printf.h>
+
 #include <algorithm>
 #include <memory>
 #include <random>
@@ -29,8 +31,7 @@
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
@@ -530,11 +531,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             if (_workgroup != nullptr &&
                 (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT_NS ||
-                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS) &&
-                _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
-                should_yield = true;
-                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
-                break;
+                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS)) {
+                DCHECK(_in_queue != nullptr);
+                if (_in_queue->should_yield(this, time_spent)) {
+                    should_yield = true;
+                    COUNTER_UPDATE(_yield_by_preempt_counter, 1);
+                    break;
+                }
             }
         }
         // close finished operators and update _first_unfinished index

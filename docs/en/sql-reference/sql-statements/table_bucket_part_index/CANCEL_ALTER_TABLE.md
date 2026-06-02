@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, including:"
 ---
 
 # CANCEL ALTER TABLE

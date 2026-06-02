@@ -2314,8 +2314,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                                  ColocateTableIndex.GroupId groupId)
             throws DdlException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRangeMgr()
-                .getColocateRanges(groupId.grpId);
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
         if (colocateRanges.isEmpty()) {
             throw new DdlException("Colocate range metadata is missing for group '"
                     + table.getColocateGroup() + "', cannot create range colocate tablets");
@@ -4132,6 +4131,26 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterLightWeightTabletCreation(OlapTable table,
+                                                Map<String, String> properties,
+                                                List<Runnable> appliers) throws DdlException {
+        if (!table.isCloudNativeTable()) {
+            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                    " can only be set for cloud native tables");
+        }
+        // Strict validation: AlterTableClauseAnalyzer matches at most one branch in its
+        // else-if chain, so if light_weight_tablet_creation comes after another recognized
+        // property in a multi-property ALTER, its analyzer branch is skipped. Validate
+        // here as well to ensure invalid values are always rejected.
+        String value = properties.remove(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION);
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                    " must be bool type(false/true)");
+        }
+        boolean newValue = Boolean.parseBoolean(value);
+        appliers.add(() -> table.setLightWeightTabletCreation(newValue));
+    }
+
     private void alterTableQueryTimeout(OlapTable table,
                                        Map<String, String> properties,
                                        List<Runnable> appliers) throws DdlException {
@@ -4232,6 +4251,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
             alterLakeCompactionMaxParallel(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+            alterLightWeightTabletCreation(table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);

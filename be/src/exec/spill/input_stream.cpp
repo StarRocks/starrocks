@@ -17,60 +17,26 @@
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <any>
+#include <atomic>
 #include <memory>
-#include <mutex>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/utility/defer_op.h"
-#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
-#include "exec/sorting/sort_cursor.h"
+#include "compute_env/sorting/sorted_chunks_merger.h"
+#include "exec/sort_exec_exprs.h"
 #include "exec/spill/block_manager.h"
+#include "exec/spill/input_stream_internal.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/spill/task_executor.h"
+#include "fmt/format.h"
 #include "runtime/runtime_state.h"
-#include "runtime/sorted_chunks_merger.h"
 
 namespace starrocks::spill {
-
-static const int chunk_buffer_max_size = 2;
-
-Status YieldableRestoreTask::do_read(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
-    size_t num_eos = 0;
-    yield_ctx.total_yield_point_cnt = _sub_stream.size();
-    auto wg = yield_ctx.wg;
-    while (yield_ctx.yield_point < yield_ctx.total_yield_point_cnt) {
-        {
-            SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-            size_t i = yield_ctx.yield_point;
-            if (!_sub_stream[i]->eof()) {
-                DCHECK(_sub_stream[i]->enable_prefetch());
-                auto status = _sub_stream[i]->prefetch(yield_ctx, context);
-                if (!status.ok() && !status.is_end_of_file() && !status.is_yield()) {
-                    return status;
-                }
-                if (status.is_yield()) {
-                    yield_ctx.need_yield = true;
-                    return Status::OK();
-                }
-            }
-            yield_ctx.yield_point++;
-            num_eos += _sub_stream[i]->eof();
-        }
-
-        BREAK_IF_YIELD(wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
-    }
-
-    if (num_eos == _sub_stream.size()) {
-        _input_stream->mark_is_eof();
-        return Status::EndOfFile("eos");
-    }
-    return Status::OK();
-}
 
 class UnionAllSpilledInputStream final : public SpillInputStream {
 public:
@@ -158,6 +124,10 @@ StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& 
     return res;
 }
 
+InputStreamPtr detail::make_raw_chunk_input_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+    return std::make_shared<RawChunkInputStream>(std::move(chunks), spiller);
+}
+
 // method for create input stream
 InputStreamPtr SpillInputStream::union_all(const InputStreamPtr& left, const InputStreamPtr& right) {
     return std::make_shared<UnionAllSpilledInputStream>(left, right);
@@ -168,7 +138,7 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
 }
 
 InputStreamPtr SpillInputStream::as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller) {
-    return std::make_shared<RawChunkInputStream>(chunks, spiller);
+    return detail::make_raw_chunk_input_stream(chunks, spiller);
 }
 
 class BufferedInputStream : public SpillInputStream {
@@ -257,6 +227,10 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
     return res.status();
 }
 
+InputStreamPtr detail::make_buffered_input_stream(int capacity, InputStreamPtr stream, Spiller* spiller) {
+    return std::make_shared<BufferedInputStream>(capacity, std::move(stream), spiller);
+}
+
 class SequenceInputStream : public SpillInputStream {
 public:
     SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde, BlockReaderOptions options)
@@ -331,6 +305,11 @@ StatusOr<ChunkUniquePtr> SequenceInputStream::get_next(workgroup::YieldContext& 
         return res;
     }
     __builtin_unreachable();
+}
+
+InputStreamPtr detail::make_sequence_input_stream(std::vector<BlockPtr> input_blocks, SerdePtr serde,
+                                                  BlockReaderOptions options) {
+    return std::make_shared<SequenceInputStream>(std::move(input_blocks), std::move(serde), options);
 }
 
 class OrderedInputStream : public SpillInputStream {
@@ -410,117 +389,13 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(workgroup::YieldContext& y
     return std::make_unique<Chunk>();
 }
 
-std::vector<BlockGroupPtr> BlockGroupSet::select_compaction_block_groups() {
-    std::vector<BlockGroupPtr> result;
-    {
-        std::lock_guard guard(_mutex);
-        const int min_compact_groups = 8;
-        const int level_size_factor = 8;
-        if (_groups.size() <= min_compact_groups) {
-            return {};
-        }
-        std::stable_sort(_groups.begin(), _groups.end(), [](const BlockGroupPtr& a, const BlockGroupPtr& b) {
-            return a->data_size() > b->data_size();
-        });
-
-        // assign level to each group
-        std::vector<int> levels(_groups.size(), 0);
-        int current_level = 0;
-        int need_compaction_level = -1;
-        int current_level_nums = 0;
-        size_t current_size = _groups.back()->data_size();
-
-        for (int i = _groups.size() - 1; i >= 0; --i) {
-            if (_groups[i]->data_size() > current_size * level_size_factor) {
-                current_size = _groups[i]->data_size();
-                current_level++;
-                current_level_nums = 0;
-            }
-            levels[i] = current_level;
-            current_level_nums++;
-            if (current_level_nums > min_compact_groups && need_compaction_level < 0) {
-                need_compaction_level = current_level;
-            }
-        }
-
-        if (need_compaction_level >= 0) {
-            // compact the groups in the same level
-            std::unordered_set<BlockGroup*> removed_groups;
-            for (int i = _groups.size() - 1; i >= 0; --i) {
-                if (levels[i] == need_compaction_level) {
-                    result.emplace_back(_groups[i]);
-                    removed_groups.insert(_groups[i].get());
-                }
-                if (result.size() > min_compact_groups) {
-                    break;
-                }
-            }
-
-            auto it = std::remove_if(_groups.begin(), _groups.end(), [&removed_groups](const BlockGroupPtr& group) {
-                return removed_groups.count(group.get()) > 0;
-            });
-
-            _groups.erase(it, _groups.end());
-        } else {
-            // select the smallest N block group for compact
-            for (size_t i = 0; i < min_compact_groups; ++i) {
-                result.emplace_back(_groups.back());
-                _groups.pop_back();
-            }
-        }
-    }
-    return result;
-}
-
-StatusOr<InputStreamPtr> BlockGroupSet::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
-    BlockReaderOptions read_options;
-    if (spiller->options().enable_buffer_read) {
-        read_options.enable_buffer_read = true;
-        read_options.max_buffer_bytes = spiller->options().max_read_buffer_bytes;
-    }
-    std::vector<BlockPtr> blocks;
-    // collect block for each group
-    for (const auto& group : _groups) {
-        blocks.insert(blocks.end(), group->blocks().begin(), group->blocks().end());
-    }
-    auto stream = std::make_shared<SequenceInputStream>(std::move(blocks), serde, read_options);
-    return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream), spiller);
-}
-
-StatusOr<InputStreamPtr> BlockGroupSet::as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
-                                                          const SortExecExprs* sort_exprs,
-                                                          const SortDescs* sort_descs) {
-    return build_ordered_stream(_groups, state, serde, spiller, sort_exprs, sort_descs);
-}
-
-StatusOr<InputStreamPtr> BlockGroupSet::build_ordered_stream(std::vector<BlockGroupPtr>& block_groups,
-                                                             RuntimeState* state, const SerdePtr& serde,
-                                                             Spiller* spiller, const SortExecExprs* sort_exprs,
-                                                             const SortDescs* sort_descs) {
-    BlockReaderOptions read_options;
-    if (spiller->options().enable_buffer_read && block_groups.size() > 0) {
-        size_t max_buffer_bytes = spiller->options().max_read_buffer_bytes / block_groups.size();
-        if (max_buffer_bytes > config::spill_read_buffer_min_bytes) {
-            read_options.enable_buffer_read = true;
-            read_options.max_buffer_bytes = max_buffer_bytes;
-        }
-    }
-    std::vector<InputStreamPtr> streams;
-    for (const auto& group : block_groups) {
-        auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde, read_options);
-        streams.emplace_back(std::make_shared<BufferedInputStream>(chunk_buffer_max_size, stream, spiller));
-    }
-
-    InputStreamPtr res;
-    if (streams.empty() || state->is_cancelled()) {
-        res = std::make_shared<RawChunkInputStream>(std::vector<ChunkPtr>(), spiller);
-    } else {
-        auto stream = std::make_shared<OrderedInputStream>(std::move(streams), state);
-        RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
-        res = std::move(stream);
-    }
-
-    return res;
+StatusOr<InputStreamPtr> detail::make_ordered_input_stream(std::vector<InputStreamPtr> input_streams,
+                                                           RuntimeState* state, const SerdePtr& serde,
+                                                           const SortExecExprs* sort_exprs, const SortDescs* descs,
+                                                           Spiller* spiller) {
+    auto stream = std::make_shared<OrderedInputStream>(std::move(input_streams), state);
+    RETURN_IF_ERROR(stream->init(serde, sort_exprs, descs, spiller));
+    return stream;
 }
 
 } // namespace starrocks::spill

@@ -174,6 +174,10 @@ public class SchemaChangeHandler extends AlterHandler {
     private AlterJobV2 createOptimizeTableJob(
             OptimizeClause optimizeClause, Database db, OlapTable olapTable, Map<String, String> propertyMap)
             throws StarRocksException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                    "OPTIMIZE is not supported on tables with range distribution.");
+        }
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
@@ -341,6 +345,8 @@ public class SchemaChangeHandler extends AlterHandler {
          *      Can not drop any key column is has value with REPLACE method
          */
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        rejectIfTouchesRangeSortKey(olapTable, baseIndexMetaId,
+                "DROP COLUMN", dropColName);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             List<Column> baseSchema = indexMetaIdToSchema.get(baseIndexMetaId);
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
@@ -816,6 +822,22 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
+        rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn,
+                "MODIFY COLUMN", newColName);
+        // A keyness flip (value -> key or key -> value) shifts the
+        // key-derived range sort key on AGG/UNIQUE tables and on tables
+        // without an explicit ORDER BY, even when the column is not
+        // currently in the sort key.
+        if (olapTable.isRangeDistribution()
+                && oriColumn.isKey() != modColumn.isKey()) {
+            throw new DdlException(
+                "MODIFY COLUMN that changes keyness is not supported " +
+                "on tables with range distribution, because adding to " +
+                "or removing from the key column set shifts the range " +
+                "sort key on AGG/UNIQUE tables and on tables without " +
+                "explicit ORDER BY. Column: " + newColName);
+        }
+
         for (Index index : olapTable.getIndexes()) {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
                 if (index.getColumns().contains(oriColumn.getColumnId()) &&
@@ -1107,6 +1129,12 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processModifySortKeyColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexMetaIdToSchema, List<Integer> sortKeyIdxes,
                                             List<Integer> sortKeyUniqueIds) throws DdlException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                "Modifying sort key (ALTER TABLE ... ORDER BY) is not " +
+                "supported on tables with range distribution, because the " +
+                "sort key defines tablet boundaries.");
+        }
         LinkedList<Column> targetIndexSchema = indexMetaIdToSchema.get(olapTable.getIndexMetaIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -1268,6 +1296,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 newColumn.setAggregationType(AggregateType.NONE, true);
             }
         }
+
+        // Range-distribution guard runs AFTER the keys-type block above,
+        // which may promote a no-aggregate column to KEY on AGG tables
+        // (line ~1276). Checking newColumn.isKey() here sees the final
+        // post-promotion value.
+        rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(newColumn));
 
         // hll must be used in agg_keys
         if (newColumn.getType().isHllType() && KeysType.AGG_KEYS != olapTable.getKeysType()) {
@@ -2365,6 +2399,23 @@ public class SchemaChangeHandler extends AlterHandler {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                 LOG.info("updated table: {} lake_compaction_max_parallel from {} to {}",
                         olapTable.getName(), oldMaxParallel, maxParallel);
+                return null;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+                // light_weight_tablet_creation is a pure FE property: it gates whether FE
+                // dispatches CreateReplicaTask in CREATE TABLE / ADD PARTITION / schema change /
+                // rollup paths. No CN-side state to flip. Use properties.get() (not
+                // analyzeBooleanProp) so the key remains in the map for alterTableProperties
+                // to dispatch on.
+                boolean newValue = Boolean.parseBoolean(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION));
+                if (newValue == olapTable.isLightWeightTabletCreation()) {
+                    LOG.info("table: {} light_weight_tablet_creation is {}, nothing need to do",
+                            olapTable.getName(), newValue);
+                    return null;
+                }
+                GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                LOG.info("updated table: {} light_weight_tablet_creation to {}",
+                        olapTable.getName(), newValue);
                 return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
@@ -3563,5 +3614,66 @@ public class SchemaChangeHandler extends AlterHandler {
                 && oriColumn.isKey() == modColumn.isKey()
                 && oriColumn.isAllowNull() == modColumn.isAllowNull()
                 && oriColumn.isHidden() == modColumn.isHidden();
+    }
+
+    /**
+     * Reject the operation if the named column belongs to the range-
+     * distribution sort-key column set of the given index.
+     *
+     * Range-distribution tablet boundaries are stored as 1:1 copies of the
+     * base values, and any DROP/MODIFY that changes the column set or
+     * type/semantics of those columns invalidates the stored boundary
+     * interpretation — even if no row physically moves.
+     */
+    private static void rejectIfTouchesRangeSortKey(
+            OlapTable olapTable, long indexMetaId,
+            String operation, String columnName) throws DdlException {
+        if (!olapTable.isRangeDistribution()) {
+            return;
+        }
+        List<Column> rangeSortKeyColumns =
+                MetaUtils.getRangeDistributionColumns(olapTable, indexMetaId);
+        boolean isInRangeSortKey = rangeSortKeyColumns.stream()
+                .anyMatch(column -> column.getName().equalsIgnoreCase(columnName));
+        if (isInRangeSortKey) {
+            throw new DdlException(operation +
+                " on a sort-key column is not supported on tables with " +
+                "range distribution, because it would change the column set " +
+                "or type/semantics that the existing range tablet boundary " +
+                "values were recorded under. Column: " + columnName);
+        }
+    }
+
+    /**
+     * Reject ADD COLUMN that would introduce a new key column on a
+     * range-distribution table.
+     *
+     * On AGG/UNIQUE tables new key columns are appended to the range sort
+     * key, and on tables without an explicit ORDER BY the range sort key
+     * is derived from the key columns. Either way, adding a key column
+     * shifts the column set that the existing range tablet boundary
+     * values were recorded under.
+     *
+     * Callers should invoke this AFTER the keys-type block in
+     * addColumnInternal, because that block may promote a no-aggregate
+     * column to KEY on AGG tables. Checking isKey() before promotion
+     * would miss `ALTER TABLE agg_range ADD COLUMN c INT` (no KEY
+     * keyword) and let it corrupt the range sort key.
+     */
+    private static void rejectAddingKeyColumnOnRangeDistribution(
+            OlapTable olapTable, List<Column> columnsToAdd) throws DdlException {
+        if (!olapTable.isRangeDistribution()) {
+            return;
+        }
+        for (Column column : columnsToAdd) {
+            if (column.isKey()) {
+                throw new DdlException(
+                    "ADD COLUMN of a key column is not supported on tables " +
+                    "with range distribution, because new key columns are " +
+                    "appended to the range sort key (AGG/UNIQUE) or derived " +
+                    "sort key (no explicit ORDER BY), invalidating stored " +
+                    "range tablet boundary values. Column: " + column.getName());
+            }
+        }
     }
 }

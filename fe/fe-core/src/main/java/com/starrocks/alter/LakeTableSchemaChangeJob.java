@@ -95,6 +95,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -400,9 +401,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
+        boolean lightWeight;
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+            lightWeight = table.isLightWeightTabletCreation();
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {
@@ -419,7 +422,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            // Light-weight tablet creation skips CreateReplicaTask; the shadow tablet's
+            // version 1 metadata is materialized on demand by the CN-side fallback when
+            // the first read or publish hits it.
+            Set<Long> shadowPhysicalPartitionIds = lightWeight
+                    ? Collections.<Long>emptySet()
+                    : physicalPartitionIndexMap.rowKeySet();
+            for (long physicalPartitionId : shadowPhysicalPartitionIds) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
                 TStorageMedium storageMedium = table.getPartitionInfo()
@@ -498,8 +507,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             throw new AlterCancelException(e.getMessage());
         }
 
-        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
-                             waitingCreatingReplica, isCancelling);
+        if (!lightWeight) {
+            sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
+                                 waitingCreatingReplica, isCancelling);
+        }
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {

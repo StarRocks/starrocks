@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the 64-bit xxhash3 hash value of the input string."
 ---
 
 # xx_hash3_64

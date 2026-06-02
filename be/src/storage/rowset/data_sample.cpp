@@ -21,8 +21,8 @@
 
 #include "common/runtime_profile.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "storage/types.h"
-#include "storage/zone_map_detail.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

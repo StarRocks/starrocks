@@ -263,6 +263,15 @@ public class TaskRunManager implements MemoryTrackable {
             Future<?> future = taskRun.getFuture();
             if (future.isDone()) {
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
+
+                //defense code
+                if (!taskRun.getStatus().getState().isFinishState()) {
+                    LOG.warn("TaskRun future is done but state is still {} (not finish state), " +
+                            "likely a transient race between kill/cancel path and async execution thread; " +
+                            "will retry on next scheduler tick. queryId={}, taskId={}",
+                            taskRun.getStatus().getState(), taskRun.getStatus().getQueryId(), taskId);
+                    continue;
+                }
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {

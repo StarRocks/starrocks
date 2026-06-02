@@ -163,7 +163,6 @@ Status HttpServiceBE::start() {
     // Register Stop Be action
     auto* stop_be_action = new StopBeAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
-    _ev_http_server->register_handler(HttpMethod::POST, "/api/_stop_be", stop_be_action);
     _http_handlers.emplace_back(stop_be_action);
 
     // register pprof actions

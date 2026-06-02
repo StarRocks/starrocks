@@ -15,12 +15,23 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
 
+#include "common/statusor.h"
 #include "common/thread/cpu_util.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::workgroup {
+
+using DriverExecutorFactory = std::function<StatusOr<std::unique_ptr<pipeline::DriverExecutor>>(
+        const std::string& name, const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids,
+        uint32_t num_driver_threads, pipeline::PipelineExecutorMetrics* metrics,
+        const WorkGroupSchedulePolicy& schedule_policy)>;
 
 /// Manage all PipelineExecutorSet and CPU resource allocation.
 ///
@@ -43,9 +54,8 @@ namespace starrocks::workgroup {
 /// with `unlocked` suffix. And the methods with `unlocked`suffix should not call other protected methods.
 class ExecutorsManager {
 public:
-    ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf);
-
-    void close() const;
+    ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGroupSchedulePolicy& schedule_policy,
+                     DriverExecutorFactory driver_executor_factory);
 
     Status start_shared_executors_unlocked() const;
     void update_shared_executors() const;
@@ -58,13 +68,10 @@ public:
     std::unique_ptr<PipelineExecutorSet> maybe_create_exclusive_executors_unlocked(WorkGroup* wg,
                                                                                    const CpuUtil::CpuIds& cpuids) const;
 
-    void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
+    bool change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
-    void change_exec_state_report_max_threads(int max_threads);
-    void change_priority_exec_state_report_max_threads(int max_threads);
 
     using ExecutorsConsumer = std::function<void(PipelineExecutorSet&)>;
-    void for_each_executors(const ExecutorsConsumer& consumer) const;
 
     /// Whether the task running on the borrowed CPU should yield the CPU, that is,
     /// the task of the owner resource group of the borrowed CPU has arrived.
@@ -73,8 +80,9 @@ public:
 private:
     static constexpr WorkGroup* COMMON_WORKGROUP = nullptr;
 
-    WorkGroupManager* const _parent;
     PipelineExecutorSetConfig _conf;
+    const WorkGroupSchedulePolicy& _schedule_policy;
+    DriverExecutorFactory _driver_executor_factory;
     std::unordered_map<WorkGroup*, CpuUtil::CpuIds> _wg_to_cpuids;
     const std::unique_ptr<PipelineExecutorSet> _shared_executors;
 

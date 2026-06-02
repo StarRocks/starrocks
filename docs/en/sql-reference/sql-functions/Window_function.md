@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['analytic']
 sidebar_position: 0.9
+description: "The window function is a special class of built-in functions."
 ---
 
 # Window functions

@@ -69,7 +69,7 @@ public:
         _enable_persistent_index = enable_persistent_index;
     }
 
-    Status apply_opcompaction(const TabletMetadata& metadata, const TxnLogPB_OpCompaction& op_compaction);
+    Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
@@ -112,6 +112,8 @@ public:
     // cross-segment parallelism. Each rss_rowids[i] = (rssid << 32 | rowid) for the
     // i-th primary key, or NullIndexValue if the key doesn't exist.
     // Used by column mode partial update to build the update-row-to-source-row mapping.
+    // To learn each segment's physical rowid base (range_start), call
+    // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
     Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
                                          std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
                                          std::vector<std::vector<uint64_t>>* rss_rowids_per_segment);

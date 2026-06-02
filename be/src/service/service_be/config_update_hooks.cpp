@@ -21,6 +21,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/string/parse_util.h"
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "cache/mem_cache/page_cache.h"
@@ -37,18 +38,21 @@
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/txn_state_cache.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
@@ -92,6 +96,24 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         cache->set_capacity(cache_limit);
         return Status::OK();
     });
+#ifdef WITH_TENANN
+    registry->register_callback("vector_query_cache_capacity", [=]() -> Status {
+        if (exec_env == nullptr || exec_env->vector_index_cache() == nullptr) {
+            return Status::InternalError("Vector index cache is not initialized");
+        }
+        const int64_t proc_mem = GlobalEnv::GetInstance()->process_mem_limit();
+        ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
+        if (limit < 0) limit = 0;
+        auto* cache = exec_env->vector_index_cache();
+        if (static_cast<size_t>(limit) == cache->capacity()) {
+            return Status::OK();
+        }
+        cache->SetCapacity(static_cast<size_t>(limit));
+        LOG(INFO) << "vector_query_cache_capacity updated: " << config::vector_query_cache_capacity << " => " << limit
+                  << " bytes";
+        return Status::OK();
+    });
+#endif // WITH_TENANN
 #endif
 #ifndef __APPLE__
     registry->register_callback("disable_storage_page_cache", [=]() -> Status {

@@ -14,7 +14,7 @@
 
 #include "exec/data_sinks/buffer_control_result_writer.h"
 
-#include "runtime/buffer_control_block.h"
+#include "compute_env/result/buffer_control_block.h"
 
 namespace starrocks {
 

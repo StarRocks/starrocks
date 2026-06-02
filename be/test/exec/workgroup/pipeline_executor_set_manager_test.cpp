@@ -16,13 +16,17 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 
 namespace starrocks::workgroup {
 
@@ -47,6 +51,89 @@ static TWorkGroupOp make_create_op(const TWorkGroup& twg) {
     return op;
 }
 
+class FakeDriverExecutor final : public pipeline::DriverExecutor {
+public:
+    explicit FakeDriverExecutor(std::string name) : DriverExecutor(std::move(name)) {}
+
+    void initialize(int32_t num_threads) override {
+        initialized_num_threads = num_threads;
+        current_num_threads = num_threads;
+    }
+    void change_num_threads(int32_t num_threads) override { current_num_threads = num_threads; }
+    void submit(pipeline::DriverRawPtr) override {}
+    void cancel(pipeline::DriverRawPtr) override {}
+    void close() override { closed = true; }
+    void report_exec_state(pipeline::QueryContext*, pipeline::FragmentContext*, const Status&, bool) override {}
+    void report_audit_statistics(pipeline::QueryContext*, pipeline::FragmentContext*) override {}
+    void report_audit_statistics_on_failure(pipeline::QueryContext*, pipeline::FragmentContext*) override {}
+    void iterate_immutable_blocking_driver(const pipeline::ConstDriverConsumer&) const override {}
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override {
+        bound_cpuids = cpuids;
+        bound_borrowed_cpuids = borrowed_cpuids;
+    }
+    Status update_exec_state_report_max_threads(int max_threads) override {
+        exec_state_report_max_threads = max_threads;
+        return Status::OK();
+    }
+    Status update_priority_exec_state_report_max_threads(int max_threads) override {
+        priority_exec_state_report_max_threads = max_threads;
+        return Status::OK();
+    }
+
+    int32_t initialized_num_threads = 0;
+    int32_t current_num_threads = 0;
+    int exec_state_report_max_threads = 0;
+    int priority_exec_state_report_max_threads = 0;
+    bool closed = false;
+    CpuUtil::CpuIds bound_cpuids;
+    std::vector<CpuUtil::CpuIds> bound_borrowed_cpuids;
+};
+
+struct DriverExecutorFactoryCall {
+    std::string name;
+    CpuUtil::CpuIds cpuids;
+    std::vector<CpuUtil::CpuIds> borrowed_cpuids;
+    uint32_t num_driver_threads = 0;
+    pipeline::PipelineExecutorMetrics* metrics = nullptr;
+};
+
+static DriverExecutorFactory make_fake_driver_executor_factory(
+        std::vector<DriverExecutorFactoryCall>* calls = nullptr) {
+    return [calls](const std::string& name, const CpuUtil::CpuIds& cpuids,
+                   const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
+                   pipeline::PipelineExecutorMetrics* metrics, const WorkGroupSchedulePolicy& schedule_policy)
+                   -> StatusOr<std::unique_ptr<pipeline::DriverExecutor>> {
+        (void)schedule_policy;
+        if (calls != nullptr) {
+            calls->push_back({name, cpuids, borrowed_cpuids, num_driver_threads, metrics});
+        }
+        std::unique_ptr<pipeline::DriverExecutor> executor = std::make_unique<FakeDriverExecutor>(name);
+        return executor;
+    };
+}
+
+static DriverExecutorFactory make_fail_after_shared_driver_executor_factory(
+        std::vector<DriverExecutorFactoryCall>* calls) {
+    return [calls](const std::string& name, const CpuUtil::CpuIds& cpuids,
+                   const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
+                   pipeline::PipelineExecutorMetrics* metrics, const WorkGroupSchedulePolicy& schedule_policy)
+                   -> StatusOr<std::unique_ptr<pipeline::DriverExecutor>> {
+        (void)schedule_policy;
+        calls->push_back({name, cpuids, borrowed_cpuids, num_driver_threads, metrics});
+        if (calls->size() > 1) {
+            return Status::InternalError("injected driver executor creation failure");
+        }
+        std::unique_ptr<pipeline::DriverExecutor> executor = std::make_unique<FakeDriverExecutor>(name);
+        return executor;
+    };
+}
+
+static FakeDriverExecutor* TEST_fake_driver_executor(const PipelineExecutorSet* exec_set) {
+    auto* driver_exec = dynamic_cast<FakeDriverExecutor*>(exec_set->driver_executor());
+    EXPECT_NE(nullptr, driver_exec);
+    return driver_exec;
+}
+
 // ---------------------------------------------------------------------------
 // ExecutorsManagerTest
 //
@@ -60,7 +147,8 @@ TEST(ExecutorsManagerTest, for_each_executors_visits_only_shared_when_no_exclusi
     // With null metrics and empty CPUIDs, no exclusive executor can be created,
     // so for_each_executors should visit exactly the one shared executor set.
     PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr);
-    auto manager = std::make_unique<WorkGroupManager>(config);
+    auto manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                      make_fake_driver_executor_factory());
 
     int visit_count = 0;
     manager->for_each_executors([&visit_count](PipelineExecutorSet&) { ++visit_count; });
@@ -74,7 +162,8 @@ TEST(ExecutorsManagerTest, for_each_executors_still_one_when_shared_workgroups_e
     // Workgroups that cannot obtain exclusive CPUs (empty total_cpuids) use the
     // shared executor set, so the visit count stays 1.
     PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr);
-    auto manager = std::make_unique<WorkGroupManager>(config);
+    auto manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                      make_fake_driver_executor_factory());
 
     // Add two workgroups that would request exclusive cores but cannot get them.
     TWorkGroup twg1 = make_exclusive_twg(10, 4);
@@ -94,7 +183,7 @@ TEST(ExecutorsManagerTest, for_each_executors_still_one_when_shared_workgroups_e
 // ---------------------------------------------------------------------------
 // ExecutorsManagerIntegrationTest
 //
-// Tests that require fully started executor sets, including real thread pools.
+// Tests that require fully started executor sets, including scan thread pools.
 // Using 8 total cores with actual CPUIDs and a real PipelineExecutorMetrics so
 // that start() and exclusive-executor creation succeed.
 //
@@ -120,7 +209,9 @@ protected:
         // which avoids requiring actual core-binding privileges in CI.
         _config = std::make_unique<PipelineExecutorSetConfig>(kTotalCores, 2, 2, kInitConnScanThreads, cpuids, false,
                                                               false, _metrics.get());
-        _manager = std::make_unique<WorkGroupManager>(*_config);
+        _manager =
+                std::make_unique<WorkGroupManager>(*_config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                   make_fake_driver_executor_factory(&_driver_executor_factory_calls));
         ASSERT_OK(_manager->start());
     }
 
@@ -152,27 +243,37 @@ protected:
     }
 
     // Return the max_threads of the normal exec_state_report thread pool owned by the executor set.
-    // Only for unit tests: accesses ExecStateReporter::TEST_pool_max_threads() via friend.
     static int TEST_exec_state_report_pool_max_threads(const PipelineExecutorSet* exec_set) {
-        auto* driver_exec = dynamic_cast<pipeline::GlobalDriverExecutor*>(exec_set->driver_executor());
-        EXPECT_NE(nullptr, driver_exec);
-        if (driver_exec == nullptr || driver_exec->exec_state_reporter() == nullptr) return -1;
-        return driver_exec->exec_state_reporter()->TEST_pool_max_threads();
+        auto* driver_exec = TEST_fake_driver_executor(exec_set);
+        if (driver_exec == nullptr) return -1;
+        return driver_exec->exec_state_report_max_threads;
     }
 
     // Return the max_threads of the priority exec_state_report thread pool owned by the executor set.
-    // Only for unit tests: accesses ExecStateReporter::TEST_priority_pool_max_threads() via friend.
     static int TEST_priority_exec_state_report_pool_max_threads(const PipelineExecutorSet* exec_set) {
-        auto* driver_exec = dynamic_cast<pipeline::GlobalDriverExecutor*>(exec_set->driver_executor());
-        EXPECT_NE(nullptr, driver_exec);
-        if (driver_exec == nullptr || driver_exec->exec_state_reporter() == nullptr) return -1;
-        return driver_exec->exec_state_reporter()->TEST_priority_pool_max_threads();
+        auto* driver_exec = TEST_fake_driver_executor(exec_set);
+        if (driver_exec == nullptr) return -1;
+        return driver_exec->priority_exec_state_report_max_threads;
     }
 
     std::unique_ptr<pipeline::PipelineExecutorMetrics> _metrics;
     std::unique_ptr<PipelineExecutorSetConfig> _config;
     std::unique_ptr<WorkGroupManager> _manager;
+    std::vector<DriverExecutorFactoryCall> _driver_executor_factory_calls;
 };
+
+TEST_F(ExecutorsManagerIntegrationTest, start_shared_executors_uses_injected_driver_executor_factory) {
+    ASSERT_EQ(1, _driver_executor_factory_calls.size());
+    EXPECT_EQ("com", _driver_executor_factory_calls[0].name);
+    EXPECT_EQ((CpuUtil::CpuIds{0, 1, 2, 3, 4, 5, 6, 7}), _driver_executor_factory_calls[0].cpuids);
+    EXPECT_TRUE(_driver_executor_factory_calls[0].borrowed_cpuids.empty());
+    EXPECT_EQ(2u, _driver_executor_factory_calls[0].num_driver_threads);
+    EXPECT_EQ(_metrics.get(), _driver_executor_factory_calls[0].metrics);
+
+    auto* driver_exec = TEST_fake_driver_executor(_manager->shared_executors());
+    ASSERT_NE(nullptr, driver_exec);
+    EXPECT_EQ(2, driver_exec->initialized_num_threads);
+}
 
 // With no workgroups, only the shared executor set exists → 1 visit.
 TEST_F(ExecutorsManagerIntegrationTest, for_each_executors_visits_only_shared_by_default) {
@@ -185,6 +286,7 @@ TEST_F(ExecutorsManagerIntegrationTest, for_each_executors_visits_only_shared_by
 // because total_cpuids is non-empty), for_each_executors should visit both the
 // exclusive and the shared executor set.
 TEST_F(ExecutorsManagerIntegrationTest, for_each_executors_visits_both_shared_and_exclusive) {
+    const size_t old_num_factory_calls = _driver_executor_factory_calls.size();
     apply_exclusive_workgroup(200, 4);
 
     int visit_count = 0;
@@ -193,6 +295,45 @@ TEST_F(ExecutorsManagerIntegrationTest, for_each_executors_visits_both_shared_an
     // 1 exclusive + 1 shared
     ASSERT_EQ(2, visit_count);
     ASSERT_NE(nullptr, find_exclusive_executor());
+    ASSERT_EQ(old_num_factory_calls + 1, _driver_executor_factory_calls.size());
+    const auto& call = _driver_executor_factory_calls.back();
+    EXPECT_EQ("200", call.name);
+    EXPECT_EQ((CpuUtil::CpuIds{0, 1, 2, 3}), call.cpuids);
+    EXPECT_TRUE(call.borrowed_cpuids.empty());
+    EXPECT_EQ(1u, call.num_driver_threads);
+}
+
+TEST(ExecutorsManagerIntegrationTestStandalone, exclusive_driver_executor_factory_failure_falls_back_to_shared) {
+    auto metrics = std::make_unique<pipeline::PipelineExecutorMetrics>();
+    CpuUtil::CpuIds cpuids{0, 1, 2, 3, 4, 5, 6, 7};
+    PipelineExecutorSetConfig config(8, 2, 2, 4, cpuids, false, false, metrics.get());
+    std::vector<DriverExecutorFactoryCall> calls;
+    auto manager = std::make_unique<WorkGroupManager>(config, nullptr, pipeline::create_query_shared_driver_queue,
+                                                      make_fail_after_shared_driver_executor_factory(&calls));
+    ASSERT_OK(manager->start());
+
+    TWorkGroup twg = make_exclusive_twg(210, 4);
+    manager->apply({make_create_op(twg)});
+
+    int visit_count = 0;
+    manager->for_each_executors([&visit_count](PipelineExecutorSet&) { ++visit_count; });
+    ASSERT_EQ(1, visit_count);
+    ASSERT_EQ(2, calls.size());
+    EXPECT_EQ("210", calls.back().name);
+
+    PipelineExecutorSet* exclusive = nullptr;
+    PipelineExecutorSet* assigned = nullptr;
+    manager->for_each_workgroup([&exclusive, &assigned](const WorkGroup& wg) {
+        if (wg.id() == 210) {
+            exclusive = wg.exclusive_executors();
+            assigned = wg.executors();
+        }
+    });
+    EXPECT_EQ(nullptr, exclusive);
+    EXPECT_EQ(manager->shared_executors(), assigned);
+
+    manager->close();
+    manager->destroy();
 }
 
 // change_num_connector_scan_threads propagates the new thread-count to the

@@ -31,6 +31,7 @@
 #include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
+#include "exec/spill/mem_tracker_guard.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
@@ -211,8 +212,11 @@ void AggregatorParams::init() {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
 
-        if (AggStateUtils::is_count_function(fn.name.function_name)) {
-            // count function is always not nullable
+        if (AggStateUtils::is_count_function(fn.name.function_name) &&
+            fn.name.function_name != FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
+            // count family output is always non-nullable BIGINT. count_combine is the
+            // exception: it needs the real input nullability so the nested lookup picks
+            // the NULL-skipping CountNullableAggregateFunction (else it counts NULLs too).
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child

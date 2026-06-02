@@ -29,12 +29,15 @@ class ScanTaskQueue;
 
 enum class ScanSchedEntityType : uint8_t { OLAP, CONNECTOR };
 
+class WorkGroupSchedState;
+
 template <typename Q>
 class WorkGroupSchedEntity;
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
 using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 
 class WorkGroupManager;
+class DefaultWorkGroupInitialization;
 class ScanExecutor;
 
 struct RunningQueryToken;

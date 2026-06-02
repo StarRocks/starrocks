@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/observer.h"
-
 #include <unistd.h>
 
 #include <atomic>
@@ -26,17 +24,19 @@
 #include "butil/time.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/pipeline/pipeline_timer.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"

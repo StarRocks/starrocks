@@ -329,6 +329,15 @@ public class MaterializedViewHandler extends AlterHandler {
                                                   KeysType mvKeysType, OriginStatement origStmt,
                                                   QueryStatement queryStatement)
             throws DdlException, AnalysisException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                "Synchronous materialized view / rollup is not supported on " +
+                "tables with range distribution. Use an asynchronous " +
+                "materialized view instead: declare it with an explicit " +
+                "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a " +
+                "DISTRIBUTED BY clause, e.g. CREATE MATERIALIZED VIEW ... " +
+                "DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+        }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's
             mvKeysType = olapTable.getKeysType();

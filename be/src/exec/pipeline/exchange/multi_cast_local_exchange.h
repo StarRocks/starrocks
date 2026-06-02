@@ -19,7 +19,7 @@
 
 #include "column/chunk.h"
 #include "common/runtime_profile.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/spill/dir_manager.h"
 #include "fs/fs.h"

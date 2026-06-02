@@ -22,11 +22,14 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_storage_fwd.h"
 #include "common/runtime_profile.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -45,7 +48,8 @@ public:
         dummy_wg = std::make_shared<workgroup::WorkGroup>(
                 "default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0,
                 1.0, workgroup::WorkGroupType::WG_DEFAULT, workgroup::WorkGroup::DEFAULT_MEM_POOL);
-        dummy_wg->init(parent);
+        dummy_wg->init(parent, create_query_shared_driver_queue(
+                                       PipelineExecutorMetrics::instance()->get_driver_queue_metrics()));
         dummy_wg->set_shared_executors(ExecEnv::GetInstance()->workgroup_manager()->shared_executors());
 
         dummy_dir_mgr = std::make_unique<spill::DirManager>();

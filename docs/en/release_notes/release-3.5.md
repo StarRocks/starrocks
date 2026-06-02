@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.5 release notes: Iceberg view creation, OAuth 2.0 and JWT authentication with Security Integration, multi-partition-column materialized views,..."
 ---
 
 # StarRocks version 3.5

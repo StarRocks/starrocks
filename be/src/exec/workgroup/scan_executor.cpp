@@ -14,7 +14,8 @@
 
 #include "exec/workgroup/scan_executor.h"
 
-#include "exec/pipeline/pipeline_metrics.h"
+#include "common/thread/thread.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
 

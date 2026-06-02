@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Query and Loading"
+description: "BE configuration parameters for query execution and data loading."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -645,6 +646,14 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Master switch for adaptive `ef_search` scaling on HNSW vector indexes. When enabled, BE scales the effective `ef_search` per segment based on its row count, so recall is preserved when compaction enlarges segments without forcing manual `ef_search` retuning. Set to `false` to disable scaling and use the user-supplied `ef_search` literally.
 - Introduced in: -
+### vector_query_cache_capacity
+
+- Default: `20%`
+- Type: String
+- Unit: Bytes, with unit suffix (`K`/`M`/`G`/`T`) or percentage of BE `mem_limit` (`%`)
+- Is mutable: Yes
+- Description: Total capacity of the SR-owned vector index cache, which holds HNSW whole-index entries and IVF-PQ per-list block entries (when `enable_vector_index_block_cache=true`) in a single LRU. Applied at BE startup and on every HTTP `/api/update_config` call. Accepts absolute bytes (e.g. `4294967296`), units (`4G`, `512M`), or a percentage of the BE process memory limit (`20%`). **Behavior change in v4.2.0:** prior versions accepted only an absolute byte count (default 512MB); upgrading without changing this config will resize the cache to 20% of BE memory.
+- Introduced in: v3.4.0
 
 ### vector_adaptive_ef_alpha
 

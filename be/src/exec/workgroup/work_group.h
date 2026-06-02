@@ -15,54 +15,43 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
-#include <mutex>
-#include <queue>
-#include <unordered_map>
+#include <optional>
+#include <string>
+#include <utility>
 
 #include "base/time/time.h"
-#include "common/thread/priority_thread_pool.hpp"
-#include "exec/pipeline/pipeline_driver_queue.h"
+#include "base/types/int128.h"
+#include "common/statusor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "mem_tracker_manager.h"
-#include "pipeline_executor_set_manager.h"
+#include "gen_cpp/WorkGroup_types.h"
 #include "runtime/mem_tracker.h"
-#include "storage/olap_define.h"
 
 namespace starrocks {
-
-class MetricRegistry;
-class TWorkGroup;
 
 namespace workgroup {
 
 using steady_clock = std::chrono::steady_clock;
 
-using pipeline::QueryContext;
 using WorkGroupType = TWorkGroupType::type;
-struct WorkGroupMetrics;
-using WorkGroupMetricsPtr = std::shared_ptr<WorkGroupMetrics>;
 
-template <typename Q>
-class WorkGroupSchedEntity {
+struct WorkGroupQueryStats {
+    int64_t cpu_runtime_ns = 0;
+    int64_t scan_rows = 0;
+    int64_t scan_rows_limit = 0;
+};
+
+class WorkGroupSchedState {
 public:
-    explicit WorkGroupSchedEntity(WorkGroup* workgroup);
-    ~WorkGroupSchedEntity();
-
-    WorkGroup* workgroup() { return _workgroup; }
-
-    Q* queue() { return _my_queue.get(); }
-    void set_queue(std::unique_ptr<Q> my_queue);
-
-    Q* in_queue() { return _in_queue; }
-    const Q* in_queue() const { return _in_queue; }
-    void set_in_queue(Q* in_queue) { _in_queue = in_queue; }
-
-    int64_t cpu_weight() const;
-
     int64_t vruntime_ns() const { return _vruntime_ns.load(std::memory_order_acquire); }
-    int64_t runtime_ns() const { return _vruntime_ns.load(std::memory_order_acquire) * cpu_weight(); }
+    int64_t runtime_ns(size_t cpu_weight) const {
+        return _vruntime_ns.load(std::memory_order_acquire) * int64_t(cpu_weight);
+    }
 
     /// Return the growth runtime in the range [last, curr].
     /// For example:
@@ -80,20 +69,61 @@ public:
 
     int64_t unadjusted_runtime_ns() const { return _unadjusted_runtime_ns.load(std::memory_order_acquire); }
 
-    void incr_runtime_ns(int64_t runtime_ns);
-    void adjust_runtime_ns(int64_t runtime_ns);
+    void incr_runtime_ns(int64_t runtime_ns, size_t cpu_weight);
+    void adjust_runtime_ns(int64_t runtime_ns, size_t cpu_weight);
 
 private:
-    WorkGroup* _workgroup; // The workgroup owning this entity.
-
-    std::unique_ptr<Q> _my_queue; // The queue owned by this group.
-    Q* _in_queue = nullptr;       // The queue on which this entity is queued.
-
     std::atomic<int64_t> _vruntime_ns{0};
 
     std::atomic<int64_t> _unadjusted_runtime_ns{0};
     int64_t _curr_unadjusted_runtime_ns = 0;
     int64_t _last_unadjusted_runtime_ns = 0;
+};
+
+template <typename Q>
+class WorkGroupSchedEntity {
+public:
+    WorkGroupSchedEntity(WorkGroup* workgroup, WorkGroupSchedState* sched_state);
+    ~WorkGroupSchedEntity();
+
+    WorkGroup* workgroup() { return _workgroup; }
+    const WorkGroup* workgroup() const { return _workgroup; }
+
+    Q* queue() { return _my_queue.get(); }
+    void set_queue(std::unique_ptr<Q> my_queue);
+
+    Q* in_queue() { return _in_queue; }
+    const Q* in_queue() const { return _in_queue; }
+    void set_in_queue(Q* in_queue) { _in_queue = in_queue; }
+
+    int64_t cpu_weight() const;
+
+    int64_t vruntime_ns() const { return _sched_state->vruntime_ns(); }
+    int64_t runtime_ns() const { return _sched_state->runtime_ns(cpu_weight()); }
+
+    /// Return the growth runtime in the range [last, curr].
+    /// For example:
+    ///     mark_curr_runtime_ns();           // Move curr to latest.
+    ///     auto value = growth_runtime_ns;   // Get growth value in [curr, last] multiple times.
+    ///     auto value = growth_runtime_ns;
+    ///     mark_last_runtime_ns();           // Move last to curr.
+    int64_t growth_runtime_ns() const { return _sched_state->growth_runtime_ns(); }
+    /// Update curr runtime to the latest runtime.
+    void mark_curr_runtime_ns() { _sched_state->mark_curr_runtime_ns(); }
+    /// Update last runtime to the curr runtime.
+    void mark_last_runtime_ns() { _sched_state->mark_last_runtime_ns(); }
+
+    int64_t unadjusted_runtime_ns() const { return _sched_state->unadjusted_runtime_ns(); }
+
+    void incr_runtime_ns(int64_t runtime_ns);
+    void adjust_runtime_ns(int64_t runtime_ns);
+
+private:
+    WorkGroup* _workgroup; // The workgroup owning this entity.
+    WorkGroupSchedState* _sched_state;
+
+    std::unique_ptr<Q> _my_queue; // The queue owned by this group.
+    Q* _in_queue = nullptr;       // The queue on which this entity is queued.
 };
 
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -117,9 +147,9 @@ public:
     WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_weight, double memory_limit, size_t concurrency,
               double spill_mem_limit_threshold, WorkGroupType type, std::string mem_pool);
     explicit WorkGroup(const TWorkGroup& twg);
-    ~WorkGroup() = default;
+    ~WorkGroup();
 
-    void init(std::shared_ptr<MemTracker>& parent_mem_tracker);
+    void init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::DriverQueuePtr driver_queue);
 
     TWorkGroup to_thrift() const;
     std::string to_string() const;
@@ -142,6 +172,10 @@ public:
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
     int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
+
+    const WorkGroupSchedState& driver_sched_state() const { return _driver_sched_state; }
+    const WorkGroupSchedState& scan_sched_state() const { return _scan_sched_state; }
+    const WorkGroupSchedState& connector_scan_sched_state() const { return _connector_scan_sched_state; }
 
     WorkGroupDriverSchedEntity* driver_sched_entity() { return &_driver_sched_entity; }
     const WorkGroupDriverSchedEntity* driver_sched_entity() const { return &_driver_sched_entity; }
@@ -179,7 +213,7 @@ public:
     int128_t unique_id() const { return create_unique_id(_id, _version); }
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
-    Status check_big_query(const QueryContext& query_context);
+    Status check_big_query(const WorkGroupQueryStats& query_stats);
     StatusOr<RunningQueryTokenPtr> acquire_running_query_token(bool enable_group_level_query_queue);
     void decr_num_queries();
     int64_t num_running_queries() const { return _num_running_queries; }
@@ -206,18 +240,15 @@ public:
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
     std::string mem_pool() const { return _mem_pool; }
     void set_shared_executors(PipelineExecutorSet* executors) { _executors = executors; }
-    void set_exclusive_executors(std::unique_ptr<PipelineExecutorSet> executors) {
-        _exclusive_executors = std::move(executors);
-        _executors = _exclusive_executors.get();
-    }
+    void set_exclusive_executors(std::unique_ptr<PipelineExecutorSet> executors);
 
     PipelineExecutorSet* exclusive_executors() const { return _exclusive_executors.get(); }
     PipelineExecutorSet* executors() const { return _executors; }
 
-    static constexpr int64 DEFAULT_WG_ID = 0;
-    static constexpr int64 DEFAULT_MV_WG_ID = 1;
-    static constexpr int64 DEFAULT_VERSION = 0;
-    static constexpr int64 DEFAULT_MV_VERSION = 1;
+    static constexpr int64_t DEFAULT_WG_ID = 0;
+    static constexpr int64_t DEFAULT_MV_WG_ID = 1;
+    static constexpr int64_t DEFAULT_VERSION = 0;
+    static constexpr int64_t DEFAULT_MV_VERSION = 1;
     inline static std::string DEFAULT_MEM_POOL{"default_mem_pool"};
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
@@ -252,6 +283,9 @@ private:
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 
+    WorkGroupSchedState _driver_sched_state;
+    WorkGroupSchedState _scan_sched_state;
+    WorkGroupSchedState _connector_scan_sched_state;
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;
     WorkGroupScanSchedEntity _connector_scan_sched_entity;
@@ -274,95 +308,6 @@ private:
 
     std::unique_ptr<PipelineExecutorSet> _exclusive_executors;
     PipelineExecutorSet* _executors = nullptr;
-};
-
-// WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
-// pick next workgroup for computation and launching io tasks.
-class WorkGroupManager {
-public:
-    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf, MetricRegistry* metrics = nullptr);
-
-    ~WorkGroupManager();
-
-    Status start();
-
-    // add a new workgroup to WorkGroupManger
-    WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
-    // return reserved beforehand default workgroup for query is not bound to any workgroup
-    WorkGroupPtr get_default_workgroup();
-    // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
-    WorkGroupPtr get_default_mv_workgroup();
-
-    size_t num_workgroups() const { return _workgroups.size(); }
-
-    void close();
-    // destruct workgroups
-    void destroy();
-
-    void apply(const std::vector<TWorkGroupOp>& ops);
-    std::vector<TWorkGroup> list_workgroups();
-    std::vector<std::string> list_memory_pools() const;
-
-    using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
-    void for_each_workgroup(const WorkGroupConsumer& consumer) const;
-
-    void update_metrics();
-
-    bool should_yield(const WorkGroup* wg) const;
-    PipelineExecutorSet* shared_executors() const { return _executors_manager.shared_executors(); }
-    void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
-    void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
-    void change_enable_resource_group_cpu_borrowing(bool val);
-    void change_exec_state_report_max_threads(int max_threads);
-    void change_priority_exec_state_report_max_threads(int max_threads);
-    void set_workgroup_expiration_time(std::chrono::seconds value);
-
-private:
-    using MutexType = std::shared_mutex;
-    using UniqueLockType = std::unique_lock<MutexType>;
-    using SharedLockType = std::shared_lock<MutexType>;
-
-    // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
-    // WorkGroupManager::_mutex is held when invoking these method.
-    void create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueLockType& lock);
-    void alter_workgroup_unlocked(const WorkGroupPtr& wg, UniqueLockType& lock);
-    void delete_workgroup_unlocked(const WorkGroupPtr& wg);
-    void add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock);
-    void update_metrics_unlocked();
-    WorkGroupPtr get_default_workgroup_unlocked();
-
-private:
-    friend class ExecutorsManager;
-
-    mutable std::shared_mutex _mutex;
-    // Place it before _workgroups to ensure the shared executors is destructed after all the dedicated executors for
-    // workgroups, since _executors_manager owns the shared executors, and WorkGroup owns the dedicated executors.
-    ExecutorsManager _executors_manager;
-
-    std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
-    std::unordered_map<int64_t, int64_t> _workgroup_versions;
-    std::list<int128_t> _workgroup_expired_versions;
-    std::chrono::seconds _workgroup_expiration_time{120};
-
-    std::atomic<size_t> _sum_cpu_weight = 0;
-    MetricRegistry* _metrics = nullptr;
-    MemTrackerManager _shared_mem_tracker_manager;
-    std::once_flag init_metrics_once_flag;
-    std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;
-};
-
-class DefaultWorkGroupInitialization {
-public:
-    DefaultWorkGroupInitialization(WorkGroupManager* workgroup_manager, int64_t max_executor_threads);
-
-    // create or renew default group
-    std::shared_ptr<WorkGroup> create_default_workgroup();
-    // create or renew default mv group
-    std::shared_ptr<WorkGroup> create_default_mv_workgroup();
-
-private:
-    WorkGroupManager* _workgroup_manager;
-    int64_t _max_executor_threads;
 };
 
 } // namespace workgroup

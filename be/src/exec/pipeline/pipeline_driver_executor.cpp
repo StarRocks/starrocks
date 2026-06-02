@@ -15,13 +15,16 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/master_info.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/workgroup/work_group.h"
@@ -38,11 +41,12 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
-                                           PipelineExecutorMetrics* metrics)
+                                           PipelineExecutorMetrics* metrics,
+                                           const workgroup::WorkGroupSchedulePolicy& schedule_policy)
         : Base("pip_exec_" + name),
           _driver_queue(enable_resource_group
-                                ? std::unique_ptr<DriverQueue>(
-                                          std::make_unique<WorkGroupDriverQueue>(metrics->get_driver_queue_metrics()))
+                                ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>(
+                                          metrics->get_driver_queue_metrics(), schedule_policy))
                                 : std::make_unique<QuerySharedDriverQueue>(metrics->get_driver_queue_metrics())),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(
@@ -178,7 +182,11 @@ void GlobalDriverExecutor::_worker_thread() {
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
-                status = driver->workgroup()->check_big_query(*query_ctx);
+                workgroup::WorkGroupQueryStats query_stats;
+                query_stats.cpu_runtime_ns = query_ctx->cpu_cost();
+                query_stats.scan_rows = query_ctx->cur_scan_rows_num();
+                query_stats.scan_rows_limit = query_ctx->get_scan_limit();
+                status = driver->workgroup()->check_big_query(query_stats);
             }
 
             FAIL_POINT_TRIGGER_EXECUTE(operator_return_failed_status, {
@@ -544,6 +552,14 @@ void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
     _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
     _blocked_driver_poller->bind_cpus(cpuids);
     _exec_state_reporter->bind_cpus(cpuids);
+}
+
+Status GlobalDriverExecutor::update_exec_state_report_max_threads(int max_threads) {
+    return _exec_state_reporter->update_max_threads(max_threads);
+}
+
+Status GlobalDriverExecutor::update_priority_exec_state_report_max_threads(int max_threads) {
+    return _exec_state_reporter->update_priority_max_threads(max_threads);
 }
 
 } // namespace starrocks::pipeline

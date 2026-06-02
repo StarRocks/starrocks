@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -514,6 +515,13 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Table", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Create Table", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowCreateFunctionStatement(ShowCreateFunctionStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Create Function", TypeFactory.createVarcharType(30)))
                 .build();
     }
 

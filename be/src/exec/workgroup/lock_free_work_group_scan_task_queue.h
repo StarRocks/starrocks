@@ -24,6 +24,7 @@
 #include "exec/workgroup/lock_free_scan_task_queue.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::workgroup {
 
@@ -33,7 +34,8 @@ namespace starrocks::workgroup {
 /// No cancel mechanism — scan tasks handle cancellation at execution level.
 class LockFreeWorkGroupScanTaskQueue : public ScanTaskQueue {
 public:
-    LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers);
+    LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers,
+                                   const WorkGroupSchedulePolicy& schedule_policy);
     ~LockFreeWorkGroupScanTaskQueue() override = default;
 
     LockFreeWorkGroupScanTaskQueue(const LockFreeWorkGroupScanTaskQueue&) = delete;
@@ -49,7 +51,7 @@ public:
     size_t size() const override;
 
     void update_statistics(ScanTask& task, int64_t runtime_ns) override;
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
+    bool should_yield(const WorkGroupScanSchedEntity* scan_sched_entity, int64_t unaccounted_runtime_ns) const override;
 
 #ifdef BE_TEST
     size_t available_wakeup_permits_for_test() const { return _sema.availableApprox(); }
@@ -81,6 +83,7 @@ private:
 
     ScanSchedEntityType _sched_entity_type;
     int _num_workers;
+    const WorkGroupSchedulePolicy& _schedule_policy;
     std::atomic<size_t> _num_tasks{0};
     std::atomic<bool> _closed{false};
 

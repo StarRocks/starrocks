@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 

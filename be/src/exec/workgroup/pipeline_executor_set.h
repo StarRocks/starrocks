@@ -18,6 +18,7 @@
 #include "common/thread/cpu_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;
@@ -48,10 +49,10 @@ struct PipelineExecutorSetConfig {
 class PipelineExecutorSet {
 public:
     PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name, CpuUtil::CpuIds cpuids,
-                        std::vector<CpuUtil::CpuIds> borrowed_cpuids);
+                        std::vector<CpuUtil::CpuIds> borrowed_cpuids, const WorkGroupSchedulePolicy& schedule_policy);
     ~PipelineExecutorSet();
 
-    Status start();
+    Status start(std::unique_ptr<pipeline::DriverExecutor> driver_executor);
     void close();
 
     void change_cpus(CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids);
@@ -65,10 +66,11 @@ public:
     ScanExecutor* scan_executor() const { return _scan_executor.get(); }
     ScanExecutor* connector_scan_executor() const { return _connector_scan_executor.get(); }
 
+    uint32_t num_driver_threads() const { return calculate_num_threads(_conf.num_total_driver_threads); }
+
     std::string to_string() const;
 
 private:
-    uint32_t num_driver_threads() const { return calculate_num_threads(_conf.num_total_driver_threads); }
     uint32_t num_scan_threads() const { return calculate_num_threads(_conf.num_total_scan_threads); }
     uint32_t num_connector_scan_threads() const {
         return calculate_num_threads(_conf.num_total_connector_scan_threads);
@@ -78,6 +80,7 @@ private:
 private:
     const PipelineExecutorSetConfig& _conf;
     const std::string _name;
+    const WorkGroupSchedulePolicy& _schedule_policy;
 
     CpuUtil::CpuIds _cpuids;
     std::vector<CpuUtil::CpuIds> _borrowed_cpu_ids;

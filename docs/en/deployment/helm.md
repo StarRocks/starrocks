@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Helm is a package manager for Kubernetes."
 ---
 
 # Deploy StarRocks with Helm

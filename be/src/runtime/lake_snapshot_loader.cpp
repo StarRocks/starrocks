@@ -193,7 +193,8 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         auto tablet_metadata = tablet->get_metadata(snapshot.version());
         for (const auto& rowset : (*tablet_metadata)->rowsets()) {
-            for (const std::string& segment : rowset.segments()) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                const auto& segment = segment_meta.filename();
                 file_locations[segment] = tablet->segment_location(segment);
             }
         }

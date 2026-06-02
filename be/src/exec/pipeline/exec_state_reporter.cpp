@@ -27,7 +27,7 @@
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"

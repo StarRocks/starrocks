@@ -529,6 +529,50 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by
     pool->shutdown();
 }
 
+// Regression test for the self-deadlock fix: an outer task running on one pool must be
+// able to submit work into a DISTINCT inner pool and call ThreadPoolToken::wait() on it.
+// This mirrors how the REPLICATE_SNAPSHOT agent task (outer pool) drives per-file copy
+// sub-tasks on the dedicated `replicate_file` pool. If both ends were the same pool,
+// ThreadPool::check_not_pool_thread_unlocked() would LOG(FATAL) and abort the process.
+TEST(LakeReplicationTaskRunnerTest, test_outer_pool_can_wait_on_distinct_inner_pool) {
+    std::unique_ptr<ThreadPool> outer_pool;
+    ASSERT_OK(ThreadPoolBuilder("repl_outer_pool")
+                      .set_min_threads(1)
+                      .set_max_threads(1)
+                      .set_max_queue_size(8)
+                      .build(&outer_pool));
+    std::unique_ptr<ThreadPool> file_pool;
+    ASSERT_OK(ThreadPoolBuilder("repl_file_pool")
+                      .set_min_threads(1)
+                      .set_max_threads(2)
+                      .set_max_queue_size(16)
+                      .build(&file_pool));
+
+    constexpr int kNumFiles = 8;
+    std::atomic<int> done{0};
+    // Capture per-iteration submit results in the worker and assert on the main thread.
+    // gtest ASSERT_*/EXPECT_* from a non-test thread does not reliably fail the test —
+    // gtest prints to stderr but the test process can still report success.
+    std::vector<Status> inner_submit_status(kNumFiles);
+    std::atomic<bool> outer_body_completed{false};
+    ASSERT_OK(outer_pool->submit_func([&]() {
+        auto token = file_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        for (int i = 0; i < kNumFiles; ++i) {
+            inner_submit_status[i] = token->submit_func([&]() { done.fetch_add(1, std::memory_order_relaxed); });
+        }
+        token->wait();
+        outer_body_completed.store(true);
+    }));
+    outer_pool->wait();
+    EXPECT_TRUE(outer_body_completed.load());
+    for (const auto& s : inner_submit_status) {
+        EXPECT_OK(s);
+    }
+    EXPECT_EQ(kNumFiles, done.load());
+    outer_pool->shutdown();
+    file_pool->shutdown();
+}
+
 #ifdef USE_STAROS
 TEST(LakeReplicationTxnManagerTest, test_convert_s3_path_to_starlet_uri) {
     // Test case from user: convert S3 path to starlet URI
@@ -995,8 +1039,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Inject source tablet metadata via SyncPoint to avoid metacache dependency
@@ -1041,8 +1085,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Inject source tablet metadata via SyncPoint to avoid metacache dependency
@@ -1104,7 +1148,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Inject source tablet metadata via SyncPoint to avoid metacache dependency
@@ -1154,10 +1198,16 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segment_size(1024); // src_file_size for segment 1
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
-    rowset->add_segment_size(2048); // src_file_size for segment 2
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+        sm->set_size(1024); // src_file_size for segment 1
+    }
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+        sm->set_size(2048); // src_file_size for segment 2
+    }
     // Add a delvec for non-segment path
     auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
     auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
@@ -1221,10 +1271,16 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_ope
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segment_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
-    rowset->add_segment_size(2048);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+        sm->set_size(1024);
+    }
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+        sm->set_size(2048);
+    }
     auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
     auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
     delvec_entry.set_name("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.delvec");
@@ -1289,8 +1345,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
@@ -1321,7 +1377,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
 
     (void)update_master_info(original_master_info);
 
-    // Parallel copy should fail because download_lake_segment_file fails with mock FS
+    // Parallel copy should fail because download_lake_file_with_converter fails with mock FS
     EXPECT_FALSE(status.ok());
     pool->shutdown();
 }

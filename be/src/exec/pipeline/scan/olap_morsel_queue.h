@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "exec/pipeline/scan/morsel_queue.h"
-#include "storage/olap_tuple.h"
+#include "storage/primitive/olap_tuple.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
 

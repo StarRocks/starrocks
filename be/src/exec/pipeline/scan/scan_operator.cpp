@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
+#include <fmt/printf.h>
+
 #include "base/concurrency/race_detect.h"
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
@@ -27,6 +29,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"

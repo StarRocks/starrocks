@@ -14,27 +14,34 @@
 
 #include "exec/workgroup/pipeline_executor_set_manager.h"
 
-#include "work_group.h"
+#include "common/thread/thread.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/workgroup/work_group.h"
 
 namespace starrocks::workgroup {
 
-ExecutorsManager::ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf)
-        : _parent(parent),
-          _conf(std::move(conf)),
+ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGroupSchedulePolicy& schedule_policy,
+                                   DriverExecutorFactory driver_executor_factory)
+        : _conf(std::move(conf)),
+          _schedule_policy(schedule_policy),
+          _driver_executor_factory(std::move(driver_executor_factory)),
           _shared_executors(std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids,
-                                                                  std::vector<CpuUtil::CpuIds>{})) {
+                                                                  std::vector<CpuUtil::CpuIds>{}, _schedule_policy)) {
+    DCHECK(_driver_executor_factory != nullptr);
     _wg_to_cpuids[COMMON_WORKGROUP] = _conf.total_cpuids;
     for (auto cpuid : _conf.total_cpuids) {
         _cpu_owners[cpuid].set_wg(COMMON_WORKGROUP);
     }
 }
 
-void ExecutorsManager::close() const {
-    for_each_executors([](auto& executors) { executors.close(); });
-}
-
 Status ExecutorsManager::start_shared_executors_unlocked() const {
-    return _shared_executors->start();
+    auto driver_executor =
+            _driver_executor_factory("com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{},
+                                     _shared_executors->num_driver_threads(), _conf.metrics, _schedule_policy);
+    if (!driver_executor.ok()) {
+        return driver_executor.status();
+    }
+    return _shared_executors->start(std::move(driver_executor).value());
 }
 
 void ExecutorsManager::update_shared_executors() const {
@@ -118,9 +125,22 @@ std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_ex
         return nullptr;
     }
 
-    auto executors = std::make_unique<PipelineExecutorSet>(_conf, std::to_string(wg->id()), cpuids,
-                                                           std::vector<CpuUtil::CpuIds>{});
-    if (const Status status = executors->start(); !status.ok()) {
+    const std::string name = std::to_string(wg->id());
+    auto executors = std::make_unique<PipelineExecutorSet>(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{},
+                                                           _schedule_policy);
+    auto driver_executor = _driver_executor_factory(name, cpuids, std::vector<CpuUtil::CpuIds>{},
+                                                    executors->num_driver_threads(), _conf.metrics, _schedule_policy);
+    if (!driver_executor.ok()) {
+        LOG(WARNING) << "[WORKGROUP] failed to create driver executor for workgroup "
+                     << "[workgroup=" << wg->to_string() << "] "
+                     << "[conf=" << _conf.to_string() << "] "
+                     << "[cpuids=" << CpuUtil::to_string(cpuids) << "] "
+                     << "[status=" << driver_executor.status() << "]";
+        LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
+                  << "[workgroup=" << wg->to_string() << "] ";
+        return nullptr;
+    }
+    if (const Status status = executors->start(std::move(driver_executor).value()); !status.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to start executors for workgroup "
                      << "[workgroup=" << wg->to_string() << "] "
                      << "[conf=" << _conf.to_string() << "] "
@@ -137,14 +157,14 @@ std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_ex
     return executors;
 }
 
-void ExecutorsManager::change_num_connector_scan_threads(uint32_t num_connector_scan_threads) {
+bool ExecutorsManager::change_num_connector_scan_threads(uint32_t num_connector_scan_threads) {
     const auto prev_val = _conf.num_total_connector_scan_threads;
     _conf.num_total_connector_scan_threads = num_connector_scan_threads;
     if (_conf.num_total_connector_scan_threads == prev_val) {
-        return;
+        return false;
     }
 
-    for_each_executors([](const auto& executors) { executors.notify_num_total_connector_scan_threads_changed(); });
+    return true;
 }
 
 void ExecutorsManager::change_enable_resource_group_cpu_borrowing(bool val) {
@@ -155,31 +175,6 @@ void ExecutorsManager::change_enable_resource_group_cpu_borrowing(bool val) {
     _conf.enable_cpu_borrowing = new_val;
 
     update_shared_executors();
-}
-
-void ExecutorsManager::change_exec_state_report_max_threads(int max_threads) {
-    for_each_executors([max_threads](const auto& executors) {
-        auto st = executors.update_exec_state_report_max_threads(max_threads);
-        LOG_IF(WARNING, !st.ok()) << "[WORKGROUP] change exec_state_report_max_threads failed: " << st;
-    });
-}
-
-void ExecutorsManager::change_priority_exec_state_report_max_threads(int max_threads) {
-    for_each_executors([max_threads](const auto& executors) {
-        auto st = executors.update_priority_exec_state_report_max_threads(max_threads);
-        LOG_IF(WARNING, !st.ok()) << "[WORKGROUP] change priority_exec_state_report_max_threads failed: " << st;
-    });
-}
-
-void ExecutorsManager::for_each_executors(const ExecutorsConsumer& consumer) const {
-    for (const auto& [_, wg] : _parent->_workgroups) {
-        if (wg != nullptr && wg->exclusive_executors() != nullptr) {
-            consumer(*wg->exclusive_executors());
-        }
-    }
-    if (_shared_executors) {
-        consumer(*_shared_executors);
-    }
 }
 
 bool ExecutorsManager::should_yield(const WorkGroup* wg) const {

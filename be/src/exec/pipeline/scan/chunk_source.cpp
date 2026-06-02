@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/chunk_source.h"
 
 #include "base/failpoint/fail_point.h"
+#include "base/time/monotime.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
@@ -117,9 +118,11 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             break;
         }
 
-        if (running_wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT &&
-            _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
-            break;
+        if (running_wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT) {
+            const auto* scan_sched_entity = _scan_sched_entity(running_wg);
+            if (scan_sched_entity->in_queue()->should_yield(scan_sched_entity, time_spent_ns)) {
+                break;
+            }
         }
     }
     return _status;

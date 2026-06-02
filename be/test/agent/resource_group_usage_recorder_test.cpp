@@ -17,8 +17,11 @@
 #include "base/testutil/assert.h"
 #include "common/config_runtime_fwd.h"
 #include "common/system/cpu_info.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 
@@ -34,7 +37,9 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), num_cores, num_cores, num_cores, CpuInfo::get_core_ids(), true,
             config::enable_resource_group_cpu_borrowing, pipeline::PipelineExecutorMetrics::instance());
-    exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
+    exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(
+            std::move(executors_manager_opts), nullptr, pipeline::create_query_shared_driver_queue,
+            pipeline::create_workgroup_driver_executor);
     ASSERT_OK(exec_env._workgroup_manager->start());
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(exec_env.workgroup_manager(), num_cores);
