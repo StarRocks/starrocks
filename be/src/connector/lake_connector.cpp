@@ -1702,13 +1702,16 @@ StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_r
                      DataSourceProvider::convert_scan_range_to_morsel_queue_builder(
                              *effective_scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
                              tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
-    builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
+    if (_could_split && _could_split_physically && _enable_lake_prepared_physical_split_scan) {
+        const bool has_more_scan_ranges = builder->has_more_scan_ranges();
+        const size_t max_degree_of_parallelism = builder->max_degree_of_parallelism();
+        builder = pipeline::make_lake_prepared_physical_split_morsel_queue_builder(
+                builder->take_morsels(), has_more_scan_ranges, max_degree_of_parallelism, splitted_scan_rows);
+    } else {
+        builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
+    }
     if (_could_split) {
         builder->set_has_more_from_split(true);
-    }
-    if (_could_split && _could_split_physically && _enable_lake_prepared_physical_split_scan) {
-        builder = pipeline::make_lake_prepared_physical_split_morsel_queue_builder(std::move(builder),
-                                                                                  splitted_scan_rows);
     }
     return builder;
 }

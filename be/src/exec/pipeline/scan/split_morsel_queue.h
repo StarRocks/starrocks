@@ -14,9 +14,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <deque>
 #include <mutex>
-#include <unordered_set>
+#include <queue>
 
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
@@ -180,16 +181,16 @@ private:
     ShortKeyIndexGroupIterator _next_lower_block_iter;
 };
 
-// Lake prepared physical split uses the wrapped queue for root/refined morsels.
-// When that queue is temporarily empty, this wrapper may issue extra coarse
-// ranges for seed segments whose final pruned ranges are not ready yet.
+// Lake prepared physical split keeps root/refined morsels in its own dynamic
+// queue. When that queue is temporarily empty, it may issue extra coarse ranges
+// for seed segments whose final pruned ranges are not ready yet.
 class LakePreparedPhysicalSplitMorselQueue final : public OlapMorselQueue, public TicketedMorselQueue {
 public:
-    LakePreparedPhysicalSplitMorselQueue(MorselQueuePtr base_queue, int64_t splitted_scan_rows);
+    LakePreparedPhysicalSplitMorselQueue(Morsels&& morsels, bool has_more_scan_ranges, int64_t splitted_scan_rows,
+                                         size_t degree_of_parallelism);
     ~LakePreparedPhysicalSplitMorselQueue() override = default;
 
-    size_t num_original_morsels() const override { return _base_queue->num_original_morsels(); }
-    size_t max_degree_of_parallelism() const override { return _base_queue->max_degree_of_parallelism(); }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override;
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;
@@ -200,23 +201,9 @@ public:
 
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
-        if (auto* ticketed_queue = dynamic_cast<TicketedMorselQueue*>(_base_queue.get())) {
-            ticketed_queue->set_ticket_checker(ticket_checker);
-        }
     }
-    bool could_attch_ticket_checker() const override {
-        const auto* ticketed_queue = dynamic_cast<const TicketedMorselQueue*>(_base_queue.get());
-        return ticketed_queue != nullptr && ticketed_queue->could_attch_ticket_checker();
-    }
+    bool could_attch_ticket_checker() const override { return true; }
     std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const override;
-    void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
-                        const TabletReaderParams::RangeEndOperation& range_end_op,
-                        const std::vector<OlapTuple>& range_start_key,
-                        const std::vector<OlapTuple>& range_end_key) override;
-    void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override;
-    void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) override;
-    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) override;
 
 private:
     struct PreRefinementCandidate {
@@ -233,18 +220,18 @@ private:
         DEAD,
     };
 
-    OlapMorselQueue* base_olap_queue();
-    const OlapMorselQueue* base_olap_queue() const;
+    void enter_ticket(ScanMorsel* morsel);
     PreRefinementCandidateState pre_refinement_candidate_state(const PreRefinementCandidate& candidate) const;
-    bool has_live_pre_refinement_candidate_locked() const;
-    void register_pre_refinement_candidate(ScanMorsel* morsel);
-    StatusOr<MorselPtr> allocate_pre_refinement_coarse_split();
+    bool has_pre_refinement_candidate_locked() const;
+    void enqueue_pre_refinement_candidate_from_initial_coarse_locked(ScanMorsel* morsel);
+    StatusOr<MorselPtr> allocate_pre_refinement_coarse_split_locked();
 
-    MorselQueuePtr _base_queue;
     int64_t _splitted_scan_rows;
+    size_t _degree_of_parallelism = 1;
+    std::atomic<int64_t> _size = 0;
+    std::deque<MorselPtr> _queue;
     mutable std::mutex _mutex;
-    mutable std::deque<PreRefinementCandidate> _pre_refinement_candidates;
-    std::unordered_set<const void*> _registered_segment_states;
+    mutable std::queue<PreRefinementCandidate> _pre_refinement_candidates;
     query_cache::TicketCheckerPtr _ticket_checker;
 };
 

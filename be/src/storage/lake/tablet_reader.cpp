@@ -66,6 +66,24 @@ using Field = starrocks::Field;
 using PredicateParser = starrocks::PredicateParser;
 using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
+static Schema build_prepare_pruning_schema(const RowsetPtr& rowset, const Schema& read_schema,
+                                           const RowsetReadOptions& rowset_read_options,
+                                           const DisjunctivePredicates& delete_predicates) {
+    Schema prepare_schema = rowset->build_segment_schema(read_schema, rowset_read_options, delete_predicates);
+    if (rowset_read_options.tablet_schema == nullptr) {
+        return prepare_schema;
+    }
+
+    for (ColumnId cid : rowset_read_options.pred_tree_for_zone_map.column_ids()) {
+        const TabletColumn& col = rowset_read_options.tablet_schema->column(cid);
+        if (prepare_schema.get_field_by_name(std::string(col.name())) != nullptr) {
+            continue;
+        }
+        prepare_schema.append(std::make_shared<Field>(ChunkHelper::convert_field(cid, col)));
+    }
+    return prepare_schema;
+}
+
 static Status prepare_segment_pruned_scan_range(const SegmentPtr& segment, const Schema& schema,
                                                 const SegmentReadOptions& segment_read_options,
                                                 const PreparedSegmentReadStatePtr& prepared_segment_read_state) {
@@ -78,7 +96,7 @@ static Status prepare_segment_pruned_scan_range(const SegmentPtr& segment, const
         return range_or.status();
     }
     prepared_segment_read_state->publish_pruned_scan_range(
-            std::make_shared<SparseRange<>>(std::move(range_or).value()), false /* includes_page_filters */);
+            std::make_shared<SparseRange<>>(std::move(range_or).value()), true /* includes_page_filters */);
     return Status::OK();
 }
 
@@ -111,7 +129,7 @@ static Status prepare_segment_pruned_scan_range_for_split(
     segment_state->publish_rowid_bounds_cache(std::move(seek_ranges_rowid_bounds), tablet_range_rowid_bounds);
     segment_read_options.read_state_cache.seek_range_rowid_ranges = &segment_state->seek_ranges_rowid_bounds;
     segment_read_options.read_state_cache.tablet_rowid_range = &segment_state->tablet_range_rowid_bounds;
-    auto prepare_schema = rowset->build_segment_schema(read_schema, rowset_read_options, delete_predicates);
+    auto prepare_schema = build_prepare_pruning_schema(rowset, read_schema, rowset_read_options, delete_predicates);
     return prepare_segment_pruned_scan_range(segment, prepare_schema, segment_read_options, segment_state);
 }
 
