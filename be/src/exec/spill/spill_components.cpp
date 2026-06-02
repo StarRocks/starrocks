@@ -30,7 +30,6 @@
 #include "compute_env/workgroup/scan_task.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/aggregator.h"
 #include "exec/spill/common.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/mem_tracker_guard.h"
@@ -590,17 +589,13 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
     return Status::OK();
 }
 
-// When the skew data is detected, we will compact the skew partitions.
-// when session variable spill_partitionwise_agg_skew_elimination is true, spiller would try to choose the mem tables
-// undergoing flushing that are skewed and merge the duplicated rows into one row, so that the skewed data
-// can be eliminated.
+// When an operator-specific skew compactor is configured, spiller tries to choose skewed mem tables during flushing and
+// asks the compactor to merge duplicated rows. Without a compactor, spill remains a generic partition writer.
 Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions) {
     if (partitions.empty()) {
         return Status::OK();
     }
-    // opt_aggregator_params is set when spill_partitionwise_agg_skew_elimination is true, so
-    // it indicates that the skew elimination is enabled.
-    if (!_spiller->options().opt_aggregator_params.has_value()) {
+    if (!_spiller->options().skew_chunk_compactor) {
         for (auto& partition : partitions) {
             auto mem_table = std::dynamic_pointer_cast<UnorderedMemTable>(partition->spill_writer->mem_table());
             auto& chunks = mem_table->get_chunks();
@@ -623,9 +618,7 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
         auto input_mem_size = mem_table->mem_usage();
         auto is_done = mem_table->is_done();
         mem_table->reset();
-        // invoke _compact_skew_chunks to merge the skewed data in chunks.
-        RETURN_IF_ERROR(
-                _compact_skew_chunks(input_num_rows, chunks, _spiller->options().opt_aggregator_params.value()));
+        RETURN_IF_ERROR(_compact_skew_chunks(input_num_rows, chunks));
 
         // if the partition are not spilttable, we can remove the hash column to save serde/flush time.
         if (!_spiller->options().splittable) {
@@ -672,8 +665,7 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
 // find the most repetitive, these algorithms are based on the assumption that the most repetitive group-by value
 // has an extremely high probability to be obtained in sampling process. for an example, if the most repetitive group-by
 // value's frequency is 0.25. in 30 samples, the probability of obtaining it is 1 - (1 - 0.25)^30 = 0.9999999999999999.
-Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks,
-                                                      AggregatorParamsPtr& aggregator_params) {
+Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks) {
     if (num_rows < 30) {
         return Status::OK();
     }
@@ -729,67 +721,8 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         return Status::OK();
     }
 
-    // use aggregator to merge the skewed data.
-    auto merger = std::make_shared<Aggregator>(aggregator_params);
-    merger->set_aggr_mode(AM_STREAMING_POST_CACHE);
-    RuntimeProfile* profile = _runtime_state->runtime_profile()->create_child("spillable_pw_skew_elimination", true);
-    RETURN_IF_ERROR(merger->prepare(_runtime_state, profile));
-    RETURN_IF_ERROR(merger->open(_runtime_state));
-    DeferOp defer([&merger, this]() { merger->close(_runtime_state); });
-    auto target_hash_value = mode_elem_it->first;
-    std::vector<ChunkPtr> new_chunks;
-    for (auto& chunk : chunks) {
-        if (chunk == nullptr || chunk->is_empty()) {
-            continue;
-        }
-        auto* hash_column = down_cast<const UInt32Column*>(chunk->columns().back().get());
-        auto& hash_values = hash_column->get_data();
-        std::vector<uint32_t> indices;
-        Filter filter;
-        indices.reserve(chunk->num_rows());
-        filter.reserve(chunk->num_rows());
-        for (uint32_t i = 0; i < hash_values.size(); ++i) {
-            if (hash_values[i] == target_hash_value) {
-                indices.push_back(i);
-                filter.push_back(0);
-            } else {
-                filter.push_back(1);
-            }
-        }
-        auto chunk_merging = chunk->clone_empty_with_slot(indices.size());
-        chunk_merging->append_selective(*chunk, indices.data(), 0, indices.size());
-        chunk->filter(filter);
-        if (!chunk_merging->is_empty()) {
-            RETURN_IF_ERROR(merger->evaluate_groupby_exprs(chunk_merging.get()));
-            if (merger->only_group_by_exprs()) {
-                merger->build_hash_set(chunk_merging->num_rows());
-            } else {
-                merger->build_hash_map(chunk_merging->num_rows(), false);
-                RETURN_IF_ERROR(merger->compute_batch_agg_states(chunk_merging.get(), chunk_merging->num_rows()));
-            }
-        }
-        if (!chunk->is_empty()) {
-            new_chunks.emplace_back(std::move(chunk));
-        }
-    }
-    auto chunk_merged = std::make_shared<Chunk>();
-    if (merger->only_group_by_exprs()) {
-        merger->hash_set_variant().visit(
-                [&](auto& hash_set_with_key) { merger->it_hash() = hash_set_with_key->hash_set.begin(); });
-        auto hash_set_sz = merger->hash_set_variant().size();
-        merger->convert_hash_set_to_chunk(hash_set_sz, &chunk_merged);
-    } else {
-        merger->it_hash() = merger->state_allocator().begin();
-        auto hash_map_sz = merger->hash_map_variant().size();
-        RETURN_IF_ERROR(merger->convert_hash_map_to_chunk(hash_map_sz, &chunk_merged, true));
-    }
-    if (chunk_merged != nullptr && !chunk_merged->is_empty()) {
-        auto hash_column = UInt32Column::create(chunk_merged->num_rows(), target_hash_value);
-        chunk_merged->append_column(hash_column, Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
-        new_chunks.emplace_back(std::move(chunk_merged));
-    }
-    chunks = std::move(new_chunks);
-    return Status::OK();
+    SpillSkewChunkCompactContext context{.state = _runtime_state, .target_hash_value = mode_elem_it->first};
+    return _spiller->options().skew_chunk_compactor(chunks, context);
 }
 
 Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield_ctx, SerdeContext& spill_ctx,

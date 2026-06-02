@@ -14,20 +14,31 @@
 
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "compute_env/sorting/sorting.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/spill/block_manager.h"
 
 namespace starrocks {
-struct AggregatorParams;
-using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
+class RuntimeState;
 }; // namespace starrocks
 
 namespace starrocks::spill {
+struct SpillSkewChunkCompactContext {
+    RuntimeState* state;
+    uint32_t target_hash_value;
+};
+
+using SpillSkewChunkCompactor =
+        std::function<Status(std::vector<ChunkPtr>& chunks, const SpillSkewChunkCompactContext& context)>;
+
 struct SpilledChunkBuildSchema {
     void set_schema(const ChunkPtr& chunk) {
         _chunk = chunk->clone_empty(0);
@@ -113,7 +124,7 @@ struct SpilledOptions {
 
     int64_t spill_hash_join_probe_op_max_bytes = 1LL << 31;
 
-    mutable std::optional<AggregatorParamsPtr> opt_aggregator_params{};
+    SpillSkewChunkCompactor skew_chunk_compactor;
 };
 
 // spill strategy
