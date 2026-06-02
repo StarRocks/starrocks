@@ -164,9 +164,9 @@ Status TenANNReader::search(const float* query_vector, size_t query_size, int k,
     return Status::OK();
 };
 
-Status TenANNReader::range_search(const float* query_vector, size_t query_size, int k,
-                                  std::vector<int64_t>* result_ids, std::vector<float>* result_distances,
-                                  const SparseRange<>& scan_range, float range, int order) {
+Status TenANNReader::range_search(const float* query_vector, size_t query_size, int k, std::vector<int64_t>* result_ids,
+                                  std::vector<float>* result_distances, const SparseRange<>& scan_range, float range,
+                                  int order) {
     DelIdFilter del_id_filter(scan_range);
     auto query_view = tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(const_cast<float*>(query_vector)),
                                                .size = static_cast<uint32_t>(query_size),

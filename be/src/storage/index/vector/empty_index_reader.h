@@ -28,8 +28,8 @@ public:
         return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 
-    Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids,
-                  uint8_t* result_distances, const SparseRange<>& scan_range) override {
+    Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids, uint8_t* result_distances,
+                  const SparseRange<>& scan_range) override {
         return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 

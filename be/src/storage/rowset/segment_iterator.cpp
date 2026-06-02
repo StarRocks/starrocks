@@ -959,8 +959,8 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
     // (missing .vi file), NotSupported (empty-marker reader, or a build without TenANN) both mean
     // "no ANN index here" — fall back to brute force.
     auto st = VectorIndexReaderFactory::create_and_init(index_path, tablet_index_meta, query_params, fs,
-                                                        static_cast<size_t>(_segment->num_rows()),
-                                                        _vector_index_ctx->k, &_vector_index_ctx->ann_reader);
+                                                        static_cast<size_t>(_segment->num_rows()), _vector_index_ctx->k,
+                                                        &_vector_index_ctx->ann_reader);
     if (st.is_not_found() || st.is_not_supported()) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
@@ -1125,10 +1125,9 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         } else {
             result_ids.resize(_vector_index_ctx->k);
             result_distances.resize(_vector_index_ctx->k);
-            st = _vector_index_ctx->ann_reader->search(query_vector.data(), query_vector.size(), _vector_index_ctx->k,
-                                                       result_ids.data(),
-                                                       reinterpret_cast<uint8_t*>(result_distances.data()),
-                                                       _scan_range);
+            st = _vector_index_ctx->ann_reader->search(
+                    query_vector.data(), query_vector.size(), _vector_index_ctx->k, result_ids.data(),
+                    reinterpret_cast<uint8_t*>(result_distances.data()), _scan_range);
         }
     }
 

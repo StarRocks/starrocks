@@ -42,8 +42,8 @@ public:
     Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
                          size_t segment_num_rows, int query_k, bool user_set_ef) override;
 
-    Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids,
-                  uint8_t* result_distances, const SparseRange<>& scan_range) override;
+    Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids, uint8_t* result_distances,
+                  const SparseRange<>& scan_range) override;
     Status range_search(const float* query_vector, size_t query_size, int k, std::vector<int64_t>* result_ids,
                         std::vector<float>* result_distances, const SparseRange<>& scan_range, float range,
                         int order) override;

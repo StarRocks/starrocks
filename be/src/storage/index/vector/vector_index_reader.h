@@ -71,9 +71,9 @@ public:
     // caller-owned and must be sized to at least k.
     virtual Status search(const float* query_vector, size_t query_size, int k, int64_t* result_ids,
                           uint8_t* result_distances, const SparseRange<>& scan_range) = 0;
-    virtual Status range_search(const float* query_vector, size_t query_size, int k,
-                                std::vector<int64_t>* result_ids, std::vector<float>* result_distances,
-                                const SparseRange<>& scan_range, float range, int order) = 0;
+    virtual Status range_search(const float* query_vector, size_t query_size, int k, std::vector<int64_t>* result_ids,
+                                std::vector<float>* result_distances, const SparseRange<>& scan_range, float range,
+                                int order) = 0;
 };
 
 } // namespace starrocks
