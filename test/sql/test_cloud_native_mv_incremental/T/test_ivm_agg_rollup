@@ -1,0 +1,107 @@
+-- name: test_ivm_agg_rollup_full_key @cloud
+CREATE TABLE base_agg_fk (
+    region VARCHAR(8), city VARCHAR(8),
+    s BIGINT SUM, mx BIGINT MAX, mn BIGINT MIN
+) AGGREGATE KEY(region, city) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_agg_fk VALUES
+    ('CN','BJ',10,100,5),('CN','BJ',20,50,8),('US','NY',30,200,1);
+CREATE MATERIALIZED VIEW mv_agg_fk
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, city, SUM(s) AS s_sum, MAX(mx) AS mx_max, MIN(mn) AS mn_min
+   FROM base_agg_fk GROUP BY region, city;
+REFRESH MATERIALIZED VIEW mv_agg_fk WITH SYNC MODE;
+SELECT region, city, s_sum, mx_max, mn_min FROM mv_agg_fk ORDER BY region, city;
+INSERT INTO base_agg_fk VALUES ('CN','BJ',5,150,2),('JP','TK',7,7,7);
+REFRESH MATERIALIZED VIEW mv_agg_fk WITH SYNC MODE;
+SELECT region, city, s_sum, mx_max, mn_min FROM mv_agg_fk ORDER BY region, city;
+SELECT COUNT(*) AS mv_rows FROM mv_agg_fk;
+SELECT COUNT(*) AS base_rows FROM (SELECT region, city FROM base_agg_fk GROUP BY region, city) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, city, s_sum, mx_max, mn_min FROM mv_agg_fk
+    EXCEPT
+    SELECT region, city, SUM(s), MAX(mx), MIN(mn) FROM base_agg_fk GROUP BY region, city
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, city, SUM(s), MAX(mx), MIN(mn) FROM base_agg_fk GROUP BY region, city
+    EXCEPT
+    SELECT region, city, s_sum, mx_max, mn_min FROM mv_agg_fk
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_agg_fk%' OR DEFINITION LIKE '%mv_agg_fk%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_agg_rollup_subset_key @cloud
+CREATE TABLE base_agg_sk (
+    region VARCHAR(8), city VARCHAR(8),
+    s BIGINT SUM, mx BIGINT MAX, mn BIGINT MIN
+) AGGREGATE KEY(region, city) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_agg_sk VALUES
+    ('CN','BJ',10,100,5),('CN','SH',20,50,8),('CN','BJ',7,120,3),('US','NY',30,200,1);
+CREATE MATERIALIZED VIEW mv_agg_sk
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, SUM(s) AS s_sum, MAX(mx) AS mx_max, MIN(mn) AS mn_min
+   FROM base_agg_sk GROUP BY region;
+REFRESH MATERIALIZED VIEW mv_agg_sk WITH SYNC MODE;
+SELECT region, s_sum, mx_max, mn_min FROM mv_agg_sk ORDER BY region;
+INSERT INTO base_agg_sk VALUES ('CN','SH',3,80,1),('JP','TK',9,9,9);
+REFRESH MATERIALIZED VIEW mv_agg_sk WITH SYNC MODE;
+SELECT region, s_sum, mx_max, mn_min FROM mv_agg_sk ORDER BY region;
+SELECT COUNT(*) AS mv_rows FROM mv_agg_sk;
+SELECT COUNT(*) AS base_rows FROM (SELECT region FROM base_agg_sk GROUP BY region) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, s_sum, mx_max, mn_min FROM mv_agg_sk
+    EXCEPT
+    SELECT region, SUM(s), MAX(mx), MIN(mn) FROM base_agg_sk GROUP BY region
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, SUM(s), MAX(mx), MIN(mn) FROM base_agg_sk GROUP BY region
+    EXCEPT
+    SELECT region, s_sum, mx_max, mn_min FROM mv_agg_sk
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_agg_sk%' OR DEFINITION LIKE '%mv_agg_sk%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_agg_rollup_key_filter @cloud
+CREATE TABLE base_agg_kf (
+    region VARCHAR(8), city VARCHAR(8),
+    s BIGINT SUM
+) AGGREGATE KEY(region, city) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_agg_kf VALUES
+    ('CN','BJ',10),('CN','BJ',20),('CN','SH',5),('US','NY',30);
+CREATE MATERIALIZED VIEW mv_agg_kf
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, city, SUM(s) AS s_sum
+   FROM base_agg_kf WHERE region = 'CN' GROUP BY region, city;
+REFRESH MATERIALIZED VIEW mv_agg_kf WITH SYNC MODE;
+SELECT region, city, s_sum FROM mv_agg_kf ORDER BY region, city;
+INSERT INTO base_agg_kf VALUES ('CN','BJ',3),('CN','GZ',8),('US','LA',99);
+REFRESH MATERIALIZED VIEW mv_agg_kf WITH SYNC MODE;
+SELECT region, city, s_sum FROM mv_agg_kf ORDER BY region, city;
+SELECT COUNT(*) AS mv_rows FROM mv_agg_kf;
+SELECT COUNT(*) AS base_rows FROM (SELECT region, city FROM base_agg_kf WHERE region='CN' GROUP BY region, city) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, city, s_sum FROM mv_agg_kf
+    EXCEPT
+    SELECT region, city, SUM(s) FROM base_agg_kf WHERE region='CN' GROUP BY region, city
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, city, SUM(s) FROM base_agg_kf WHERE region='CN' GROUP BY region, city
+    EXCEPT
+    SELECT region, city, s_sum FROM mv_agg_kf
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_agg_kf%' OR DEFINITION LIKE '%mv_agg_kf%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
