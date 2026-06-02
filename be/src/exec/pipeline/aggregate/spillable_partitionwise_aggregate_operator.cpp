@@ -15,9 +15,9 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/mem_tracker_guard.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state_helper.h"
 

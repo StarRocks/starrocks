@@ -18,12 +18,12 @@
 #include <memory>
 #include <numeric>
 
+#include "compute_env/spill/input_stream.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/cross_join_node.h"
 #include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/spill/input_stream.h"
-#include "exec/spill/mem_tracker_guard.h"
-#include "exec/spill/spill_components.h"
-#include "exec/spill/spiller.hpp"
 #include "exprs/expr.h"
 #include "fmt/format.h"
 #include "runtime/runtime_state.h"

@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "compute_env/spill/options.h"
 #include "exec/aggregator.h"
-#include "exec/spill/options.h"
 
 namespace starrocks::pipeline {
 

@@ -175,41 +175,6 @@
       "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."
     },
     {
-      "id": "spillcore",
-      "doc_label": "SpillCore",
-      "summary": "Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.",
-      "owned_targets": ["SpillCore"],
-      "owned_globs": [
-        "be/src/exec/spill/block_manager.h",
-        "be/src/exec/spill/common.h",
-        "be/src/exec/spill/spill_fwd.h",
-        "be/src/exec/spill/dir_manager.h",
-        "be/src/exec/spill/dir_manager.cpp",
-        "be/src/exec/spill/log_block_manager.h",
-        "be/src/exec/spill/log_block_manager.cpp",
-        "be/src/exec/spill/file_block_manager.h",
-        "be/src/exec/spill/file_block_manager.cpp",
-        "be/src/exec/spill/hybird_block_manager.h",
-        "be/src/exec/spill/hybird_block_manager.cpp",
-        "be/src/exec/spill/query_spill_manager.h",
-        "be/src/exec/spill/query_spill_manager.cpp",
-        "be/src/exec/spill/block_reader.cpp",
-        "be/src/exec/spill/global_spill_manager.h",
-        "be/src/exec/spill/operator_mem_resource_manager.h",
-        "be/src/exec/spill/operator_mem_resource_manager.cpp",
-        "be/src/exec/spill/partition.h",
-        "be/src/exec/spill/spill_metrics.h",
-        "be/src/exec/spill/spill_metrics.cpp"
-      ],
-      "allowed_include_prefixes": ["exec/spill/", "platform/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
-      "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["RuntimeCore", "Platform", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["spill_core_test"],
-      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "Platform", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward."
-    },
-    {
       "id": "typecore",
       "doc_label": "Types",
       "summary": "Core type system without runtime/storage/exec coupling.",
@@ -453,6 +418,8 @@
         "runtime/",
         "util/time_guard.h",
         "platform/",
+        "fs/",
+        "io/",
         "column/",
         "types/",
         "common/",
@@ -462,10 +429,10 @@
       ],
       "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/"],
       "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
-      "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, and reusable compute-side sorting algorithms; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
+      "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
       "id": "exprcore",
@@ -792,7 +759,7 @@
         "be/src/exec/join/**"
       ],
       "allowed_include_prefixes": ["exec/join/", "compute_env/sorting/sort_helper.h", "exprs/", "serde/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "exec/spill/", "compute_env/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
+      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "compute_env/spill/", "compute_env/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
       "forbidden_includes": [
         "exec/cross_join_node.h",
         "exec/data_sink.h",

@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "compute_env/spill/spiller.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
-#include "exec/spill/spiller.h"
 
 namespace starrocks::pipeline {
 class SpillablePartitionSortSinkOperator final : public PartitionSortSinkOperator {

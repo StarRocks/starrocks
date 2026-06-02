@@ -63,23 +63,6 @@ ADD_BE_LIB(ExecSinkCore
 
 target_link_libraries(ExecSinkCore PUBLIC Common Base Gutil StarRocksGen)
 
-set(SPILL_CORE_FILES
-    spill/dir_manager.cpp
-    spill/block_reader.cpp
-    spill/log_block_manager.cpp
-    spill/file_block_manager.cpp
-    spill/hybird_block_manager.cpp
-    spill/query_spill_manager.cpp
-    spill/operator_mem_resource_manager.cpp
-    spill/spill_metrics.cpp
-)
-
-ADD_BE_LIB(SpillCore
-    ${SPILL_CORE_FILES}
-)
-
-target_link_libraries(SpillCore PUBLIC RuntimeCore Platform FSCore IO Common Base Gutil StarRocksGen)
-
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
 )
@@ -323,17 +306,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
-    spill/spill_components.cpp
-    spill/runtime_context.cpp
-    spill/task_executor.cpp
-    spill/spiller.cpp
-    spill/spiller_factory.cpp
-    spill/mem_table.cpp
-    spill/serde.cpp
-    spill/block_group.cpp
-    spill/input_stream.cpp
-    spill/restore_task.cpp
-    spill/data_stream.cpp
 )
 
 set(EXEC_NON_PIPELINE_FILES
@@ -549,5 +521,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

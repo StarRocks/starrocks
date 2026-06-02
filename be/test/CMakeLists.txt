@@ -257,7 +257,6 @@ set(EXEC_FILES
         ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./io/spill_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/descriptors_test.cpp
@@ -373,7 +372,6 @@ add_subdirectory(http)
 add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(serde)
-add_subdirectory(spill)
 add_subdirectory(staros_integration)
 
 if (APPLE)
