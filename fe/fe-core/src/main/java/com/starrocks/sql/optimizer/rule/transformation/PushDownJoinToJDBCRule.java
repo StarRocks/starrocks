@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.join.MultiJoinNode;
@@ -341,11 +342,11 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
                 continue;
             }
 
-            // Pushability is checked per-group because dialect (isMySQL) may differ.
-            // Reuse the same node coverage that JDBCJoinPushDownSQLBuilder's ToSQLVisitor
-            // relies on so predicate gating and SQL rendering stay in sync.
-            boolean isMySQL = mergeableGroups.get(owningGroup).get(0).table.isMySQLCompatible();
-            if (!JDBCJoinPushDownSQLBuilder.canPushExpression(pred, isMySQL)) {
+            // Pushability is checked per-group because dialect may differ across groups.
+            // Reuse the same node coverage that ScalarOperatorToJDBCSQLVisitor relies on
+            // so predicate gating and SQL rendering stay in sync.
+            JDBCTable.ProtocolType dialect = mergeableGroups.get(owningGroup).get(0).table.getProtocolType();
+            if (!CanPushDownPredicateVisitor.canPushDown(pred, dialect)) {
                 disqualifiedGroups.add(owningGroup);
                 remainingPredicates.add(pred);
                 continue;

@@ -27,9 +27,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorToJDBCSQLVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.JDBCJoinPushDownSQLBuilder;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -440,7 +445,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
     }
 
     // -----------------------------------------------------------------------
-    // JDBCJoinPushDownSQLBuilder: ToSQLVisitor — predicate types in WHERE
+    // ScalarOperatorToJDBCSQLVisitor — predicate types in WHERE
     // -----------------------------------------------------------------------
 
     @Test
@@ -532,13 +537,24 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testPostgresConcatPredicatePushedDown() throws Exception {
+    public void testPostgresNullSafeEqualRendered() throws Exception {
+        // <=> has no native operator on Postgres; the renderer must emit ANSI form.
+        String sql = "select t1.a from jdbc_postgres.partitioned_db0.tbl0 t1 " +
+                "join jdbc_postgres.partitioned_db0.tbl1 t2 on t1.a <=> t2.a";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "IS NOT DISTINCT FROM");
+    }
+
+    @Test
+    public void testPostgresConcatPredicateNotPushedDown() throws Exception {
+        // concat push-down is restricted to MySQL-compatible dialects (see
+        // CanPushDownPredicateVisitor.visitCall): rendering concat correctly on Postgres
+        // would require the single-table Expr→SQL path to also be dialect-aware, which it
+        // is not. So the join here cannot be merged into a single JDBC query.
         String sql = "select t1.a from jdbc_postgres.partitioned_db0.tbl0 t1 " +
                 "join jdbc_postgres.partitioned_db0.tbl1 t2 on concat(t1.a, t2.a, t1.b) = t2.b";
         String plan = getFragmentPlan(sql);
-        assertContains(plan,
-                "sr_merged",
-                "ON ((t0.\"a\" || t1.\"a\" || t0.\"b\") = t1.\"b\")");
+        assertNotContains(plan, "sr_merged");
     }
 
     @Test
@@ -546,24 +562,224 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ColumnRefOperator varcharCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "a", true);
         ColumnRefOperator intCol = new ColumnRefOperator(2, IntegerType.INT, "c", true);
 
-        Assertions.assertTrue(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol, intCol)), true));
-        Assertions.assertFalse(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol)), true));
-        Assertions.assertFalse(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol, intCol, intCol)), true));
+        // Arithmetic functions: must be binary, dialect-independent.
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol, intCol)),
+                JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol)),
+                JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol, intCol, intCol)),
+                JDBCTable.ProtocolType.MYSQL));
 
-        Assertions.assertTrue(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)), true));
-        Assertions.assertFalse(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol)), true));
+        // concat: arity >= 2 only on MySQL-compatible dialects; everything else rejected.
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
+                JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
+                JDBCTable.ProtocolType.MARIADB));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol)),
+                JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
+                        List.of(varcharCol, varcharCol, varcharCol)),
+                JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
+                JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
+                JDBCTable.ProtocolType.UNKNOWN));
 
-        Assertions.assertFalse(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CastOperator(IntegerType.BIGINT, intCol, false), true));
-        Assertions.assertTrue(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CastOperator(IntegerType.BIGINT, intCol, false), false));
-        Assertions.assertTrue(JDBCJoinPushDownSQLBuilder.canPushExpression(
-                new CastOperator(IntegerType.BIGINT, intCol, true), true));
+        // Cast: every dialect enforces the same 7-type whitelist via JDBCCastTypeMapper.
+        // BIGINT is outside the whitelist, so non-implicit casts are rejected on all dialects.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CastOperator(IntegerType.BIGINT, intCol, false), JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new CastOperator(IntegerType.BIGINT, intCol, false), JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+                new CastOperator(IntegerType.BIGINT, intCol, true), JDBCTable.ProtocolType.MYSQL));
+    }
+
+    @Test
+    public void testCanPushExpressionEqForNullDialectGate() {
+        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        BinaryPredicateOperator nullSafe = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, a, b);
+
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.MARIADB));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.CLICKHOUSE));
+        // Oracle has no native null-safe equality and we don't synthesize the OR expansion.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.UNKNOWN));
+    }
+
+    @Test
+    public void testCanPushExpressionDivideRejectsPostgres() {
+        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        CallOperator divide = new CallOperator(FunctionSet.DIVIDE, IntegerType.INT, List.of(a, b));
+
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.MYSQL));
+        // PG truncates int/int; the renderer strips implicit casts so the original int columns
+        // would reach PG and silently produce wrong results — reject up front.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.UNKNOWN));
+    }
+
+    @Test
+    public void testCanPushExpressionModRejectsOracle() {
+        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        CallOperator mod = new CallOperator(FunctionSet.MOD, IntegerType.INT, List.of(a, b));
+
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.MARIADB));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.CLICKHOUSE));
+        // Single-table scan path renders mod as `%` via AstToStringBuilder, which Oracle rejects.
+        // Until that path becomes dialect-aware, gate Oracle/UNKNOWN out.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.UNKNOWN));
+    }
+
+    @Test
+    public void testCanPushExpressionOracleConstantsAndInLimit() {
+        ConstantOperator trueLit = ConstantOperator.createBoolean(true);
+        // Oracle SQL has no BOOLEAN type at all — gate must reject boolean constants.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.UNKNOWN));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.POSTGRES));
+
+        // IN list of 1000 items is fine on Oracle; 1001 is not (ORA-01795).
+        ColumnRefOperator intCol = new ColumnRefOperator(2, IntegerType.INT, "c", true);
+        List<ScalarOperator> children1000 = new java.util.ArrayList<>();
+        children1000.add(intCol);
+        for (int i = 0; i < 1000; i++) {
+            children1000.add(ConstantOperator.createInt(i));
+        }
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+                new InPredicateOperator(false, children1000), JDBCTable.ProtocolType.ORACLE));
+
+        List<ScalarOperator> children1001 = new java.util.ArrayList<>(children1000);
+        children1001.add(ConstantOperator.createInt(1001));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+                new InPredicateOperator(false, children1001), JDBCTable.ProtocolType.ORACLE));
+        // Same predicate is fine on the other dialects.
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+                new InPredicateOperator(false, children1001), JDBCTable.ProtocolType.MYSQL));
+    }
+
+    @Test
+    public void testCanPushExpressionCastWhitelistPerDialect() {
+        ColumnRefOperator intCol = new ColumnRefOperator(1, IntegerType.INT, "c", true);
+        // DATE is in the 7-type whitelist for every dialect → allowed.
+        CastOperator toDate = new CastOperator(DateType.DATE, intCol, false);
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.UNKNOWN));
+
+        // JSON is excluded specifically on Oracle.
+        CastOperator toJson = new CastOperator(JsonType.JSON, intCol, false);
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.CLICKHOUSE));
+    }
+
+    @Test
+    public void testRendererEqForNullDispatch() {
+        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        BinaryPredicateOperator nullSafe = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, a, b);
+        Map<ColumnRefOperator, String> names = new HashMap<>();
+        names.put(a, "`a`");
+        names.put(b, "`b`");
+
+        Assertions.assertEquals("(`a` <=> `b`)",
+                nullSafe.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.MYSQL), null));
+        Assertions.assertEquals("(`a` IS NOT DISTINCT FROM `b`)",
+                nullSafe.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.POSTGRES), null));
+        Assertions.assertEquals("(`a` <=> `b`)",
+                nullSafe.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.CLICKHOUSE), null));
+    }
+
+    @Test
+    public void testRendererModRendersAsPercent() {
+        // Gate restricts mod push-down to dialects where `%` is valid (no Oracle/UNKNOWN), so the
+        // renderer emits the infix form uniformly.
+        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        CallOperator mod = new CallOperator(FunctionSet.MOD, IntegerType.INT, List.of(a, b));
+        Map<ColumnRefOperator, String> names = new HashMap<>();
+        names.put(a, "`a`");
+        names.put(b, "`b`");
+
+        Assertions.assertEquals("(`a` % `b`)",
+                mod.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.MYSQL), null));
+        Assertions.assertEquals("(`a` % `b`)",
+                mod.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.POSTGRES), null));
+        Assertions.assertEquals("(`a` % `b`)",
+                mod.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.CLICKHOUSE), null));
+    }
+
+    @Test
+    public void testRendererCastTypePerDialect() {
+        ColumnRefOperator c = new ColumnRefOperator(1, IntegerType.INT, "c", true);
+        CastOperator toDate = new CastOperator(DateType.DATE, c, false);
+        Map<ColumnRefOperator, String> names = new HashMap<>();
+        names.put(c, "`c`");
+
+        Assertions.assertEquals("CAST(`c` AS date)",
+                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.MYSQL), null));
+        Assertions.assertEquals("CAST(`c` AS date)",
+                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.POSTGRES), null));
+        Assertions.assertEquals("CAST(`c` AS DATE)",
+                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.ORACLE), null));
+        Assertions.assertEquals("CAST(`c` AS Date)",
+                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.CLICKHOUSE), null));
+    }
+
+    @Test
+    public void testRendererOracleDateLiteralWrapping() throws Exception {
+        ConstantOperator date = ConstantOperator.createDate(
+                java.time.LocalDateTime.of(2024, 1, 15, 0, 0, 0));
+        ScalarOperatorToJDBCSQLVisitor oracle =
+                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.ORACLE);
+        ScalarOperatorToJDBCSQLVisitor mysql =
+                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.MYSQL);
+
+        // Oracle wraps in ANSI form so the literal is self-describing (NLS_DATE_FORMAT-safe).
+        Assertions.assertTrue(date.accept(oracle, null).startsWith("DATE '"));
+        // Other dialects keep the bare string-literal form.
+        Assertions.assertTrue(date.accept(mysql, null).startsWith("'"));
+    }
+
+    @Test
+    public void testRendererOracleImplicitCastDateWrapping() {
+        // `dt = '2024-01-15'` on a DATE column reaches the renderer as an implicit cast
+        // around a VARCHAR ConstantOperator; without special handling the cast is stripped
+        // and Oracle would parse the bare string via NLS_DATE_FORMAT.
+        ConstantOperator stringLiteral = ConstantOperator.createVarchar("2024-01-15");
+        CastOperator implicitToDate = new CastOperator(DateType.DATE, stringLiteral, true);
+
+        ScalarOperatorToJDBCSQLVisitor oracle =
+                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.ORACLE);
+        ScalarOperatorToJDBCSQLVisitor mysql =
+                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.MYSQL);
+
+        Assertions.assertEquals("DATE '2024-01-15'", implicitToDate.accept(oracle, null));
+        Assertions.assertEquals("'2024-01-15'", implicitToDate.accept(mysql, null));
     }
 
     @Test

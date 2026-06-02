@@ -63,8 +63,7 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         ScalarOperator predicate = Utils.compoundAnd(lfo.getPredicate(), operator.getPredicate());
         ScalarOperator scanPredicate = operator.getPredicate();
         ScalarOperator filterPredicate = lfo.getPredicate();
-        ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(
-                        operator.getOpType() == OperatorType.LOGICAL_MYSQL_SCAN || isMySQLCompatibleJDBC(operator));
+        ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(dialectOf(operator));
         extractor.extract(predicate);
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
@@ -124,11 +123,16 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         }
     }
 
-    private boolean isMySQLCompatibleJDBC(Operator operator) {
-        if (operator.getOpType() != OperatorType.LOGICAL_JDBC_SCAN) {
-            return false;
+    private JDBCTable.ProtocolType dialectOf(Operator operator) {
+        if (operator.getOpType() == OperatorType.LOGICAL_MYSQL_SCAN) {
+            return JDBCTable.ProtocolType.MYSQL;
         }
-        JDBCTable table = (JDBCTable) ((LogicalJDBCScanOperator) operator).getTable();
-        return table.isMySQLCompatible();
+        if (operator.getOpType() == OperatorType.LOGICAL_JDBC_SCAN) {
+            JDBCTable table = (JDBCTable) ((LogicalJDBCScanOperator) operator).getTable();
+            return table.getProtocolType();
+        }
+        // LOGICAL_ODPS_SCAN and anything else: we don't have a JDBC dialect mapping here,
+        // so use the most conservative gate to avoid emitting dialect-specific SQL syntax.
+        return JDBCTable.ProtocolType.UNKNOWN;
     }
 }

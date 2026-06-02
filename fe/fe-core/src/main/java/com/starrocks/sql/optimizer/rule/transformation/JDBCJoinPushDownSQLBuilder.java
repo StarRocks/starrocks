@@ -22,23 +22,13 @@ import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorToJDBCSQLVisitor;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -285,7 +275,13 @@ public class JDBCJoinPushDownSQLBuilder {
      * Convert using an explicit column ref → SQL name map (e.g. unqualified names inside a subquery).
      */
     public String toSQL(ScalarOperator op, Map<ColumnRefOperator, String> nameMap) {
-        return op.accept(new ToSQLVisitor(nameMap), null);
+        return op.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(nameMap, dialect()), null);
+    }
+
+    private JDBCTable.ProtocolType dialect() {
+        return tableEntries.isEmpty()
+                ? JDBCTable.ProtocolType.UNKNOWN
+                : tableEntries.get(0).table.getProtocolType();
     }
 
     /**
@@ -301,240 +297,5 @@ public class JDBCJoinPushDownSQLBuilder {
     /** Convenience overload accepting a ColumnRefOperator directly. */
     public static String outputColumnAlias(ColumnRefOperator col) {
         return outputColumnAlias(col.getId());
-    }
-
-    /**
-     * Check whether a ScalarOperator expression can be fully converted to external DB SQL
-     * by {@link ToSQLVisitor}. Returns false if the tree contains any node type the visitor
-     * does not explicitly handle (in which case the fallback {@code visit()} would be used,
-     * producing unreliable output).
-     */
-    public static boolean canPushExpression(ScalarOperator op, boolean isMySQL) {
-        return op.accept(new CanPushExpressionVisitor(isMySQL), null);
-    }
-
-    private static class CanPushExpressionVisitor extends ScalarOperatorVisitor<Boolean, Void> {
-        private final boolean isMySQL;
-
-        CanPushExpressionVisitor(boolean isMySQL) {
-            this.isMySQL = isMySQL;
-        }
-
-        @Override
-        public Boolean visit(ScalarOperator op, Void context) {
-            return false;
-        }
-
-        private Boolean allChildrenPushable(ScalarOperator op) {
-            for (ScalarOperator child : op.getChildren()) {
-                if (!child.accept(this, null)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        public Boolean visitVariableReference(ColumnRefOperator op, Void ctx) {
-            return true;
-        }
-
-        @Override
-        public Boolean visitConstant(ConstantOperator op, Void ctx) {
-            return true;
-        }
-
-        @Override
-        public Boolean visitCall(CallOperator op, Void ctx) {
-            String fnName = op.getFnName().toLowerCase(Locale.ROOT);
-            int arity = op.getChildren().size();
-            if (BINARY_INFIX_FUNCTIONS.containsKey(fnName)) {
-                return arity == 2 && allChildrenPushable(op);
-            }
-            if ("concat".equals(fnName)) {
-                return arity >= 2 && allChildrenPushable(op);
-            }
-            return false;
-        }
-
-        @Override
-        public Boolean visitCastOperator(CastOperator op, Void ctx) {
-            if (!op.isImplicit() && isMySQL && !isMySQLCastType(op.getType().getPrimitiveType())) {
-                return false;
-            }
-            return allChildrenPushable(op);
-        }
-
-        @Override
-        public Boolean visitBinaryPredicate(BinaryPredicateOperator op, Void ctx) {
-            return allChildrenPushable(op);
-        }
-
-        @Override
-        public Boolean visitCompoundPredicate(CompoundPredicateOperator op, Void ctx) {
-            return allChildrenPushable(op);
-        }
-
-        @Override
-        public Boolean visitInPredicate(InPredicateOperator op, Void ctx) {
-            return allChildrenPushable(op);
-        }
-
-        @Override
-        public Boolean visitIsNullPredicate(IsNullPredicateOperator op, Void ctx) {
-            return allChildrenPushable(op);
-        }
-
-        @Override
-        public Boolean visitBetweenPredicate(BetweenPredicateOperator op, Void ctx) {
-            return allChildrenPushable(op);
-        }
-
-        private boolean isMySQLCastType(PrimitiveType primitiveType) {
-            return primitiveType == PrimitiveType.DATE
-                    || primitiveType == PrimitiveType.CHAR
-                    || primitiveType == PrimitiveType.DATETIME
-                    || primitiveType == PrimitiveType.DECIMALV2
-                    || primitiveType == PrimitiveType.DOUBLE
-                    || primitiveType == PrimitiveType.FLOAT
-                    || primitiveType == PrimitiveType.JSON;
-        }
-    }
-
-    /** StarRocks function names -> SQL infix syntax. */
-    private static final Map<String, String> BINARY_INFIX_FUNCTIONS = Map.of(
-            "add", "+",
-            "subtract", "-",
-            "multiply", "*",
-            "divide", "/",
-            "mod", "%"
-    );
-
-    private class ToSQLVisitor extends ScalarOperatorVisitor<String, Void> {
-        private final Map<ColumnRefOperator, String> columnNames;
-
-        ToSQLVisitor(Map<ColumnRefOperator, String> columnNames) {
-            this.columnNames = columnNames;
-        }
-
-        @Override
-        public String visit(ScalarOperator scalarOperator, Void context) {
-            // Fallback: should not happen for validated predicates
-            return scalarOperator.toString();
-        }
-
-        @Override
-        public String visitVariableReference(ColumnRefOperator op, Void context) {
-            String name = columnNames.get(op);
-            return name != null ? name : op.getName();
-        }
-
-        @Override
-        public String visitConstant(ConstantOperator op, Void context) {
-            if (op.isNull()) {
-                return "NULL";
-            }
-            if (op.getType().isStringType() || op.getType().isDateType()) {
-                return "'" + op.toString().replace("'", "''") + "'";
-            }
-            if (op.getType().isBoolean()) {
-                return Boolean.TRUE.equals(op.getValue()) ? "TRUE" : "FALSE";
-            }
-            return op.toString();
-        }
-
-        @Override
-        public String visitBinaryPredicate(BinaryPredicateOperator op, Void context) {
-            String left = op.getChild(0).accept(this, null);
-            String right = op.getChild(1).accept(this, null);
-            return "(" + left + " " + op.getBinaryType().toString() + " " + right + ")";
-        }
-
-        @Override
-        public String visitCompoundPredicate(CompoundPredicateOperator op, Void context) {
-            switch (op.getCompoundType()) {
-                case AND: {
-                    List<String> parts = new ArrayList<>();
-                    for (ScalarOperator child : op.getChildren()) {
-                        parts.add(child.accept(this, null));
-                    }
-                    return "(" + Joiner.on(" AND ").join(parts) + ")";
-                }
-                case OR: {
-                    List<String> parts = new ArrayList<>();
-                    for (ScalarOperator child : op.getChildren()) {
-                        parts.add(child.accept(this, null));
-                    }
-                    return "(" + Joiner.on(" OR ").join(parts) + ")";
-                }
-                case NOT:
-                    return "(NOT " + op.getChild(0).accept(this, null) + ")";
-                default:
-                    return op.toString();
-            }
-        }
-
-        @Override
-        public String visitInPredicate(InPredicateOperator op, Void context) {
-            String col = op.getChild(0).accept(this, null);
-            List<String> values = new ArrayList<>();
-            for (int i = 1; i < op.getChildren().size(); i++) {
-                values.add(op.getChild(i).accept(this, null));
-            }
-            String inClause = op.isNotIn() ? " NOT IN " : " IN ";
-            return "(" + col + inClause + "(" + Joiner.on(", ").join(values) + "))";
-        }
-
-        @Override
-        public String visitIsNullPredicate(IsNullPredicateOperator op, Void context) {
-            String col = op.getChild(0).accept(this, null);
-            String expr = op.isNotNull() ? col + " IS NOT NULL" : col + " IS NULL";
-            return "(" + expr + ")";
-        }
-
-        @Override
-        public String visitBetweenPredicate(BetweenPredicateOperator op, Void context) {
-            String col = op.getChild(0).accept(this, null);
-            String lower = op.getChild(1).accept(this, null);
-            String upper = op.getChild(2).accept(this, null);
-            String betweenClause = op.isNotBetween() ? " NOT BETWEEN " : " BETWEEN ";
-            return "(" + col + betweenClause + lower + " AND " + upper + ")";
-        }
-
-        @Override
-        public String visitCastOperator(CastOperator op, Void context) {
-            String child = op.getChild(0).accept(this, null);
-            if (op.isImplicit()) {
-                return child;
-            }
-            return "CAST(" + child + " AS " + op.getType().toSql() + ")";
-        }
-
-        @Override
-        public String visitCall(CallOperator op, Void context) {
-            String fnName = op.getFnName().toLowerCase(Locale.ROOT);
-            String sqlOp = BINARY_INFIX_FUNCTIONS.get(fnName);
-            if (sqlOp != null && op.getChildren().size() == 2) {
-                // Binary infix operator (e.g., add → +)
-                String left = op.getChild(0).accept(this, null);
-                String right = op.getChild(1).accept(this, null);
-                return "(" + left + " " + sqlOp + " " + right + ")";
-            }
-            if ("concat".equals(fnName) && op.getChildren().size() >= 2) {
-                List<String> args = op.getChildren().stream()
-                        .map(child -> child.accept(this, null))
-                        .collect(Collectors.toList());
-                if (isMySQLCompatible()) {
-                    return "CONCAT(" + Joiner.on(", ").join(args) + ")";
-                }
-                return "(" + Joiner.on(" || ").join(args) + ")";
-            }
-            // Fallback for unknown functions — shouldn't reach here if canPushExpression was checked
-            return op.toString();
-        }
-    }
-
-    private boolean isMySQLCompatible() {
-        return !tableEntries.isEmpty() && tableEntries.get(0).table.isMySQLCompatible();
     }
 }

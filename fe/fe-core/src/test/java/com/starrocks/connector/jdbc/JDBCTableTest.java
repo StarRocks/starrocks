@@ -74,6 +74,12 @@ public class JDBCTableTest {
     }
 
     @Test
+    public void testGetProtocolType() throws Exception {
+        Assertions.assertEquals(JDBCTable.ProtocolType.POSTGRES,
+                buildJDBCTable("jdbc:postgresql://host:5432/db").getProtocolType());
+    }
+
+    @Test
     public void testIsMySQLCompatible() throws Exception {
         Assertions.assertTrue(buildJDBCTable("jdbc:mysql://host:3306/db").isMySQLCompatible());
         Assertions.assertTrue(buildJDBCTable("jdbc:mariadb://host:3306/db").isMySQLCompatible());

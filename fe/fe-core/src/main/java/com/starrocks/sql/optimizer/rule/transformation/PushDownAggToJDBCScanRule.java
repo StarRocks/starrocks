@@ -38,7 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ExternalTablePredicateExtractor;
+import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
@@ -192,19 +192,12 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             ReplaceColumnRefRewriter havingRewriter = new ReplaceColumnRefRewriter(outputColumnRefToExpr, true);
             havingPredicate = havingRewriter.rewrite(aggregationOperator.getPredicate());
-            ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(
-                    isMySQLCompatibleJDBC(scanOperator));
-            extractor.extract(havingPredicate);
-            if (extractor.getReservePredicate() != null) {
+            JDBCTable.ProtocolType dialect = ((JDBCTable) scanOperator.getTable()).getProtocolType();
+            if (!CanPushDownPredicateVisitor.canPushDown(havingPredicate, dialect)) {
                 return null;
             }
         }
         return new AggregatePushDown(outputColumnRefToExpr, groupByExprs, havingPredicate);
-    }
-
-    private boolean isMySQLCompatibleJDBC(LogicalJDBCScanOperator scanOperator) {
-        JDBCTable table = (JDBCTable) scanOperator.getTable();
-        return table.isMySQLCompatible();
     }
 
     private boolean canPushDownAggregate(LogicalAggregationOperator aggregationOperator,

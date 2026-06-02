@@ -422,7 +422,7 @@ public class JDBCTable extends Table {
     }
 
     public ProtocolType getProtocolType() {
-        String uri = connectInfo.get(JDBCResource.URI);
+        String uri = getJdbcUri();
         if (StringUtils.isEmpty(uri)) {
             return ProtocolType.UNKNOWN;
         }
@@ -433,6 +433,9 @@ public class JDBCTable extends Table {
             throw new IllegalArgumentException("illegal jdbc uri: " + uri);
         }
         protocol = slices.get(0);
+        if ("postgresql".equalsIgnoreCase(protocol)) {
+            protocol = "postgres";
+        }
 
         ProtocolType res = EnumUtils.getEnumIgnoreCase(ProtocolType.class, protocol);
         if (res == null) {
