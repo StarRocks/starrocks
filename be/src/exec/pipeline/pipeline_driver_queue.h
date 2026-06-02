@@ -18,10 +18,10 @@
 
 #include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "base/utility/factory_method.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/workgroup/work_group_fwd.h"
-#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::pipeline {
 

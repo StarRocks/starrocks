@@ -16,9 +16,9 @@
 
 #include <any>
 
-#include "exec/workgroup/pipeline_executor_set.h"
-#include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/work_group.h"
 
 namespace starrocks::spill {
 

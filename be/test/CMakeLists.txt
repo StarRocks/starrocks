@@ -53,14 +53,6 @@ set(EXEC_FILES
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
-        ./exec/workgroup/scan_task_queue_test.cpp
-        ./exec/workgroup/lock_free_scan_task_queue_test.cpp
-        ./exec/workgroup/lock_free_work_group_scan_task_queue_test.cpp
-        ./exec/workgroup/pipeline_executor_set_test.cpp
-        ./exec/workgroup/pipeline_executor_set_manager_test.cpp
-        ./exec/workgroup/work_group_test.cpp
-        ./exec/workgroup/work_group_manager_test.cpp
-        ./exec/workgroup/mem_tracker_manager_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp

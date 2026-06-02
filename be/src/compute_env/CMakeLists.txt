@@ -27,6 +27,20 @@ set(COMPUTE_ENV_SORTING_FILES
     sorting/sorted_chunks_merger.cpp
 )
 
+set(COMPUTE_ENV_WORKGROUP_FILES
+    workgroup/lock_free_scan_task_queue.cpp
+    workgroup/lock_free_work_group_scan_task_queue.cpp
+    workgroup/mem_tracker_manager.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
+    workgroup/priority_scan_task_queue.cpp
+    workgroup/scan_executor.cpp
+    workgroup/scan_task_queue_factory.cpp
+    workgroup/work_group.cpp
+    workgroup/work_group_manager.cpp
+    workgroup/work_group_scan_task_queue.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -39,6 +53,7 @@ ADD_BE_LIB(ComputeEnv
     result/result_buffer_mgr.cpp
     result/result_queue_mgr.cpp
     ${COMPUTE_ENV_SORTING_FILES}
+    ${COMPUTE_ENV_WORKGROUP_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
