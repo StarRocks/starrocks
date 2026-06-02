@@ -16,9 +16,17 @@
 
 #include <fmt/core.h>
 
+#include <limits>
 #include <string>
 #include <utility>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#include "base/simd/rle_simd.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column.h"
@@ -224,8 +232,29 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
         auto values = new target_type[col->size()];
         DeferOp defer([&] { delete[] values; });
 
-        for (size_t i = 0; i < col->size(); i++) {
-            values[i] = static_cast<target_type>(data_col[i]);
+        // SIMD widening for the two common parquet-int cases; rle_simd takes int32
+        // counts, so fall back to scalar when col_size doesn't fit.
+        const size_t col_size = col->size();
+        if constexpr (std::is_same_v<source_type, int8_t> && std::is_same_v<target_type, int32_t>) {
+            if (col_size <= static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                simd_widen_int8_to_int32(values, data_col, static_cast<int32_t>(col_size));
+            } else {
+                for (size_t i = 0; i < col_size; i++) {
+                    values[i] = static_cast<target_type>(data_col[i]);
+                }
+            }
+        } else if constexpr (std::is_same_v<source_type, int16_t> && std::is_same_v<target_type, int32_t>) {
+            if (col_size <= static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                simd_widen_int16_to_int32(values, data_col, static_cast<int32_t>(col_size));
+            } else {
+                for (size_t i = 0; i < col_size; i++) {
+                    values[i] = static_cast<target_type>(data_col[i]);
+                }
+            }
+        } else {
+            for (size_t i = 0; i < col_size; i++) {
+                values[i] = static_cast<target_type>(data_col[i]);
+            }
         }
 
         write_leaf_callback(LevelBuilderResult{
@@ -729,9 +758,48 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const Leve
         }
 
         auto bitset = std::make_shared<std::vector<uint8_t>>((col_size + 7) / 8);
+#ifdef __AVX2__
+        {
+            const __m256i zero_vec = _mm256_setzero_si256();
+            size_t i = 0;
+            // cmpeq_epi8 yields 0xFF where the input byte is 0 (i.e. NOT null);
+            // movemask_epi8 packs those MSB-bits into a 32-bit bitset directly,
+            // which matches the (1 - nulls[i]) << (i & 7) pattern below.
+            for (; i + 32 <= col_size; i += 32) {
+                __m256i nulls_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(nulls + i));
+                __m256i not_null = _mm256_cmpeq_epi8(nulls_vec, zero_vec);
+                uint32_t mask = _mm256_movemask_epi8(not_null);
+                std::memcpy(bitset->data() + (i >> 3), &mask, sizeof(mask));
+            }
+            for (; i < col_size; i++) {
+                (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
+            }
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        {
+            // NEON lacks movemask, so AND with per-lane bit weights and reduce
+            // via three pairwise adds to pack 8 bytes -> 1 bitset byte.
+            const uint8x8_t zero_vec = vdup_n_u8(0);
+            const uint8x8_t bit_mask = {1, 2, 4, 8, 16, 32, 64, 128};
+            size_t i = 0;
+            for (; i + 8 <= col_size; i += 8) {
+                uint8x8_t nulls_vec = vld1_u8(nulls + i);
+                uint8x8_t not_null = vceq_u8(nulls_vec, zero_vec);
+                uint8x8_t masked = vand_u8(not_null, bit_mask);
+                uint8x8_t sum1 = vpadd_u8(masked, masked);
+                uint8x8_t sum2 = vpadd_u8(sum1, sum1);
+                uint8x8_t sum3 = vpadd_u8(sum2, sum2);
+                (*bitset)[i >> 3] = vget_lane_u8(sum3, 0);
+            }
+            for (; i < col_size; i++) {
+                (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
+            }
+        }
+#else
         for (size_t i = 0; i < col_size; i++) {
             (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
         }
+#endif
         return bitset;
     }
 
