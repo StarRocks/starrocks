@@ -44,6 +44,8 @@ public:
 
     bool is_pod_state() const override { return _function->is_pod_state(); }
 
+    bool support_nullable_immediate_input() const override { return _function->support_nullable_immediate_input(); }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         _function->reset(ctx, args, state);
     }
