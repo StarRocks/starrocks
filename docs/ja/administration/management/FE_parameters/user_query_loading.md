@@ -761,7 +761,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- デフォルト：10
+- デフォルト：5
 - タイプ：Int
 - 単位：-
 - 変更可能：No
