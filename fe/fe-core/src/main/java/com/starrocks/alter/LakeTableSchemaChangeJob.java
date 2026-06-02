@@ -923,10 +923,17 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // indices and deliberately SKIPS its shadow indices: the shadows are
         // about to be dropped by removeShadowIndex() inside persistStateChange,
         // so publishing them would just produce orphan metadata. The visible
-        // indices are what subsequent loads' publish chains depend on. The
-        // shared publish mechanics live in Utils#noOpPublishForForceSkip; the
-        // isFileBundling dispatch matches lakePublishVersion() (the alter does
-        // not change file_bundling, so current == target here).
+        // indices are what subsequent loads' publish chains depend on.
+        //
+        // Dispatch must key off the table's CURRENT file_bundling format read
+        // fresh here, NOT the cached isFileBundling field: that field is not
+        // serialized and is only populated by readyToPublishVersion() in the
+        // normal publish path. After an FE restart/leader change a replayed job
+        // sits in FINISHED_REWRITING with isFileBundling=false; if the operator
+        // force-cancels before the publish daemon runs, the cached field would
+        // wrongly route a file_bundling table to per-tablet publish. This
+        // mirrors the alter-meta force path and lakePublishVersion().
+        boolean useAggregatePublish = false;
         Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             List<Tablet> regularTablets = new ArrayList<>();
@@ -939,6 +946,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 if (table == null) {
                     continue;
                 }
+                useAggregatePublish = table.isFileBundling();
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition == null) {
                     // partition gone (concurrent drop); nothing to advance, skip.
@@ -951,7 +959,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             tabletsByPartition.put(physicalPartitionId, regularTablets);
         }
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
-                tabletsByPartition, computeResource, isFileBundling);
+                tabletsByPartition, computeResource, useAggregatePublish);
     }
 
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {
