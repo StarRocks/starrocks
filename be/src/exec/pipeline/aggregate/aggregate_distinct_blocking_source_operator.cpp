@@ -27,6 +27,7 @@ bool AggregateDistinctBlockingSourceOperator::is_finished() const {
 }
 
 Status AggregateDistinctBlockingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 
