@@ -277,13 +277,8 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = 0; i < rows_per_segment; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -296,13 +291,8 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     }
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -315,13 +305,8 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     }
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -460,13 +445,8 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = 0; i < rows_per_segment; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -479,13 +459,8 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     }
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -498,13 +473,8 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     }
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -613,13 +583,8 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 }
 
 static ssize_t read_and_compare(const ChunkIteratorPtr& iter, int64_t nkeys) {
-<<<<<<< HEAD
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
-    auto cols = full_chunk->mutable_columns();
-=======
-    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), nkeys);
     auto cols = full_chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (size_t i = 0; i < nkeys / 4; i++) {
         cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
         cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -687,13 +652,8 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     auto schema = ChunkHelper::convert_schema(partial_schema);
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = 0; i < rows_per_segment; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -705,13 +665,8 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     }
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -723,13 +678,8 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     }
 
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
@@ -1086,13 +1036,8 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     Int64Column deletes;
     std::unique_ptr<SegmentPB> seg_info = std::make_unique<SegmentPB>();
     {
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (auto i = 0; i < num_rows; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
