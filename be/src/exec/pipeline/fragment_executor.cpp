@@ -241,7 +241,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
-    runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(runtime_state);
     RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
     // Only consider the `query_mem_limit` variable

@@ -36,6 +36,7 @@
 #include "runtime/descriptors_fwd.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_context_lifetime.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state_fwd.h"
 #include "util/debug/query_trace.h"
@@ -54,7 +55,7 @@ using std::chrono::duration_cast;
 struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
-class QueryContext : public std::enable_shared_from_this<QueryContext> {
+class QueryContext : public QueryContextLifetime, public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
@@ -160,6 +161,7 @@ public:
     const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
     FragmentContextManager* fragment_mgr();
+    void attach_to_runtime_state(RuntimeState* state);
 
     void cancel(const Status& status, bool cancelled_by_fe);
     void set_cancelled_by_fe() { _cancelled_by_fe = true; }
