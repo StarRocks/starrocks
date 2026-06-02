@@ -583,19 +583,19 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
 
     // ========== Test helpers ==========
 
-    Map<Long, VectorIndexBuildTask> getRunningTasksForTest() {
+    public Map<Long, VectorIndexBuildTask> getRunningTasksForTest() {
         return runningTasks;
     }
 
-    ConcurrentHashMap<Long, Pending> getPendingTabletsForTest() {
+    public ConcurrentHashMap<Long, Pending> getPendingTabletsForTest() {
         return pendingTablets;
     }
 
-    Map<Long, Long> getCooldownUntilForTest() {
+    public Map<Long, Long> getCooldownUntilForTest() {
         return cooldownUntil;
     }
 
-    Map<Long, ComputeNode> getPreferredNodesForTest() {
+    public Map<Long, ComputeNode> getPreferredNodesForTest() {
         return preferredNodes;
     }
 }
