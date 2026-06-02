@@ -17,6 +17,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 
@@ -103,6 +104,12 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
             to_file_meta_pb(writer->lcrm_file(), op_compaction->mutable_lcrm_file());
         }
     }
+    // Fresh uid: a compaction output is a new logical rowset and must not dedup
+    // with the input rowsets it supersedes (it leaves their split family). Use
+    // set_ (always re-mint), not ensure_ (mint-if-absent): the output is derived
+    // from inputs, so it must never alias an input's uid even if one is ever
+    // copied in. Matches tablet_parallel_compaction_manager's merged output.
+    tablet_reshard_helper::set_rowset_uid(op_compaction->mutable_output_rowset());
     return Status::OK();
 }
 

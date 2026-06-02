@@ -47,6 +47,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/vacuum.h"
 #include "storage/protobuf_file.h"
 #include "storage/replication_utils.h"
@@ -505,6 +506,8 @@ Status ReplicationTxnManager::convert_rowset_meta(
         }
     }
 
+    // Fresh uid for the replicated rowset.
+    tablet_reshard_helper::set_rowset_uid(rowset_metadata);
     return Status::OK();
 }
 

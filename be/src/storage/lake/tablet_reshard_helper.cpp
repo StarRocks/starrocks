@@ -20,8 +20,38 @@
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
+#include "util/uid_util.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
+
+// Generates a fresh, non-zero global rowset uid (a 128-bit PUniqueId).
+PUniqueId make_rowset_uid() {
+    return UniqueId(generate_uuid()).to_proto();
+}
+
+// Mints the rowset's global `uid` if absent; idempotent so an inherited uid
+// (CopyFrom from split / cross-publish) is preserved.
+void ensure_rowset_uid(RowsetMetadataPB* rowset_metadata) {
+    if (has_valid_uid(*rowset_metadata)) {
+        return;
+    }
+    rowset_metadata->mutable_uid()->CopyFrom(make_rowset_uid());
+}
+
+// Unconditionally assigns a fresh uid, replacing any existing one.
+void set_rowset_uid(RowsetMetadataPB* rowset_metadata) {
+    rowset_metadata->mutable_uid()->CopyFrom(make_rowset_uid());
+}
+
+// True iff the rowset carries a usable uid (present and non-zero).
+bool has_valid_uid(const RowsetMetadataPB& rowset_metadata) {
+    return rowset_metadata.has_uid() && (rowset_metadata.uid().hi() != 0 || rowset_metadata.uid().lo() != 0);
+}
+
+// True iff both rowsets carry the same valid uid (the same logical rowset).
+bool same_rowset_uid(const RowsetMetadataPB& a, const RowsetMetadataPB& b) {
+    return has_valid_uid(a) && has_valid_uid(b) && UniqueId(a.uid()) == UniqueId(b.uid());
+}
 
 void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out) {
     DCHECK(out != nullptr);

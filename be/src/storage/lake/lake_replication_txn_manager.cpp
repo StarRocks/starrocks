@@ -35,6 +35,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
@@ -707,6 +708,9 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         auto new_rowset_meta = new_metadata->add_rowsets();
         new_rowset_meta->CopyFrom(src_rowset_meta);
         new_rowset_meta->mutable_del_files()->Clear();
+        // Replication produces a target-local rowset; any source-cluster uid carried by
+        // CopyFrom belongs to a different uid space, so mint a fresh target uid.
+        tablet_reshard_helper::set_rowset_uid(new_rowset_meta);
 
         // Convert rowset metadata. The copied segment_metas carry over per-segment attributes
         // (size, sort keys, num_rows, vector_index_ids, ...); rewrite only filename/encryption_meta.

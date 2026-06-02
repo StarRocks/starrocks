@@ -29,6 +29,27 @@ class TabletManager;
 
 namespace starrocks::lake::tablet_reshard_helper {
 
+// Generates a fresh, non-zero global rowset uid (a 128-bit PUniqueId).
+PUniqueId make_rowset_uid();
+
+// Mints the rowset's global `uid` if absent. Called at every rowset-creation
+// site so that every RowsetMetadataPB carries a uid; idempotent (set-if-absent)
+// so an inherited uid (CopyFrom from split / cross-publish) is preserved.
+void ensure_rowset_uid(RowsetMetadataPB* rowset_metadata);
+
+// Unconditionally assigns a fresh uid, replacing any existing one. Used when a
+// publish physically rewrites a rowset's segments (replace_segments), so a
+// per-tablet-private rewrite cannot alias the cross-published sibling it came from.
+void set_rowset_uid(RowsetMetadataPB* rowset_metadata);
+
+// True iff the rowset carries a usable uid (present and non-zero). A zero or
+// absent uid is treated as non-dedupable by MERGE rather than aliasing.
+bool has_valid_uid(const RowsetMetadataPB& rowset_metadata);
+
+// True iff both rowsets carry the same valid uid, i.e. they are the same logical
+// rowset across split siblings. The single source of truth for MERGE dedup.
+bool same_rowset_uid(const RowsetMetadataPB& a, const RowsetMetadataPB& b);
+
 void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata);
 void set_all_data_files_shared(TxnLogPB* txn_log);
 void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs = false);

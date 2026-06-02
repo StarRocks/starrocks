@@ -32,6 +32,45 @@ using namespace tablet_reshard_helper;
 
 class TabletReshardHelperTest : public ::testing::Test {};
 
+// Exercises the per-rowset uid helpers introduced for the reshard MERGE identity.
+TEST_F(TabletReshardHelperTest, RowsetUidHelpers) {
+    // make_rowset_uid: fresh, non-zero, and distinct across calls.
+    auto a = make_rowset_uid();
+    auto b = make_rowset_uid();
+    EXPECT_TRUE(a.hi() != 0 || a.lo() != 0);
+    EXPECT_FALSE(a.hi() == b.hi() && a.lo() == b.lo());
+
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs)); // absent => invalid
+
+    ensure_rowset_uid(&rs); // mints when absent
+    EXPECT_TRUE(has_valid_uid(rs));
+    auto minted = rs.uid();
+
+    ensure_rowset_uid(&rs); // idempotent: preserves the existing uid
+    EXPECT_EQ(minted.hi(), rs.uid().hi());
+    EXPECT_EQ(minted.lo(), rs.uid().lo());
+
+    set_rowset_uid(&rs); // always re-mints (replaces)
+    EXPECT_TRUE(has_valid_uid(rs));
+    EXPECT_FALSE(rs.uid().hi() == minted.hi() && rs.uid().lo() == minted.lo());
+
+    // same_rowset_uid: equal valid uids match; differing uids do not.
+    RowsetMetadataPB x;
+    RowsetMetadataPB y;
+    x.mutable_uid()->CopyFrom(a);
+    y.mutable_uid()->CopyFrom(a);
+    EXPECT_TRUE(same_rowset_uid(x, y));
+    y.mutable_uid()->CopyFrom(b);
+    EXPECT_FALSE(same_rowset_uid(x, y));
+
+    // A present-but-zero uid is not valid and never matches.
+    RowsetMetadataPB z;
+    z.mutable_uid();
+    EXPECT_FALSE(has_valid_uid(z));
+    EXPECT_FALSE(same_rowset_uid(x, z));
+}
+
 namespace {
 
 int64_t sum_of(const std::vector<int64_t>& v) {
