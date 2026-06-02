@@ -22,15 +22,7 @@
 
 #include <string>
 
-<<<<<<< HEAD
-=======
-#include "base/metrics.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_ingest_fwd.h"
-#include "common/system/cpu_info.h"
->>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
+#include "common/config.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"

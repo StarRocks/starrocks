@@ -40,16 +40,7 @@
 #include <future>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/auth/auth_info.h"
-#include "base/concurrency/concurrent_limiter.h"
-#include "base/metrics.h"
-#include "base/string/string_util.h"
-#include "base/time/time.h"
-#include "base/uid_util.h"
-#include "common/config_ingest_fwd.h"
->>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
+#include "common/config.h"
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"

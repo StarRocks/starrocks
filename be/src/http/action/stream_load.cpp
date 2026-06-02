@@ -46,18 +46,7 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-<<<<<<< HEAD
 #include "agent/master_info.h"
-=======
-#include "base/auth/auth_info.h"
-#include "base/string/string_parser.hpp"
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "base/uid_util.h"
-#include "base/url_coding.h"
-#include "base/utility/defer_op.h"
-#include "common/config_ingest_fwd.h"
->>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/utils.h"
@@ -83,6 +72,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
+#include "testutil/sync_point.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"

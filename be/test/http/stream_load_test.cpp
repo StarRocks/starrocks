@@ -42,15 +42,7 @@
 
 #include <cstring>
 
-<<<<<<< HEAD
-=======
-#include "base/concurrency/concurrent_limiter.h"
-#include "base/metrics.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_ingest_fwd.h"
->>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
+#include "common/config.h"
 #include "common/process_exit.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -639,28 +631,6 @@ TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
     ASSERT_EQ(-1, action.on_header(&request));
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(StreamLoadActionTest, invalid_envelope) {
-    StreamLoadAction action(&_env, _limiter.get());
-
-    HttpRequest request(_evhttp_req);
-    request._params.emplace(HTTP_DB_KEY, "db");
-    request._params.emplace(HTTP_TABLE_KEY, "tbl");
-    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-    request._headers.emplace(HTTP_FORMAT_KEY, "json");
-    request._headers.emplace(HTTP_ENVELOPE, "custom");
-    request.set_handler(&action);
-
-    ASSERT_EQ(-1, action.on_header(&request));
-
-    rapidjson::Document doc;
-    doc.Parse(k_response_str.c_str());
-    ASSERT_STREQ("Fail", doc["Status"].GetString());
-    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
-}
-
 TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     struct TestCase {
         const char* timeout_header;
@@ -699,5 +669,4 @@ TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     }
 }
 
->>>>>>> 0b3ab84661 ([BugFix] Fix transaction stream load put incorrect RPC timeout (#67584))
 } // namespace starrocks
