@@ -21,6 +21,16 @@
 
 namespace starrocks::workgroup {
 
+namespace {
+
+class NoopWorkGroupSchedulePolicy final : public WorkGroupSchedulePolicy {
+public:
+    bool should_yield(const WorkGroup* wg) const override { return false; }
+    size_t num_workgroups() const override { return 2; }
+};
+
+} // namespace
+
 PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     CpuUtil::CpuIds empty_cpuids;
     CpuUtil::CpuIds cpuids{0, 1, 2, 3, 4, 5, 6, 7};
@@ -86,9 +96,10 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_proportional) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // 8 total cores, 16 total connector-scan threads.
     PipelineExecutorSetConfig conf(8, 8, 8, 16, all_cpuids, false, false, nullptr);
+    NoopWorkGroupSchedulePolicy policy;
 
     // Executor covering 2 out of 8 CPUs, no borrowed CPUs → 8 * 2/8 = 2 for driver/scan, 16 * 2/8 = 4 for connector scan
-    PipelineExecutorSet exec(conf, "test_shared", CpuUtil::CpuIds{0, 1}, /*borrowed=*/{});
+    PipelineExecutorSet exec(conf, "test_shared", CpuUtil::CpuIds{0, 1}, /*borrowed=*/{}, policy);
     EXPECT_EQ(4u, exec.num_connector_scan_threads());
     EXPECT_EQ(2u, exec.num_driver_threads());
     EXPECT_EQ(2u, exec.num_scan_threads());
@@ -101,10 +112,11 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_full_when_borrowed) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // 8 total cores, 16 total connector-scan threads.
     PipelineExecutorSetConfig conf(8, 8, 8, 16, all_cpuids, false, false, nullptr);
+    NoopWorkGroupSchedulePolicy policy;
 
     // Executor with 2 own CPUs but also borrows {2,3,4,5} → returns num_total_driver_threads -> 8.
     PipelineExecutorSet exec(conf, "test_borrowed", CpuUtil::CpuIds{0, 1},
-                             /*borrowed=*/{{2, 3, 4, 5}});
+                             /*borrowed=*/{{2, 3, 4, 5}}, policy);
     EXPECT_EQ(16u, exec.num_connector_scan_threads());
     EXPECT_EQ(8u, exec.num_driver_threads());
     EXPECT_EQ(8u, exec.num_scan_threads());
@@ -116,9 +128,10 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_minimum_one) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // 8 total cores, only 1 total connector-scan thread configured.
     PipelineExecutorSetConfig conf(8, 1, 1, 1, all_cpuids, false, false, nullptr);
+    NoopWorkGroupSchedulePolicy policy;
 
     // 1 out of 8 CPUs → 1 * 1/8 = 0, but floor is 1.
-    PipelineExecutorSet exec(conf, "test_min", CpuUtil::CpuIds{0}, /*borrowed=*/{});
+    PipelineExecutorSet exec(conf, "test_min", CpuUtil::CpuIds{0}, /*borrowed=*/{}, policy);
     EXPECT_EQ(1u, exec.num_connector_scan_threads());
     EXPECT_EQ(1u, exec.num_driver_threads());
     EXPECT_EQ(1u, exec.num_scan_threads());
@@ -130,8 +143,9 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_reflects_config_update)
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // Mutable config: num_total_connector_scan_threads starts at 4.
     PipelineExecutorSetConfig conf(8, 4, 4, 4, all_cpuids, false, false, nullptr);
+    NoopWorkGroupSchedulePolicy policy;
 
-    PipelineExecutorSet exec(conf, "test_update", CpuUtil::CpuIds{0, 1, 2, 3}, /*borrowed=*/{});
+    PipelineExecutorSet exec(conf, "test_update", CpuUtil::CpuIds{0, 1, 2, 3}, /*borrowed=*/{}, policy);
     // 4 * 4/8 = 2 initially.
     EXPECT_EQ(2u, exec.num_connector_scan_threads());
 

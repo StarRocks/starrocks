@@ -63,7 +63,7 @@ WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_c
                                          : pipeline::PipelineExecutorMetrics::instance())
                                         ->get_driver_queue_metrics()),
           _driver_queue_factory(std::move(driver_queue_factory)),
-          _executors_manager(std::move(executors_manager_conf)),
+          _executors_manager(std::move(executors_manager_conf), *this),
           _metrics(metrics),
           _shared_mem_tracker_manager(metrics) {
     DCHECK(_driver_queue_factory != nullptr);

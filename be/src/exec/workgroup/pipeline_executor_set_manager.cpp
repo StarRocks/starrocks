@@ -26,7 +26,8 @@ namespace {
 
 StatusOr<std::unique_ptr<pipeline::DriverExecutor>> create_driver_executor(
         const PipelineExecutorSetConfig& conf, const std::string& name, const CpuUtil::CpuIds& cpuids,
-        const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads) {
+        const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
+        const WorkGroupSchedulePolicy& schedule_policy) {
     std::unique_ptr<ThreadPool> thread_pool;
     const Status status = ThreadPoolBuilder("pip_exec_" + name)
                                   .set_min_threads(0)
@@ -40,17 +41,18 @@ StatusOr<std::unique_ptr<pipeline::DriverExecutor>> create_driver_executor(
         return status;
     }
 
-    std::unique_ptr<pipeline::DriverExecutor> driver_executor =
-            std::make_unique<pipeline::GlobalDriverExecutor>(name, std::move(thread_pool), true, cpuids, conf.metrics);
+    std::unique_ptr<pipeline::DriverExecutor> driver_executor = std::make_unique<pipeline::GlobalDriverExecutor>(
+            name, std::move(thread_pool), true, cpuids, conf.metrics, schedule_policy);
     return driver_executor;
 }
 
 } // namespace
 
-ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf)
+ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGroupSchedulePolicy& schedule_policy)
         : _conf(std::move(conf)),
+          _schedule_policy(schedule_policy),
           _shared_executors(std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids,
-                                                                  std::vector<CpuUtil::CpuIds>{})) {
+                                                                  std::vector<CpuUtil::CpuIds>{}, _schedule_policy)) {
     _wg_to_cpuids[COMMON_WORKGROUP] = _conf.total_cpuids;
     for (auto cpuid : _conf.total_cpuids) {
         _cpu_owners[cpuid].set_wg(COMMON_WORKGROUP);
@@ -59,7 +61,7 @@ ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf)
 
 Status ExecutorsManager::start_shared_executors_unlocked() const {
     auto driver_executor = create_driver_executor(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{},
-                                                  _shared_executors->num_driver_threads());
+                                                  _shared_executors->num_driver_threads(), _schedule_policy);
     if (!driver_executor.ok()) {
         return driver_executor.status();
     }
@@ -148,9 +150,10 @@ std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_ex
     }
 
     const std::string name = std::to_string(wg->id());
-    auto executors = std::make_unique<PipelineExecutorSet>(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{});
+    auto executors = std::make_unique<PipelineExecutorSet>(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{},
+                                                           _schedule_policy);
     auto driver_executor = create_driver_executor(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{},
-                                                  executors->num_driver_threads());
+                                                  executors->num_driver_threads(), _schedule_policy);
     if (!driver_executor.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to create driver executor for workgroup "
                      << "[workgroup=" << wg->to_string() << "] "

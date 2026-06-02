@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -28,8 +29,23 @@
 #include "exec/workgroup/priority_scan_task_queue.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_scan_task_queue.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::workgroup {
+
+namespace {
+
+class FakeWorkGroupSchedulePolicy final : public WorkGroupSchedulePolicy {
+public:
+    std::function<bool(const WorkGroup*)> should_yield_func = [](const WorkGroup*) { return false; };
+    size_t num_workgroups_value = 2;
+
+    bool should_yield(const WorkGroup* wg) const override { return should_yield_func(wg); }
+    size_t num_workgroups() const override { return num_workgroups_value; }
+};
+
+} // namespace
 
 PARALLEL_TEST(ScanExecutorTest, test_yield) {
     auto queue = std::make_unique<PriorityScanTaskQueue>(100);
@@ -95,6 +111,17 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
     std::unique_lock lock(mutex);
     cv.wait(lock, [&]() { return submit_tasks == finished_tasks.load(); });
     ASSERT_EQ(submit_tasks, finished_tasks.load());
+}
+
+PARALLEL_TEST(WorkGroupScanTaskQueueTest, test_should_yield_uses_injected_policy) {
+    auto wg = std::make_shared<WorkGroup>("scan_wg", 101, WorkGroup::DEFAULT_VERSION, 1, 0.5, 10, 1.0,
+                                          WorkGroupType::WG_NORMAL, WorkGroup::DEFAULT_MEM_POOL);
+
+    FakeWorkGroupSchedulePolicy policy;
+    policy.should_yield_func = [expected = wg.get()](const WorkGroup* actual) { return actual == expected; };
+    WorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, policy);
+
+    ASSERT_TRUE(queue.should_yield(wg->scan_sched_entity(), 0));
 }
 
 } // namespace starrocks::workgroup

@@ -23,12 +23,14 @@
 
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::workgroup {
 
 class WorkGroupScanTaskQueue final : public ScanTaskQueue {
 public:
-    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
+    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, const WorkGroupSchedulePolicy& schedule_policy)
+            : _sched_entity_type(sched_entity_type), _schedule_policy(schedule_policy) {}
     ~WorkGroupScanTaskQueue() override = default;
 
     void close() override;
@@ -66,6 +68,7 @@ private:
     using WorkgroupSet = std::set<WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
 
     const ScanSchedEntityType _sched_entity_type;
+    const WorkGroupSchedulePolicy& _schedule_policy;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
