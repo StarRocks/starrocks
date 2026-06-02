@@ -533,7 +533,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // 4 generate delta columngroup
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first],
-                             dcg_column_file_sizes[each.first]);
+                            dcg_column_file_sizes[each.first]);
     }
     builder->apply_column_mode_partial_update(params.op_write);
 
