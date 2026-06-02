@@ -94,6 +94,8 @@ public:
             auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
             chinese_analyzer->setLanguage(L"cjk");
             _analyzer.reset(chinese_analyzer);
+        } else if (_parser_type == InvertedIndexParserType::PARSER_WHITESPACE) {
+            _analyzer = std::make_unique<lucene::analysis::WhitespaceAnalyzer>();
         } else {
             // ANALYSER_NOT_SET, ANALYSER_NONE use default SimpleAnalyzer
             _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
@@ -132,7 +134,8 @@ public:
 
                 if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
                     _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
-                    _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
+                    _parser_type == InvertedIndexParserType::PARSER_STANDARD ||
+                    _parser_type == InvertedIndexParserType::PARSER_WHITESPACE) {
                     _char_string_reader->init(tchar.c_str(), tchar.size(), false);
                     auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
                     _field->setValue(stream);
@@ -157,7 +160,8 @@ public:
             for (int i = 0; i < count; ++i) {
                 if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
                     _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
-                    _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
+                    _parser_type == InvertedIndexParserType::PARSER_STANDARD ||
+                    _parser_type == InvertedIndexParserType::PARSER_WHITESPACE) {
                     _char_string_reader->init(data, 0, false);
                     auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
                     _field->setValue(stream);

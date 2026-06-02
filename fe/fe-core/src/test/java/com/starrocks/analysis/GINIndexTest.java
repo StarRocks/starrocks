@@ -115,6 +115,12 @@ public class GINIndexTest extends PlanTestBase {
                     put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
                 }}, KeysType.DUP_KEYS));
 
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_WHITESPACE);
+                }}, KeysType.DUP_KEYS));
+
         new MockUp<RunMode>() {
             @Mock
             public boolean isSharedDataMode() {

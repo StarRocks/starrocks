@@ -1689,3 +1689,70 @@ SELECT sleep(10);
 DROP TABLE t_vertical_compaction;
 -- result:
 -- !result
+-- name: test_gin_index_single_predicate_whitespace
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_single_predicate_whitespace` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_whitespace (`text_column`) USING GIN ("parser" = "whitespace") COMMENT 'whitespace index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_single_predicate_whitespace VALUES
+(1, "user-john@email.com hello world"),
+(2, "john smith 12345"),
+(3, "Hello World"),
+(4, "hello-world test"),
+(5, NULL);
+-- result:
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column match "john";
+-- result:
+2	john smith 12345
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column match "user-john@email.com";
+-- result:
+1	user-john@email.com hello world
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column match "hello";
+-- result:
+1	user-john@email.com hello world
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column match "Hello";
+-- result:
+3	Hello World
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column match "hello-world";
+-- result:
+4	hello-world test
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column match "world";
+-- result:
+1	user-john@email.com hello world
+-- !result
+SELECT * FROM t_gin_index_single_predicate_whitespace WHERE text_column not match "hello";
+-- result:
+2	john smith 12345
+3	Hello World
+4	hello-world test
+5	None
+-- !result
+DROP TABLE t_gin_index_single_predicate_whitespace;
+-- result:
+-- !result

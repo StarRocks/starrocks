@@ -16,7 +16,7 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 ## 概述
 
-StarRocks 将其底层数据存储在按列组织的数据文件中。每个数据文件包含基于索引列的全文倒排索引。索引列中的值被分词为单个词。分词后的每个词被视为一个索引条目，映射到该词出现的行号。目前支持的分词方法包括英文分词、中文分词、多语言分词和不分词。
+StarRocks 将其底层数据存储在按列组织的数据文件中。每个数据文件包含基于索引列的全文倒排索引。索引列中的值被分词为单个词。分词后的每个词被视为一个索引条目，映射到该词出现的行号。目前支持的分词方法包括英文分词、中文分词、多语言分词、空白字符分词和不分词。
 
 例如，如果一行数据包含 "hello world" 且其行号为 123，全文倒排索引根据分词结果和行号构建索引条目：hello->123, world->123。
 
@@ -56,6 +56,7 @@ PROPERTIES (
   - `english`: 英文分词。此分词方法通常在任何非字母字符处进行分词。此外，大写英文字符会被转换为小写。因此，查询条件中的关键词需要是小写英文而不是大写英文，以利用全文倒排索引定位数据行。
   - `chinese`: 中文分词。此分词方法使用 CLucene 中的 [CJK Analyzer](https://lucene.apache.org/core/6_6_1/analyzers-common/org/apache/lucene/analysis/cjk/package-summary.html) 进行分词。
   - `standard`: 多语言分词。此分词方法提供基于语法的分词（基于 [Unicode Text Segmentation algorithm](https://unicode.org/reports/tr29/)），适用于大多数语言和混合语言的情况，如中英文。例如，此分词方法可以区分中英文。当中英文共存时，分词后会将大写英文字符转换为小写。因此，查询条件中的关键词需要是小写英文而不是大写英文，以利用全文倒排索引定位数据行。
+  - `whitespace`: 空白字符分词。此分词方法仅在空白字符处将文本拆分为标记，保留标记内的标点符号和特殊字符。与 `english` 和 `standard` 分词器不同，此方法不执行小写转换，因此查询区分大小写。适用于索引电子邮件地址、URL 或带连字符的标识符等数据，这些数据中的标点符号具有语义意义，不应作为标记边界。这是一种成熟的分词器，在 Apache Lucene、Solr 和 Elasticsearch 中也可用。
 - 索引列的数据类型必须是 CHAR、VARCHAR 或 STRING。
 
 #### 在创建表后添加全文倒排索引
@@ -92,7 +93,7 @@ ALTER TABLE t DROP index idx;
 
 #### 当索引列已分词时支持的查询
 
-如果全文倒排索引对索引列进行了分词，即 `'parser' = 'standard|english|chinese'`，则仅支持使用 `MATCH` 谓词进行数据过滤，格式需为 `<col_name> (NOT) MATCH '%keyword%'`。`keyword` 必须是字符串字面量，不支持表达式。
+如果全文倒排索引对索引列进行了分词，即 `'parser' = 'standard|english|chinese|whitespace'`，则仅支持使用 `MATCH` 谓词进行数据过滤，格式需为 `<col_name> (NOT) MATCH '%keyword%'`。`keyword` 必须是字符串字面量，不支持表达式。
 
 1. 创建一个表并插入几行测试数据。
 
@@ -148,7 +149,7 @@ ALTER TABLE t DROP index idx;
     Empty set (0.02 sec)
     ```
 
-- 如果使用英文或多语言分词构建全文倒排索引，存储时会将大写英文单词转换为小写。因此，在查询时，关键词需要是小写而不是大写，以利用全文倒排索引定位数据行。
+- 如果使用英文或多语言分词构建全文倒排索引，存储时会将大写英文单词转换为小写。因此，在查询时，关键词需要是小写而不是大写，以利用全文倒排索引定位数据行。注意空白字符分词不执行小写转换，因此查询区分大小写（例如，`"Hello"` 和 `"hello"` 是不同的标记）。
 
     ```SQL
     MySQL [example_db]> INSERT INTO t VALUES (3, "StarRocks is the BEST");

@@ -16,7 +16,7 @@ The full-text inverted index is not yet supported in Primary Key tables and shar
 
 ## Overview
 
-StarRocks stores its underlying data in the data files organized by columns. Each data file contains the full-text inverted index based on the indexed columns. The values in the indexed columns are tokenized into individual words. Each word after tokenization is treated as an index entry, mapping to the row number where the word appears. Currently supported tokenization methods for English tokenization, Chinese tokenization, multilingual tokenization, and no tokenization.
+StarRocks stores its underlying data in the data files organized by columns. Each data file contains the full-text inverted index based on the indexed columns. The values in the indexed columns are tokenized into individual words. Each word after tokenization is treated as an index entry, mapping to the row number where the word appears. Currently supported tokenization methods for English tokenization, Chinese tokenization, multilingual tokenization, whitespace tokenization, and no tokenization.
 
 For example, if a data row contains "hello world" and its row number is 123, the full-text inverted index builds index entries based on this tokenization result and row number: hello->123, world->123.
 
@@ -56,6 +56,7 @@ PROPERTIES (
   - `english`: English tokenization. This tokenization method typically tokenizing at any non-alphabetic character. Also, uppercase English letters are converted to lowercase. Therefore, keywords in the query conditions need to be lowercase English rather than uppercase English to leverage the full-text inverted index to locate data rows.
   - `chinese`: Chinese tokenization. This tokenization method uses the [CJK Analyzer](https://lucene.apache.org/core/6_6_1/analyzers-common/org/apache/lucene/analysis/cjk/package-summary.html) in CLucene for tokenization.
   - `standard`: Multilingual tokenization. This tokenization method provides grammar based tokenization (based on the [Unicode Text Segmentation algorithm](https://unicode.org/reports/tr29/)) and works well for most languages and cases of mixed languages, such as Chinese and English. For example, this tokenization method can distinguishes between Chinese and English when these two languages coexist. After tokenizing English, it converts uppercase English letters to lowercase. Therefore, keywords in the query conditions need to be lowercase English rather than uppercase English to leverage the full-text inverted index to locate data rows.
+  - `whitespace`: Whitespace tokenization. This tokenization method splits text into tokens only at whitespace characters, preserving punctuation and special characters within tokens. Unlike the `english` and `standard` tokenizers, this method does not perform lowercasing, so queries are case-sensitive. This is useful for indexing data like email addresses, URLs, or hyphenated identifiers where punctuation is meaningful and should not be used as a token boundary. This is a well-established tokenizer also available in Apache Lucene, Solr, and Elasticsearch.
 - The data type of the indexed column must be CHAR, VARCHAR, or STRING.
 
 #### Add full-text inverted index after table creation
@@ -92,7 +93,7 @@ After creating a full-text inverted index, you need to ensure that the system va
 
 #### Supported queries when indexed column is tokenized
 
-If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 'standard|english|chinese'`, only the `MATCH` predicate is supported for data filtering using full-text inverted indexes, and the format needs to be `<col_name> (NOT) MATCH '%keyword%'`. The `keyword` must be a string literal, and does not support expressions .
+If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 'standard|english|chinese|whitespace'`, only the `MATCH` predicate is supported for data filtering using full-text inverted indexes, and the format needs to be `<col_name> (NOT) MATCH '%keyword%'`. The `keyword` must be a string literal, and does not support expressions .
 
 1. Create a table and insert a few rows of test data.
 
@@ -148,7 +149,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
     Empty set (0.02 sec)
     ```
 
-- If English or multilingual tokenization is used to construct the full-text inverted index, uppercase English words are converted to lowercase when the full-text inverted index is actually stored. Therefore, during queries, keywords need to be lowercase instead of uppercase to utilize the full-text inverted index to locate data rows.
+- If English or multilingual tokenization is used to construct the full-text inverted index, uppercase English words are converted to lowercase when the full-text inverted index is actually stored. Therefore, during queries, keywords need to be lowercase instead of uppercase to utilize the full-text inverted index to locate data rows. Note that whitespace tokenization does not perform lowercasing, so queries are case-sensitive (e.g., `"Hello"` and `"hello"` are different tokens).
 
     ```SQL
     MySQL [example_db]> INSERT INTO t VALUES (3, "StarRocks is the BEST");
