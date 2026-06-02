@@ -26,15 +26,10 @@ displayed_sidebar: docs
 
 ## 锁类型
 
-- **DATABASE**：数据库级别锁（当 `lock_manager_enabled` 为 false 时）。
-- **TABLE**：表级别锁（当 `lock_manager_enabled` 为 true 时）。
+- **DATABASE**：数据库级别锁。
+- **TABLE**：表级别锁。
 
-## 配置
-
-`fe_locks` 的行为取决于 `lock_manager_enabled` 配置参数：
-
-- 当 `lock_manager_enabled = true` 时：使用新的锁管理器进行集中式锁管理，具有表级别粒度。
-- 当 `lock_manager_enabled = false` 时：使用传统的数据库级别锁定。
+StarRocks 通过锁管理器（Lock Manager）管理元数据锁，进行集中式锁管理，并具有表级别粒度。
 
 ## 示例
 
