@@ -369,11 +369,11 @@ static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const 
     auto chunk = ChunkHelper::new_chunk(schema, 1024);
     for (size_t i = 0; i < 1024; ++i) {
         test_data.push_back("well" + std::to_string(i));
-        auto cols = chunk->mutable_columns();
-        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        auto cols = chunk->columns();
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
         Slice field_1(test_data[i]);
-        cols[1]->append_datum(Datum(field_1));
-        cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
     }
     auto st = writer->add_chunk(*chunk);
     ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();

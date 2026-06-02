@@ -59,7 +59,7 @@ enum PartialUpdateCloneCase {
 };
 
 template <class T>
-static void append_datum_func(MutableColumnPtr& col, T val) {
+static void append_datum_func(const MutableColumnPtr& col, T val) {
     if (val == -1) {
         col->append_nulls(1);
     } else {
@@ -93,23 +93,23 @@ public:
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
             } else {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                 string v = fmt::to_string(key * 234234342345);
-                cols[1]->append_datum(Datum(Slice(v)));
-                cols[2]->append_datum(Datum((int32_t)key));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
             }
             int vcol_start = schema.num_key_fields();
-            cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[vcol_start]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
             if (cols[vcol_start + 1]->is_binary()) {
                 string v = fmt::to_string(key % 1000 + 2);
-                cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
             } else {
-                cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (one_delete == nullptr && !keys.empty()) {
@@ -149,23 +149,23 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (int i = 0; i < keys_by_segment.size(); i++) {
             auto chunk = ChunkHelper::new_chunk(schema, keys_by_segment[i].size());
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (int64_t key : keys_by_segment[i]) {
                 if (schema.num_key_fields() == 1) {
-                    cols[0]->append_datum(Datum(key));
+                    cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                 } else {
-                    cols[0]->append_datum(Datum(key));
+                    cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                     string v = fmt::to_string(key * 234234342345);
-                    cols[1]->append_datum(Datum(Slice(v)));
-                    cols[2]->append_datum(Datum((int32_t)key));
+                    cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+                    cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
                 }
                 int vcol_start = schema.num_key_fields();
-                cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+                cols[vcol_start]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
                 if (cols[vcol_start + 1]->is_binary()) {
                     string v = fmt::to_string(key % 1000 + 2);
-                    cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                    cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
                 } else {
-                    cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                    cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
                 }
             }
             if (one_delete == nullptr && !keys_by_segment[i].empty()) {
@@ -205,10 +205,10 @@ public:
         if (keys.size() > 0) {
             auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
-            auto cols = chunk->mutable_columns();
-            for (long key : keys) {
-                cols[0]->append_datum(Datum(key));
-                cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
+            auto cols = chunk->columns();
+            for (int64_t key : keys) {
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+                cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 3)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -236,11 +236,11 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
             auto chunk = ChunkHelper::new_chunk(schema, max_rows_per_segment);
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (size_t i = 0; i < max_rows_per_segment; i++) {
-                cols[0]->append_datum(Datum(keys[written_rows + i]));
-                cols[1]->append_datum(Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
-                cols[2]->append_datum(Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(keys[written_rows + i]));
+                cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -265,11 +265,11 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto nkeys = keys.size();
         auto chunk = ChunkHelper::new_chunk(schema, nkeys);
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
-            cols[2]->append_datum(Datum((int32_t)(key)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(nkeys - 1 - key)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         return *writer->build();
@@ -308,11 +308,11 @@ public:
         } else {
             varchar_value = std::string(1024, 'a');
         }
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
-            cols[2]->append_datum(Datum(Slice(varchar_value)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(nkeys - 1 - key)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(Slice(varchar_value)));
         }
         RETURN_IF_ERROR(writer->flush_chunk(*chunk));
         return *writer->build();
@@ -337,11 +337,11 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto nkeys = keys.size();
         auto chunk = ChunkHelper::new_chunk(schema, nkeys);
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (auto i = 0; i < nkeys; ++i) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)1));
-            cols[2]->append_datum(Datum((int32_t)(keys[nkeys - 1 - i])));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[nkeys - 1 - i])));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         return *writer->build();
@@ -366,11 +366,11 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto keys_size = all_cols[0].size();
         auto chunk = ChunkHelper::new_chunk(schema, keys_size);
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (auto i = 0; i < keys_size; ++i) {
-            append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
-            append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
-            append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
+            append_datum_func(cols[0]->as_mutable_ptr(), static_cast<int64_t>(all_cols[0][i]));
+            append_datum_func(cols[1]->as_mutable_ptr(), static_cast<int16_t>(all_cols[1][i]));
+            append_datum_func(cols[2]->as_mutable_ptr(), static_cast<int32_t>(all_cols[2][i]));
         }
 
         CHECK_OK(writer->flush_chunk(*chunk));
