@@ -100,6 +100,10 @@ message DeltaColumnGroupVerPB {
     repeated bytes encryption_metas = 4;
     // Whether files are shared by multiple tablets
     repeated bool shared_files = 5;
+    // Per-file size of each `.cols` file, strictly 1:1 with column_files.
+    // 0 means unknown (data written before this field existed); readers then
+    // fall back to stat/HeadObject to discover the file size.
+    repeated int64 column_file_sizes = 6 [packed = true];
 }
 
 message DeltaColumnGroupMetadataPB {
