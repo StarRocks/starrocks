@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/failpoint/fail_point.h"
+#include "failpoint/fail_point.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
