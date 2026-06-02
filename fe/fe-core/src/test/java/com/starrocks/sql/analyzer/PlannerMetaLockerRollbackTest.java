@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -182,5 +183,77 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
             Mockito.verify(constructed.get(0), Mockito.times(1))
                     .unLockTablesWithIntensiveDbLock(anyLong(), anyList(), any(LockType.class));
         }
+    }
+
+    /**
+     * Nested lock()/unlock() pattern (the optimistic-retry path:
+     * {@code InsertPlanner.buildExecPlanWithRetry} unlocks during planning then re-locks,
+     * and the retry iteration calls {@code StatementPlanner.reAnalyzeStmt}, which itself
+     * does {@code try { lock(); ... } finally { unlock(); }} on the same instance).
+     *
+     * <p>Pre-fix, lock() unconditionally overwrote {@code heldEntries} every call, and
+     * unlock() unconditionally cleared it. So:
+     *   <ul>
+     *     <li>inner lock() overwrote outer's snapshot (with the same content — no observable harm yet);</li>
+     *     <li>inner unlock() decremented LockManager refCount by 1 per rid (2 → 1) AND cleared {@code heldEntries};</li>
+     *     <li>outer unlock() saw {@code heldEntries == null} and was a no-op — but LockManager refCount
+     *         was still 1 per rid, so the locks were LEAKED, and the retry body continued to plan WHILE
+     *         STILL HOLDING the meta locks (the opposite of the design intent of the unlock-plan-relock cycle).</li>
+     *   </ul>
+     *
+     * <p>Fix uses an explicit {@code lockDepth} counter so nested lock()/unlock() pairs only
+     * touch their own LockManager refCount slot, and {@code heldEntries} is only cleared
+     * when the outermost unlock() drains the depth.
+     */
+    @Test
+    public void nestedLockUnlockReleasesAllReferences() throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("select * from t0", connectContext);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
+
+        Assertions.assertEquals(0, readLockDepth(locker), "fresh instance must have depth 0");
+        Assertions.assertNull(readHeldEntries(locker), "fresh instance must have no snapshot");
+
+        locker.lock();                                              // outer
+        Assertions.assertEquals(1, readLockDepth(locker), "outer lock must increment depth to 1");
+        Assertions.assertNotNull(readHeldEntries(locker), "outer lock must record the snapshot");
+        Object outerSnapshot = readHeldEntries(locker);
+
+        locker.lock();                                              // inner (nested)
+        Assertions.assertEquals(2, readLockDepth(locker), "nested lock must bump depth to 2");
+        Assertions.assertSame(outerSnapshot, readHeldEntries(locker),
+                "nested lock must NOT overwrite the outer snapshot — the outer unlock relies on it");
+
+        locker.unlock();                                            // inner
+        Assertions.assertEquals(1, readLockDepth(locker),
+                "inner unlock must decrement depth to 1, not drain to 0");
+        Assertions.assertSame(outerSnapshot, readHeldEntries(locker),
+                "inner unlock must NOT clear the snapshot — outer still needs it");
+
+        locker.unlock();                                            // outer
+        Assertions.assertEquals(0, readLockDepth(locker), "outer unlock must drain depth to 0");
+        Assertions.assertNull(readHeldEntries(locker),
+                "outer unlock must clear the snapshot now that no acquisition is in scope");
+
+        // After full unwind a new lock/unlock cycle must work cleanly — proves the LockManager
+        // state is balanced (no leaked LockHolders carrying refCount from the previous cycle).
+        Assertions.assertDoesNotThrow(locker::lock,
+                "follow-up lock() after nested cycle must work — would fail if a stale LockHolder "
+                        + "was left in LockManager and a hierarchical/upgrade guard fired.");
+        Assertions.assertDoesNotThrow(locker::unlock,
+                "follow-up unlock() must release cleanly.");
+        Assertions.assertEquals(0, readLockDepth(locker));
+        Assertions.assertNull(readHeldEntries(locker));
+    }
+
+    private static int readLockDepth(PlannerMetaLocker locker) throws Exception {
+        Field f = PlannerMetaLocker.class.getDeclaredField("lockDepth");
+        f.setAccessible(true);
+        return f.getInt(locker);
+    }
+
+    private static Object readHeldEntries(PlannerMetaLocker locker) throws Exception {
+        Field f = PlannerMetaLocker.class.getDeclaredField("heldEntries");
+        f.setAccessible(true);
+        return f.get(locker);
     }
 }
