@@ -108,6 +108,16 @@ public class FeNameFormatTest {
     }
 
     @Test
+    public void testCheckTableName() {
+        // length boundary: 1024 chars is accepted, 1025 is rejected
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkTableName("a".repeat(1024)));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkTableName("my_table"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkTableName("a".repeat(1025)));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkTableName(""));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkTableName("ab\0c"));
+    }
+
+    @Test
     public void testCheckNamespace() {
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("abc"));
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2"));
