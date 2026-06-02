@@ -42,6 +42,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -390,6 +391,44 @@ public abstract class AlterJobV2 implements Writable {
             boolean cancelled = cancelImpl(errMsg, force);
             cancelHook(cancelled);
             return cancelled;
+        }
+    }
+
+    /**
+     * Shared FORCE-cancel version bump for all lake alter job types
+     * (heavy schema change, metadata alter, async fast schema change).
+     *
+     * <p>When a lake alter is force-cancelled out of {@code FINISHED_REWRITING},
+     * the no-op publish has already written tablet metadata at {@code commitVersion}
+     * on BE. FE must advance each affected partition's visible version to match so
+     * subsequent loads compute their publish base correctly. This single helper is
+     * used by BOTH the live cancel path and the replay CANCELLED branch of every
+     * subclass, so a leader FE and a replayed/restarted FE stay byte-for-byte
+     * identical (the whole point of the {@code forceSkippedAtCommitted} marker).
+     *
+     * <p>It bumps the visible version ONLY — it does not touch
+     * {@code metadataSwitchVersion} (a force-cancel discards the alter, so no
+     * format switch happened at {@code commitVersion}) — and uses a soft guard
+     * instead of a hard precondition, because it runs inside the edit-log applier
+     * after the CANCELLED entry is already journaled.
+     *
+     * @param commitVersionMap per-partition commit version reserved by the alter;
+     *                         passed in because each subclass owns its own field.
+     */
+    protected void advanceVisibleVersionForForceSkip(OlapTable table, Map<Long, Long> commitVersionMap) {
+        if (table == null || commitVersionMap == null) {
+            return;
+        }
+        for (Map.Entry<Long, Long> entry : commitVersionMap.entrySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(entry.getKey());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long commitVersion = entry.getValue();
+            // Idempotent: a later load may already have advanced past commitVersion.
+            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+            }
         }
     }
 

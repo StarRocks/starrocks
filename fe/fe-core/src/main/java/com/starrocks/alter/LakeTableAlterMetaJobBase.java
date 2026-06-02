@@ -483,40 +483,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
-    /**
-     * Force-skip variant of {@link #updateVisibleVersion(OlapTable)}: advances ONLY
-     * the visible version, with a soft guard, and deliberately does NOT touch
-     * {@code metadataSwitchVersion}.
-     *
-     * <p>A force-cancel discards the alter — the no-op publish writes V-1 content
-     * tagged as version V, so no format switch happened at commitVersion. Recording
-     * a switch version here would (a) needlessly pin vacuum's retained version and
-     * (b) diverge from the replay path, which does not record one. This single helper
-     * is therefore used by BOTH the live cancel callback and the replay CANCELLED
-     * branch so a leader FE and a replayed/restarted FE stay byte-for-byte identical.
-     *
-     * <p>Unlike {@link #updateVisibleVersion(OlapTable)} it uses a soft {@code if}
-     * guard instead of {@code Preconditions.checkState}: this runs inside the
-     * edit-log applier (after the CANCELLED entry is already durably journaled), so
-     * a thrown precondition would leave the live FE inconsistent with its own journal.
-     */
-    private void advanceVisibleVersionForForceSkip(@NotNull OlapTable table) {
-        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition == null) {
-                continue;
-            }
-            Long commitVersion = commitVersionMap.get(physicalPartitionId);
-            if (commitVersion == null) {
-                continue;
-            }
-            // Idempotent: a later load may already have advanced past commitVersion.
-            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
-                physicalPartition.updateVisibleVersion(commitVersion, finishedTimeMs);
-            }
-        }
-    }
-
     protected AgentBatchTask getBatchTask() {
         return batchTask;
     }
@@ -599,7 +565,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                         boolean advanceVersionForForce = (jobState == JobState.FINISHED_REWRITING) && force;
                         persistStateChange(this, JobState.CANCELLED, () -> {
                             if (advanceVersionForForce) {
-                                advanceVisibleVersionForForceSkip(table);
+                                advanceVisibleVersionForForceSkip(table, commitVersionMap);
                             }
                             table.setState(OlapTable.OlapTableState.NORMAL);
                         });
@@ -751,7 +717,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 // VisibleVersion=commitVersion-1 and subsequent load publishes
                 // compute base from the wrong version.
                 if (forceSkippedAtCommitted) {
-                    advanceVisibleVersionForForceSkip(table);
+                    advanceVisibleVersionForForceSkip(table, commitVersionMap);
                 }
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN) {

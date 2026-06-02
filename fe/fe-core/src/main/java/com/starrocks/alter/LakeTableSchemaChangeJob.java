@@ -1080,17 +1080,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // subsequent load publishes compute base from the wrong version,
                 // re-applying the cancelled alter's txn_log on top.
                 if (forceSkippedAtCommitted) {
-                    for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-                        Long commitVersion = commitVersionMap.get(physicalPartition.getId());
-                        if (commitVersion == null) {
-                            continue;
-                        }
-                        // Idempotent: subsequent loads may have already advanced
-                        // past commitVersion before the replay reached here.
-                        if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
-                            physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
-                        }
-                    }
+                    advanceVisibleVersionForForceSkip(table, commitVersionMap);
                 }
                 removeShadowIndex(table);
             } else {
@@ -1310,20 +1300,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         // We just no-op published tablet_metadata at commitVersion
                         // on BE. FE-side partition.VisibleVersion must follow so
                         // subsequent loads' publish base matches the BE state.
-                        // Mirrors the version bump inside removeShadowIndex's
-                        // normal FINISHED transition, but applied to the regular
-                        // (visible) partitions only — the shadow tablets that
-                        // removeShadowIndex drops below were never visible
-                        // anyway.
-                        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-                            Long commitVersion = commitVersionMap.get(physicalPartition.getId());
-                            if (commitVersion == null) {
-                                continue;
-                            }
-                            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
-                                physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
-                            }
-                        }
+                        // Shared with the meta-alter path and replay via the
+                        // AlterJobV2 helper so all lake alter types and both the
+                        // live and replay paths bump identically.
+                        advanceVisibleVersionForForceSkip(table, commitVersionMap);
                     }
                     removeShadowIndex(table);
                 }
