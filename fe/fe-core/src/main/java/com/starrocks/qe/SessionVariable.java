@@ -2190,7 +2190,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableEvaluateSchemaScanRule = true;
 
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
-    private int interleavingGroupSize = 10;
+    private int interleavingGroupSize = 32;
 
     // support auto|row|column
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
