@@ -201,12 +201,12 @@
         "be/src/exec/spill/spill_metrics.h",
         "be/src/exec/spill/spill_metrics.cpp"
       ],
-      "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": ["exec/spill/", "platform/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
       "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "Platform", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["spill_core_test"],
-      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "Platform", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward."
     },
     {

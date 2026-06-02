@@ -418,7 +418,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _cache_mgr = new query_cache::CacheManager(capacity);
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
-    RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+    auto storage_paths = StorageEngine::instance()->get_store_paths();
+    RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir, storage_paths));
     // Bridge the local spill DirManager into the spill_disk_bytes_used gauge
     // via a collect-time hook so the metrics registry stays decoupled from
     // spill internals. The callback captures a raw pointer because the
