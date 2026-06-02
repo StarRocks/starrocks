@@ -45,6 +45,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
@@ -820,6 +821,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segment_metas_size() > 1);
+    // Mint the rowset's global uid here so it lives in the txn log and is inherited
+    // identically by every split child this write may be cross-published to. This is a
+    // freshly built op_write (no uid to inherit), so always assign one.
+    tablet_reshard_helper::set_rowset_uid(op_write->mutable_rowset());
 
     // Column-mode PCU combined with condition update requires the condition column to be part of
     // the partial update column set: the handler compares old vs new values from the partial chunk
