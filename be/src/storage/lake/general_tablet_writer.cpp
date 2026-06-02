@@ -261,7 +261,9 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
 
     opts.global_dicts = _global_dicts;
 
-    opts.defer_vector_index_build = has_async_vector_index(_schema);
+    // The schema-change conversion forces inline .vi build so async-mode ADD also builds the
+    // existing data's index during the rewrite; all other write paths honor the declared mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -575,7 +577,9 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
 
     RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
                                                  _fs.get(), opts));
-    opts.defer_vector_index_build = has_async_vector_index(_schema);
+    // The schema-change conversion forces inline .vi build so async-mode ADD also builds the
+    // existing data's index during the rewrite; all other write paths honor the declared mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));

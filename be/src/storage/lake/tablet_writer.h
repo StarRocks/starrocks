@@ -176,6 +176,14 @@ public:
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
 
+    // Force the segment writer to build vector indexes (.vi) inline regardless of the
+    // schema's declared index_build_mode. Used by the lake schema-change conversion so the
+    // existing data's .vi is built during the rewrite for async-mode indexes too (so the
+    // ADD DDL's sync semantics hold: at FINISHED the existing data is queryable via ANN).
+    // Normal/concurrent write paths leave this false and honor their declared mode.
+    bool force_build_vector_index_inline() const { return _force_build_vector_index_inline; }
+    void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
+
     void check_global_dict(SegmentWriter* segment_writer);
 
     const FileInfo& lcrm_file() const { return _lcrm_file; }
@@ -205,6 +213,7 @@ protected:
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
+    bool _force_build_vector_index_inline = false;
 };
 
 } // namespace lake
