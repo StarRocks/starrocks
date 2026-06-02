@@ -43,7 +43,7 @@ static void fill_rowset_row(MutableColumns& columns, const RowsetMetadataPB& row
         append_bigint(columns[0], rowset.id());
     }
 
-    append_bigint(columns[1], rowset.segments_size());
+    append_bigint(columns[1], rowset.segment_metas_size());
 
     if (UNLIKELY(!rowset.has_num_rows())) {
         columns[2] = NullableColumn::wrap_if_necessary(std::move(columns[2]));

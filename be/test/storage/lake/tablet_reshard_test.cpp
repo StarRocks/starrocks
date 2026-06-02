@@ -122,8 +122,11 @@ protected:
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(rowset_id);
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
-        rowset->add_segments("segment.dat");
-        rowset->add_segment_size(128);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("segment.dat");
+            sm->set_size(128);
+        }
         auto* del_file = rowset->add_del_files();
         del_file->set_name("del.dat");
         del_file->set_origin_rowset_id(del_origin_rowset_id);
@@ -137,8 +140,11 @@ protected:
         rowset->set_version(version);
         rowset->set_overlapped(false);
         if (!has_predicate) {
-            rowset->add_segments(fmt::format("segment_{}.dat", rowset_id));
-            rowset->add_segment_size(128);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(fmt::format("segment_{}.dat", rowset_id));
+                sm->set_size(128);
+            }
             rowset->set_num_rows(1);
             rowset->set_data_size(128);
             return rowset;
@@ -425,19 +431,23 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
 
     auto rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
-    rowset_meta_pb->add_segments("test_0.dat");
-    rowset_meta_pb->add_segment_size(512);
-    auto* segment_meta0 = rowset_meta_pb->add_segment_metas();
-    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-    segment_meta0->set_num_rows(3);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_0.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(3);
+    }
 
-    rowset_meta_pb->add_segments("test_1.dat");
-    rowset_meta_pb->add_segment_size(512);
-    auto* segment_meta1 = rowset_meta_pb->add_segment_metas();
-    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
-    segment_meta1->set_num_rows(2);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_1.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+        sm->set_num_rows(2);
+    }
     rowset_meta_pb->add_del_files()->set_name("test.del");
     rowset_meta_pb->set_overlapped(true);
     rowset_meta_pb->set_data_size(1024);
@@ -556,15 +566,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
     // candidate ranges. Requesting 8 splits cannot be satisfied.
     auto* rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
-    rowset_meta_pb->add_segments("seg_0.dat");
-    rowset_meta_pb->add_segment_size(1024);
-    auto* segment_meta = rowset_meta_pb->add_segment_metas();
-    segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
-    segment_meta->set_num_rows(300);
-    segment_meta->set_sort_key_sample_row_interval(100);
-    segment_meta->add_sort_key_samples()->CopyFrom(generate_sort_key(100));
-    segment_meta->add_sort_key_samples()->CopyFrom(generate_sort_key(200));
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("seg_0.dat");
+        sm->set_size(1024);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
+        sm->set_num_rows(300);
+        sm->set_sort_key_sample_row_interval(100);
+        sm->add_sort_key_samples()->CopyFrom(generate_sort_key(100));
+        sm->add_sort_key_samples()->CopyFrom(generate_sort_key(200));
+    }
     rowset_meta_pb->set_num_rows(300);
     rowset_meta_pb->set_data_size(1024);
 
@@ -607,19 +619,23 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
 
     auto rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
-    rowset_meta_pb->add_segments("test_0.dat");
-    rowset_meta_pb->add_segment_size(512);
-    auto* segment_meta0 = rowset_meta_pb->add_segment_metas();
-    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(299999));
-    segment_meta0->set_num_rows(100);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_0.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(299999));
+        sm->set_num_rows(100);
+    }
 
-    rowset_meta_pb->add_segments("test_1.dat");
-    rowset_meta_pb->add_segment_size(512);
-    auto* segment_meta1 = rowset_meta_pb->add_segment_metas();
-    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(300000));
-    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(599999));
-    segment_meta1->set_num_rows(100);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_1.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(300000));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(599999));
+        sm->set_num_rows(100);
+    }
 
     rowset_meta_pb->set_overlapped(true);
     rowset_meta_pb->set_data_size(1024);
@@ -707,19 +723,23 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
     rowset->set_num_rows(8);
     rowset->set_data_size(800);
 
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(400);
-    auto* segment_meta0 = rowset->add_segment_metas();
-    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-    segment_meta0->set_num_rows(4);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("segment_0.dat");
+        sm->set_size(400);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(4);
+    }
 
-    rowset->add_segments("segment_1.dat");
-    rowset->add_segment_size(400);
-    auto* segment_meta1 = rowset->add_segment_metas();
-    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    segment_meta1->set_num_rows(4);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("segment_1.dat");
+        sm->set_size(400);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->set_num_rows(4);
+    }
 
     DelVector delvec;
     const uint32_t deleted_rows[] = {0, 1, 2};
@@ -782,19 +802,23 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
     rowset->set_data_size(1000);
     rowset->set_num_dels(6);
 
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(500);
-    auto* segment_meta0 = rowset->add_segment_metas();
-    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-    segment_meta0->set_num_rows(5);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("segment_0.dat");
+        sm->set_size(500);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(5);
+    }
 
-    rowset->add_segments("segment_1.dat");
-    rowset->add_segment_size(500);
-    auto* segment_meta1 = rowset->add_segment_metas();
-    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    segment_meta1->set_num_rows(5);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("segment_1.dat");
+        sm->set_size(500);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->set_num_rows(5);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
@@ -857,19 +881,23 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
     rowset->set_data_size(800);
     // num_dels intentionally not set -> exercises get_rowset_num_deletes fallback.
 
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(400);
-    auto* segment_meta0 = rowset->add_segment_metas();
-    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-    segment_meta0->set_num_rows(4);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("segment_0.dat");
+        sm->set_size(400);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(4);
+    }
 
-    rowset->add_segments("segment_1.dat");
-    rowset->add_segment_size(400);
-    auto* segment_meta1 = rowset->add_segment_metas();
-    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    segment_meta1->set_num_rows(4);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("segment_1.dat");
+        sm->set_size(400);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->set_num_rows(4);
+    }
 
     DelVector delvec;
     const uint32_t deleted_rows[] = {0, 1, 2, 3};
@@ -934,12 +962,14 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
     rs_a->set_num_rows(100);
     rs_a->set_data_size(10000);
     rs_a->set_num_dels(7);
-    rs_a->add_segments("rs_a_0.dat");
-    rs_a->add_segment_size(10000);
-    auto* sm_a = rs_a->add_segment_metas();
-    sm_a->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    sm_a->set_num_rows(100);
+    {
+        auto* sm = rs_a->add_segment_metas();
+        sm->set_filename("rs_a_0.dat");
+        sm->set_size(10000);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->set_num_rows(100);
+    }
 
     // Rowset B: keys [50, 199], 60 rows / 6000 bytes / 0 dels (overlaps A on [50,99]).
     auto* rs_b = metadata.add_rowsets();
@@ -948,12 +978,14 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
     rs_b->set_num_rows(60);
     rs_b->set_data_size(6000);
     rs_b->set_num_dels(0);
-    rs_b->add_segments("rs_b_0.dat");
-    rs_b->add_segment_size(6000);
-    auto* sm_b = rs_b->add_segment_metas();
-    sm_b->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
-    sm_b->set_num_rows(60);
+    {
+        auto* sm = rs_b->add_segment_metas();
+        sm->set_filename("rs_b_0.dat");
+        sm->set_size(6000);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+        sm->set_num_rows(60);
+    }
 
     // Rowset C: keys [100, 199], 30 rows / 3000 bytes / 11 dels.
     auto* rs_c = metadata.add_rowsets();
@@ -962,12 +994,14 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
     rs_c->set_num_rows(30);
     rs_c->set_data_size(3000);
     rs_c->set_num_dels(11);
-    rs_c->add_segments("rs_c_0.dat");
-    rs_c->add_segment_size(3000);
-    auto* sm_c = rs_c->add_segment_metas();
-    sm_c->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
-    sm_c->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
-    sm_c->set_num_rows(30);
+    {
+        auto* sm = rs_c->add_segment_metas();
+        sm->set_filename("rs_c_0.dat");
+        sm->set_size(3000);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+        sm->set_num_rows(30);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
@@ -1049,19 +1083,23 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
     // Two segments so calculate_range_split_boundaries has enough key-space
     // boundaries to produce a 2-way split (single segment falls back to
     // identical-tablet publish, which would skip the anchor pass).
-    rowset->add_segments("seg_0.dat");
-    rowset->add_segment_size(500);
-    auto* sm0 = rowset->add_segment_metas();
-    sm0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-    sm0->set_num_rows(5);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg_0.dat");
+        sm->set_size(500);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(5);
+    }
 
-    rowset->add_segments("seg_1.dat");
-    rowset->add_segment_size(500);
-    auto* sm1 = rowset->add_segment_metas();
-    sm1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    sm1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    sm1->set_num_rows(5);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg_1.dat");
+        sm->set_size(500);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->set_num_rows(5);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
@@ -1128,19 +1166,23 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
     // Intentionally do NOT set num_rows or data_size at the rowset level.
     // Segment metadata still carries the real values.
 
-    rowset->add_segments("seg_0.dat");
-    rowset->add_segment_size(400);
-    auto* sm0 = rowset->add_segment_metas();
-    sm0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-    sm0->set_num_rows(4);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg_0.dat");
+        sm->set_size(400);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(4);
+    }
 
-    rowset->add_segments("seg_1.dat");
-    rowset->add_segment_size(400);
-    auto* sm1 = rowset->add_segment_metas();
-    sm1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-    sm1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    sm1->set_num_rows(4);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg_1.dat");
+        sm->set_size(400);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->set_num_rows(4);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
@@ -1193,9 +1235,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         rs->set_num_rows(num_rows);
         rs->set_data_size(data_size);
         rs->set_num_dels(num_dels);
-        rs->add_segments(fmt::format("rs_{}_0.dat", rs_id));
-        rs->add_segment_size(data_size);
         auto* sm = rs->add_segment_metas();
+        sm->set_filename(fmt::format("rs_{}_0.dat", rs_id));
+        sm->set_size(data_size);
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
@@ -2300,8 +2342,11 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_
     old_rowset->set_overlapped(false);
     old_rowset->set_num_rows(2);
     old_rowset->set_data_size(100);
-    old_rowset->add_segments("segment.dat");
-    old_rowset->add_segment_size(100);
+    {
+        auto* sm = old_rowset->add_segment_metas();
+        sm->set_filename("segment.dat");
+        sm->set_size(100);
+    }
 
     auto new_meta = std::make_shared<TabletMetadataPB>(*old_meta);
     new_meta->set_id(new_tablet_id);
@@ -2317,8 +2362,11 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_
     op_write_rowset->set_overlapped(false);
     op_write_rowset->set_num_rows(1);
     op_write_rowset->set_data_size(1);
-    op_write_rowset->add_segments("x.dat");
-    op_write_rowset->add_segment_size(1);
+    {
+        auto* sm = op_write_rowset->add_segment_metas();
+        sm->set_filename("x.dat");
+        sm->set_size(1);
+    }
 
     EXPECT_OK(_tablet_manager->put_txn_log(log));
 
@@ -2365,8 +2413,11 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
         rowset->set_overlapped(false);
         rowset->set_num_rows(1);
         rowset->set_data_size(1);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(1);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(segment_name);
+            sm->set_size(1);
+        }
         set_range(rowset->mutable_range(), lower, upper);
     };
     auto fill_sstable = [&](PersistentIndexSstablePB* sstable, const std::string& filename) {
@@ -2375,9 +2426,8 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
         sstable->set_shared(false);
     };
     auto expect_shared_and_range = [&](const RowsetMetadataPB& rowset, int lower, int upper) {
-        ASSERT_EQ(rowset.segments_size(), rowset.shared_segments_size());
-        for (int i = 0; i < rowset.shared_segments_size(); ++i) {
-            EXPECT_TRUE(rowset.shared_segments(i));
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            EXPECT_TRUE(segment_meta.shared());
         }
         TabletRangePB expected_range;
         set_range(&expected_range, lower, upper);
@@ -2446,9 +2496,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         // Add shared sstable with shared_rssid
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename("shared_sst.sst");
@@ -2488,7 +2541,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
 
     // Should have only 1 rowset (deduped)
     ASSERT_EQ(1, merged->rowsets_size());
-    EXPECT_EQ("shared_seg.dat", merged->rowsets(0).segments(0));
+    EXPECT_EQ("shared_seg.dat", merged->rowsets(0).segment_metas(0).filename());
     // num_rows/data_size should be accumulated from both children
     EXPECT_EQ(20, merged->rowsets(0).num_rows());
     EXPECT_EQ(200, merged->rowsets(0).data_size());
@@ -2532,9 +2585,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_num_dels) {
         rowset->set_num_rows(num_rows);
         rowset->set_data_size(data_size);
         rowset->set_num_dels(num_dels);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(data_size);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(data_size);
+            sm->set_shared(true);
+        }
         return meta;
     };
 
@@ -2592,17 +2648,23 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
     shared_a->set_version(1);
     shared_a->set_num_rows(10);
     shared_a->set_data_size(100);
-    shared_a->add_segments("shared_seg.dat");
-    shared_a->add_segment_size(100);
-    shared_a->add_shared_segments(true);
+    {
+        auto* sm = shared_a->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Local upsert (new data after split)
     auto* local_a = meta_a->add_rowsets();
     local_a->set_id(2);
     local_a->set_version(2);
     local_a->set_num_rows(5);
     local_a->set_data_size(50);
-    local_a->add_segments("local_a_seg.dat");
-    local_a->add_segment_size(50);
+    {
+        auto* sm = local_a->add_segment_metas();
+        sm->set_filename("local_a_seg.dat");
+        sm->set_size(50);
+    }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
     meta_b->set_id(child_b);
@@ -2615,17 +2677,23 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
     shared_b->set_version(1);
     shared_b->set_num_rows(10);
     shared_b->set_data_size(100);
-    shared_b->add_segments("shared_seg.dat");
-    shared_b->add_segment_size(100);
-    shared_b->add_shared_segments(true);
+    {
+        auto* sm = shared_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Local upsert (different new data)
     auto* local_b = meta_b->add_rowsets();
     local_b->set_id(2);
     local_b->set_version(3);
     local_b->set_num_rows(3);
     local_b->set_data_size(30);
-    local_b->add_segments("local_b_seg.dat");
-    local_b->add_segment_size(30);
+    {
+        auto* sm = local_b->add_segment_metas();
+        sm->set_filename("local_b_seg.dat");
+        sm->set_size(30);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
@@ -2651,11 +2719,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
     ASSERT_EQ(3, merged->rowsets_size());
 
     // First rowset should be the deduped shared one
-    EXPECT_EQ("shared_seg.dat", merged->rowsets(0).segments(0));
+    EXPECT_EQ("shared_seg.dat", merged->rowsets(0).segment_metas(0).filename());
     // Remaining two are the local ones
     std::unordered_set<std::string> local_segments;
     for (int i = 1; i < merged->rowsets_size(); ++i) {
-        local_segments.insert(merged->rowsets(i).segments(0));
+        local_segments.insert(merged->rowsets(i).segment_metas(0).filename());
     }
     EXPECT_TRUE(local_segments.count("local_a_seg.dat") > 0);
     EXPECT_TRUE(local_segments.count("local_b_seg.dat") > 0);
@@ -2686,8 +2754,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_compaction) {
     compacted_a->set_version(2);
     compacted_a->set_num_rows(10);
     compacted_a->set_data_size(100);
-    compacted_a->add_segments("compacted_a.dat");
-    compacted_a->add_segment_size(100);
+    {
+        auto* sm = compacted_a->add_segment_metas();
+        sm->set_filename("compacted_a.dat");
+        sm->set_size(100);
+    }
     // not shared - this is the compaction output
 
     // Child B: still has shared rowset
@@ -2701,9 +2772,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_compaction) {
     shared_b->set_version(1);
     shared_b->set_num_rows(10);
     shared_b->set_data_size(100);
-    shared_b->add_segments("shared_seg.dat");
-    shared_b->add_segment_size(100);
-    shared_b->add_shared_segments(true);
+    {
+        auto* sm = shared_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
@@ -2751,8 +2825,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rowset_on_non_first_chi
     rowset_a->set_version(1);
     rowset_a->set_num_rows(5);
     rowset_a->set_data_size(50);
-    rowset_a->add_segments("local_a.dat");
-    rowset_a->add_segment_size(50);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("local_a.dat");
+        sm->set_size(50);
+    }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
     meta_b->set_id(child_b);
@@ -2763,9 +2840,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rowset_on_non_first_chi
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("shared_seg.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
@@ -2872,9 +2952,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_different_split_families) {
     rowset_c->set_version(1);
     rowset_c->set_num_rows(10);
     rowset_c->set_data_size(100);
-    rowset_c->add_segments("family_a_seg.dat");
-    rowset_c->add_segment_size(100);
-    rowset_c->add_shared_segments(true);
+    {
+        auto* sm = rowset_c->add_segment_metas();
+        sm->set_filename("family_a_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     auto meta_d = std::make_shared<TabletMetadataPB>();
     meta_d->set_id(child_d);
@@ -2885,9 +2968,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_different_split_families) {
     rowset_d->set_version(1);
     rowset_d->set_num_rows(10);
     rowset_d->set_data_size(100);
-    rowset_d->add_segments("family_e_seg.dat");
-    rowset_d->add_segment_size(100);
-    rowset_d->add_shared_segments(true);
+    {
+        auto* sm = rowset_d->add_segment_metas();
+        sm->set_filename("family_e_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_c));
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_d));
@@ -2936,9 +3022,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("cross_pub.dat");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("cross_pub.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
     meta_b->set_id(child_b);
@@ -2949,9 +3038,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("cross_pub.dat"); // Same segment
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas(); // Same segment
+        sm->set_filename("cross_pub.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
@@ -2975,7 +3067,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
     auto merged = tablet_metadatas.at(merged_tablet);
     // Should be deduped to 1 rowset
     ASSERT_EQ(1, merged->rowsets_size());
-    EXPECT_EQ("cross_pub.dat", merged->rowsets(0).segments(0));
+    EXPECT_EQ("cross_pub.dat", merged->rowsets(0).segment_metas(0).filename());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
@@ -3000,9 +3092,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("shared_seg.dat");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // DCG from child A's independent partial update
     add_dcg_with_columns(meta_a.get(), 1, "dcg_a.cols", {1}, 1);
 
@@ -3015,9 +3110,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("shared_seg.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // DCG from child B's different independent partial update
     add_dcg_with_columns(meta_b.get(), 1, "dcg_b.cols", {1}, 1);
 
@@ -3123,9 +3221,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_dcg_dedup) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         // Same shared DCG on both children (inherited from split)
         add_dcg_with_columns(meta.get(), 1, "shared_dcg.cols", {1, 2}, 1);
         return meta;
@@ -3199,9 +3300,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("shared_seg.dat");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Delvec from child_a's independent delete
     add_delvec(meta_a.get(), child_a, 1, 1, "delvec_a.dv", dv_a_data);
 
@@ -3215,9 +3319,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("shared_seg.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Delvec from child_b's different independent delete
     add_delvec(meta_b.get(), child_b, 2, 1, "delvec_b.dv", dv_b_data);
 
@@ -3311,12 +3418,18 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("shared_seg1.dat");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_segments("shared_seg2.dat");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("shared_seg1.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("shared_seg2.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Delvec for segment 1 (rssid 1) and segment 2 (rssid 2) from child_a
     // Write a combined delvec file for child_a with both pages
     std::string combined_a = dv_a1_data + dv_a2_data;
@@ -3351,12 +3464,18 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("shared_seg1.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    rowset_b->add_segments("shared_seg2.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg1.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg2.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Delvec for segment 1 and 2 from child_b
     std::string combined_b = dv_b1_data + dv_b2_data;
     {
@@ -3478,9 +3597,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_three_way_union) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         add_delvec(meta.get(), tablet_id, delvec_version, 1, delvec_file_name, delvec_data);
         return meta;
     };
@@ -3561,9 +3683,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_no_independent_delete) 
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("shared_seg.dat");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Both children reference the same delvec file (shared after split)
     add_delvec(meta_a.get(), child_a, 1, 1, "shared_delvec.dv", dv_data);
 
@@ -3577,9 +3702,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_no_independent_delete) 
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("shared_seg.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Same file name, same offset/size -> page-ref dedup
     add_delvec(meta_b.get(), child_b, 1, 1, "shared_delvec.dv", dv_data);
 
@@ -3651,9 +3779,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_disjoint_columns) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         return meta;
     };
 
@@ -3725,9 +3856,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         add_dcg_with_columns(meta.get(), 1, "shared.cols", {1, 2}, 1);
         return meta;
     };
@@ -3784,9 +3918,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_same_column_conflict) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         return meta;
     };
 
@@ -3840,9 +3977,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_partial_overlap) {
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         return meta;
     };
 
@@ -3893,8 +4033,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_missing_shape) {
     rowset->set_version(1);
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("seg.dat");
-    rowset->add_segment_size(100);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg.dat");
+        sm->set_size(100);
+    }
     // Use legacy add_dcg (no unique_column_ids/versions)
     add_dcg(meta_a.get(), 1, "malformed.cols");
 
@@ -3937,8 +4080,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_duplicate_column_uid) {
     rowset->set_version(1);
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("seg.dat");
-    rowset->add_segment_size(100);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg.dat");
+        sm->set_size(100);
+    }
     // Build a malformed DCG with overlapping column UIDs across entries
     add_dcg_with_columns(meta_a.get(), 1, "first.cols", {1, 2}, 1);
     add_dcg_with_columns(meta_a.get(), 1, "second.cols", {2, 3}, 1);
@@ -4000,9 +4146,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_shared_without_shared_
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         // Legacy shared sstable: no shared_rssid, no delvec
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -4072,16 +4221,22 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_mixed_shared_and_local
     rowset_a1->set_version(1);
     rowset_a1->set_num_rows(10);
     rowset_a1->set_data_size(100);
-    rowset_a1->add_segments("shared_seg.dat");
-    rowset_a1->add_segment_size(100);
-    rowset_a1->add_shared_segments(true);
+    {
+        auto* sm = rowset_a1->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     auto* rowset_a2 = meta_a->add_rowsets();
     rowset_a2->set_id(2);
     rowset_a2->set_version(2);
     rowset_a2->set_num_rows(5);
     rowset_a2->set_data_size(50);
-    rowset_a2->add_segments("local_a.dat");
-    rowset_a2->add_segment_size(50);
+    {
+        auto* sm = rowset_a2->add_segment_metas();
+        sm->set_filename("local_a.dat");
+        sm->set_size(50);
+    }
     // Shared sstable
     auto* sst_shared_a = meta_a->mutable_sstable_meta()->add_sstables();
     sst_shared_a->set_filename("shared_sst.sst");
@@ -4108,9 +4263,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_mixed_shared_and_local
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("shared_seg.dat");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     // Same shared sstable
     auto* sst_shared_b = meta_b->mutable_sstable_meta()->add_sstables();
     sst_shared_b->set_filename("shared_sst.sst");
@@ -4172,8 +4330,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_no_dedup_different_fil
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("seg_a.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a.dat");
+        sm->set_size(100);
+    }
     auto* sst_a = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a->set_filename("sst_family_a.sst");
     sst_a->set_filesize(256);
@@ -4191,8 +4352,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_no_dedup_different_fil
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("seg_b.dat");
-    rowset_b->add_segment_size(100);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b.dat");
+        sm->set_size(100);
+    }
     auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
     sst_b->set_filename("sst_family_b.sst");
     sst_b->set_filesize(256);
@@ -4249,8 +4413,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_shared_rssid_projectio
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("local_seg.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("local_seg.dat");
+        sm->set_size(100);
+    }
 
     // child_b: has shared sstable with shared_rssid=1 referencing shared segment
     auto meta_b = std::make_shared<TabletMetadataPB>();
@@ -4263,8 +4430,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_shared_rssid_projectio
     rowset_b->set_version(2);
     rowset_b->set_num_rows(5);
     rowset_b->set_data_size(50);
-    rowset_b->add_segments("seg_b.dat");
-    rowset_b->add_segment_size(50);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b.dat");
+        sm->set_size(50);
+    }
     auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
     sst_b->set_filename("sst_b.sst");
     sst_b->set_filesize(512);
@@ -4521,8 +4691,11 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_adjusts_data_stats_for_splitt
     rowset->set_overlapped(false);
     rowset->set_num_rows(100);
     rowset->set_data_size(1000);
-    rowset->add_segments("seg.dat");
-    rowset->add_segment_size(1000);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg.dat");
+        sm->set_size(1000);
+    }
     auto* range = rowset->mutable_range();
     range->mutable_lower_bound()->CopyFrom(generate_sort_key(5));
     range->set_lower_bound_included(true);
@@ -4554,8 +4727,8 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_adjusts_data_stats_for_splitt
                             converted2->op_write().rowset().data_size());
 
     // Verify ranges are still adjusted (shared and intersected with base range)
-    ASSERT_TRUE(converted0->op_write().rowset().shared_segments_size() > 0);
-    EXPECT_TRUE(converted0->op_write().rowset().shared_segments(0));
+    ASSERT_TRUE(converted0->op_write().rowset().segment_metas_size() > 0);
+    EXPECT_TRUE(converted0->op_write().rowset().segment_metas(0).shared());
 }
 
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_normal_publish_no_stats_change) {
@@ -4602,8 +4775,11 @@ TxnLogPtr make_op_write_only_log(int64_t source_tablet_id, const std::string& se
     log->set_tablet_id(source_tablet_id);
     log->set_txn_id(1000);
     auto* rowset = log->mutable_op_write()->mutable_rowset();
-    rowset->add_segments(segment_name);
-    rowset->add_segment_size(128);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(segment_name);
+        sm->set_size(128);
+    }
     rowset->set_num_rows(1);
     return log;
 }
@@ -4615,7 +4791,7 @@ TxnLogPtr make_op_compaction_log(int64_t source_tablet_id) {
     auto* op = log->mutable_op_compaction();
     op->add_input_rowsets(100);
     op->add_input_rowsets(101);
-    op->mutable_output_rowset()->add_segments("out_seg.dat");
+    op->mutable_output_rowset()->add_segment_metas()->set_filename("out_seg.dat");
     // Normal (non-partial) compaction: all output segments are newly written.
     op->set_new_segment_offset(0);
     op->set_new_segment_count(1);
@@ -4632,9 +4808,12 @@ RowsetMetadataPB* add_shared_rowset(TabletMetadataPB* metadata, uint32_t rowset_
     rowset->set_version(version);
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments(segment_filename);
-    rowset->add_segment_size(100);
-    rowset->add_shared_segments(true);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(segment_filename);
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     return rowset;
 }
 
@@ -4681,7 +4860,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_merging_drops_op_parallel_com
     auto* op_parallel_compaction = log->mutable_op_parallel_compaction();
     for (int i = 0; i < 2; ++i) {
         auto* subtask = op_parallel_compaction->add_subtask_compactions();
-        subtask->mutable_output_rowset()->add_segments(fmt::format("subtask_seg_{}.dat", i));
+        subtask->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("subtask_seg_{}.dat", i));
         subtask->mutable_output_sstable()->set_filename(fmt::format("subtask_{}.sst", i));
     }
 
@@ -4743,7 +4922,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_drops_op_parallel_c
     auto* op_parallel_compaction = log->mutable_op_parallel_compaction();
     for (int i = 0; i < 2; ++i) {
         auto* subtask = op_parallel_compaction->add_subtask_compactions();
-        subtask->mutable_output_rowset()->add_segments(fmt::format("split_subtask_seg_{}.dat", i));
+        subtask->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("split_subtask_seg_{}.dat", i));
         subtask->mutable_output_sstable()->set_filename(fmt::format("split_subtask_{}.sst", i));
     }
 
@@ -4785,8 +4964,11 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_op_write_preserved)
     rowset->set_overlapped(false);
     rowset->set_num_rows(60);
     rowset->set_data_size(600);
-    rowset->add_segments("write_seg.dat");
-    rowset->add_segment_size(600);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("write_seg.dat");
+        sm->set_size(600);
+    }
 
     lake::PublishTabletInfo info(lake::PublishTabletInfo::SPLITTING_TABLET, source_tablet_id, child_tablet_id, 3, 0);
     ASSIGN_OR_ABORT(auto converted, lake::convert_txn_log(log, base_metadata, info));
@@ -4797,8 +4979,8 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_op_write_preserved)
     // shared-flag to op_write rowset.
     EXPECT_EQ(20, converted->op_write().rowset().num_rows());
     EXPECT_EQ(200, converted->op_write().rowset().data_size());
-    ASSERT_TRUE(converted->op_write().rowset().shared_segments_size() > 0);
-    EXPECT_TRUE(converted->op_write().rowset().shared_segments(0));
+    ASSERT_TRUE(converted->op_write().rowset().segment_metas_size() > 0);
+    EXPECT_TRUE(converted->op_write().rowset().segment_metas(0).shared());
 }
 
 // Regression: op_parallel_compaction subtasks synthesized by
@@ -4813,8 +4995,8 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_parallel
     auto* op_parallel_compaction = log.mutable_op_parallel_compaction();
     auto* subtask = op_parallel_compaction->add_subtask_compactions();
     auto* output_rowset = subtask->mutable_output_rowset();
-    output_rowset->add_segments("parallel_new_0.dat");
-    output_rowset->add_segments("parallel_new_1.dat");
+    output_rowset->add_segment_metas()->set_filename("parallel_new_0.dat");
+    output_rowset->add_segment_metas()->set_filename("parallel_new_1.dat");
     // Intentionally NOT setting new_segment_offset/new_segment_count to
     // reproduce the shape produced by the parallel-compaction manager.
 
@@ -4836,10 +5018,10 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_partial_
     auto* op_compaction = log.mutable_op_compaction();
     auto* output_rowset = op_compaction->mutable_output_rowset();
     // [reused_0, reused_1, new_0, new_1] — only new_0/new_1 are newly written.
-    output_rowset->add_segments("reused_0.dat");
-    output_rowset->add_segments("reused_1.dat");
-    output_rowset->add_segments("new_0.dat");
-    output_rowset->add_segments("new_1.dat");
+    output_rowset->add_segment_metas()->set_filename("reused_0.dat");
+    output_rowset->add_segment_metas()->set_filename("reused_1.dat");
+    output_rowset->add_segment_metas()->set_filename("new_0.dat");
+    output_rowset->add_segment_metas()->set_filename("new_1.dat");
     op_compaction->set_new_segment_offset(2);
     op_compaction->set_new_segment_count(2);
 
@@ -4864,7 +5046,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_a
 
     // Top-level op_compaction with every output-file kind populated.
     auto* op_compaction = log.mutable_op_compaction();
-    op_compaction->mutable_output_rowset()->add_segments("out_seg.dat");
+    op_compaction->mutable_output_rowset()->add_segment_metas()->set_filename("out_seg.dat");
     op_compaction->set_new_segment_offset(0);
     op_compaction->set_new_segment_count(1);
     op_compaction->add_ssts()->set_name("compact_ingest.sst");
@@ -4929,8 +5111,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_row
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("seg_a.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a.dat");
+        sm->set_size(100);
+    }
     auto* sst_a_tombstone = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a_tombstone->set_filename("a_tombstone.sst");
     sst_a_tombstone->set_filesize(256);
@@ -4946,8 +5131,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_row
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("seg_b.dat");
-    rowset_b->add_segment_size(100);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b.dat");
+        sm->set_size(100);
+    }
     auto* sst_b_local = meta_b->mutable_sstable_meta()->add_sstables();
     sst_b_local->set_filename("b_local.sst");
     sst_b_local->set_filesize(128);
@@ -5022,8 +5210,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comp
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("seg_a.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a.dat");
+        sm->set_size(100);
+    }
     auto* sst_a_high = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a_high->set_filename("a_high.sst");
     sst_a_high->set_filesize(256);
@@ -5043,8 +5234,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comp
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("seg_b.dat");
-    rowset_b->add_segment_size(100);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b.dat");
+        sm->set_size(100);
+    }
     auto* sst_b_low = meta_b->mutable_sstable_meta()->add_sstables();
     sst_b_low->set_filename("b_low.sst");
     sst_b_low->set_filesize(128);
@@ -5151,8 +5345,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_keep_same_fileset_id_
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("seg_a.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a.dat");
+        sm->set_size(100);
+    }
     // Child A's source-iteration order has F_X sstables already contiguous —
     // the merge_sstables block-sort must preserve this even when projection
     // and cross-child interleave with F_A would otherwise split them.
@@ -5171,8 +5368,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_keep_same_fileset_id_
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("seg_b.dat");
-    rowset_b->add_segment_size(100);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b.dat");
+        sm->set_size(100);
+    }
     // Child B's lone F_A sstable falls inside F_X's max_rss_rowid range.
     add_sst(meta_b.get(), "fa_high200.sst", 200, 0, fid_a);
 
@@ -5312,8 +5512,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_split_inherited_files
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("seg_a.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a.dat");
+        sm->set_size(100);
+    }
     // Source-iteration order in child_a: the early FID-X sstable, then foreign
     // compaction outputs and the per-child flush sstables also tagged FID-X.
     add_sst(meta_a.get(), "fx_high225.sst", 225, 0, fid_x);
@@ -5335,8 +5538,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_split_inherited_files
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("seg_b.dat");
-    rowset_b->add_segment_size(100);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b.dat");
+        sm->set_size(100);
+    }
 
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
     EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
@@ -5454,9 +5660,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dedup_legacy_standalone_sstabl
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -5559,9 +5768,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_drops_d
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments(seg_filename);
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(seg_filename);
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -5679,9 +5891,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_filters
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         add_delvec(meta.get(), tablet_id, 1, /*segment_id=*/1, delvec_filename, shared_delvec_data);
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -5768,16 +5983,20 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_sparse_
         rowset->set_data_size(200);
         // Two segments at sparse segment_idx {0, 2} — the {0,1,2} dense span
         // is broken because the middle segment was compacted away.
-        rowset->add_segments("sparse_seg_0.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
-        auto* segment_meta_at_idx_0 = rowset->add_segment_metas();
-        segment_meta_at_idx_0->set_segment_idx(0);
-        rowset->add_segments("sparse_seg_2.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
-        auto* segment_meta_at_idx_2 = rowset->add_segment_metas();
-        segment_meta_at_idx_2->set_segment_idx(2);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("sparse_seg_0.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(0);
+        }
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("sparse_seg_2.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(2);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -5868,9 +6087,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_with_so
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -5964,9 +6186,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_tombsto
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -6057,9 +6282,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_stacked
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -6138,9 +6366,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_tombsto
         data_rowset->set_version(1);
         data_rowset->set_num_rows(10);
         data_rowset->set_data_size(100);
-        data_rowset->add_segments("data_seg.dat");
-        data_rowset->add_segment_size(100);
-        data_rowset->add_shared_segments(true);
+        {
+            auto* sm = data_rowset->add_segment_metas();
+            sm->set_filename("data_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         // Delete-only rowset id=10 (segments_size==0): owns no PK index entries.
         auto* delete_only_rowset = meta->add_rowsets();
         delete_only_rowset->set_id(10);
@@ -6250,9 +6481,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_clean_
             rowset->set_version(1);
             rowset->set_num_rows(10);
             rowset->set_data_size(100);
-            rowset->add_segments(fmt::format("shared_seg_{}.dat", rs_id));
-            rowset->add_segment_size(100);
-            rowset->add_shared_segments(true);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(fmt::format("shared_seg_{}.dat", rs_id));
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
         }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -6333,8 +6567,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_nonzer
     rs_a->set_version(1);
     rs_a->set_num_rows(10);
     rs_a->set_data_size(100);
-    rs_a->add_segments("seg_a10.dat");
-    rs_a->add_segment_size(100);
+    {
+        auto* sm = rs_a->add_segment_metas();
+        sm->set_filename("seg_a10.dat");
+        sm->set_size(100);
+    }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
     meta_b->set_id(child_b);
@@ -6347,8 +6584,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_nonzer
         rs->set_version(1);
         rs->set_num_rows(10);
         rs->set_data_size(100);
-        rs->add_segments(fmt::format("seg_b{}.dat", rs_id));
-        rs->add_segment_size(100);
+        {
+            auto* sm = rs->add_segment_metas();
+            sm->set_filename(fmt::format("seg_b{}.dat", rs_id));
+            sm->set_size(100);
+        }
     }
     auto* sst = meta_b->mutable_sstable_meta()->add_sstables();
     sst->set_filename(legacy_filename);
@@ -6421,9 +6661,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_v2_src
             rs->set_version(1);
             rs->set_num_rows(10);
             rs->set_data_size(100);
-            rs->add_segments(fmt::format("nzs_seg_{}.dat", rs_id));
-            rs->add_segment_size(100);
-            rs->add_shared_segments(true);
+            {
+                auto* sm = rs->add_segment_metas();
+                sm->set_filename(fmt::format("nzs_seg_{}.dat", rs_id));
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
         }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -6501,9 +6744,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_range_
             rs->set_version(1);
             rs->set_num_rows(10);
             rs->set_data_size(100);
-            rs->add_segments(fmt::format("rfid_seg_{}.dat", rs_id));
-            rs->add_segment_size(100);
-            rs->add_shared_segments(true);
+            {
+                auto* sm = rs->add_segment_metas();
+                sm->set_filename(fmt::format("rfid_seg_{}.dat", rs_id));
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
         }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -6596,9 +6842,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_orphan_per_chil
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments(seg_name);
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(false);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(seg_name);
+            sm->set_size(100);
+            sm->set_shared(false);
+        }
         // Legacy ancestor-inherited sstable. Distinct filenames across
         // children → filename edge does not fire either, so both ctxs
         // remain kNoFamily.
@@ -6706,9 +6955,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_v2_can
     rs_a->set_version(1);
     rs_a->set_num_rows(10);
     rs_a->set_data_size(100);
-    rs_a->add_segments("seg_a_local.dat");
-    rs_a->add_segment_size(100);
-    rs_a->add_shared_segments(false);
+    {
+        auto* sm = rs_a->add_segment_metas();
+        sm->set_filename("seg_a_local.dat");
+        sm->set_size(100);
+        sm->set_shared(false);
+    }
 
     auto make_family_member = [&](int64_t tablet_id) {
         auto meta = std::make_shared<TabletMetadataPB>();
@@ -6724,9 +6976,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_fastpath_v2_can
             rs->set_data_size(100);
             // Family-shared segment: same filename across ctx_b and ctx_c
             // gives them identical RowsetPhysicalKey for the rowset edge.
-            rs->add_segments(fmt::format("family_seg_{}.dat", rs_id));
-            rs->add_segment_size(100);
-            rs->add_shared_segments(true);
+            {
+                auto* sm = rs->add_segment_metas();
+                sm->set_filename(fmt::format("family_seg_{}.dat", rs_id));
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
         }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -6819,9 +7074,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_pure_child_
         shared_rs->set_version(1);
         shared_rs->set_num_rows(10);
         shared_rs->set_data_size(100);
-        shared_rs->add_segments("shared.dat");
-        shared_rs->add_segment_size(100);
-        shared_rs->add_shared_segments(true);
+        {
+            auto* sm = shared_rs->add_segment_metas();
+            sm->set_filename("shared.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         if (include_local_and_sstable) {
             // Child-local rowset at LOW id 1, in a "gap" beneath the
             // shared-ancestor (legal: rs.id ≥ 1, ids need not be
@@ -6831,9 +7089,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_pure_child_
             local_rs->set_version(1);
             local_rs->set_num_rows(5);
             local_rs->set_data_size(50);
-            local_rs->add_segments("ctx_b_local.dat");
-            local_rs->add_segment_size(50);
-            local_rs->add_shared_segments(false);
+            {
+                auto* sm = local_rs->add_segment_metas();
+                sm->set_filename("ctx_b_local.dat");
+                sm->set_size(50);
+                sm->set_shared(false);
+            }
             auto* sst = meta->mutable_sstable_meta()->add_sstables();
             sst->set_filename(ns_filename);
             sst->set_filesize(ns_filesize);
@@ -6905,9 +7166,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_mixed_refs_
     rs_a1->set_version(1);
     rs_a1->set_num_rows(10);
     rs_a1->set_data_size(100);
-    rs_a1->add_segments("shared.dat");
-    rs_a1->add_segment_size(100);
-    rs_a1->add_shared_segments(true);
+    {
+        auto* sm = rs_a1->add_segment_metas();
+        sm->set_filename("shared.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
     meta_b->set_id(child_b);
@@ -6919,17 +7183,23 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_mixed_refs_
     rs_b1->set_version(1);
     rs_b1->set_num_rows(10);
     rs_b1->set_data_size(100);
-    rs_b1->add_segments("shared.dat");
-    rs_b1->add_segment_size(100);
-    rs_b1->add_shared_segments(true);
+    {
+        auto* sm = rs_b1->add_segment_metas();
+        sm->set_filename("shared.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     auto* rs_b2 = meta_b->add_rowsets();
     rs_b2->set_id(2);
     rs_b2->set_version(1);
     rs_b2->set_num_rows(5);
     rs_b2->set_data_size(50);
-    rs_b2->add_segments("ctx_b_local.dat");
-    rs_b2->add_segment_size(50);
-    rs_b2->add_shared_segments(false);
+    {
+        auto* sm = rs_b2->add_segment_metas();
+        sm->set_filename("ctx_b_local.dat");
+        sm->set_size(50);
+        sm->set_shared(false);
+    }
     auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
     sst_b->set_filename(ns_filename);
     sst_b->set_filesize(ns_filesize);
@@ -7004,9 +7274,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_canonical_c
         rs->set_version(1);
         rs->set_num_rows(10);
         rs->set_data_size(100);
-        rs->add_segments("shared.dat");
-        rs->add_segment_size(100);
-        rs->add_shared_segments(true);
+        {
+            auto* sm = rs->add_segment_metas();
+            sm->set_filename("shared.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         if (include_sstable) {
             auto* sst = meta->mutable_sstable_meta()->add_sstables();
             sst->set_filename(ns_filename);
@@ -7082,9 +7355,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_with_delvec
         shared_rs->set_version(1);
         shared_rs->set_num_rows(10);
         shared_rs->set_data_size(100);
-        shared_rs->add_segments("shared.dat");
-        shared_rs->add_segment_size(100);
-        shared_rs->add_shared_segments(true);
+        {
+            auto* sm = shared_rs->add_segment_metas();
+            sm->set_filename("shared.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         if (include_sstable) {
             auto* sst = meta->mutable_sstable_meta()->add_sstables();
             sst->set_filename(ns_filename);
@@ -7159,8 +7435,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments(seg_name);
-        rowset->add_segment_size(100);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(seg_name);
+            sm->set_size(100);
+        }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(sst_name);
         sst->set_filesize(512);
@@ -7231,7 +7510,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
     bool found_ctx1 = false;
     int32_t ctx1_offset = 0;
     for (const auto& rs : merged->rowsets()) {
-        if (rs.segments_size() > 0 && rs.segments(0) == "seg_b.dat") {
+        if (rs.segment_metas_size() > 0 && rs.segment_metas(0).filename() == "seg_b.dat") {
             ctx1_offset = static_cast<int32_t>(rs.id()) - 5;
             found_ctx1 = true;
             break;
@@ -7498,8 +7777,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_next_rowset_id_covers_projecte
     rowset_a->set_version(1);
     rowset_a->set_num_rows(10);
     rowset_a->set_data_size(100);
-    rowset_a->add_segments("a_seg.dat");
-    rowset_a->add_segment_size(100);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("a_seg.dat");
+        sm->set_size(100);
+    }
     auto* sst_a = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a->set_filename("a.sst");
     sst_a->set_filesize(256);
@@ -7519,8 +7801,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_next_rowset_id_covers_projecte
     rowset_b->set_version(1);
     rowset_b->set_num_rows(10);
     rowset_b->set_data_size(100);
-    rowset_b->add_segments("b_seg.dat");
-    rowset_b->add_segment_size(100);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("b_seg.dat");
+        sm->set_size(100);
+    }
     auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
     sst_b->set_filename("b.sst");
     sst_b->set_filesize(256);
@@ -7871,9 +8156,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_two_children_same_
         rowset->set_version(1);
         rowset->set_num_rows(kNumRows);
         rowset->set_data_size(base_segment_size);
-        rowset->add_segments(shared_segment_name);
-        rowset->add_segment_size(base_segment_size);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(shared_segment_name);
+            sm->set_size(base_segment_size);
+            sm->set_shared(true);
+        }
         *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
         *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(upper_key);
         rowset->mutable_range()->set_lower_bound_included(true);
@@ -7965,9 +8253,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_consistency_fa
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         (*metadata->mutable_rowset_to_schema())[1] = 5001;
         add_dcg_with_columns(metadata.get(), 1, "inconsistent.cols", dcg_columns, 1);
         return metadata;
@@ -8025,9 +8316,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_missing_uid_falls_
         rowset->set_version(1);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         (*metadata->mutable_rowset_to_schema())[1] = 6001;
         auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[1];
         dcg.add_column_files(cols_filename);
@@ -8116,9 +8410,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
         rowset->set_id(kGoodSegmentRssid);
         rowset->set_version(1);
         rowset->set_num_rows(kNumRows);
-        rowset->add_segments(good_segment);
-        rowset->add_segment_size(good_seg_size);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(good_segment);
+            sm->set_size(good_seg_size);
+            sm->set_shared(true);
+        }
         *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
         *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(upper_key);
         rowset->mutable_range()->set_lower_bound_included(true);
@@ -8130,9 +8427,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
         bad_rowset->set_id(kBadSegmentRssid);
         bad_rowset->set_version(1);
         bad_rowset->set_num_rows(10);
-        bad_rowset->add_segments(bad_segment);
-        bad_rowset->add_segment_size(100);
-        bad_rowset->add_shared_segments(true);
+        {
+            auto* sm = bad_rowset->add_segment_metas();
+            sm->set_filename(bad_segment);
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         *bad_rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
         *bad_rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(upper_key);
         bad_rowset->mutable_range()->set_lower_bound_included(true);
@@ -8234,9 +8534,12 @@ inline std::shared_ptr<TabletMetadataPB> make_shared_child(int64_t tablet_id, in
     rowset->set_version(base_version);
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("shared_seg.dat");
-    rowset->add_segment_size(100);
-    rowset->add_shared_segments(true);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
     return meta;
 }
@@ -8261,8 +8564,11 @@ inline std::shared_ptr<TabletMetadataPB> make_compacted_child(int64_t tablet_id,
     rowset->set_version(base_version + 1); // compaction bumps version
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments(compacted_seg_name);
-    rowset->add_segment_size(100);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(compacted_seg_name);
+        sm->set_size(100);
+    }
     // Not shared: this is the local compaction output.
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
     return meta;
@@ -8309,9 +8615,12 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(
     rowset->set_version(base_version);
     rowset->set_num_rows(static_cast<int64_t>(tablet_upper - tablet_lower));
     rowset->set_data_size(static_cast<int64_t>(segment_size));
-    rowset->add_segments("shared_seg.dat");
-    rowset->add_segment_size(segment_size);
-    rowset->add_shared_segments(true);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(segment_size);
+        sm->set_shared(true);
+    }
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
     return meta;
 }
@@ -8332,8 +8641,11 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
     rowset->set_version(base_version + 1);
     rowset->set_num_rows(tablet_upper - tablet_lower);
     rowset->set_data_size(100);
-    rowset->add_segments(compacted_seg_name);
-    rowset->add_segment_size(100);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(compacted_seg_name);
+        sm->set_size(100);
+    }
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
     return meta;
 }
@@ -8396,8 +8708,8 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
         ASSERT_NE(MERGED, nullptr);                                                                                    \
         for (const auto& r : MERGED->rowsets()) {                                                                      \
             bool has_shared = false;                                                                                   \
-            for (int i = 0; i < r.shared_segments_size(); ++i) {                                                       \
-                if (r.shared_segments(i)) {                                                                            \
+            for (int i = 0; i < r.segment_metas_size(); ++i) {                                                         \
+                if (r.segment_metas(i).shared()) {                                                                     \
                     has_shared = true;                                                                                 \
                     break;                                                                                             \
                 }                                                                                                      \
@@ -8489,8 +8801,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_pk_sstable_pb_delvec_projectio
     uint32_t canonical_rssid = 0;
     for (const auto& r : merged->rowsets()) {
         bool has_shared = false;
-        for (int i = 0; i < r.shared_segments_size(); ++i) {
-            if (r.shared_segments(i)) {
+        for (const auto& segment_meta : r.segment_metas()) {
+            if (segment_meta.shared()) {
                 has_shared = true;
                 break;
             }
@@ -8665,8 +8977,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dup_keys_skip_dedup_on_gap) {
     int local_count = 0;
     for (const auto& r : merged->rowsets()) {
         bool has_shared = false;
-        for (int i = 0; i < r.shared_segments_size(); ++i) {
-            if (r.shared_segments(i)) {
+        for (const auto& segment_meta : r.segment_metas()) {
+            if (segment_meta.shared()) {
                 has_shared = true;
                 break;
             }
@@ -8827,9 +9139,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_canonical_range_extends_for_du
         rowset->set_version(base_version);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("shared_seg.dat");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("shared_seg.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
         // intentionally NO rowset->mutable_range(): rely on ctx tablet range
         return meta;
     };
@@ -8971,11 +9286,11 @@ struct SplitFamilyTestBuilder {
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
         for (const auto& segment : segments) {
-            rowset->add_segments(segment);
-            rowset->add_segment_size(100);
-            rowset->add_shared_segments(true);
-            auto* segment_meta = rowset->add_segment_metas();
-            segment_meta->set_segment_idx(static_cast<uint32_t>(rowset->segment_metas_size() - 1));
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(segment);
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(static_cast<uint32_t>(rowset->segment_metas_size() - 1));
         }
     }
 
@@ -8990,11 +9305,11 @@ struct SplitFamilyTestBuilder {
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
         for (const auto& segment : segments) {
-            rowset->add_segments(segment);
-            rowset->add_segment_size(100);
-            rowset->add_shared_segments(false);
-            auto* segment_meta = rowset->add_segment_metas();
-            segment_meta->set_segment_idx(static_cast<uint32_t>(rowset->segment_metas_size() - 1));
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(segment);
+            sm->set_size(100);
+            sm->set_shared(false);
+            sm->set_segment_idx(static_cast<uint32_t>(rowset->segment_metas_size() - 1));
         }
     }
 
@@ -9083,25 +9398,37 @@ TEST(SplitFamilyInferenceTest, rowset_edge_segment_idx_layout_must_match) {
     auto* rowset_a = builder.metadata_of(0)->add_rowsets();
     rowset_a->set_id(3);
     rowset_a->set_version(2);
-    rowset_a->add_segments("seg_a");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_segments("seg_b");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_segment_metas()->set_segment_idx(0);
-    rowset_a->add_segment_metas()->set_segment_idx(1);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(0);
+    }
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(1);
+    }
     auto* rowset_b = builder.metadata_of(1)->add_rowsets();
     rowset_b->set_id(3);
     rowset_b->set_version(2);
-    rowset_b->add_segments("seg_a");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    rowset_b->add_segments("seg_b");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    rowset_b->add_segment_metas()->set_segment_idx(0);
-    rowset_b->add_segment_metas()->set_segment_idx(2); // sparse!
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(0);
+    }
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(2); // sparse!
+    }
     ASSIGN_OR_ABORT(auto result, lake::detail::infer_split_families(builder.snapshot()));
     EXPECT_TRUE(result.families.empty()) << "different segment_idx layouts must not union";
     EXPECT_EQ(lake::detail::InferredSplitFamilies::kNoFamily, result.child_to_family[0]);
@@ -9239,24 +9566,36 @@ TEST(SplitFamilyInferenceTest, rowset_edge_normalizes_absent_segment_metas) {
     auto* rowset_a = builder.metadata_of(0)->add_rowsets();
     rowset_a->set_id(3);
     rowset_a->set_version(2);
-    rowset_a->add_segments("seg_a");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_segments("seg_b");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_segment_metas()->set_segment_idx(0);
-    rowset_a->add_segment_metas()->set_segment_idx(1);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(0);
+    }
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(1);
+    }
     auto* rowset_b = builder.metadata_of(1)->add_rowsets();
     rowset_b->set_id(3);
     rowset_b->set_version(2);
-    rowset_b->add_segments("seg_a");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    rowset_b->add_segments("seg_b");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    // segment_metas intentionally absent — read path falls back to
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
+    // segment_idx intentionally absent — read path falls back to
     // positional index, which equals A's explicit (0, 1).
     ASSIGN_OR_ABORT(auto result, lake::detail::infer_split_families(builder.snapshot()));
     ASSERT_EQ(1u, result.families.size()) << "default positional segment_idx must equal explicit (0, 1) layout";
@@ -9273,29 +9612,41 @@ TEST(SplitFamilyInferenceTest, rowset_edge_normalizes_absent_bundle_file_offsets
     auto* rowset_a = builder.metadata_of(0)->add_rowsets();
     rowset_a->set_id(3);
     rowset_a->set_version(2);
-    rowset_a->add_segments("seg_a");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_segments("seg_b");
-    rowset_a->add_segment_size(100);
-    rowset_a->add_shared_segments(true);
-    rowset_a->add_bundle_file_offsets(0);
-    rowset_a->add_bundle_file_offsets(0);
-    rowset_a->add_segment_metas()->set_segment_idx(0);
-    rowset_a->add_segment_metas()->set_segment_idx(1);
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_bundle_file_offset(0);
+        sm->set_segment_idx(0);
+    }
+    {
+        auto* sm = rowset_a->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_bundle_file_offset(0);
+        sm->set_segment_idx(1);
+    }
     auto* rowset_b = builder.metadata_of(1)->add_rowsets();
     rowset_b->set_id(3);
     rowset_b->set_version(2);
-    rowset_b->add_segments("seg_a");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    rowset_b->add_segments("seg_b");
-    rowset_b->add_segment_size(100);
-    rowset_b->add_shared_segments(true);
-    // bundle_file_offsets absent — PB default 0 per segment, equal to A's
+    // bundle_file_offset absent — PB default 0 per segment, equal to A's
     // explicit (0, 0).
-    rowset_b->add_segment_metas()->set_segment_idx(0);
-    rowset_b->add_segment_metas()->set_segment_idx(1);
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(0);
+    }
+    {
+        auto* sm = rowset_b->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(100);
+        sm->set_shared(true);
+        sm->set_segment_idx(1);
+    }
     ASSIGN_OR_ABORT(auto result, lake::detail::infer_split_families(builder.snapshot()));
     ASSERT_EQ(1u, result.families.size()) << "absent bundle_file_offsets must equal explicit (0, 0) layout";
 }
@@ -9479,14 +9830,20 @@ TEST(RssidProjectionPlanTest, sparse_segment_idx_projection) {
         auto* rowset = builder.metadata_of(child_index)->add_rowsets();
         rowset->set_id(3);
         rowset->set_version(2);
-        rowset->add_segments("seg_0");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
-        rowset->add_segments("seg_2");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
-        rowset->add_segment_metas()->set_segment_idx(0);
-        rowset->add_segment_metas()->set_segment_idx(2);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("seg_0");
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(0);
+        }
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("seg_2");
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(2);
+        }
     };
     add_sparse_rowset(0);
     add_sparse_rowset(1);
@@ -9542,14 +9899,20 @@ TEST(RssidProjectionPlanTest, segment_rssid_overflow_marks_family_unsafe) {
         auto* rowset = builder.metadata_of(child_index)->add_rowsets();
         rowset->set_id(std::numeric_limits<uint32_t>::max());
         rowset->set_version(2);
-        rowset->add_segments("seg_0");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
-        rowset->add_segments("seg_1");
-        rowset->add_segment_size(100);
-        rowset->add_shared_segments(true);
-        rowset->add_segment_metas()->set_segment_idx(0); // lifted = UINT32_MAX, OK
-        rowset->add_segment_metas()->set_segment_idx(1); // lifted = UINT32_MAX + 1 → overflow
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("seg_0");
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(0); // lifted = UINT32_MAX, OK
+        }
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename("seg_1");
+            sm->set_size(100);
+            sm->set_shared(true);
+            sm->set_segment_idx(1); // lifted = UINT32_MAX + 1 → overflow
+        }
     };
     add_overflow_rowset(0);
     add_overflow_rowset(1);

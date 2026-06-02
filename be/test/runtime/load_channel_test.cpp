@@ -329,8 +329,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
     for (auto tablet_id : finished_tablets) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kChunkSizePerTablet, chunk1->num_rows());
     }
 }
@@ -403,8 +403,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
     for (auto tablet_id : std::vector<int64_t>{10086, 10087, 10088, 10089}) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kSegmentRows, chunk1->num_rows());
     }
 }

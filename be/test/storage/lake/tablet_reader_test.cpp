@@ -116,11 +116,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -243,11 +242,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -272,11 +270,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(2);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -380,11 +377,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -533,11 +529,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -661,11 +656,10 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -691,11 +685,10 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_overlapped(false);
         rowset->set_id(2);
         rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -859,11 +852,10 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -971,11 +963,10 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1048,11 +1039,10 @@ StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::test
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1196,11 +1186,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1217,11 +1206,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(2);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }

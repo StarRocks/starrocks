@@ -112,9 +112,8 @@ public:
             rowset->set_overlapped(true);
             rowset->set_id(1);
             rowset->set_next_compaction_offset(1);
-            auto* segs = rowset->mutable_segments();
             for (const auto& file : writer->segments()) {
-                segs->Add()->assign(file.path);
+                rowset->add_segment_metas()->set_filename(file.path);
             }
 
             writer->close();
@@ -288,7 +287,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     {
         TxnLogPB txn_log;
         auto op_compaction = txn_log.mutable_op_compaction();
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 0);
 
         auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1
                                                  /* compaction_segment_limit */);
@@ -300,7 +299,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         VersionedTablet vt(nullptr, _tablet_metadata);
         VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
         EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 4);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 4);
         EXPECT_EQ(op_compaction->new_segment_offset(), 1);
         EXPECT_EQ(op_compaction->new_segment_count(), 2);
 
@@ -314,7 +313,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     {
         TxnLogPB txn_log;
         auto op_compaction = txn_log.mutable_op_compaction();
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 0);
 
         auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
                                                  0 /* compaction_segment_limit */);
@@ -323,7 +322,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         VersionedTablet vt(nullptr, _tablet_metadata);
         VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
         EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 2);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 2);
         EXPECT_EQ(op_compaction->new_segment_offset(), 0);
         EXPECT_EQ(op_compaction->new_segment_count(), 2);
 
@@ -339,10 +338,12 @@ TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     create_rowsets_for_testing();
     auto* rowset_meta = _tablet_metadata->mutable_rowsets(0);
     rowset_meta->set_next_compaction_offset(2);
-    rowset_meta->clear_segment_metas();
-    rowset_meta->add_segment_metas()->set_segment_idx(0);
-    rowset_meta->add_segment_metas()->set_segment_idx(2);
-    rowset_meta->add_segment_metas()->set_segment_idx(4);
+    // Assign sparse, non-contiguous segment ids to the existing (named) segments to exercise the
+    // sparse-segment_idx path without colliding ids. Keep the real filenames so load_segments works.
+    ASSERT_EQ(3, rowset_meta->segment_metas_size());
+    rowset_meta->mutable_segment_metas(0)->set_segment_idx(0);
+    rowset_meta->mutable_segment_metas(1)->set_segment_idx(2);
+    rowset_meta->mutable_segment_metas(2)->set_segment_idx(4);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     int64_t txn_id = next_id();
@@ -375,14 +376,14 @@ TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     ASSERT_OK(task.fill_compaction_segment_info(op_compaction, writer.get()));
 
     const auto& output_rowset = op_compaction->output_rowset();
-    ASSERT_EQ(4, output_rowset.segments_size());
+    ASSERT_EQ(4, output_rowset.segment_metas_size());
     ASSERT_EQ(4, output_rowset.segment_metas_size());
     EXPECT_EQ(2, op_compaction->new_segment_offset());
     EXPECT_EQ(2, op_compaction->new_segment_count());
 
     std::unordered_set<uint32_t> segment_ids;
-    for (int i = 0; i < output_rowset.segment_metas_size(); ++i) {
-        segment_ids.insert(output_rowset.segment_metas(i).segment_idx());
+    for (const auto& segment_meta : output_rowset.segment_metas()) {
+        segment_ids.insert(segment_meta.segment_idx());
     }
     EXPECT_EQ(static_cast<size_t>(output_rowset.segment_metas_size()), segment_ids.size());
     EXPECT_TRUE(segment_ids.contains(0));
@@ -417,9 +418,8 @@ static void set_tablet_range_int(TabletMetadata* tablet_meta, std::optional<int3
 }
 
 static void set_rowset_shared_segments(RowsetMetadataPB* rowset_meta, bool shared) {
-    rowset_meta->clear_shared_segments();
-    for (int i = 0; i < rowset_meta->segments_size(); i++) {
-        rowset_meta->add_shared_segments(shared);
+    for (auto& segment_meta : *rowset_meta->mutable_segment_metas()) {
+        segment_meta.set_shared(shared);
     }
 }
 
@@ -681,7 +681,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
     rowset->set_overlapped(true);
     rowset->set_id(1);
     for (auto& file : files) {
-        rowset->add_segments(std::move(file.path));
+        rowset->add_segment_metas()->set_filename(std::move(file.path));
     }
     set_rowset_shared_segments(rowset, true);
 
@@ -790,7 +790,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
     rowset->set_overlapped(true);
     rowset->set_id(1);
     for (auto& file : files) {
-        rowset->add_segments(std::move(file.path));
+        rowset->add_segment_metas()->set_filename(std::move(file.path));
     }
     set_rowset_shared_segments(rowset, true);
 
@@ -964,60 +964,59 @@ public:
         rowset->set_id(1);
         rowset->set_num_rows(33); // 11 + 11 + 11
 
-        for (const auto& file : files) {
-            rowset->add_segments(file.path);
-        }
-
         // Add segment_metas with sort_key_min/max
         // Segment 0: [0, 10]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[0].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("10");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         // Segment 1: [20, 30]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[1].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("30");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         // Segment 2: [40, 50]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[2].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("50");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         writer->close();

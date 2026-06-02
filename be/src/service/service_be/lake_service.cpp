@@ -1713,7 +1713,8 @@ static Status check_missing_files(const TabletMetadata& metadata, const lake::Ta
 
     // segment
     for (const auto& rowset : metadata.rowsets()) {
-        for (const auto& seg_name : rowset.segments()) {
+        for (const auto& segment_metadata : rowset.segment_metas()) {
+            const auto& seg_name = segment_metadata.filename();
             RETURN_IF_ERROR(check_file(tablet_mgr->segment_location(tablet_id, seg_name), seg_name));
         }
     }
