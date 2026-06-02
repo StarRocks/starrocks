@@ -25,7 +25,6 @@
 #include <utility>
 #include <vector>
 
-#include "util/failpoint/fail_point.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -42,6 +41,7 @@
 #include "storage/rowset/json_column_compactor.h"
 #include "types/constexpr.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 #include "velocypack/vpack.h"
 
