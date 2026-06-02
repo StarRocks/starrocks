@@ -18,7 +18,7 @@
 
 #include "base/testutil/parallel_test.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 
 namespace starrocks::workgroup {
 PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_default_mem_pool) {

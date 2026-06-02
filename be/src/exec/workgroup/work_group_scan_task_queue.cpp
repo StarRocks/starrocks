@@ -21,8 +21,6 @@
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_manager.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
@@ -62,8 +60,7 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
         // TODO: In the future, we may implement different task queues for exclusive workgroup and shared workgroup,
         // since exclusive workgroup does not need two-level queues about workgroup.
         wg_entity = _pick_next_wg();
-        if (wg_entity != nullptr &&
-            !ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
+        if (wg_entity != nullptr && !_schedule_policy.should_yield(wg_entity->workgroup())) {
             break;
         }
 
@@ -150,7 +147,7 @@ void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_n
 bool WorkGroupScanTaskQueue::should_yield(const WorkGroupScanSchedEntity* wg_entity,
                                           int64_t unaccounted_runtime_ns) const {
     DCHECK(wg_entity != nullptr);
-    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
+    if (_schedule_policy.should_yield(wg_entity->workgroup())) {
         return true;
     }
 

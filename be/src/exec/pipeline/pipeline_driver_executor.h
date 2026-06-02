@@ -28,6 +28,7 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
@@ -38,7 +39,8 @@ class PipelineExecutorMetrics;
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
     GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group,
-                         const CpuUtil::CpuIds& cpuids, PipelineExecutorMetrics* metrics);
+                         const CpuUtil::CpuIds& cpuids, PipelineExecutorMetrics* metrics,
+                         const workgroup::WorkGroupSchedulePolicy& schedule_policy);
     ~GlobalDriverExecutor() override = default;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;

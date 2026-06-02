@@ -69,9 +69,11 @@ std::string PipelineExecutorSetConfig::to_string() const {
 // ------------------------------------------------------------------------------------
 
 PipelineExecutorSet::PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name,
-                                         CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids)
+                                         CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids,
+                                         const WorkGroupSchedulePolicy& schedule_policy)
         : _conf(conf),
           _name(std::move(name)),
+          _schedule_policy(schedule_policy),
           _cpuids(std::move(cpuids)),
           _borrowed_cpu_ids(std::move(borrowed_cpuids)) {}
 
@@ -110,8 +112,8 @@ Status PipelineExecutorSet::start(std::unique_ptr<pipeline::DriverExecutor> driv
             std::move(scan_thread_pool),
             config::enable_lock_free_scan_task_queue
                     ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeWorkGroupScanTaskQueue>(
-                              ScanSchedEntityType::OLAP, num_scan_threads()))
-                    : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP),
+                              ScanSchedEntityType::OLAP, num_scan_threads(), _schedule_policy))
+                    : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP, _schedule_policy),
             _conf.metrics->get_scan_executor_metrics());
     _scan_executor->initialize(num_scan_threads());
 
@@ -128,8 +130,8 @@ Status PipelineExecutorSet::start(std::unique_ptr<pipeline::DriverExecutor> driv
             std::move(connector_scan_thread_pool),
             config::enable_lock_free_scan_task_queue
                     ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeWorkGroupScanTaskQueue>(
-                              ScanSchedEntityType::CONNECTOR, num_connector_scan_threads()))
-                    : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR),
+                              ScanSchedEntityType::CONNECTOR, num_connector_scan_threads(), _schedule_policy))
+                    : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR, _schedule_policy),
             _conf.metrics->get_connector_scan_executor_metrics());
     _connector_scan_executor->initialize(num_connector_scan_threads());
     LOG(INFO) << "[WORKGROUP] start executors " << to_string();

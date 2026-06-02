@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <functional>
 #include <thread>
 
 #include "base/testutil/parallel_test.h"
@@ -24,14 +26,48 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_manager.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
-class MockEmptyOperator final : public SourceOperator {
+namespace {
+
+class FakeWorkGroupSchedulePolicy final : public workgroup::WorkGroupSchedulePolicy {
+public:
+    std::function<bool(const workgroup::WorkGroup*)> should_yield_func = [](const workgroup::WorkGroup*) {
+        return false;
+    };
+    size_t num_workgroups_value = 2;
+
+    bool should_yield(const workgroup::WorkGroup* wg) const override { return should_yield_func(wg); }
+    size_t num_workgroups() const override { return num_workgroups_value; }
+};
+
+} // namespace
+
+class EmptyOperatorRuntimeAccess final : public OperatorRuntimeAccess {
+public:
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override {}
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override { return nullptr; }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override { return nullptr; }
+    const std::vector<SlotId>& get_filter_null_value_columns() const override { return _filter_null_value_columns; }
+
+private:
+    std::vector<SlotId> _filter_null_value_columns;
+};
+
+EmptyOperatorRuntimeAccess* empty_operator_runtime_access() {
+    static EmptyOperatorRuntimeAccess runtime_access;
+    return &runtime_access;
+}
+
+class MockEmptyOperator final : public Operator {
 public:
     MockEmptyOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : SourceOperator(factory, id, "mock_empty_operator", plan_node_id, false, driver_sequence) {}
+            : Operator(factory, id, "mock_empty_operator", plan_node_id, false, driver_sequence,
+                       empty_operator_runtime_access()) {}
 
     ~MockEmptyOperator() override = default;
 
@@ -199,12 +235,13 @@ protected:
     workgroup::WorkGroupPtr _wg2 = nullptr;
     workgroup::WorkGroupPtr _wg3 = nullptr;
     workgroup::WorkGroupPtr _wg4 = nullptr;
+    FakeWorkGroupSchedulePolicy _schedule_policy;
 };
 
 TEST_F(WorkGroupDriverQueueTest, test_basic) {
     QueryContext query_ctx;
     PipelineExecutorMetrics metrics;
-    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
     // Prepare drivers for _wg2.
     int64_t sum_wg2_time_spent = 0;
@@ -285,7 +322,7 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
 TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     QueryContext query_ctx;
     PipelineExecutorMetrics metrics;
-    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
     // Prepare drivers.
     auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
@@ -305,9 +342,53 @@ TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     consumer_thread->join();
 }
 
+TEST_F(WorkGroupDriverQueueTest, test_take_uses_injected_policy) {
+    QueryContext query_ctx;
+    PipelineExecutorMetrics metrics;
+    std::atomic<bool> block_wg2{true};
+    _schedule_policy.should_yield_func = [&](const workgroup::WorkGroup* wg) {
+        return wg == _wg2.get() && block_wg2.load(std::memory_order_acquire);
+    };
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
+
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    _set_driver_level(driver.get(), 1);
+    driver->set_workgroup(_wg2);
+
+    queue.update_statistics(driver.get());
+    queue.put_back(driver.get());
+
+    auto blocked = queue.take(false);
+    ASSERT_TRUE(blocked.ok());
+    ASSERT_EQ(nullptr, blocked.value());
+
+    block_wg2.store(false, std::memory_order_release);
+
+    auto unblocked = queue.take(false);
+    ASSERT_TRUE(unblocked.ok());
+    ASSERT_EQ(driver.get(), unblocked.value());
+}
+
+TEST_F(WorkGroupDriverQueueTest, test_update_statistics_uses_injected_workgroup_count_policy) {
+    QueryContext query_ctx;
+    PipelineExecutorMetrics metrics;
+    _schedule_policy.num_workgroups_value = 1;
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
+
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    _set_driver_level(driver.get(), 1);
+    driver->driver_acct().update_last_time_spent(100'000'000L);
+    driver->set_workgroup(_wg1);
+
+    const int64_t before = _wg1->driver_sched_entity()->vruntime_ns();
+    queue.update_statistics(driver.get());
+
+    ASSERT_EQ(before, _wg1->driver_sched_entity()->vruntime_ns());
+}
+
 TEST_F(WorkGroupDriverQueueTest, test_take_close) {
     PipelineExecutorMetrics metrics;
-    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
         auto maybe_driver = queue.take(true);

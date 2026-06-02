@@ -17,9 +17,7 @@
 #include <limits>
 
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_manager.h"
 #include "glog/logging.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
@@ -37,8 +35,9 @@ const char* sched_entity_type_to_string(ScanSchedEntityType sched_entity_type) {
 
 } // namespace
 
-LockFreeWorkGroupScanTaskQueue::LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers)
-        : _sched_entity_type(sched_entity_type), _num_workers(num_workers) {
+LockFreeWorkGroupScanTaskQueue::LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers,
+                                                               const WorkGroupSchedulePolicy& schedule_policy)
+        : _sched_entity_type(sched_entity_type), _num_workers(num_workers), _schedule_policy(schedule_policy) {
     LOG(INFO) << "[SCAN_QUEUE] create LockFreeWorkGroupScanTaskQueue"
               << " sched_entity_type=" << sched_entity_type_to_string(_sched_entity_type)
               << " num_workers=" << _num_workers;
@@ -92,7 +91,7 @@ StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take(int worker_id) {
         auto candidates = _pick_sorted_wgs();
         bool skipped_due_to_yield = false;
         for (auto& [vruntime, wg_queue] : candidates) {
-            if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_queue->workgroup)) {
+            if (_schedule_policy.should_yield(wg_queue->workgroup)) {
                 skipped_due_to_yield = true;
                 continue;
             }
@@ -129,7 +128,7 @@ void LockFreeWorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t r
 bool LockFreeWorkGroupScanTaskQueue::should_yield(const WorkGroupScanSchedEntity* wg_entity,
                                                   int64_t unaccounted_runtime_ns) const {
     DCHECK(wg_entity != nullptr);
-    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
+    if (_schedule_policy.should_yield(wg_entity->workgroup())) {
         return true;
     }
     const auto* min_entity = _min_wg_entity.load();

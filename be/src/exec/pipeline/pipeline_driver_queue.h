@@ -21,6 +21,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::pipeline {
 
@@ -127,7 +128,8 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
-    WorkGroupDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {}
+    WorkGroupDriverQueue(DriverQueueMetrics* metrics, const workgroup::WorkGroupSchedulePolicy& schedule_policy)
+            : FactoryMethod(metrics), _schedule_policy(schedule_policy) {}
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 
@@ -192,6 +194,7 @@ private:
 
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
+    const workgroup::WorkGroupSchedulePolicy& _schedule_policy;
 
     moodycamel::ConcurrentQueue<DriverRawPtr> _local_queue;
     std::atomic_int32_t _local_queue_cntl{};

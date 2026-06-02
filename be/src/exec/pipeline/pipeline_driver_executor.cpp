@@ -15,6 +15,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
@@ -40,11 +41,12 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
-                                           PipelineExecutorMetrics* metrics)
+                                           PipelineExecutorMetrics* metrics,
+                                           const workgroup::WorkGroupSchedulePolicy& schedule_policy)
         : Base("pip_exec_" + name),
           _driver_queue(enable_resource_group
-                                ? std::unique_ptr<DriverQueue>(
-                                          std::make_unique<WorkGroupDriverQueue>(metrics->get_driver_queue_metrics()))
+                                ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>(
+                                          metrics->get_driver_queue_metrics(), schedule_policy))
                                 : std::make_unique<QuerySharedDriverQueue>(metrics->get_driver_queue_metrics())),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(

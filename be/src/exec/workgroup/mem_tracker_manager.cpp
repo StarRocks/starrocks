@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "base/metrics.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "work_group.h"
 

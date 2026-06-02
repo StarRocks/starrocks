@@ -19,9 +19,7 @@
 #include "exec/pipeline/schedule/utils.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_manager.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
@@ -278,8 +276,7 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
         // TODO: In the future, we may implement different driver queues for exclusive workgroup and shared workgroup,
         // since exclusive workgroup does not need two-level queues about workgroup.
         wg_entity = _pick_next_wg();
-        if (wg_entity != nullptr &&
-            !ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
+        if (wg_entity != nullptr && !_schedule_policy.should_yield(wg_entity->workgroup())) {
             break;
         }
 
@@ -329,7 +326,7 @@ void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
     auto* wg_entity = driver->workgroup()->driver_sched_entity();
 
     // we don't have to update statistics when we only have one work group
-    if (ExecEnv::GetInstance()->workgroup_manager()->num_workgroups() <= 1) {
+    if (_schedule_policy.num_workgroups() <= 1) {
         wg_entity->queue()->update_statistics(driver);
         return;
     }
@@ -359,7 +356,7 @@ size_t WorkGroupDriverQueue::size() const {
 }
 
 bool WorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const {
-    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(driver->workgroup())) {
+    if (_schedule_policy.should_yield(driver->workgroup())) {
         return true;
     }
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.

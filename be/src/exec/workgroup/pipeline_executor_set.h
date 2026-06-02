@@ -18,6 +18,7 @@
 #include "common/thread/cpu_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;
@@ -48,7 +49,7 @@ struct PipelineExecutorSetConfig {
 class PipelineExecutorSet {
 public:
     PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name, CpuUtil::CpuIds cpuids,
-                        std::vector<CpuUtil::CpuIds> borrowed_cpuids);
+                        std::vector<CpuUtil::CpuIds> borrowed_cpuids, const WorkGroupSchedulePolicy& schedule_policy);
     ~PipelineExecutorSet();
 
     Status start(std::unique_ptr<pipeline::DriverExecutor> driver_executor);
@@ -79,6 +80,7 @@ private:
 private:
     const PipelineExecutorSetConfig& _conf;
     const std::string _name;
+    const WorkGroupSchedulePolicy& _schedule_policy;
 
     CpuUtil::CpuIds _cpuids;
     std::vector<CpuUtil::CpuIds> _borrowed_cpu_ids;
