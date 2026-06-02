@@ -1593,7 +1593,110 @@ public class CreateFunctionStmtAnalyzerTest {
         }
     }
 
-    // Varargs UDF with at least one fixed parameter ahead of the varargs slot.
+    @Test
+    public void testCreateRejectsUnsizedVarcharArg() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "varchar"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedCharArg() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "char"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Char size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharReturnType() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("varchar", "int"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharInsideArray() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "array<varchar>"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateAcceptsSizedVarcharInsideArray() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(NestedArrayEval.class);
+            CreateFunctionStmt stmt = (CreateFunctionStmt)
+                    com.starrocks.sql.parser.SqlParser.parse(
+                            buildFunction("array<int>", "array<varchar(65500)>"), 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharAsMapKey() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "map<varchar, int>"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharAsMapValue() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "map<int, varchar>"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
     // Covers checkVarargsParametersGeneric's `for (i = 0; i < length - 1; i++)`
     // body which only fires when declaredArgTypes.length >= 2 (existing varargs
     // tests use a single varargs-only signature, so this loop stays cold).

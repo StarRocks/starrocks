@@ -216,7 +216,7 @@ public class DropStmtAnalyzer {
             FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
             // analyze arguments
             FunctionArgsDef argsDef = statement.getArgsDef();
-            FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+            FunctionRefAnalyzer.analyzeArgsDef(argsDef, false);
 
             FunctionSearchDesc funcDesc = new FunctionSearchDesc(functionName, argsDef.getArgTypes(),
                     argsDef.isVariadic());
