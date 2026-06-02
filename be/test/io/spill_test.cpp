@@ -56,6 +56,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
+#include "exprs/sort_exec_exprs.h"
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"

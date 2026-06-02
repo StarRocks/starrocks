@@ -22,6 +22,7 @@ set(EXPR_CORE_FILES
   function_context.cpp
   expr_context.cpp
   expr.cpp
+  sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
   base64.cpp

@@ -22,6 +22,7 @@
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/source_operator.h"
+#include "exprs/sort_exec_exprs.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
