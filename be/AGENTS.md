@@ -145,8 +145,8 @@ Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/S
 ### SpillCore (`spillcore`)
 Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.
 - Targets: `SpillCore`
-- Allowed internal include prefixes: `exec/spill/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `exec/spill/`, `platform/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `spill_core_test`
 - Remediation: Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward.
 
