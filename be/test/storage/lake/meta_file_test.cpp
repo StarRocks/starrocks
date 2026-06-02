@@ -346,7 +346,8 @@ TEST_F(MetaFileTest, test_dcg) {
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 4, 5});
         unique_column_id_list.push_back({6, 7, 8});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{111, 222};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -364,7 +365,8 @@ TEST_F(MetaFileTest, test_dcg) {
         filenames.emplace_back("ccc.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({4, 7});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{333};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -383,7 +385,8 @@ TEST_F(MetaFileTest, test_dcg) {
         filenames.emplace_back("ddd.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 5});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{444};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -392,6 +395,16 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(dcg_ver_iter->second.versions_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.column_files_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.unique_column_ids_size() == 3);
+        // column_file_sizes stays 1:1 with column_files, and carries forward the size
+        // of each retained `.cols` file regardless of how entries are reordered.
+        EXPECT_TRUE(dcg_ver_iter->second.column_file_sizes_size() == 3);
+        std::map<std::string, int64_t> file_to_size;
+        for (int i = 0; i < dcg_ver_iter->second.column_files_size(); i++) {
+            file_to_size[dcg_ver_iter->second.column_files(i)] = dcg_ver_iter->second.column_file_sizes(i);
+        }
+        EXPECT_EQ(444, file_to_size["ddd.cols"]);
+        EXPECT_EQ(222, file_to_size["bbb.cols"]);
+        EXPECT_EQ(333, file_to_size["ccc.cols"]);
         // <3, 5> -> ddd.cols
         // <6, 8> -> bbb.cols
         // <4, 7> -> ccc.cols

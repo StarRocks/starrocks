@@ -53,7 +53,8 @@ public:
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
+                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                    const std::vector<int64_t>& file_sizes);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
