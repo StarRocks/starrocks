@@ -661,6 +661,23 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testCancelAlterForceRejectedForUnsupportedTypes() throws Exception {
+        // FORCE (the publish-stuck escape hatch) is only implemented for COLUMN
+        // alters on lake tables. ROLLUP -> MaterializedViewHandler and OPTIMIZE
+        // -> OptimizeJobV2/OnlineOptimizeJobV2 do not honor isForce(), so the
+        // analyzer must reject `... FORCE` for them up front instead of letting
+        // the grammar accept a request that would silently no-op.
+        for (String type : new String[] {"ROLLUP", "OPTIMIZE"}) {
+            Throwable t = Assertions.assertThrows(Throwable.class, () ->
+                    UtFrameUtils.parseStmtWithNewParser(
+                            "CANCEL ALTER TABLE " + type + " FROM mydb.t1 (12345) FORCE", connectContext));
+            Assertions.assertNotNull(t.getMessage());
+            Assertions.assertTrue(t.getMessage().contains("FORCE is only supported for COLUMN"),
+                    "expected FORCE-unsupported rejection for " + type + ", got: " + t.getMessage());
+        }
+    }
+
+    @Test
     public void testAlterTabletSuccessEnableFileBundling() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
