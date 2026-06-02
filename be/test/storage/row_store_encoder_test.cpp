@@ -113,13 +113,8 @@ TEST(RowStoreEncoderTest, testEncodeFullRowColumn) {
                                           {TYPE_VARCHAR, false}});
     // fill chunk
     const int n = 2;
-<<<<<<< HEAD
     auto pchunk = ChunkHelper::new_chunk(*schema, n);
-    auto obj_column = down_cast<ObjectColumn<BitmapValue>*>(pchunk->mutable_columns()[6].get());
-=======
-    auto pchunk = ChunkFactory::new_chunk(*schema, n);
     auto obj_column = down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6]->as_mutable_ptr().get());
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     size_t ss = 0;
     for (int i = 0; i < n; i++) {
         Datum tmp;
