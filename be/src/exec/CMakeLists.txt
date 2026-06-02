@@ -349,7 +349,6 @@ set(EXEC_NON_PIPELINE_FILES
     exchange_node.cpp
     scan_node.cpp
     select_node.cpp
-    sort_exec_exprs.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
     olap_common.cpp

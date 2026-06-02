@@ -19,7 +19,7 @@
 #include "compute_env/data_stream/data_stream_recvr.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/sort_exec_exprs.h"
+#include "exprs/sort_exec_exprs.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"

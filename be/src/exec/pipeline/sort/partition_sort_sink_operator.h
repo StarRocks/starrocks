@@ -24,8 +24,8 @@
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/sort_exec_exprs.h"
 #include "exec/spill/spiller_factory.h"
+#include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {

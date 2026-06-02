@@ -203,10 +203,7 @@
       ],
       "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
-      "forbidden_includes": [
-        "runtime/exec_env.h",
-        "exec/sort_exec_exprs.h"
-      ],
+      "forbidden_includes": ["runtime/exec_env.h"],
       "allowed_target_deps": ["RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["spill_core_test"],
       "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
