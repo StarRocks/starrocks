@@ -186,24 +186,18 @@ public class ColocateTableIndex implements Writable {
     }
 
     /**
-     * Returns the PACK shard group ids of all live range-colocate groups.
+     * Returns all PACK shard group ids tracked by the range-colocate metadata.
      *
      * <p>PACK shard groups are created by FE but not attached to any {@code PhysicalPartition},
      * so {@code StarMgrMetaSyncer} must union these into its FE-known shard group set to avoid
-     * reaping live PACK shard groups as orphans. Only groups still present in {@code group2Schema}
-     * are included, so a stale range entry left by a crash between the range-update and add-table
-     * journal records does not pin a genuinely orphaned PACK shard group forever.
+     * reaping live PACK shard groups as orphans.
      *
      * @return a new set of PACK shard group ids (empty if none); never null
      */
     public Set<Long> getAllPackShardGroupIds() {
         readLock();
         try {
-            Set<Long> liveColocateGroupIds = new HashSet<>();
-            for (GroupId groupId : group2Schema.keySet()) {
-                liveColocateGroupIds.add(groupId.grpId);
-            }
-            return colocateRangeMgr.getPackShardGroupIds(liveColocateGroupIds);
+            return colocateRangeMgr.getAllPackShardGroupIds();
         } finally {
             readUnlock();
         }
