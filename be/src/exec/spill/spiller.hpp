@@ -260,15 +260,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 YieldableRestoreTask task(_stream);
                 res = task.do_read(yield_ctx, serd_ctx);
 
-<<<<<<< HEAD
-=======
-                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
-                // Simulate a non-EOF error coming out of the restore IO task
-                // (e.g. ColumnarSerde::deserialize hitting a short read).
-                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_error,
-                                           { res = Status::InternalError("inject spill_restore_error"); });
-
->>>>>>> 8a7b7d3342 ([BugFix] Propagate sort merge provider errors to fragment context  (#73337))
                 if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
                     defer.cancel();
