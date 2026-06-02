@@ -2935,8 +2935,7 @@ TEST_F(VectorizedCastExprTest, variant_cast_to_struct_with_special_char_field_na
     {
         // Field name starting with '$' (the exact case from the bug report).
         auto const_variant = make_const_variant_column_from_json(R"({"$currency":"USD"})", kInputSize);
-        auto result =
-                cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"$currency"}), const_variant);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"$currency"}), const_variant);
         assert_const_or_expanded_result(result, kInputSize, "{$currency:'USD'}");
     }
     {
