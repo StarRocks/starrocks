@@ -22,8 +22,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -140,12 +138,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getColumnRefs().size() > 1);
         // exist multiple distinct columns should enable cte use
         if (hasMultiColumns) {
-            if (!context.getSessionVariable().isCboCteReuse()) {
-                throw new StarRocksPlannerException(ErrorType.USER_ERROR,
-                        "%s is unsupported when cbo_cte_reuse is disabled", distinctAggOperatorList);
-            } else {
-                return true;
-            }
+            return context.getSessionVariable().isCboCteReuse();
         }
 
         // respect prefer cte rewrite hint
@@ -185,8 +178,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         }
 
         if (!context.getSessionVariable().isCboCteReuse() && !canRewriteByMultiFunc) {
-            throw new StarRocksPlannerException(ErrorType.USER_ERROR,
-                    "%s is unsupported when cbo_cte_reuse is disabled", distinctAggOperatorList);
+            return false;
         }
 
         return !canRewriteByMultiFunc;
