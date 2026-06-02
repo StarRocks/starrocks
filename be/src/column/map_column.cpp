@@ -25,6 +25,7 @@
 #include <arm_neon.h>
 #endif
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
@@ -430,11 +431,12 @@ size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
 
     while (check_offset + kBatchSize < to) {
         uint8x16_t f = vld1q_u8(f_data + check_offset);
-        uint8_t maxv = vmaxvq_u8(f);
+        // nibble_mask holds 4 bits per row: 0xf where the row is kept, 0x0 otherwise.
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(f, f));
 
-        if (maxv == 0) {
+        if (nibble_mask == 0) {
             // all no hit, pass
-        } else if (vminvq_u8(f) != 0) {
+        } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
             // all hit, copy all
             auto element_size = offsets[check_offset + kBatchSize] - offsets[check_offset];
             memset(element_filter.data() + offsets[check_offset], 1, element_size);
@@ -448,13 +450,14 @@ size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
             }
             result_offset += kBatchSize;
         } else {
-            for (size_t i = 0; i < kBatchSize; ++i) {
-                if (f_data[check_offset + i]) {
-                    auto array_size = offsets[check_offset + i + 1] - offsets[check_offset + i];
-                    memset(element_filter.data() + offsets[check_offset + i], 1, array_size);
-                    offsets[result_offset + 1] = offsets[result_offset] + array_size;
-                    result_offset += 1;
-                }
+            // Keep only the high bit of each nibble, then walk the kept rows one set bit at a time.
+            nibble_mask &= 0x8888'8888'8888'8888ull;
+            for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                size_t i = __builtin_ctzll(nibble_mask) >> 2;
+                auto array_size = offsets[check_offset + i + 1] - offsets[check_offset + i];
+                memset(element_filter.data() + offsets[check_offset + i], 1, array_size);
+                offsets[result_offset + 1] = offsets[result_offset] + array_size;
+                result_offset += 1;
             }
         }
         check_offset += kBatchSize;
