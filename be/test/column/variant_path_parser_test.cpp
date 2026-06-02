@@ -435,9 +435,8 @@ TEST_F(VariantPathTest, ParseQuotedKeyWithSpecialChars) {
         std::vector<std::string> keys; // expected object-segment keys, in order
     };
     const std::vector<Case> cases = {
-            {"$['$currency']", {"$currency"}},      {R"($["$amount"])", {"$amount"}},
-            {"$['a.b']", {"a.b"}},                  {"$['a[0]b']", {"a[0]b"}},
-            {"$.outer['$inner']", {"outer", "$inner"}},
+            {"$['$currency']", {"$currency"}}, {R"($["$amount"])", {"$amount"}},           {"$['a.b']", {"a.b"}},
+            {"$['a[0]b']", {"a[0]b"}},         {"$.outer['$inner']", {"outer", "$inner"}},
     };
     for (const auto& c : cases) {
         auto result = VariantPathParser::parse(c.path);
@@ -459,10 +458,10 @@ TEST_F(VariantPathTest, ParseQuotedKeyEscapeSequences) {
         std::string key;
     };
     const std::vector<Case> cases = {
-            {R"($['a\'b'])", "a'b"},             // escaped single quote
-            {R"($['a\\b'])", "a\\b"},            // escaped backslash -> a<backslash>b
-            {R"($["a\"b"])", "a\"b"},            // escaped double quote
-            {R"($['tab\theld'])", "tab\theld"},  // \t -> tab character
+            {R"($['a\'b'])", "a'b"},            // escaped single quote
+            {R"($['a\\b'])", "a\\b"},           // escaped backslash -> a<backslash>b
+            {R"($["a\"b"])", "a\"b"},           // escaped double quote
+            {R"($['tab\theld'])", "tab\theld"}, // \t -> tab character
     };
     for (const auto& c : cases) {
         auto result = VariantPathParser::parse(c.path);
