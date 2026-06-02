@@ -27,12 +27,12 @@
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
-#include "exec/sort_exec_exprs.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/input_stream_internal.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/task_executor.h"
+#include "exprs/sort_exec_exprs.h"
 #include "fmt/format.h"
 #include "runtime/runtime_state.h"
 

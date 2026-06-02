@@ -23,8 +23,8 @@
 #include "common/status.h"
 #include "compute_env/sorting/sorting.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/sort_exec_exprs.h"
 #include "exec/spill/block_manager.h"
+#include "exprs/sort_exec_exprs.h"
 
 namespace starrocks {
 class RuntimeState;
