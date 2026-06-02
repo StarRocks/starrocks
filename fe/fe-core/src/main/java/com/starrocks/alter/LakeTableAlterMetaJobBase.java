@@ -583,63 +583,33 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     }
 
     /**
-     * Send a publish_version RPC with TxnInfoPB.no_op_publish=true for every
-     * affected (regular) tablet at the alter's reserved commitVersion. BE
-     * short-circuits the txn-log apply path and writes a no-op metadata file
-     * (V-1 content tagged with version V), so the partition version chain
-     * advances past the cancelled alter without including any of its changes.
+     * No-op publish for the CANCEL ALTER TABLE ... FORCE escape hatch (metadata
+     * alter). Metadata alter has no shadow tablets, so it publishes the tablets
+     * of its own dirty indices directly. The shared publish mechanics live in
+     * {@link Utils#noOpPublishForForceSkip}.
      *
-     * <p>Mirrors {@link #lakePublishVersion()} but sets noOpPublish=true and a
-     * reason string for audit. Returns false if any RPC fails or throws; in
-     * that case the caller leaves the job at FINISHED_REWRITING so the
-     * operator can retry CANCEL ALTER ... FORCE.
+     * <p>Dispatch is keyed on the partition's CURRENT (pre-alter) bundling
+     * format, NOT the alter's target: this is a CANCEL, so V must be written in
+     * V-1's format. Keying off the target (e.g. an enabling alter whose V-1 data
+     * is still per-tablet) would emit an aggregate bundle write over per-tablet
+     * data. The alter never reached FINISHED, so updateCatalog() has not flipped
+     * the table's flag yet — table.isFileBundling() is the current format.
+     * (Falls back to the cached isFileBundling field if the table is gone,
+     * though a dropped table needs no version advance anyway.)
      */
     protected boolean lakePublishVersionWithSkip(String reason) {
-        LOG.info("force-cancel no-op publish: meta alter job {} watershedTxnId {} reason \"{}\"",
-                jobId, watershedTxnId, reason);
-        try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.commitTime = System.currentTimeMillis() / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-            txnInfo.gtid = watershedGtid;
-            txnInfo.noOpPublish = true;
-
-            // Dispatch on the partition's CURRENT (pre-alter) bundling format,
-            // NOT the alter's target. This is a CANCEL: the no-op publish writes
-            // V from V-1 content, so V must be written in V-1's format. Keying
-            // off the alter's target (e.g. enableFileBundling() for an enabling
-            // alter, whose V-1 data is still per-tablet) would emit an aggregate
-            // bundle write over per-tablet data. The alter never reached
-            // FINISHED, so updateCatalog() has not flipped the table's flag yet —
-            // table.isFileBundling() is therefore the current/pre-alter format.
-            // (Falls back to the cached isFileBundling field if the table is
-            // gone, though a dropped table needs no version advance anyway.)
-            OlapTable currentTable = getOlapTable(dbId, tableId);
-            boolean useAggregatePublish = (currentTable != null) ? currentTable.isFileBundling() : isFileBundling;
-            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
-                long commitVersion = commitVersionMap.get(physicalPartitionId);
-                Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
-                List<Tablet> aggregateTablets = useAggregatePublish ? new ArrayList<>() : null;
-                for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    if (useAggregatePublish) {
-                        aggregateTablets.addAll(index.getTablets());
-                    } else {
-                        Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                computeResource, false);
-                    }
-                }
-                if (useAggregatePublish && !aggregateTablets.isEmpty()) {
-                    Utils.publishVersion(aggregateTablets, txnInfo, commitVersion - 1, commitVersion,
-                            computeResource, true);
-                }
+        OlapTable currentTable = getOlapTable(dbId, tableId);
+        boolean useAggregatePublish = (currentTable != null) ? currentTable.isFileBundling() : isFileBundling;
+        Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            List<Tablet> tablets = new ArrayList<>();
+            for (MaterializedIndex index : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
+                tablets.addAll(index.getTablets());
             }
-            return true;
-        } catch (Exception e) {
-            LOG.error("Fail to no-op publish for force-cancel of meta alter job {}: {}", jobId, e.getMessage());
-            return false;
+            tabletsByPartition.put(physicalPartitionId, tablets);
         }
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+                tabletsByPartition, computeResource, useAggregatePublish);
     }
 
     private void updateErrorInfo(String errMsg) {

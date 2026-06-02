@@ -908,50 +908,32 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      * FINISHED_REWRITING so the operator can retry CANCEL ALTER ... FORCE.
      */
     protected boolean lakePublishVersionWithSkip(String reason) {
-        LOG.info("force-cancel no-op publish: schema change job {} watershedTxnId {} reason \"{}\"",
-                jobId, watershedTxnId, reason);
-        try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-            txnInfo.commitTime = System.currentTimeMillis() / 1000;
-            txnInfo.gtid = watershedGtid;
-            txnInfo.noOpPublish = true;
-
-            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
-                long commitVersion = commitVersionMap.get(physicalPartitionId);
-                List<MaterializedIndex> visibleIndices;
-                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-                    OlapTable table = getTableOrThrow(db, tableId);
-                    PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    if (physicalPartition == null) {
-                        // partition gone (concurrent drop); nothing to advance, skip.
-                        continue;
-                    }
-                    visibleIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
-                }
-                List<Tablet> regularTablets = new ArrayList<>();
-                for (MaterializedIndex index : visibleIndices) {
-                    regularTablets.addAll(index.getTablets());
-                }
-                if (regularTablets.isEmpty()) {
+        // Heavy schema change publishes the partition's VISIBLE (original)
+        // indices and deliberately SKIPS its shadow indices: the shadows are
+        // about to be dropped by removeShadowIndex() inside persistStateChange,
+        // so publishing them would just produce orphan metadata. The visible
+        // indices are what subsequent loads' publish chains depend on. The
+        // shared publish mechanics live in Utils#noOpPublishForForceSkip; the
+        // isFileBundling dispatch matches lakePublishVersion() (the alter does
+        // not change file_bundling, so current == target here).
+        Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            List<Tablet> regularTablets = new ArrayList<>();
+            try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+                OlapTable table = getTableOrThrow(db, tableId);
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null) {
+                    // partition gone (concurrent drop); nothing to advance, skip.
                     continue;
                 }
-                // Mirror lakePublishVersion()'s isFileBundling dispatch: for
-                // bundled tables BE expects the partition's new version as a
-                // single bundle file, so we must send aggregate_publish too —
-                // otherwise the no-op publish lands as per-tablet metadata and
-                // subsequent loads have to limp through BE's mixed-format
-                // compatibility path.
-                Utils.publishVersion(regularTablets, txnInfo, commitVersion - 1, commitVersion,
-                        computeResource, isFileBundling);
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    regularTablets.addAll(index.getTablets());
+                }
             }
-            return true;
-        } catch (Exception e) {
-            LOG.error("Fail to no-op publish for force-cancel of schema change job {}: {}", jobId, e.getMessage());
-            return false;
+            tabletsByPartition.put(physicalPartitionId, regularTablets);
         }
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+                tabletsByPartition, computeResource, isFileBundling);
     }
 
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {
