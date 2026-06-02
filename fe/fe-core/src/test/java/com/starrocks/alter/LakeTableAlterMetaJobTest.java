@@ -207,26 +207,67 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testLakePublishVersionWithSkipSingleDispatch() throws Exception {
-        // ENABLE_PERSISTENT_INDEX meta alter → enableFileBundling() is false
-        // and isFileBundling stays false in UT, so lakePublishVersionWithSkip
-        // uses the per-tablet (non-aggregate) publish_version path.
-        LakeTableAlterMetaJob single = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true,
-                "CLOUD_NATIVE");
-        runForceCancelNoOpPublishBody(single, /*expectAggregate=*/ false);
+        // Current (pre-alter) format is per-tablet (file_bundling=false), so the
+        // no-op publish must use the per-tablet (non-aggregate) publish_version
+        // path — dispatch keys off the table's CURRENT format, not the alter's
+        // target.
+        LakeTable single = createTable(connectContext,
+                "CREATE TABLE t_single(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), single.getId(), single.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        runForceCancelNoOpPublishBody(job, /*expectAggregate=*/ false);
     }
 
     @Test
     public void testLakePublishVersionWithSkipAggregateDispatch() throws Exception {
-        // ENABLE_FILE_BUNDLING meta alter with enableFileBundling=true makes
-        // enableFileBundling() return true, so lakePublishVersionWithSkip uses
-        // the aggregate publish_version path (BE expects one bundle file per
-        // partition). This is deterministic without depending on isFileBundling,
-        // which is only populated by the normal publish path.
-        LakeTableAlterMetaJob aggregate = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), table.getName(), 60 * 1000, TTabletMetaType.ENABLE_FILE_BUNDLING, true,
-                "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT");
-        runForceCancelNoOpPublishBody(aggregate, /*expectAggregate=*/ true);
+        // Current (pre-alter) format is bundled (file_bundling=true), so the
+        // no-op publish must use the aggregate publish_version path (BE expects
+        // one bundle file per partition) — again keyed off the table's CURRENT
+        // format.
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_bundled(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='true')");
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        runForceCancelNoOpPublishBody(job, /*expectAggregate=*/ true);
+    }
+
+    @Test
+    public void testForceCancelFileBundlingAlterDoesNotSetMetadataSwitchVersion() throws Exception {
+        // Regression for the leader/replay divergence: force-cancelling a
+        // file_bundling alter must NOT record a metadataSwitchVersion. The alter
+        // is discarded (no-op publish writes V-1 content as V), so no format
+        // switch happened at commitVersion; recording one would diverge from the
+        // replay path (which never sets it) and needlessly pin vacuum's retain
+        // version.
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_switch(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        // ENABLE_FILE_BUNDLING alter (enable): updateVisibleVersion's old code
+        // would have set metadataSwitchVersion for exactly this metaType.
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_FILE_BUNDLING,
+                true, "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT");
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+            }
+        };
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        Assertions.assertTrue(job.cancel("force-cancel-switch-version", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        for (PhysicalPartition pp : bundled.getPhysicalPartitions()) {
+            Assertions.assertEquals(0L, pp.getMetadataSwitchVersion(),
+                    "force-cancel must not record a metadataSwitchVersion");
+        }
     }
 
     // Runs the REAL lakePublishVersionWithSkip body (the other force-cancel

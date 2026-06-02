@@ -483,6 +483,40 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
+    /**
+     * Force-skip variant of {@link #updateVisibleVersion(OlapTable)}: advances ONLY
+     * the visible version, with a soft guard, and deliberately does NOT touch
+     * {@code metadataSwitchVersion}.
+     *
+     * <p>A force-cancel discards the alter — the no-op publish writes V-1 content
+     * tagged as version V, so no format switch happened at commitVersion. Recording
+     * a switch version here would (a) needlessly pin vacuum's retained version and
+     * (b) diverge from the replay path, which does not record one. This single helper
+     * is therefore used by BOTH the live cancel callback and the replay CANCELLED
+     * branch so a leader FE and a replayed/restarted FE stay byte-for-byte identical.
+     *
+     * <p>Unlike {@link #updateVisibleVersion(OlapTable)} it uses a soft {@code if}
+     * guard instead of {@code Preconditions.checkState}: this runs inside the
+     * edit-log applier (after the CANCELLED entry is already durably journaled), so
+     * a thrown precondition would leave the live FE inconsistent with its own journal.
+     */
+    private void advanceVisibleVersionForForceSkip(@NotNull OlapTable table) {
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null) {
+                continue;
+            }
+            Long commitVersion = commitVersionMap.get(physicalPartitionId);
+            if (commitVersion == null) {
+                continue;
+            }
+            // Idempotent: a later load may already have advanced past commitVersion.
+            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                physicalPartition.updateVisibleVersion(commitVersion, finishedTimeMs);
+            }
+        }
+    }
+
     protected AgentBatchTask getBatchTask() {
         return batchTask;
     }
@@ -556,14 +590,16 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                         // otherwise the next load's publish will compute base from
                         // the stale FE-visible version (= commitVersion-1) and
                         // BE will still try to apply the cancelled alter's
-                        // txn_log when materializing the load's new version. The
-                        // updateVisibleVersion() call mirrors what the normal
-                        // FINISHED_REWRITING → FINISHED transition does, just
-                        // moved into the cancel callback.
+                        // txn_log when materializing the load's new version.
+                        // Use advanceVisibleVersionForForceSkip (NOT the full
+                        // updateVisibleVersion): the alter is being discarded, so
+                        // it must not record a metadataSwitchVersion, and it must
+                        // match the replay branch exactly to avoid leader/replay
+                        // divergence.
                         boolean advanceVersionForForce = (jobState == JobState.FINISHED_REWRITING) && force;
                         persistStateChange(this, JobState.CANCELLED, () -> {
                             if (advanceVersionForForce) {
-                                updateVisibleVersion(table);
+                                advanceVisibleVersionForForceSkip(table);
                             }
                             table.setState(OlapTable.OlapTableState.NORMAL);
                         });
@@ -604,15 +640,18 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.gtid = watershedGtid;
             txnInfo.noOpPublish = true;
 
-            // Follow the same single-vs-aggregate dispatch as the normal
-            // lakePublishVersion() so that the no-op publish writes metadata
-            // in the format consistent with how the partition's data is
-            // already stored on OSS. Without this, an alter on a
-            // file_bundling=true table would have its no-op publish written
-            // per-tablet while subsequent loads expect a bundle file,
-            // forcing BE into the (working but fragile) mixed-format
-            // recovery code path.
-            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
+            // Dispatch on the partition's CURRENT (pre-alter) bundling format,
+            // NOT the alter's target. This is a CANCEL: the no-op publish writes
+            // V from V-1 content, so V must be written in V-1's format. Keying
+            // off the alter's target (e.g. enableFileBundling() for an enabling
+            // alter, whose V-1 data is still per-tablet) would emit an aggregate
+            // bundle write over per-tablet data. The alter never reached
+            // FINISHED, so updateCatalog() has not flipped the table's flag yet —
+            // table.isFileBundling() is therefore the current/pre-alter format.
+            // (Falls back to the cached isFileBundling field if the table is
+            // gone, though a dropped table needs no version advance anyway.)
+            OlapTable currentTable = getOlapTable(dbId, tableId);
+            boolean useAggregatePublish = (currentTable != null) ? currentTable.isFileBundling() : isFileBundling;
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
@@ -707,24 +746,12 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             } else if (jobState == JobState.CANCELLED) {
                 // FORCE-cancel left BE with no-op tablet_metadata at commitVersion
                 // and the live path bumped partition.VisibleVersion to match.
-                // Replay must do the same; otherwise an FE recovering from a
-                // pre-cancel image keeps VisibleVersion=commitVersion-1 and
-                // subsequent load publishes compute base from the wrong version.
+                // Replay must do the SAME bump via the SAME helper; otherwise an
+                // FE recovering from a pre-cancel image keeps
+                // VisibleVersion=commitVersion-1 and subsequent load publishes
+                // compute base from the wrong version.
                 if (forceSkippedAtCommitted) {
-                    for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
-                        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                        if (physicalPartition == null) {
-                            continue;
-                        }
-                        Long commitVersion = commitVersionMap.get(physicalPartitionId);
-                        if (commitVersion == null) {
-                            continue;
-                        }
-                        // Idempotent against later loads having moved past commitVersion
-                        if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
-                            physicalPartition.updateVisibleVersion(commitVersion, finishedTimeMs);
-                        }
-                    }
+                    advanceVisibleVersionForForceSkip(table);
                 }
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN) {
