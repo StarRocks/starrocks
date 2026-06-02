@@ -107,7 +107,7 @@ public:
         if (_segment_range_end > 0) {
             return _segment_range_end - _segment_range_start;
         }
-        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
+        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segment_metas_size();
     }
 
     // only used in compaction

@@ -65,17 +65,24 @@ public:
 
         double cnt = 1;
         if (rowset_meta_ptr->overlapped()) {
-            int segments_size = rowset_meta_ptr->segments_size();
+            int segments_size = rowset_meta_ptr->segment_metas_size();
+            int segment_size_cnt = 0;
+            for (int i = 0; i < segments_size; i++) {
+                if (rowset_meta_ptr->segment_metas(i).has_size()) {
+                    segment_size_cnt++;
+                }
+            }
             if (segments_size == 0) {
                 cnt = 1;
-            } else if (rowset_meta_ptr->segment_size_size() == 0) {
+            } else if (segment_size_cnt == 0) {
                 // No segment_size info, fall back to counting all segments
                 cnt = segments_size;
             } else {
                 // Count only segments smaller than the large segment threshold
                 int effective_count = 0;
-                for (int i = 0; i < rowset_meta_ptr->segment_size_size(); i++) {
-                    if (static_cast<int64_t>(rowset_meta_ptr->segment_size(i)) < large_rowset_threshold) {
+                for (int i = 0; i < segments_size; i++) {
+                    const auto& segment_meta = rowset_meta_ptr->segment_metas(i);
+                    if (segment_meta.has_size() && static_cast<int64_t>(segment_meta.size()) < large_rowset_threshold) {
                         effective_count++;
                     }
                 }
@@ -99,7 +106,7 @@ public:
     void calculate_score() { score = (io_count() * 1024 * 1024) / read_bytes(); }
     // Rowset has multi segments and these segments are overlapped
     bool multi_segment_with_overlapped() const {
-        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segments_size() > 1;
+        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segment_metas_size() > 1;
     }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 

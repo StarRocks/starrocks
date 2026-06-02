@@ -799,7 +799,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
@@ -884,7 +884,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -1035,7 +1035,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -1743,7 +1743,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -1912,7 +1912,7 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
@@ -3701,7 +3701,7 @@ TEST_F(LakeColumnUpsertModeTest, test_orphan_files_gc_in_column_upsert_mode) {
         const auto& op_write = txn_log->op_write();
 
         // The partial update should have generated segments (before GC)
-        int segment_count = op_write.rowset().segments_size();
+        int segment_count = op_write.rowset().segment_metas_size();
         LOG(INFO) << "Partial update generated " << segment_count << " segments before publish";
 
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -3830,7 +3830,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         ASSERT_TRUE(txn_log->has_op_write());
         const auto& op_write = txn_log->op_write();
-        int original_dels_count = op_write.dels_size();
+        int original_dels_count = op_write.dels_meta_size();
         LOG(INFO) << "Original del files count: " << original_dels_count;
 
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());

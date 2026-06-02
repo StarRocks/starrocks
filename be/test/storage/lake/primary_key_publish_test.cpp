@@ -212,7 +212,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -1392,15 +1392,15 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 0);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).del_files_size(), 0);
-    EXPECT_EQ(new_tablet_metadata->rowsets(2).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(2).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_rows(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).del_files_size(), 1);
@@ -1429,7 +1429,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
     }
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4);
-    EXPECT_EQ(new_tablet_metadata->rowsets(3).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(3).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_rows(), kChunkSize / 2);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).del_files_size(), 0);
@@ -1514,7 +1514,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
@@ -1543,11 +1543,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
     }
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).del_files_size(), 0);
@@ -1664,7 +1664,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
     EXPECT_EQ(0, read_rows(tablet_id, version));
 
@@ -2269,8 +2269,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_sstable_meta) {
             uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
             ASSERT_OK(writer.finalize(&seg_size, &idx_size, &footer_pos));
 
-            rowset_meta->add_segments(segment_name);
-            rowset_meta->add_segment_size(seg_size);
+            auto* sm = rowset_meta->add_segment_metas();
+            sm->set_filename(segment_name);
+            sm->set_size(seg_size);
         }
 
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
@@ -2410,8 +2411,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
             uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
             ASSERT_OK(writer.finalize(&seg_size, &idx_size, &footer_pos));
 
-            rowset_meta->add_segments(segment_name);
-            rowset_meta->add_segment_size(seg_size);
+            auto* sm = rowset_meta->add_segment_metas();
+            sm->set_filename(segment_name);
+            sm->set_size(seg_size);
         }
 
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));

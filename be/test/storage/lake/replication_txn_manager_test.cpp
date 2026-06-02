@@ -749,12 +749,12 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_rowset_meta_col
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify segments are properly converted
-    EXPECT_EQ(2, op_write.rowset().segments_size());
+    EXPECT_EQ(2, op_write.rowset().segment_metas_size());
     EXPECT_EQ(2, filename_map.size());
 
     // Verify all segment files are .dat files
-    for (const auto& segment : op_write.rowset().segments()) {
-        EXPECT_TRUE(lake::is_segment(segment));
+    for (const auto& segment : op_write.rowset().segment_metas()) {
+        EXPECT_TRUE(lake::is_segment(segment.filename()));
     }
 }
 
@@ -1111,8 +1111,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_p
     rowset->set_id(5); // source rowset seg id
     rowset->set_num_rows(100);
     rowset->set_data_size(4096);
-    rowset->add_segments("seg1.dat");
-    rowset->add_segments("seg2.dat");
+    rowset->add_segment_metas()->set_filename("seg1.dat");
+    rowset->add_segment_metas()->set_filename("seg2.dat");
 
     // Add DCG metadata - segment 5 has DCG with version 3
     auto* dcg_meta = op_replication.mutable_dcg_meta();
@@ -1163,8 +1163,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     rowset1->set_id(3);
     rowset1->set_num_rows(50);
     rowset1->set_data_size(2048);
-    rowset1->add_segments("seg1.dat");
-    rowset1->add_segments("seg2.dat");
+    rowset1->add_segment_metas()->set_filename("seg1.dat");
+    rowset1->add_segment_metas()->set_filename("seg2.dat");
 
     // Rowset 2: source id=10, 1 segment
     auto* op_write2 = op_replication.add_op_writes();
@@ -1172,7 +1172,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     rowset2->set_id(10);
     rowset2->set_num_rows(30);
     rowset2->set_data_size(1024);
-    rowset2->add_segments("seg3.dat");
+    rowset2->add_segment_metas()->set_filename("seg3.dat");
 
     // DCG on segment (source rssid=4, which is rowset1.id + segment_index 1)
     auto* dcg_meta = op_replication.mutable_dcg_meta();
@@ -1190,7 +1190,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     for (const auto& ow : op_replication.op_writes()) {
         if (ow.has_rowset()) {
             uint32_t source_id = ow.rowset().id();
-            uint32_t num_segments = ow.rowset().segments_size();
+            uint32_t num_segments = ow.rowset().segment_metas_size();
             for (uint32_t i = 0; i < num_segments; i++) {
                 rssid_remap[source_id + i] = current_next_id + i;
             }
@@ -1620,8 +1620,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_p
     rowset1->set_id(3);
     rowset1->set_num_rows(50);
     rowset1->set_data_size(2048);
-    rowset1->add_segments("seg1.dat");
-    rowset1->add_segments("seg2.dat");
+    rowset1->add_segment_metas()->set_filename("seg1.dat");
+    rowset1->add_segment_metas()->set_filename("seg2.dat");
 
     // Rowset 2: source id=8, 1 segment, 30 rows
     auto* op_write2 = op_replication.add_op_writes();
@@ -1629,7 +1629,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_p
     rowset2->set_id(8);
     rowset2->set_num_rows(30);
     rowset2->set_data_size(1024);
-    rowset2->add_segments("seg3.dat");
+    rowset2->add_segment_metas()->set_filename("seg3.dat");
 
     // DCG on source segment 4 (rowset1.id=3, segment index 1)
     auto* dcg_meta_pb = op_replication.mutable_dcg_meta();
@@ -1645,9 +1645,9 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_p
     {
         uint32_t target_id = metadata.next_rowset_id(); // 20
         for (const auto& ow : op_replication.op_writes()) {
-            if (ow.dels_size() > 0 || ow.rowset().num_rows() > 0 || ow.rowset().has_delete_predicate()) {
+            if (ow.dels_meta_size() > 0 || ow.rowset().num_rows() > 0 || ow.rowset().has_delete_predicate()) {
                 uint32_t source_id = ow.rowset().id();
-                uint32_t step = std::max<uint32_t>(1, ow.rowset().segments_size());
+                uint32_t step = std::max<uint32_t>(1, ow.rowset().segment_metas_size());
                 for (uint32_t i = 0; i < step; i++) {
                     rssid_remap[source_id + i] = target_id + i;
                 }
@@ -1700,9 +1700,9 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_n
     rowset->set_id(5);
     rowset->set_num_rows(100);
     rowset->set_data_size(4096);
-    rowset->add_segments("s1.dat");
-    rowset->add_segments("s2.dat");
-    rowset->add_segments("s3.dat");
+    rowset->add_segment_metas()->set_filename("s1.dat");
+    rowset->add_segment_metas()->set_filename("s2.dat");
+    rowset->add_segment_metas()->set_filename("s3.dat");
 
     // DCG on source segment 6 (rowset.id=5, segment index 1)
     auto* dcg_meta_pb = op_replication.mutable_dcg_meta();
@@ -1719,7 +1719,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_n
         for (const auto& ow : op_replication.op_writes()) {
             if (ow.has_rowset() && (ow.rowset().num_rows() > 0 || ow.rowset().has_delete_predicate())) {
                 uint32_t source_id = ow.rowset().id();
-                uint32_t step = std::max<uint32_t>(1, ow.rowset().segments_size());
+                uint32_t step = std::max<uint32_t>(1, ow.rowset().segment_metas_size());
                 for (uint32_t i = 0; i < step; i++) {
                     rssid_remap[source_id + i] = target_id + i;
                 }

@@ -142,9 +142,9 @@ void cap_and_redistribute_dels(const std::vector<int64_t>& rows, std::vector<int
 }
 
 void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata) {
-    auto* shared_segments = rowset_metadata->mutable_shared_segments();
-    shared_segments->Clear();
-    shared_segments->Resize(rowset_metadata->segments_size(), true);
+    for (auto& segment_meta : *rowset_metadata->mutable_segment_metas()) {
+        segment_meta.set_shared(true);
+    }
 
     for (auto& del : *rowset_metadata->mutable_del_files()) {
         del.set_shared(true);
@@ -161,12 +161,11 @@ static void set_all_data_files_shared(TxnLogPB_OpWrite* op_write) {
     for (auto& sst : *op_write->mutable_ssts()) {
         sst.set_shared(true);
     }
-    // op_write.dels is a plain string list with no per-entry shared flag; populate
-    // the parallel `shared_dels` so that apply_opwrite can transfer the shared
+    // Mark every del file as shared so that apply_opwrite can transfer the shared
     // state into RowsetMetadataPB.del_files when the txn is published on a child.
-    auto* shared_dels = op_write->mutable_shared_dels();
-    shared_dels->Clear();
-    shared_dels->Resize(op_write->dels_size(), true);
+    for (auto& del_meta : *op_write->mutable_dels_meta()) {
+        del_meta.set_shared(true);
+    }
 }
 
 // Marks all data files referenced by an OpCompaction as shared. Used both for the
@@ -503,7 +502,7 @@ namespace {
 // top-level op_compaction and for every op_parallel_compaction.subtask_compactions[*].
 //
 // Only files newly written by this compaction are collected. In partial
-// compaction the output_rowset.segments() list concatenates uncompacted
+// compaction the output_rowset.segment_metas() list concatenates uncompacted
 // (reused) input segments with newly written ones; the slice
 // [new_segment_offset, new_segment_offset + new_segment_count) identifies the
 // new ones. output_rowset.del_files() may likewise be carried over from input
@@ -519,7 +518,7 @@ namespace {
 void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, int64_t tablet_id,
                                     TabletManager* tablet_manager, std::vector<std::string>* output_paths) {
     if (op_compaction.has_output_rowset()) {
-        const auto& segments = op_compaction.output_rowset().segments();
+        const auto& segments = op_compaction.output_rowset().segment_metas();
         if (op_compaction.has_new_segment_count()) {
             // Normal or partial compaction: only the
             // [new_segment_offset, new_segment_offset + new_segment_count)
@@ -531,7 +530,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
             if (new_segment_offset >= 0 && new_segment_count > 0) {
                 for (int32_t idx = new_segment_offset, taken = 0; idx < segments.size() && taken < new_segment_count;
                      ++idx, ++taken) {
-                    output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segments[idx]));
+                    output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segments[idx].filename()));
                 }
             }
         } else {
@@ -540,7 +539,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
             // tablet_parallel_compaction_manager, whose output_rowset only
             // contains segments the subtasks newly produced. Treat all as new.
             for (const auto& segment : segments) {
-                output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segment));
+                output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segment.filename()));
             }
         }
     }

@@ -550,11 +550,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
+    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
         rowset_meta.num_rows() == 0) {
         return Status::OK();
     }
-    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
+    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
     // currently assume it's a partial update
     const auto& txn_meta = params.op_write.txn_meta();
     std::vector<ColumnId> unmodified_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
@@ -577,24 +577,20 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     }
 
     bool need_rename = true;
-    const auto& src_path = rowset_meta.segments(segment_id);
+    const auto& src_seg_meta = rowset_meta.segment_metas(segment_id);
+    const auto& src_path = src_seg_meta.filename();
     const auto& dest_path = gen_segment_filename(txn_id);
     DCHECK(src_path != dest_path);
 
-    FileInfo src{.path = params.tablet->segment_location(src_path), .size = rowset_meta.segment_size(segment_id)};
-    auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
-    if (segment_encryption_metas_size > 0) {
-        if (segment_id >= segment_encryption_metas_size) {
-            string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}",
-                                     params.tablet->tablet_id(), params.op_write.rowset().id(), segment_id,
-                                     segment_encryption_metas_size);
-            LOG(ERROR) << msg;
-            return Status::Corruption(msg);
-        }
-        src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    if (src_seg_meta.has_size()) {
+        src.size = src_seg_meta.size();
     }
-    if (rowset_meta.bundle_file_offsets_size() > 0) {
-        src.bundle_file_offset = rowset_meta.bundle_file_offsets(segment_id);
+    if (src_seg_meta.has_encryption_meta()) {
+        src.encryption_meta = src_seg_meta.encryption_meta();
+    }
+    if (src_seg_meta.has_bundle_file_offset()) {
+        src.bundle_file_offset = src_seg_meta.bundle_file_offset();
     }
 
     int64_t t_rewrite_start = MonotonicMillis();
@@ -629,9 +625,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     if (need_rename) {
         // after rename, add old segment to orphan files, for gc later.
         FileMetaPB file_meta;
-        file_meta.set_name(rowset_meta.segments(segment_id));
-        if (rowset_meta.shared_segments_size() > 0) {
-            file_meta.set_shared(rowset_meta.shared_segments(segment_id));
+        file_meta.set_name(src_seg_meta.filename());
+        if (src_seg_meta.has_shared()) {
+            file_meta.set_shared(src_seg_meta.shared());
         }
         orphan_files->push_back(std::move(file_meta));
     }
@@ -651,7 +647,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     _base_versions[segment_id] = base_version;
     TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     // skip resolve conflict when not partial update happen.
-    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0) {
+    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segment_metas_size() == 0) {
         return Status::OK();
     }
 
@@ -890,7 +886,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
     TRACE_COUNTER_SCOPE_LATENCY_US("load_delete_us");
-    _deletes.resize(params.op_write.dels_size());
+    _deletes.resize(params.op_write.dels_meta_size());
     if (_deletes[del_id] != nullptr) {
         // Already load.
         return Status::OK();
@@ -906,11 +902,12 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
 
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    const std::string& path = params.op_write.dels(del_id);
+    const auto& del_meta = params.op_write.dels_meta(del_id);
+    const std::string& path = del_meta.name();
     RandomAccessFileOptions opts;
-    if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
-        // When upgrade from old version, `del_encryption_metas` could be empty.
-        auto& meta = params.op_write.del_encryption_metas(del_id);
+    if (del_meta.has_encryption_meta()) {
+        // When upgrade from old version, `encryption_meta` could be empty.
+        auto& meta = del_meta.encryption_meta();
         if (!meta.empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
             opts.encryption_info = std::move(info);

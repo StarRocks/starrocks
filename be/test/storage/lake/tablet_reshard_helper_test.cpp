@@ -205,8 +205,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         auto* op_write = txn_log.mutable_op_write();
         auto* rowset = op_write->mutable_rowset();
-        rowset->add_segments("seg1.dat");
-        rowset->add_segments("seg2.dat");
+        rowset->add_segment_metas()->set_filename("seg1.dat");
+        rowset->add_segment_metas()->set_filename("seg2.dat");
         auto* del = rowset->add_del_files();
         del->set_name("del1.dat");
 
@@ -222,7 +222,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         auto* op_compaction = txn_log.mutable_op_compaction();
         auto* output_rowset = op_compaction->mutable_output_rowset();
-        output_rowset->add_segments("compact_seg.dat");
+        output_rowset->add_segment_metas()->set_filename("compact_seg.dat");
 
         op_compaction->mutable_output_sstable()->set_filename("output.sst");
         op_compaction->mutable_output_sstable()->set_shared(false);
@@ -243,7 +243,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         auto* op_schema_change = txn_log.mutable_op_schema_change();
         auto* rowset = op_schema_change->add_rowsets();
-        rowset->add_segments("sc_seg.dat");
+        rowset->add_segment_metas()->set_filename("sc_seg.dat");
         auto* del = rowset->add_del_files();
         del->set_name("sc_del.dat");
         auto& delvec_file = (*op_schema_change->mutable_delvec_meta()->mutable_version_to_file())[1];
@@ -258,9 +258,9 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         const auto& op_write = txn_log.op_write();
         // Rowset shared_segments
-        ASSERT_EQ(op_write.rowset().shared_segments_size(), 2);
-        EXPECT_TRUE(op_write.rowset().shared_segments(0));
-        EXPECT_TRUE(op_write.rowset().shared_segments(1));
+        ASSERT_EQ(op_write.rowset().segment_metas_size(), 2);
+        EXPECT_TRUE(op_write.rowset().segment_metas(0).shared());
+        EXPECT_TRUE(op_write.rowset().segment_metas(1).shared());
         // Del files
         EXPECT_TRUE(op_write.rowset().del_files(0).shared());
         // SSTs in OpWrite
@@ -273,8 +273,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         const auto& op_compaction = txn_log.op_compaction();
         // Output rowset shared_segments
-        ASSERT_EQ(op_compaction.output_rowset().shared_segments_size(), 1);
-        EXPECT_TRUE(op_compaction.output_rowset().shared_segments(0));
+        ASSERT_EQ(op_compaction.output_rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(op_compaction.output_rowset().segment_metas(0).shared());
         // Output sstable
         EXPECT_TRUE(op_compaction.output_sstable().shared());
         // Output sstables (repeated)
@@ -289,8 +289,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     // Verify OpSchemaChange
     {
         const auto& op_schema_change = txn_log.op_schema_change();
-        ASSERT_EQ(op_schema_change.rowsets(0).shared_segments_size(), 1);
-        EXPECT_TRUE(op_schema_change.rowsets(0).shared_segments(0));
+        ASSERT_EQ(op_schema_change.rowsets(0).segment_metas_size(), 1);
+        EXPECT_TRUE(op_schema_change.rowsets(0).segment_metas(0).shared());
         EXPECT_TRUE(op_schema_change.rowsets(0).del_files(0).shared());
         const auto& vtf = op_schema_change.delvec_meta().version_to_file();
         auto it = vtf.find(1);
@@ -306,18 +306,18 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
 TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_populates_shared_dels) {
     TxnLogPB txn_log;
     auto* op_write = txn_log.mutable_op_write();
-    op_write->add_dels("del1.del");
-    op_write->add_dels("del2.del");
-    op_write->add_dels("del3.del");
+    op_write->add_dels_meta()->set_name("del1.del");
+    op_write->add_dels_meta()->set_name("del2.del");
+    op_write->add_dels_meta()->set_name("del3.del");
     // Start with shared_dels empty (pre-split state).
-    ASSERT_EQ(op_write->shared_dels_size(), 0);
+    ASSERT_FALSE(op_write->dels_meta(0).shared());
 
     set_all_data_files_shared(&txn_log);
 
-    ASSERT_EQ(txn_log.op_write().shared_dels_size(), 3);
-    EXPECT_TRUE(txn_log.op_write().shared_dels(0));
-    EXPECT_TRUE(txn_log.op_write().shared_dels(1));
-    EXPECT_TRUE(txn_log.op_write().shared_dels(2));
+    ASSERT_EQ(txn_log.op_write().dels_meta_size(), 3);
+    EXPECT_TRUE(txn_log.op_write().dels_meta(0).shared());
+    EXPECT_TRUE(txn_log.op_write().dels_meta(1).shared());
+    EXPECT_TRUE(txn_log.op_write().dels_meta(2).shared());
 }
 
 // Verify that set_all_data_files_shared marks every SST-related field inside each
@@ -334,7 +334,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_parallel_c
         auto* subtask = op_parallel->add_subtask_compactions();
 
         auto* output_rowset = subtask->mutable_output_rowset();
-        output_rowset->add_segments("sub_seg.dat");
+        output_rowset->add_segment_metas()->set_filename("sub_seg.dat");
         auto* del = output_rowset->add_del_files();
         del->set_name("sub_del.dat");
 
@@ -362,8 +362,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_parallel_c
     ASSERT_EQ(txn_log.op_parallel_compaction().subtask_compactions_size(), 2);
     for (const auto& subtask : txn_log.op_parallel_compaction().subtask_compactions()) {
         // Nested rowset data files
-        ASSERT_EQ(subtask.output_rowset().shared_segments_size(), 1);
-        EXPECT_TRUE(subtask.output_rowset().shared_segments(0));
+        ASSERT_EQ(subtask.output_rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(subtask.output_rowset().segment_metas(0).shared());
         EXPECT_TRUE(subtask.output_rowset().del_files(0).shared());
         // Nested SST fields
         EXPECT_TRUE(subtask.output_sstable().shared());
@@ -394,14 +394,14 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_op_replica
         auto* op_write = op_replication->add_op_writes();
 
         auto* rowset = op_write->mutable_rowset();
-        rowset->add_segments("rep_seg.dat");
+        rowset->add_segment_metas()->set_filename("rep_seg.dat");
         auto* del = rowset->add_del_files();
         del->set_name("rep_existing.del");
 
-        op_write->add_dels("rep_new1.del");
-        op_write->add_dels("rep_new2.del");
+        op_write->add_dels_meta()->set_name("rep_new1.del");
+        op_write->add_dels_meta()->set_name("rep_new2.del");
         // shared_dels starts empty — must be populated by set_all_data_files_shared.
-        ASSERT_EQ(op_write->shared_dels_size(), 0);
+        ASSERT_FALSE(op_write->dels_meta(0).shared());
 
         auto* sst = op_write->add_ssts();
         sst->set_name("rep_sst.sst");
@@ -413,13 +413,13 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_op_replica
     ASSERT_EQ(txn_log.op_replication().op_writes_size(), 2);
     for (const auto& op_write : txn_log.op_replication().op_writes()) {
         // Rowset segment & existing del_file shared flags
-        ASSERT_EQ(op_write.rowset().shared_segments_size(), 1);
-        EXPECT_TRUE(op_write.rowset().shared_segments(0));
+        ASSERT_EQ(op_write.rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(op_write.rowset().segment_metas(0).shared());
         EXPECT_TRUE(op_write.rowset().del_files(0).shared());
         // New-del shared_dels parallel to dels
-        ASSERT_EQ(op_write.shared_dels_size(), 2);
-        EXPECT_TRUE(op_write.shared_dels(0));
-        EXPECT_TRUE(op_write.shared_dels(1));
+        ASSERT_EQ(op_write.dels_meta_size(), 2);
+        EXPECT_TRUE(op_write.dels_meta(0).shared());
+        EXPECT_TRUE(op_write.dels_meta(1).shared());
         // ssts shared flag
         ASSERT_EQ(op_write.ssts_size(), 1);
         EXPECT_TRUE(op_write.ssts(0).shared());

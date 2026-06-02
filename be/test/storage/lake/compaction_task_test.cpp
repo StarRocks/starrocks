@@ -440,7 +440,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
-    ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segments_size());
+    ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segment_metas_size());
 
     // check data
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));

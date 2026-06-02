@@ -53,7 +53,7 @@ bool TabletParallelCompactionManager::_is_group_valid_for_compaction(const std::
     }
     if (group.size() == 1) {
         const auto& meta = group[0]->metadata();
-        return meta.overlapped() && meta.segments_size() >= 2;
+        return meta.overlapped() && meta.segment_metas_size() >= 2;
     }
     return false;
 }
@@ -109,7 +109,7 @@ TabletParallelCompactionManager::RowsetStats TabletParallelCompactionManager::_c
         }
         // Count effective segments
         if (meta.overlapped()) {
-            stats.total_segments += std::max(1, meta.segments_size());
+            stats.total_segments += std::max(1, meta.segment_metas_size());
         } else {
             stats.total_segments += 1;
         }
@@ -181,7 +181,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
     // Helper lambda to get segment count for a rowset
     auto get_rowset_segments = [](const RowsetPtr& rowset) -> int64_t {
         const auto& meta = rowset->metadata();
-        return std::max(1, meta.segments_size());
+        return std::max(1, meta.segment_metas_size());
     };
 
     for (size_t rowset_idx = 0; rowset_idx < all_rowsets.size(); rowset_idx++) {
@@ -300,12 +300,12 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_filter_inv
             const auto& rowset = group[0];
             const auto& meta = rowset->metadata();
             // An overlapped rowset with multiple segments can be compacted to merge its segments
-            bool can_compact_alone = meta.overlapped() && meta.segments_size() >= 2;
+            bool can_compact_alone = meta.overlapped() && meta.segment_metas_size() >= 2;
             if (can_compact_alone) {
                 filtered_groups.push_back(std::move(group));
                 VLOG(1) << "Parallel compaction: tablet=" << tablet_id
                         << " keeping single overlapped rowset (id=" << rowset->id()
-                        << ", segments=" << meta.segments_size() << ") as valid group";
+                        << ", segments=" << meta.segment_metas_size() << ") as valid group";
             } else {
                 discarded_rowset_ids.push_back(rowset->id());
             }
@@ -1080,20 +1080,7 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 if (subtask_op.has_output_rowset()) {
                     const auto& output = subtask_op.output_rowset();
                     auto* merged_output = merged_compaction->mutable_output_rowset();
-                    DCHECK_EQ(output.segment_metas_size(), output.segments_size());
-                    // Add segments
-                    for (int i = 0; i < output.segments_size(); i++) {
-                        merged_output->add_segments(output.segments(i));
-                    }
-                    // Add segment_size
-                    for (int i = 0; i < output.segment_size_size(); i++) {
-                        merged_output->add_segment_size(output.segment_size(i));
-                    }
-                    // Add segment_encryption_metas
-                    for (int i = 0; i < output.segment_encryption_metas_size(); i++) {
-                        merged_output->add_segment_encryption_metas(output.segment_encryption_metas(i));
-                    }
-                    // Add segment_metas
+                    // Add segment_metas (canonical: carries filename/size/encryption/shared/bundle_offset).
                     const int merged_segment_idx_base = merged_output->segment_metas_size();
                     for (int i = 0; i < output.segment_metas_size(); i++) {
                         auto* segment_meta = merged_output->add_segment_metas();
@@ -1101,7 +1088,6 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                         // Rebuild segment_idx in the merged rowset's local id space.
                         segment_meta->set_segment_idx(merged_segment_idx_base + i);
                     }
-                    DCHECK_EQ(merged_output->segment_metas_size(), merged_output->segments_size());
 
                     total_num_rows += output.num_rows();
                     total_data_size += output.data_size();
@@ -1151,20 +1137,21 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 merged_output->set_num_rows(total_num_rows);
                 merged_output->set_data_size(total_data_size);
                 merged_output->set_overlapped(true);
-                merged_output->set_next_compaction_offset(merged_output->segments_size());
+                merged_output->set_next_compaction_offset(merged_output->segment_metas_size());
             }
 
             // Log segment file names for debugging data consistency
             std::stringstream seg_names;
             const auto& merged_output_rowset = merged_compaction->output_rowset();
-            for (int i = 0; i < merged_output_rowset.segments_size(); i++) {
+            for (int i = 0; i < merged_output_rowset.segment_metas_size(); i++) {
                 if (i > 0) seg_names << ",";
-                seg_names << merged_output_rowset.segments(i);
+                seg_names << merged_output_rowset.segment_metas(i).filename();
             }
             VLOG(1) << "Merged large rowset split result: tablet=" << tablet_id << ", txn_id=" << txn_id
                     << ", large_rowset_id=" << large_rowset_id << ", subtask_count=" << sorted_subtask_ids.size()
-                    << ", total_segments=" << merged_output_rowset.segments_size() << ", total_rows=" << total_num_rows
-                    << ", total_data_size=" << total_data_size << ", merged_ssts=" << merged_compaction->ssts_size()
+                    << ", total_segments=" << merged_output_rowset.segment_metas_size()
+                    << ", total_rows=" << total_num_rows << ", total_data_size=" << total_data_size
+                    << ", merged_ssts=" << merged_compaction->ssts_size()
                     << ", merged_sst_ranges=" << merged_compaction->sst_ranges_size()
                     << ", compact_version=" << merged_compaction->compact_version() << ", input_rowsets=["
                     << JoinInts(std::vector<uint32_t>(merged_compaction->input_rowsets().begin(),
@@ -1544,7 +1531,7 @@ bool TabletParallelCompactionManager::_is_large_rowset_for_split(const RowsetPtr
     // Skip rowsets where all segments have already been processed by a previous
     // split compaction. Re-splitting would just produce the same overlapped output
     // and cause an infinite compaction loop.
-    if (meta.next_compaction_offset() >= static_cast<uint32_t>(meta.segments_size())) {
+    if (meta.next_compaction_offset() >= static_cast<uint32_t>(meta.segment_metas_size())) {
         return false;
     }
 
@@ -1553,7 +1540,7 @@ bool TabletParallelCompactionManager::_is_large_rowset_for_split(const RowsetPtr
     // 2. data_size > max_bytes_per_subtask (larger than what a single subtask should handle)
     // 3. segments_size >= 4 (enough segments to split into at least 2 subtasks with 2 segments each)
     // 4. is_overlapped (non-overlapped rowsets don't need segment-level compaction)
-    return data_size >= min_size && data_size > max_bytes_per_subtask && meta.segments_size() >= 4 &&
+    return data_size >= min_size && data_size > max_bytes_per_subtask && meta.segment_metas_size() >= 4 &&
            rowset->is_overlapped();
 }
 
@@ -1563,7 +1550,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_split_large_rowset(c
     std::vector<SubtaskGroup> groups;
 
     const auto& meta = rowset->metadata();
-    int32_t total_segments = meta.segments_size();
+    int32_t total_segments = meta.segment_metas_size();
     int64_t total_data_size = rowset->data_size();
 
     if (total_segments < 2 || total_data_size <= 0) {
@@ -1774,7 +1761,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
             }
             // Only add groups that are valid for compaction (>= 2 rowsets or 1 overlapped rowset)
             if (g.rowsets.size() >= 2 || (g.rowsets.size() == 1 && g.rowsets[0]->is_overlapped() &&
-                                          g.rowsets[0]->metadata().segments_size() >= 2)) {
+                                          g.rowsets[0]->metadata().segment_metas_size() >= 2)) {
                 all_groups.push_back(std::move(g));
                 remaining_parallel--;
             } else {
