@@ -798,9 +798,6 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
     }
 }
 
-<<<<<<< HEAD
-} // namespace starrocks
-=======
 // Reproduces SIGSEGV at offset 0x44 in ScalarColumnWriter::finish() when a
 // VARCHAR/CHAR column writer is finalized without any append. String columns
 // set need_speculate_encoding = true, so ScalarColumnWriter::init() skips
@@ -823,4 +820,3 @@ TEST_F(ColumnReaderWriterTest, test_string_writer_finish_without_append) {
 }
 
 } // namespace starrocks
->>>>>>> 6e113da25b ([BugFix] Fix FlatJson crash when subwriters without any appends (#73730))
