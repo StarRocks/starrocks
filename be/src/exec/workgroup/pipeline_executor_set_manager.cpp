@@ -14,45 +14,20 @@
 
 #include "exec/workgroup/pipeline_executor_set_manager.h"
 
-#include "common/statusor.h"
 #include "common/thread/thread.h"
-#include "common/thread/threadpool.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/workgroup/work_group.h"
 
 namespace starrocks::workgroup {
 
-namespace {
-
-StatusOr<std::unique_ptr<pipeline::DriverExecutor>> create_driver_executor(
-        const PipelineExecutorSetConfig& conf, const std::string& name, const CpuUtil::CpuIds& cpuids,
-        const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
-        const WorkGroupSchedulePolicy& schedule_policy) {
-    std::unique_ptr<ThreadPool> thread_pool;
-    const Status status = ThreadPoolBuilder("pip_exec_" + name)
-                                  .set_min_threads(0)
-                                  .set_max_threads(num_driver_threads)
-                                  .set_max_queue_size(1000)
-                                  .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                                  .set_cpuids(cpuids)
-                                  .set_borrowed_cpuids(borrowed_cpuids)
-                                  .build(&thread_pool);
-    if (!status.ok()) {
-        return status;
-    }
-
-    std::unique_ptr<pipeline::DriverExecutor> driver_executor = std::make_unique<pipeline::GlobalDriverExecutor>(
-            name, std::move(thread_pool), true, cpuids, conf.metrics, schedule_policy);
-    return driver_executor;
-}
-
-} // namespace
-
-ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGroupSchedulePolicy& schedule_policy)
+ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGroupSchedulePolicy& schedule_policy,
+                                   DriverExecutorFactory driver_executor_factory)
         : _conf(std::move(conf)),
           _schedule_policy(schedule_policy),
+          _driver_executor_factory(std::move(driver_executor_factory)),
           _shared_executors(std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids,
                                                                   std::vector<CpuUtil::CpuIds>{}, _schedule_policy)) {
+    DCHECK(_driver_executor_factory != nullptr);
     _wg_to_cpuids[COMMON_WORKGROUP] = _conf.total_cpuids;
     for (auto cpuid : _conf.total_cpuids) {
         _cpu_owners[cpuid].set_wg(COMMON_WORKGROUP);
@@ -60,8 +35,9 @@ ExecutorsManager::ExecutorsManager(PipelineExecutorSetConfig conf, const WorkGro
 }
 
 Status ExecutorsManager::start_shared_executors_unlocked() const {
-    auto driver_executor = create_driver_executor(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{},
-                                                  _shared_executors->num_driver_threads(), _schedule_policy);
+    auto driver_executor =
+            _driver_executor_factory("com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{},
+                                     _shared_executors->num_driver_threads(), _conf.metrics, _schedule_policy);
     if (!driver_executor.ok()) {
         return driver_executor.status();
     }
@@ -152,8 +128,8 @@ std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_ex
     const std::string name = std::to_string(wg->id());
     auto executors = std::make_unique<PipelineExecutorSet>(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{},
                                                            _schedule_policy);
-    auto driver_executor = create_driver_executor(_conf, name, cpuids, std::vector<CpuUtil::CpuIds>{},
-                                                  executors->num_driver_threads(), _schedule_policy);
+    auto driver_executor = _driver_executor_factory(name, cpuids, std::vector<CpuUtil::CpuIds>{},
+                                                    executors->num_driver_threads(), _conf.metrics, _schedule_policy);
     if (!driver_executor.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to create driver executor for workgroup "
                      << "[workgroup=" << wg->to_string() << "] "
