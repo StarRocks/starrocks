@@ -18,7 +18,29 @@
 
 namespace starrocks {
 
-void SegmentFileInfo::write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const {
+void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta) {
+    file_meta->set_name(file.path);
+    if (file.size.has_value()) {
+        file_meta->set_size(file.size.value());
+    }
+    if (!file.encryption_meta.empty()) {
+        file_meta->set_encryption_meta(file.encryption_meta);
+    }
+}
+
+void SegmentFileInfo::to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const {
+    // File attributes. An empty encryption_meta means "unencrypted", same as absent, so don't store it.
+    segment_meta->set_filename(path);
+    if (size.has_value()) {
+        segment_meta->set_size(size.value());
+    }
+    if (!encryption_meta.empty()) {
+        segment_meta->set_encryption_meta(encryption_meta);
+    }
+    if (bundle_file_offset.has_value() && bundle_file_offset.value() >= 0) {
+        segment_meta->set_bundle_file_offset(bundle_file_offset.value());
+    }
+    // Sort-key fields.
     sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
     sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
     for (const auto& sample : sort_key_samples) {
@@ -26,6 +48,12 @@ void SegmentFileInfo::write_sort_key_fields_to(SegmentMetadataPB* segment_meta) 
     }
     if (!sort_key_samples.empty() && sort_key_sample_row_interval > 0) {
         segment_meta->set_sort_key_sample_row_interval(sort_key_sample_row_interval);
+    }
+    // Other per-segment metadata.
+    segment_meta->set_num_rows(num_rows);
+    segment_meta->set_segment_idx(segment_idx);
+    for (int64_t vi_id : vector_index_ids) {
+        segment_meta->add_vector_index_ids(vi_id);
     }
 }
 

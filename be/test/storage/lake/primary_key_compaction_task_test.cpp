@@ -1109,7 +1109,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     // make sure compact can generate more than one segment in output rowset
-    EXPECT_TRUE(new_tablet_metadata->rowsets(0).segments_size() > 1);
+    EXPECT_TRUE(new_tablet_metadata->rowsets(0).segment_metas_size() > 1);
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact) {
@@ -1769,8 +1769,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_publish_compaction_with_invalid_rowset
     auto* output_rowset = op_compaction->mutable_output_rowset();
     output_rowset->set_num_rows(kChunkSize);
     output_rowset->set_data_size(1024);
-    output_rowset->add_segments("fake_segment.dat");
-    output_rowset->add_segment_size(1024);
+    auto* segment_meta = output_rowset->add_segment_metas();
+    segment_meta->set_filename("fake_segment.dat");
+    segment_meta->set_size(1024);
 
     ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
 

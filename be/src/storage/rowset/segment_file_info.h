@@ -22,6 +22,13 @@
 namespace starrocks {
 
 class SegmentMetadataPB;
+class FileMetaPB;
+
+// Serialize a plain file (a del file, sst, lcrm file, ...) into a FileMetaPB: name, size (when
+// known), and encryption_meta (only when non-empty, since an empty encryption_meta means
+// "unencrypted", which is the same as absent). Does NOT set `shared` — that flag is not part of
+// FileInfo and is assigned separately by the cross-publish paths that need it.
+void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta);
 
 struct SegmentFileInfo : public FileInfo {
     VariantTuple sort_key_min;
@@ -36,10 +43,12 @@ struct SegmentFileInfo : public FileInfo {
     // IDs of vector indexes configured for this segment (one .vi file per id).
     std::vector<int64_t> vector_index_ids;
 
-    // Copy sort_key_min, sort_key_max, sort_key_samples, and
-    // sort_key_sample_row_interval into a SegmentMetadataPB. Does NOT
-    // set num_rows or segment_idx (callers handle those separately).
-    void write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const;
+    // Serialize this segment's full per-segment metadata into |segment_meta|: the file attributes
+    // (filename, size, encryption_meta, bundle_file_offset), the sort-key fields, num_rows,
+    // vector_index_ids, and segment_idx. |segment_idx| is a required input (placed first so callers
+    // cannot forget it): a contiguous positional index at write time, or a sparse one after
+    // compaction/merge.
+    void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
 };
 
 } // namespace starrocks

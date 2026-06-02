@@ -245,14 +245,8 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = new_rowset_metadata->segments_size();
-        new_rowset_metadata->add_segments(f.path);
-        new_rowset_metadata->add_segment_size(f.size.value());
-        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = new_rowset_metadata->segment_metas_size();
+        f.to_proto(segment_idx, new_rowset_metadata->add_segment_metas());
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -341,14 +335,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = new_rowset_metadata->segments_size();
-        new_rowset_metadata->add_segments(f.path);
-        new_rowset_metadata->add_segment_size(f.size.value());
-        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = new_rowset_metadata->segment_metas_size();
+        f.to_proto(segment_idx, new_rowset_metadata->add_segment_metas());
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);

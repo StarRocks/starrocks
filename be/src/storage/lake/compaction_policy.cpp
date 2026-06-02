@@ -42,7 +42,7 @@ inline int64_t calc_effective_segment_count(const RowsetMetadataPB& rowset) {
         }
         return 1;
     }
-    int segments_size = rowset.segments_size();
+    int segments_size = rowset.segment_metas_size();
     // Only skip rowsets produced by large-rowset-split compaction.
     // Use a narrow condition to avoid affecting other overlapped rowsets whose
     // next_compaction_offset may also reach segments_size for different reasons.
@@ -54,14 +54,21 @@ inline int64_t calc_effective_segment_count(const RowsetMetadataPB& rowset) {
         return 1;
     }
     // If no segment_size info is available, fall back to counting all segments
-    if (rowset.segment_size_size() == 0) {
+    bool has_segment_size = false;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (segment_meta.has_size()) {
+            has_segment_size = true;
+            break;
+        }
+    }
+    if (!has_segment_size) {
         return segments_size;
     }
     // Count only segments smaller than the large segment threshold
     int64_t large_segment_threshold = config::lake_compaction_max_rowset_size;
     int64_t effective_count = 0;
-    for (int i = 0; i < rowset.segment_size_size(); i++) {
-        if (static_cast<int64_t>(rowset.segment_size(i)) < large_segment_threshold) {
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (static_cast<int64_t>(segment_meta.size()) < large_segment_threshold) {
             effective_count++;
         }
     }
@@ -85,21 +92,27 @@ inline int64_t calc_effective_segment_count_from_offset(const RowsetMetadataPB& 
         return 1;
     }
     // Use size_t for proper unsigned comparisons to avoid overflow when start_offset > INT_MAX
-    size_t segments_size = static_cast<size_t>(rowset.segments_size());
+    size_t segments_size = static_cast<size_t>(rowset.segment_metas_size());
     if (segments_size == 0 || static_cast<size_t>(start_offset) >= segments_size) {
         return 0;
     }
     // If no segment_size info is available, fall back to counting all remaining segments
-    if (rowset.segment_size_size() == 0) {
+    bool has_segment_size = false;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (segment_meta.has_size()) {
+            has_segment_size = true;
+            break;
+        }
+    }
+    if (!has_segment_size) {
         return static_cast<int64_t>(segments_size - start_offset);
     }
     // Count only segments smaller than the large segment threshold
     int64_t large_segment_threshold = config::lake_compaction_max_rowset_size;
     int64_t effective_count = 0;
-    size_t segment_size_count = static_cast<size_t>(rowset.segment_size_size());
-    size_t end_index = std::min(segment_size_count, segments_size);
+    size_t end_index = segments_size;
     for (size_t i = static_cast<size_t>(start_offset); i < end_index; i++) {
-        if (static_cast<int64_t>(rowset.segment_size(static_cast<int>(i))) < large_segment_threshold) {
+        if (static_cast<int64_t>(rowset.segment_metas(static_cast<int>(i)).size()) < large_segment_threshold) {
             effective_count++;
         }
     }

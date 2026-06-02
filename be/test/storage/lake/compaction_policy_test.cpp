@@ -55,8 +55,8 @@ protected:
 
     void add_data_rowset(uint32 id, bool overlap, int64_t level) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
-        rowset_metadata->mutable_segments()->Add("file1");
-        rowset_metadata->mutable_segments()->Add("file2");
+        rowset_metadata->add_segment_metas()->set_filename("file1");
+        rowset_metadata->add_segment_metas()->set_filename("file2");
         rowset_metadata->set_overlapped(overlap);
         rowset_metadata->set_num_rows(1);
         rowset_metadata->set_data_size(config::size_tiered_min_level_size *
@@ -95,7 +95,7 @@ TEST_F(LakeCompactionPolicyTest, test_cumulative_by_segment_num) {
     _tablet_metadata->set_version(2);
     for (int i = 1; i < 11; ++i) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
-        rowset_metadata->mutable_segments()->Add("file");
+        rowset_metadata->add_segment_metas()->set_filename("file");
         if (i <= 3) {
             rowset_metadata->set_overlapped(false);
         } else {
@@ -127,7 +127,7 @@ TEST_F(LakeCompactionPolicyTest, test_base_by_segment_num) {
     _tablet_metadata->set_version(2);
     for (int i = 1; i < 11; ++i) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
-        rowset_metadata->mutable_segments()->Add("file");
+        rowset_metadata->add_segment_metas()->set_filename("file");
         if (i <= 6) {
             rowset_metadata->set_overlapped(false);
         } else {

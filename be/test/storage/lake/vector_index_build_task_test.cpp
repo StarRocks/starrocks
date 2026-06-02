@@ -155,15 +155,15 @@ protected:
         for (const auto& [rv, seg_name] : rowset_infos) {
             auto* rowset = metadata->add_rowsets();
             rowset->set_id(_next_rowset_id++);
-            rowset->add_segments(seg_name);
             rowset->set_num_rows(10);
             rowset->set_data_size(1024);
             rowset->set_overlapped(false);
             rowset->set_version(rv);
 
-            // Populate vector_index_ids in segment_metas
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->add_vector_index_ids(kIndexId);
+            // Populate filename and vector_index_ids in segment_metas
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(seg_name);
+            segment_meta->add_vector_index_ids(kIndexId);
         }
 
         if (built_version > 0) {
@@ -355,7 +355,7 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_rowsets_without_vector_indexes) {
 
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(_next_rowset_id++);
-    rowset->add_segments(seg_name);
+    rowset->add_segment_metas()->set_filename(seg_name);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
     rowset->set_version(2);
@@ -433,20 +433,22 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
     {
         auto* rs = metadata->add_rowsets();
         rs->set_id(_next_rowset_id++);
-        rs->add_segments(seg_ok);
         rs->set_num_rows(10);
         rs->set_data_size(1024);
         rs->set_version(2);
-        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+        auto* segment_meta = rs->add_segment_metas();
+        segment_meta->set_filename(seg_ok);
+        segment_meta->add_vector_index_ids(kIndexId);
     }
     {
         auto* rs = metadata->add_rowsets();
         rs->set_id(_next_rowset_id++);
-        rs->add_segments(seg_bad);
         rs->set_num_rows(10);
         rs->set_data_size(1024);
         rs->set_version(3);
-        rs->add_segment_metas()->add_vector_index_ids(kIndexId);
+        auto* segment_meta = rs->add_segment_metas();
+        segment_meta->set_filename(seg_bad);
+        segment_meta->add_vector_index_ids(kIndexId);
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
 
@@ -482,13 +484,13 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     *metadata->mutable_schema() = schema_pb;
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(_next_rowset_id++);
-    rowset->add_segments(seg_name);
-    rowset->add_segment_size(2048);           // exercises has_segment_size branch
-    rowset->add_segment_encryption_metas(""); // exercises has_encryption_meta branch (empty meta is fine)
     rowset->set_num_rows(10);
     rowset->set_version(2);
-    auto* seg_meta = rowset->add_segment_metas();
-    seg_meta->add_vector_index_ids(kIndexId);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename(seg_name);
+    segment_meta->set_size(2048);          // exercises has_size branch
+    segment_meta->set_encryption_meta(""); // exercises has_encryption_meta branch (empty meta is fine)
+    segment_meta->add_vector_index_ids(kIndexId);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
 
     BuildVectorIndexRequest request;

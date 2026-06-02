@@ -111,7 +111,7 @@ TabletBasicInfo VersionedTablet::get_basic_info() const {
     int64_t num_row = 0;
     int64_t data_size = 0;
     for (const auto& rowset : _metadata->rowsets()) {
-        num_segment += rowset.segments_size();
+        num_segment += rowset.segment_metas_size();
         num_row += rowset.num_rows();
         data_size += rowset.data_size();
     }

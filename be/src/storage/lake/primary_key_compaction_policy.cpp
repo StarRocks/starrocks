@@ -37,17 +37,24 @@ double RowsetCandidate::io_count() const {
 
     double cnt = 1;
     if (rowset_meta_ptr->overlapped()) {
-        int segments_size = rowset_meta_ptr->segments_size();
+        int segments_size = rowset_meta_ptr->segment_metas_size();
+        int segment_size_cnt = 0;
+        for (int i = 0; i < segments_size; i++) {
+            if (rowset_meta_ptr->segment_metas(i).has_size()) {
+                segment_size_cnt++;
+            }
+        }
         if (segments_size == 0) {
             cnt = 1;
-        } else if (rowset_meta_ptr->segment_size_size() == 0) {
+        } else if (segment_size_cnt == 0) {
             // No segment_size info, fall back to counting all segments
             cnt = segments_size;
         } else {
             // Count only segments smaller than the large segment threshold
             int effective_count = 0;
-            for (int i = 0; i < rowset_meta_ptr->segment_size_size(); i++) {
-                if (static_cast<int64_t>(rowset_meta_ptr->segment_size(i)) < large_rowset_threshold) {
+            for (int i = 0; i < segments_size; i++) {
+                const auto& segment_meta = rowset_meta_ptr->segment_metas(i);
+                if (segment_meta.has_size() && static_cast<int64_t>(segment_meta.size()) < large_rowset_threshold) {
                     effective_count++;
                 }
             }
@@ -136,25 +143,32 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
 bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
     int64_t total_segment_cnt = 0;
     int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
-    for (int i = 0; i < tablet_metadata->rowsets_size(); i++) {
-        const auto& rowset = tablet_metadata->rowsets(i);
+    for (const auto& rowset : tablet_metadata->rowsets()) {
         if (!rowset.overlapped()) {
             // Large non-overlapped rowsets are already well-compacted, skip them
             if (rowset.data_size() >= large_rowset_threshold) {
                 continue;
             }
             total_segment_cnt += 1;
-        } else if (rowset.segments_size() == 0) {
+        } else if (rowset.segment_metas_size() == 0) {
             // No segments in the rowset, count as 1
             total_segment_cnt += 1;
-        } else if (rowset.segment_size_size() == 0) {
-            // No segment_size info, fall back to counting all segments
-            total_segment_cnt += rowset.segments_size();
         } else {
+            int segment_size_cnt = 0;
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                if (segment_meta.has_size()) {
+                    segment_size_cnt++;
+                }
+            }
+            if (segment_size_cnt == 0) {
+                // No segment_size info, fall back to counting all segments
+                total_segment_cnt += rowset.segment_metas_size();
+                continue;
+            }
             // Count only segments smaller than the large segment threshold
             int64_t rowset_effective_count = 0;
-            for (int j = 0; j < rowset.segment_size_size(); j++) {
-                if (static_cast<int64_t>(rowset.segment_size(j)) < large_rowset_threshold) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                if (segment_meta.has_size() && static_cast<int64_t>(segment_meta.size()) < large_rowset_threshold) {
                     rowset_effective_count++;
                 }
             }

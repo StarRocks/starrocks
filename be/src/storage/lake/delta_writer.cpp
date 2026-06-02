@@ -805,37 +805,21 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (const auto& f : _tablet_writer->segments()) {
-        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
-        op_write->mutable_rowset()->add_segments(f.path);
-        op_write->mutable_rowset()->add_segment_size(f.size.value());
-        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-        if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
-            op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
-        }
-        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
-        for (int64_t vi_id : f.vector_index_ids) {
-            segment_meta->add_vector_index_ids(vi_id);
-        }
+        uint32_t segment_idx = op_write->rowset().segment_metas_size();
+        f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
     for (const auto& f : _tablet_writer->dels()) {
-        op_write->add_dels(f.path);
-        op_write->add_del_encryption_metas(f.encryption_meta);
+        to_file_meta_pb(f, op_write->add_dels_meta());
     }
     for (const auto& sst : _tablet_writer->ssts()) {
-        auto* file_meta = op_write->add_ssts();
-        file_meta->set_name(sst.path);
-        file_meta->set_size(sst.size.value());
-        file_meta->set_encryption_meta(sst.encryption_meta);
+        to_file_meta_pb(sst, op_write->add_ssts());
     }
     for (auto& sst_range : _tablet_writer->sst_ranges()) {
         op_write->add_sst_ranges()->CopyFrom(sst_range);
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
-    op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    op_write->mutable_rowset()->set_overlapped(op_write->rowset().segment_metas_size() > 1);
 
     // Column-mode PCU combined with condition update requires the condition column to be part of
     // the partial update column set: the handler compares old vs new values from the partial chunk
@@ -863,8 +847,8 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
                 // rewrite segments are useless now, just for compatibility
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                for (auto i = 0; i < op_write->rowset().segment_metas_size(); i++) {
+                    op_write->add_rewrite_segments_meta()->set_name(gen_segment_filename(_txn_id));
                 }
             }
             // handle partial update
@@ -894,10 +878,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 }
             }
 
-            if (op_write->rewrite_segments_size() == 0) {
+            if (op_write->rewrite_segments_meta_size() == 0) {
                 // rewrite segments are useless now, just for compatibility
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                for (auto i = 0; i < op_write->rowset().segment_metas_size(); i++) {
+                    op_write->add_rewrite_segments_meta()->set_name(gen_segment_filename(_txn_id));
                 }
             }
         }
@@ -939,7 +923,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         TabletWriteLogManager::instance()->add_load_log(
                 get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
                 _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
-                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
+                op_write->rowset().segment_metas_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
                 sst_output_files, sst_output_bytes);
     }
 

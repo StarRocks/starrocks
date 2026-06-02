@@ -1054,8 +1054,8 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
 static std::pair<size_t, int64_t> rebuild_segment_counts(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
     size_t file_cnt = 0;
     int64_t row_cnt = 0;
-    bool exact = (rowset.segment_metas_size() == rowset.segments_size());
-    for (int i = 0; i < rowset.segments_size(); ++i) {
+    bool exact = true;
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
         if (get_rssid(rowset, i) >= rebuild_rss_id) {
             ++file_cnt;
             if (exact) {
@@ -1069,16 +1069,16 @@ static std::pair<size_t, int64_t> rebuild_segment_counts(const RowsetMetadataPB&
             }
         }
     }
-    if (!exact && file_cnt > 0 && rowset.segments_size() > 0) {
+    if (!exact && file_cnt > 0 && rowset.segment_metas_size() > 0) {
         // Proportional estimate when per-segment metadata is unavailable or incomplete.
-        row_cnt = rowset.num_rows() * static_cast<int64_t>(file_cnt) / rowset.segments_size();
+        row_cnt = rowset.num_rows() * static_cast<int64_t>(file_cnt) / rowset.segment_metas_size();
     }
     return {file_cnt, row_cnt};
 }
 
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
 bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
-    if (rowset.segments_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
+    if (rowset.segment_metas_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
         // All segments and del files under this rowset are not need to rebuild.
         // E.g.
         // If `rebuild_rss_id` is 12, and
@@ -1088,7 +1088,7 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
         //     is 12 which is equal to 12, it may not dump to sst yet.
         return false;
     }
-    if (rowset.segments_size() == 0 && (rowset.id() < rebuild_rss_id)) {
+    if (rowset.segment_metas_size() == 0 && (rowset.id() < rebuild_rss_id)) {
         // Rowset with empty segments may has del files, and need to rebuild them.
         // E.g.
         // If `rebuild_rss_id` is 12, and

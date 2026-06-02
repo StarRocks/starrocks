@@ -209,7 +209,7 @@ public:
     void update_shared_rssid_map(const RowsetMetadataPB& rowset, const RowsetMetadataPB& canonical_rowset) {
         uint32_t canonical_rssid = canonical_rowset.id();
         _shared_rssid_map[rowset.id()] = canonical_rssid;
-        for (int segment_pos = 0; segment_pos < rowset.segments_size(); ++segment_pos) {
+        for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
             uint32_t rssid = get_rssid(rowset, segment_pos);
             uint32_t segment_offset_within_rowset = rssid - rowset.id();
             _shared_rssid_map[rssid] = canonical_rssid + segment_offset_within_rowset;
@@ -314,13 +314,13 @@ bool is_duplicate_rowset(const RowsetMetadataPB& a, const RowsetMetadataPB& b) {
         return true;
     }
     // Has segments: compare first segment's file_name, bundle_file_offset, shared
-    if (a.segments_size() > 0 && b.segments_size() > 0) {
-        if (a.segments(0) != b.segments(0)) return false;
-        int64_t a_off = a.bundle_file_offsets_size() > 0 ? a.bundle_file_offsets(0) : 0;
-        int64_t b_off = b.bundle_file_offsets_size() > 0 ? b.bundle_file_offsets(0) : 0;
+    if (a.segment_metas_size() > 0 && b.segment_metas_size() > 0) {
+        if (a.segment_metas(0).filename() != b.segment_metas(0).filename()) return false;
+        int64_t a_off = a.segment_metas(0).has_bundle_file_offset() ? a.segment_metas(0).bundle_file_offset() : 0;
+        int64_t b_off = b.segment_metas(0).has_bundle_file_offset() ? b.segment_metas(0).bundle_file_offset() : 0;
         if (a_off != b_off) return false;
-        bool a_shared = a.shared_segments_size() > 0 && a.shared_segments(0);
-        bool b_shared = b.shared_segments_size() > 0 && b.shared_segments(0);
+        bool a_shared = a.segment_metas(0).shared();
+        bool b_shared = b.segment_metas(0).shared();
         return a_shared && b_shared;
     } else if (a.del_files_size() > 0 && b.del_files_size() > 0) {
         // Delete-only: compare first del_file's name, shared
@@ -455,10 +455,10 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
         if (canonical_index >= 0) {
             // Duplicate: skip output
             const auto& canonical = new_metadata->rowsets(canonical_index);
-            DCHECK(rowset.segments_size() == canonical.segments_size() &&
+            DCHECK(rowset.segment_metas_size() == canonical.segment_metas_size() &&
                    rowset.del_files_size() == canonical.del_files_size())
-                    << "Shared rowset dedup hit but payload shape differs: segments(" << rowset.segments_size()
-                    << " vs " << canonical.segments_size() << "), del_files(" << rowset.del_files_size() << " vs "
+                    << "Shared rowset dedup hit but payload shape differs: segments(" << rowset.segment_metas_size()
+                    << " vs " << canonical.segment_metas_size() << "), del_files(" << rowset.del_files_size() << " vs "
                     << canonical.del_files_size() << ")";
             if (!rowset.has_delete_predicate()) {
                 merge_contexts[min_child_index].update_shared_rssid_map(rowset, canonical);
@@ -507,8 +507,8 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
     }
     // No duplicate column UIDs across entries
     std::unordered_set<uint32_t> all_cids;
-    for (int i = 0; i < dcg.unique_column_ids_size(); ++i) {
-        for (auto cid : dcg.unique_column_ids(i).column_ids()) {
+    for (const auto& unique_column_ids : dcg.unique_column_ids()) {
+        for (auto cid : unique_column_ids.column_ids()) {
             if (!all_cids.insert(cid).second) {
                 return Status::Corruption("DCG contains duplicate column UID across entries");
             }
@@ -657,7 +657,7 @@ Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContex
         // (a) Accumulate source-rowset references from every rowset that
         // references any target via get_rssid -> context.map_rssid.
         for (const auto& rowset : context.metadata()->rowsets()) {
-            for (int segment_position = 0; segment_position < rowset.segments_size(); ++segment_position) {
+            for (int segment_position = 0; segment_position < rowset.segment_metas_size(); ++segment_position) {
                 uint32_t original_rssid = get_rssid(rowset, segment_position);
                 auto target_or = context.map_rssid(original_rssid);
                 if (!target_or.ok()) continue;
@@ -720,7 +720,7 @@ Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContex
 // For a merged rowset, find the segment position such that
 // get_rssid(rowset, position) == target. Returns -1 if not found.
 int find_segment_position_in_rowset(const RowsetMetadataPB& rowset, uint32_t target_rssid) {
-    for (int segment_position = 0; segment_position < rowset.segments_size(); ++segment_position) {
+    for (int segment_position = 0; segment_position < rowset.segment_metas_size(); ++segment_position) {
         if (get_rssid(rowset, segment_position) == target_rssid) {
             return segment_position;
         }
@@ -766,16 +766,16 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
                                               std::vector<DcgRowWindow>* out_windows) {
     // Open base segment for index lookups.
     FileInfo base_segment_file_info;
-    base_segment_file_info.path =
-            tablet_manager->segment_location(new_tablet_id, target_rowset.segments(target_segment_position));
-    if (target_rowset.segment_size_size() > target_segment_position) {
-        base_segment_file_info.size = target_rowset.segment_size(target_segment_position);
+    const auto& target_seg_meta = target_rowset.segment_metas(target_segment_position);
+    base_segment_file_info.path = tablet_manager->segment_location(new_tablet_id, target_seg_meta.filename());
+    if (target_seg_meta.has_size()) {
+        base_segment_file_info.size = target_seg_meta.size();
     }
-    if (target_rowset.bundle_file_offsets_size() > target_segment_position) {
-        base_segment_file_info.bundle_file_offset = target_rowset.bundle_file_offsets(target_segment_position);
+    if (target_seg_meta.has_bundle_file_offset()) {
+        base_segment_file_info.bundle_file_offset = target_seg_meta.bundle_file_offset();
     }
-    if (target_rowset.segment_encryption_metas_size() > target_segment_position) {
-        base_segment_file_info.encryption_meta = target_rowset.segment_encryption_metas(target_segment_position);
+    if (target_seg_meta.has_encryption_meta()) {
+        base_segment_file_info.encryption_meta = target_seg_meta.encryption_meta();
     }
 
     ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(base_segment_file_info.path));
@@ -1244,12 +1244,12 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
                     fmt::format("compute_synthesized_gap_specs: invalid canonical_index {}", canonical_index));
         }
         const auto& canonical = new_metadata.rowsets(canonical_index);
-        // shared_segments_size() alone is insufficient because metadata
+        // segment_metas_size() alone is insufficient because metadata
         // transforms can leave an all-false vector behind. Only synthesize
         // gap bits when at least one segment is actually shared.
         bool has_shared = false;
-        for (int i = 0; i < canonical.shared_segments_size(); ++i) {
-            if (canonical.shared_segments(i)) {
+        for (const auto& segment_meta : canonical.segment_metas()) {
+            if (segment_meta.shared()) {
                 has_shared = true;
                 break;
             }
@@ -1267,20 +1267,21 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
         }
         TabletSchemaCSPtr schema = TabletSchema::create(*schema_pb);
 
-        for (int seg_pos = 0; seg_pos < canonical.shared_segments_size(); ++seg_pos) {
-            if (!canonical.shared_segments(seg_pos)) continue;
+        for (int seg_pos = 0; seg_pos < canonical.segment_metas_size(); ++seg_pos) {
+            const auto& segment_meta = canonical.segment_metas(seg_pos);
+            if (!segment_meta.shared()) continue;
             uint32_t target_rssid = get_rssid(canonical, seg_pos);
 
             FileInfo seg_file_info;
-            seg_file_info.path = tablet_manager->segment_location(new_metadata.id(), canonical.segments(seg_pos));
-            if (canonical.segment_size_size() > seg_pos) {
-                seg_file_info.size = canonical.segment_size(seg_pos);
+            seg_file_info.path = tablet_manager->segment_location(new_metadata.id(), segment_meta.filename());
+            if (segment_meta.has_size()) {
+                seg_file_info.size = segment_meta.size();
             }
-            if (canonical.bundle_file_offsets_size() > seg_pos) {
-                seg_file_info.bundle_file_offset = canonical.bundle_file_offsets(seg_pos);
+            if (segment_meta.has_bundle_file_offset()) {
+                seg_file_info.bundle_file_offset = segment_meta.bundle_file_offset();
             }
-            if (canonical.segment_encryption_metas_size() > seg_pos) {
-                seg_file_info.encryption_meta = canonical.segment_encryption_metas(seg_pos);
+            if (segment_meta.has_encryption_meta()) {
+                seg_file_info.encryption_meta = segment_meta.encryption_meta();
             }
             ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(seg_file_info.path));
             ASSIGN_OR_RETURN(auto base_segment,
@@ -1691,7 +1692,7 @@ StatusOr<LegacyRssidLookupMaps> build_legacy_rssid_lookup_maps(const std::vector
                 ASSIGN_OR_RETURN(it->second, ctx.map_rssid(rowset.id()));
             }
             // Data + watermark maps: per-segment rssids.
-            for (int segment_position = 0; segment_position < rowset.segments_size(); ++segment_position) {
+            for (int segment_position = 0; segment_position < rowset.segment_metas_size(); ++segment_position) {
                 const uint32_t lifted_rssid = get_rssid(rowset, segment_position);
                 auto [it, inserted] = target.data_rssid_map.try_emplace(lifted_rssid, 0);
                 if (!inserted) continue;
@@ -1785,8 +1786,7 @@ std::optional<uint64_t> project_source_max_rss_rowid(
 // |*initialized| with the encoded `(rssid<<32)|rowid` if larger.
 void update_max_encoded_rss_rowid_from(const IndexValuesWithVerPB& values_pb, uint64_t* max_encoded,
                                        bool* initialized) {
-    for (int i = 0; i < values_pb.values_size(); ++i) {
-        const auto& index_value = values_pb.values(i);
+    for (const auto& index_value : values_pb.values()) {
         if (is_index_tombstone(index_value)) continue;
         const uint64_t encoded = encode_rss_rowid(index_value.rssid(), index_value.rowid());
         if (!*initialized || encoded > *max_encoded) {
@@ -1883,8 +1883,8 @@ StatusOr<bool> remap_legacy_entry_or_drop(IndexValuesWithVerPB* values_pb, int32
                                           const std::unordered_map<uint32_t, uint32_t>& data_rssid_map,
                                           const std::function<StatusOr<DelVectorPtr>(uint32_t)>& load_del_vector) {
     bool delvec_already_checked = false;
-    for (int i = 0; i < values_pb->values_size(); ++i) {
-        auto* index_value = values_pb->mutable_values(i);
+    for (auto& index_value_ref : *values_pb->mutable_values()) {
+        auto* index_value = &index_value_ref;
         if (is_index_tombstone(*index_value)) continue;
         const int64_t lifted_rssid = static_cast<int64_t>(index_value->rssid()) + source_rssid_offset;
         if (lifted_rssid < 0 || lifted_rssid > std::numeric_limits<uint32_t>::max()) {
@@ -2293,8 +2293,8 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
             return Status::InternalError("Failed to parse non-shared sstable value during rebuild");
         }
-        for (int j = 0; j < values_pb.values_size(); ++j) {
-            auto* index_value = values_pb.mutable_values(j);
+        for (auto& index_value_ref : *values_pb.mutable_values()) {
+            auto* index_value = &index_value_ref;
             if (is_index_tombstone(*index_value)) continue; // preserve sentinel as-is
             const int64_t lifted_rssid =
                     static_cast<int64_t>(index_value->rssid()) + static_cast<int64_t>(source_rssid_offset);

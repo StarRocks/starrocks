@@ -119,14 +119,8 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
     txn_log->set_txn_id(_request.transaction_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
-        op_write->mutable_rowset()->add_segments(f.path);
-        op_write->mutable_rowset()->add_segment_size(f.size.value());
-        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = op_write->mutable_rowset()->segment_metas_size();
+        f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());

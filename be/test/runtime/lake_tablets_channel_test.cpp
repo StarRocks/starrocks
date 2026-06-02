@@ -378,8 +378,8 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     for (auto tablet_id : finished_tablets) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kChunkSizePerTablet, tmp_chunk->num_rows());
     }
 
@@ -447,8 +447,8 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     for (auto tablet_id : finished_tablets) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kChunkSizePerTablet, tmp_chunk->num_rows());
     }
 }
@@ -515,8 +515,14 @@ TEST_F(LakeTabletsChannelTest, test_write_bundling_file) {
     for (auto tablet_id : finished_tablets) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        ASSERT_EQ(1, txnlog->op_write().rowset().bundle_file_offsets_size());
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        int bundle_file_offset_count = 0;
+        for (const auto& sm : txnlog->op_write().rowset().segment_metas()) {
+            if (sm.has_bundle_file_offset()) {
+                bundle_file_offset_count++;
+            }
+        }
+        ASSERT_EQ(1, bundle_file_offset_count);
     }
 }
 
@@ -586,8 +592,8 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
     for (auto tablet_id : std::vector<int64_t>{10086, 10087, 10088, 10089}) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kSegmentRows, tmp_chunk->num_rows());
     }
     ASSERT_EQ(1, close_channel_count.load());
@@ -929,11 +935,11 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
         if (tablet_id == 10086) {
-            ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-            auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+            ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+            auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
             ASSERT_EQ(kChunkSize, tmp_chunk->num_rows());
         } else {
-            ASSERT_EQ(0, txnlog->op_write().rowset().segments().size());
+            ASSERT_EQ(0, txnlog->op_write().rowset().segment_metas_size());
         }
     }
 }

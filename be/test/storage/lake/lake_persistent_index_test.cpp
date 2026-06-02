@@ -953,8 +953,8 @@ static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg
     rowset.set_id(id);
     int64_t total_rows = 0;
     for (int64_t r : seg_rows) {
-        rowset.add_segments("seg.dat");
         auto* meta = rowset.add_segment_metas();
+        meta->set_filename("seg.dat");
         meta->set_num_rows(r);
         total_rows += r;
     }
@@ -970,7 +970,7 @@ static RowsetMetadataPB make_rowset_no_meta(uint32_t id, int seg_cnt, int64_t to
     RowsetMetadataPB rowset;
     rowset.set_id(id);
     for (int i = 0; i < seg_cnt; ++i) {
-        rowset.add_segments("seg.dat");
+        rowset.add_segment_metas()->set_filename("seg.dat");
     }
     rowset.set_num_rows(total_rows);
     return rowset;
