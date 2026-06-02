@@ -110,15 +110,19 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
 
 void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list) {
+                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                                 const std::vector<int64_t>& file_sizes) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
+    DCHECK(file_with_encryption_metas.size() == file_sizes.size());
     for (int i = 0; i < file_with_encryption_metas.size(); i++) {
         new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
+        // Keep column_file_sizes strictly 1:1 with column_files so readers can index by position.
+        new_dcg_ver.add_column_file_sizes(file_sizes[i]);
         if (!file_with_encryption_metas[i].second.empty()) {
             new_dcg_ver.add_encryption_metas(file_with_encryption_metas[i].second);
         }
@@ -142,6 +146,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         if (!mcids->empty()) {
             new_dcg_ver.add_unique_column_ids()->CopyFrom(dcg_ver.unique_column_ids(i));
             new_dcg_ver.add_column_files(dcg_ver.column_files(i));
+            // Carry forward the old size, or 0 (unknown) for data written before this field existed,
+            // so column_file_sizes stays aligned with column_files.
+            new_dcg_ver.add_column_file_sizes(i < dcg_ver.column_file_sizes_size() ? dcg_ver.column_file_sizes(i) : 0);
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));

@@ -500,7 +500,8 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
         return Status::Corruption("DCG shape invalid: column_files/unique_column_ids/versions size mismatch");
     }
     // Optional fields must not exceed column_files length
-    if (dcg.encryption_metas_size() > dcg.column_files_size() || dcg.shared_files_size() > dcg.column_files_size()) {
+    if (dcg.encryption_metas_size() > dcg.column_files_size() || dcg.shared_files_size() > dcg.column_files_size() ||
+        dcg.column_file_sizes_size() > dcg.column_files_size()) {
         return Status::Corruption("DCG shape invalid: optional fields exceed column_files size");
     }
     // No duplicate column UIDs across entries
@@ -521,6 +522,11 @@ void normalize_dcg_optional_fields(DeltaColumnGroupVerPB* dcg) {
     }
     while (dcg->shared_files_size() < dcg->column_files_size()) {
         dcg->add_shared_files(false);
+    }
+    // Pad with 0 (unknown) so column_file_sizes stays 1:1 with column_files; readers
+    // treat 0 as "size unknown" and fall back to stat/HeadObject.
+    while (dcg->column_file_sizes_size() < dcg->column_files_size()) {
+        dcg->add_column_file_sizes(0);
     }
 }
 
@@ -636,6 +642,8 @@ DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source,
     out.add_versions(source.versions(entry_index));
     out.add_encryption_metas(source.encryption_metas(entry_index));
     out.add_shared_files(source.shared_files(entry_index));
+    // source is normalized before this call, so column_file_sizes is 1:1 with column_files.
+    out.add_column_file_sizes(source.column_file_sizes(entry_index));
     return out;
 }
 
@@ -1109,6 +1117,8 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
     rebuilt.add_versions(new_version);
     rebuilt.add_encryption_metas(segment_writer->encryption_meta());
     rebuilt.add_shared_files(false);
+    // Record the size of the freshly written .cols file so readers can skip a stat/HeadObject.
+    rebuilt.add_column_file_sizes(static_cast<int64_t>(written_file_size));
     return rebuilt;
 }
 
@@ -1152,6 +1162,7 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             final_dcg.add_versions(entry.single_entry.versions(0));
             final_dcg.add_encryption_metas(entry.single_entry.encryption_metas(0));
             final_dcg.add_shared_files(entry.single_entry.shared_files(0));
+            final_dcg.add_column_file_sizes(entry.single_entry.column_file_sizes(0));
         }
 
         bool any_entry_is_conflicting = false;
@@ -1191,6 +1202,7 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             final_dcg.add_versions(rebuilt_entry.versions(0));
             final_dcg.add_encryption_metas(rebuilt_entry.encryption_metas(0));
             final_dcg.add_shared_files(rebuilt_entry.shared_files(0));
+            final_dcg.add_column_file_sizes(rebuilt_entry.column_file_sizes(0));
             g_tablet_merge_dcg_rebuild_total << 1;
         }
 
