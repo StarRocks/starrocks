@@ -29,6 +29,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_compaction_state.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
@@ -827,6 +828,25 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         new_rows_op.add_dels_meta()->CopyFrom(del_meta);
     }
     if (new_rows_op.rowset().segment_metas_size() > 0 || new_rows_op.dels_meta_size() > 0) {
+        // Give the synthesized new_rows rowset a uid. In COLUMN_UPSERT_MODE the
+        // original op_write.rowset() never enters tablet metadata as a top-level
+        // rowset: its partial-column segments become DCG entries on existing rowsets
+        // (apply_column_mode_partial_update orphans them into orphan_files for GC), and
+        // only this new_rows_op is added via apply_opwrite below. So the uid here can't
+        // collide with any concurrent top-level rowset in this metadata.
+        if (tablet_reshard_helper::has_valid_uid(op_write.rowset())) {
+            // Reuse op_write.uid (minted by delta_writer at write time, preserved
+            // verbatim across cross-publish by proto CopyFrom) so every split sibling
+            // that re-runs this publish converges on the same identity.
+            new_rows_op.mutable_rowset()->mutable_uid()->CopyFrom(op_write.rowset().uid());
+        } else {
+            // A legacy in-flight COLUMN_UPSERT_MODE op_write written before the uid
+            // field existed (rolling upgrade / BE restart with pending txn logs) carries
+            // no uid. Such a write is never range-distributed (range distribution is a
+            // new, post-uid feature) and therefore never cross-published, so mint a
+            // fresh uid rather than hard-failing the in-flight transaction.
+            tablet_reshard_helper::set_rowset_uid(new_rows_op.mutable_rowset());
+        }
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
             (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
