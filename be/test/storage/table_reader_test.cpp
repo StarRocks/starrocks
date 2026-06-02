@@ -71,13 +71,8 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, data.size());
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, data.size());
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (int pos = start_pos; pos < end_pos; pos++) {
             const DatumTuple& row = data[pos];
             DatumTuple tmp_row;
