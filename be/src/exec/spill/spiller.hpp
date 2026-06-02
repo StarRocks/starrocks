@@ -35,12 +35,6 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks::spill {
-<<<<<<< HEAD
-=======
-DECLARE_FAIL_POINT(spill_restore_sleep);
-DECLARE_FAIL_POINT(spill_restore_error);
-
->>>>>>> 8a7b7d3342 ([BugFix] Propagate sort merge provider errors to fragment context  (#73337))
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
