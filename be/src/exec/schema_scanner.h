@@ -78,6 +78,15 @@ struct SchemaScannerParam {
     // schema scanner's predicates
     const std::vector<ExprContext*>* expr_contexts;
     std::unordered_map<SlotId, SlotDescriptor*> slot_id_mapping;
+
+    // Set by SchemaScanNode::prepare after the dest tuple's materialized slots are known.
+    // Scanners use this to populate the `selected_columns` field of their FE RPC request,
+    // letting FE skip computing columns the query did not SELECT. May be nullptr when the
+    // scanner doesn't need projection pushdown (existing scanners).
+    const std::vector<SlotDescriptor*>* dest_slot_descs = nullptr;
+
+    int64_t db_id{-1};
+    int64_t bookmark_id{-1};
 };
 
 // schema scanner runtime state

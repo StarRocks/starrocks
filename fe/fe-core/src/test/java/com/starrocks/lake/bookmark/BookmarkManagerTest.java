@@ -21,9 +21,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -371,6 +375,50 @@ public class BookmarkManagerTest extends BookmarkTestBase {
 
         // 10. ReleaseReference on missing tracker — silently ignored, no NPE.
         mgr.replay(rel1);
+    }
+
+    /* ---------- Cluster-wide listing ---------- */
+
+    @Test
+    public void testListAllBookmarksClusterWide() {
+        // Seed two trackers via the replay path: avoids needing real OlapTables.
+        // (db=1, table=2) holds one bookmark, (db=1, table=3) holds one bookmark.
+        BookmarkManager mgr = new BookmarkManager();
+        Map<Long, Map<Long, PhysicalPartitionMeta>> emptyMeta = Collections.emptyMap();
+        Bookmark b1 = new Bookmark(1L, 2L, 100L, 1_000L, emptyMeta);
+        Bookmark b2 = new Bookmark(1L, 3L, 200L, 2_000L, emptyMeta);
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("snap_cluster_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("snap_cluster_h2");
+
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L));
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(b2, h2, 2_100L));
+
+        // No filter returns every tracker.
+        List<Bookmark.View> views = mgr.listAllBookmarks(
+                Optional.empty(), Optional.empty(), Optional.empty());
+        assertEquals(2, views.size());
+        Set<Long> tableIds = new HashSet<>();
+        for (Bookmark.View s : views) {
+            tableIds.add(s.getBookmark().getTableId());
+        }
+        assertEquals(Set.of(2L, 3L), tableIds);
+
+        // Filter to a single tableId returns just that tracker's bookmarks.
+        List<Bookmark.View> filtered = mgr.listAllBookmarks(
+                Optional.empty(), Optional.of(2L), Optional.empty());
+        assertEquals(1, filtered.size());
+        assertEquals(2L, filtered.get(0).getBookmark().getTableId());
+
+        // Filter by dbId.
+        List<Bookmark.View> dbFiltered = mgr.listAllBookmarks(
+                Optional.of(1L), Optional.empty(), Optional.empty());
+        assertEquals(2, dbFiltered.size());
+
+        // Filter by bookmarkId.
+        List<Bookmark.View> bmFiltered = mgr.listAllBookmarks(
+                Optional.empty(), Optional.empty(), Optional.of(100L));
+        assertEquals(1, bmFiltered.size());
+        assertEquals(100L, bmFiltered.get(0).getBookmark().getBookmarkId());
     }
 
     /* ---------- Image ---------- */

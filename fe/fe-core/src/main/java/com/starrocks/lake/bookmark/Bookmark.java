@@ -22,6 +22,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -148,5 +149,28 @@ public final class Bookmark {
 
     public int getPhysicalPartitionCount() {
         return partitionsMeta.values().stream().mapToInt(Map::size).sum();
+    }
+
+    /**
+     * Read-only pairing of a bookmark with the references held against it at
+     * the moment the snapshot was taken. Used by information_schema row
+     * materialization.
+     */
+    public static final class View {
+        private final Bookmark bookmark;
+        private final List<Reference.View> references;
+
+        public View(Bookmark bookmark, List<Reference.View> references) {
+            this.bookmark = bookmark;
+            this.references = references;
+        }
+
+        public Bookmark getBookmark() {
+            return bookmark;
+        }
+
+        public List<Reference.View> getReferences() {
+            return references;
+        }
     }
 }

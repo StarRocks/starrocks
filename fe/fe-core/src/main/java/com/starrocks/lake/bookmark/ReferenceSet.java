@@ -17,6 +17,7 @@ package com.starrocks.lake.bookmark;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -65,8 +66,9 @@ public final class ReferenceSet {
         return references.isEmpty();
     }
 
+    /** Read-only view of the internal holder→reference map. */
     public Map<HolderId, Reference> entries() {
-        return references;
+        return Collections.unmodifiableMap(references);
     }
 
     public Collection<Reference> values() {

@@ -307,6 +307,50 @@ public class TableBookmarkTracker {
         }
     }
 
+    /**
+     * Read-only listing of every active bookmark in this tracker, sorted by
+     * bookmarkId ascending.
+     */
+    public List<Bookmark.View> listAllBookmarks() {
+        rwLock.readLock().lock();
+        try {
+            List<Bookmark.View> out = new ArrayList<>(activeBookmarks.size());
+            for (Map.Entry<Long, Bookmark> e : activeBookmarks.entrySet()) {
+                out.add(new Bookmark.View(e.getValue(), collectReferenceViews(e.getKey())));
+            }
+            return out;
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Read-only lookup of a single tracked bookmark with its references.
+     */
+    public Optional<Bookmark.View> findBookmarkView(long bookmarkId) {
+        rwLock.readLock().lock();
+        try {
+            Bookmark b = activeBookmarks.get(bookmarkId);
+            if (b == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new Bookmark.View(b, collectReferenceViews(bookmarkId)));
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    private List<Reference.View> collectReferenceViews(long bookmarkId) {
+        ReferenceSet refSet = referencesByBookmark.get(bookmarkId);
+        List<Reference.View> refs = new ArrayList<>();
+        if (refSet != null) {
+            for (Map.Entry<HolderId, Reference> r : refSet.entries().entrySet()) {
+                refs.add(new Reference.View(r.getKey().getId(), r.getValue().getAcquiredAtMs()));
+            }
+        }
+        return refs;
+    }
+
     /** Apply a previously persisted entry on this tracker. */
     public void replayLogEntry(BookmarkLogEntry entry) {
         rwLock.writeLock().lock();

@@ -98,6 +98,9 @@ public class SchemaScanNode extends ScanNode {
     private Long logLimit = null;
     private List<TFrontend> frontends = null;
 
+    private Long dbId = null;
+    private Long bookmarkId = null;
+
     private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
@@ -260,6 +263,12 @@ public class SchemaScanNode extends ScanNode {
         if (logLimit != null) {
             msg.schema_scan_node.setLog_limit(logLimit);
         }
+        if (dbId != null) {
+            msg.schema_scan_node.setDb_id(dbId);
+        }
+        if (bookmarkId != null) {
+            msg.schema_scan_node.setBookmark_id(bookmarkId);
+        }
         // setting limit for the scanner may cause query to return less rows than expected
         // but this is for the purpose of protect FE resource usage, so it's acceptable
         if (getLimit() > 0) {
@@ -316,6 +325,14 @@ public class SchemaScanNode extends ScanNode {
 
     public void setLogLimit(long logLimit) {
         this.logLimit = logLimit;
+    }
+
+    public void setDbId(long v) {
+        this.dbId = v;
+    }
+
+    public void setBookmarkId(long v) {
+        this.bookmarkId = v;
     }
 
     public boolean isBeSchemaTable() {

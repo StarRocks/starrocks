@@ -226,6 +226,30 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     });
 }
 
+Status SchemaHelper::get_table_bookmark_summary(const SchemaScannerState& state,
+                                                const TGetTableBookmarkSummaryRequest& var_params,
+                                                TGetTableBookmarkSummaryResponse* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTableBookmarkSummary(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_table_bookmark_partitions(const SchemaScannerState& state,
+                                                   const TGetTableBookmarkPartitionsRequest& var_params,
+                                                   TGetTableBookmarkPartitionsResponse* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTableBookmarkPartitions(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_table_bookmark_references(const SchemaScannerState& state,
+                                                   const TGetTableBookmarkReferencesRequest& var_params,
+                                                   TGetTableBookmarkReferencesResponse* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getTableBookmarkReferences(*var_result, var_params);
+    });
+}
+
 Status SchemaHelper::get_users(const SchemaScannerState& state, const TGetUsersRequest& request,
                                TGetUsersResponse* response) {
     return _call_rpc(

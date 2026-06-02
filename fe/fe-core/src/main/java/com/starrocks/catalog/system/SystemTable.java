@@ -29,6 +29,9 @@ import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.catalog.system.information.PipesSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkPartitionsSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkReferencesSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkSummarySystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
@@ -82,6 +85,9 @@ public class SystemTable extends Table {
                     .add(PipesSystemTable.NAME)
                     .add(RoutineLoadJobsSystemTable.NAME)
                     .add(StreamLoadsSystemTable.NAME)
+                    .add(TableBookmarkPartitionsSystemTable.NAME)
+                    .add(TableBookmarkReferencesSystemTable.NAME)
+                    .add(TableBookmarkSummarySystemTable.NAME)
                     .add(TablesConfigSystemTable.NAME)
                     .add(TaskRunsSystemTable.NAME)
                     .add(TasksSystemTable.NAME)

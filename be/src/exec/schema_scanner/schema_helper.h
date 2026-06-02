@@ -110,6 +110,18 @@ public:
     static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
                                       TGetPartitionsMetaResponse* var_result);
 
+    static Status get_table_bookmark_summary(const SchemaScannerState& state,
+                                             const TGetTableBookmarkSummaryRequest& var_params,
+                                             TGetTableBookmarkSummaryResponse* var_result);
+
+    static Status get_table_bookmark_partitions(const SchemaScannerState& state,
+                                                const TGetTableBookmarkPartitionsRequest& var_params,
+                                                TGetTableBookmarkPartitionsResponse* var_result);
+
+    static Status get_table_bookmark_references(const SchemaScannerState& state,
+                                                const TGetTableBookmarkReferencesRequest& var_params,
+                                                TGetTableBookmarkReferencesResponse* var_result);
+
     static Status get_policy_references(const SchemaScannerState& state, const TGetPolicyReferencesRequest& request,
                                         TGetPolicyReferenceResponse* response);
 

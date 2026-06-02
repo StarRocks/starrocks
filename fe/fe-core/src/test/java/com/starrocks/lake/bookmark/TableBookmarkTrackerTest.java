@@ -20,8 +20,11 @@ import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -190,5 +193,63 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
             pool.shutdown();
             pool.awaitTermination(10, TimeUnit.SECONDS);
         }
+    }
+
+    @Test
+    public void testListAllBookmarks() {
+        TableBookmarkTracker tracker = new TableBookmarkTracker(1L, 2L);
+
+        // Seed two bookmarks via replay path: avoids needing a real OlapTable.
+        // Lower bookmarkId has 1 reference, higher bookmarkId has 2 references.
+        Map<Long, Map<Long, PhysicalPartitionMeta>> emptyMeta = Collections.emptyMap();
+        Bookmark b1 = new Bookmark(1L, 2L, 100L, 1_000L, emptyMeta);
+        Bookmark b2 = new Bookmark(1L, 2L, 200L, 2_000L, emptyMeta);
+
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("snap_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("snap_h2");
+        BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("snap_h3");
+
+        tracker.replayLogEntry(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L));
+
+        Map<HolderId, Reference> b2Initial = new HashMap<>();
+        b2Initial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo()));
+        b2Initial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo()));
+        tracker.replayLogEntry(new BookmarkLogEntry.AddBookmark(b2, b2Initial));
+
+        List<Bookmark.View> views = tracker.listAllBookmarks();
+
+        assertEquals(2, views.size());
+        // Ascending bookmarkId order.
+        assertTrue(views.get(0).getBookmark().getBookmarkId()
+                < views.get(1).getBookmark().getBookmarkId());
+        assertEquals(100L, views.get(0).getBookmark().getBookmarkId());
+        assertEquals(200L, views.get(1).getBookmark().getBookmarkId());
+
+        // dbId / tableId propagated from the tracker via the underlying Bookmark.
+        for (Bookmark.View s : views) {
+            assertEquals(1L, s.getBookmark().getDbId());
+            assertEquals(2L, s.getBookmark().getTableId());
+            assertNotNull(s.getReferences());
+        }
+
+        // Reference counts match what we seeded.
+        assertEquals(1, views.get(0).getReferences().size());
+        assertEquals(2, views.get(1).getReferences().size());
+
+        // Holder ids and acquired-at timestamps survive the read.
+        Reference.View r0 = views.get(0).getReferences().get(0);
+        assertEquals(h1.getHolderId().getId(), r0.getHolderId());
+        assertEquals(1_100L, r0.getAcquiredAtMs());
+
+        Set<String> holderIds = new HashSet<>();
+        Set<Long> acquiredAts = new HashSet<>();
+        for (Reference.View r : views.get(1).getReferences()) {
+            holderIds.add(r.getHolderId());
+            acquiredAts.add(r.getAcquiredAtMs());
+        }
+        assertTrue(holderIds.contains(h2.getHolderId().getId()));
+        assertTrue(holderIds.contains(h3.getHolderId().getId()));
+        assertTrue(acquiredAts.contains(2_100L));
+        assertTrue(acquiredAts.contains(2_200L));
     }
 }

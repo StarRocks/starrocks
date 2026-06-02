@@ -1,0 +1,354 @@
+-- ==============================================================
+-- Section 1: basic single-bookmark coverage
+-- ==============================================================
+-- name: test_table_bookmarks_basic @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2024-04-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20), (3, '2024-03-15', 30);
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t", "h1")
+
+-- Summary: exactly 1 row; counts reflect 3 partitions x 1 physical sub-partition.
+SELECT logical_partition_count, physical_partition_count, reference_count
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${bookmark_id};
+
+-- Partitions: 3 logical x 1 physical = 3 rows.
+SELECT COUNT(*) AS partition_rows
+  FROM information_schema.table_bookmark_partitions
+  WHERE bookmark_id = ${bookmark_id};
+
+-- References: 1 row.
+SELECT holder_id
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${bookmark_id};
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${bookmark_id}, "h1")
+} END CLEANUP
+
+-- ==============================================================
+-- Section 2: multi-bookmark + multi-reference on one table
+-- Verifies summary row-per-bookmark, partitions row-per-(bm, partition),
+-- references row-per-(bm, holder), OLDEST/NEWEST_REFERENCE.
+-- ==============================================================
+-- name: test_table_bookmarks_multi @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15');
+
+-- Bookmark b1 with two holders (same state -> same bookmark id, two references).
+[UC]function: b1=create_bookmark("${db[0]}", "t", "alpha")
+[UC]function: b1_dup=create_bookmark("${db[0]}", "t", "beta")
+
+-- Mutate state, then take bookmark b2 with one holder.
+INSERT INTO t VALUES (2, '2024-02-15');
+[UC]function: b2=create_bookmark("${db[0]}", "t", "gamma")
+
+-- Summary: 2 distinct bookmarks (b1 and b2); b1.reference_count = 2, b2.reference_count = 1.
+SELECT (bookmark_id = ${b1}) AS is_b1, reference_count
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${b1}, ${b2})
+  ORDER BY bookmark_id;
+
+-- Partitions: b1 has 2 partition rows (state at b1), b2 has 2 (state at b2).
+SELECT (bookmark_id = ${b1}) AS is_b1, COUNT(*) AS partition_rows
+  FROM information_schema.table_bookmark_partitions
+  WHERE bookmark_id IN (${b1}, ${b2})
+  GROUP BY bookmark_id
+  ORDER BY bookmark_id;
+
+-- References: b1 has 2 (alpha, beta), b2 has 1 (gamma). Total 3 rows.
+SELECT (bookmark_id = ${b1}) AS is_b1, holder_id
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id IN (${b1}, ${b2})
+  ORDER BY bookmark_id, holder_id;
+
+-- OLDEST/NEWEST_REFERENCE on b1: alpha acquired first, beta after.
+-- Tie-break is lex-smallest holder id on equal time, so the smaller
+-- holder_id may flip if create_bookmark returns the same millisecond.
+SELECT
+  oldest_reference.id AS oldest_holder,
+  newest_reference.id AS newest_holder
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${b1};
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${b1}, "alpha")
+  function: release_bookmark("${db[0]}", "t", ${b1_dup}, "beta")
+  function: release_bookmark("${db[0]}", "t", ${b2}, "gamma")
+} END CLEANUP
+
+-- ==============================================================
+-- Section 3: LATEST_CHANGED_PHYSICAL_PARTITIONS ARRAY<STRUCT>
+-- Verifies top-3 cap, descending-time order, < 3 partitions case.
+-- ==============================================================
+-- name: test_table_bookmarks_latest_updated @cloud
+
+CREATE TABLE t_big (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2024-04-01'),
+    PARTITION p4 VALUES LESS THAN ('2024-05-01'),
+    PARTITION p5 VALUES LESS THAN ('2024-06-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+-- Stagger inserts so the 5 partitions have distinct visibleVersionTimes.
+INSERT INTO t_big VALUES (1, '2024-01-15');
+INSERT INTO t_big VALUES (2, '2024-02-15');
+INSERT INTO t_big VALUES (3, '2024-03-15');
+INSERT INTO t_big VALUES (4, '2024-04-15');
+INSERT INTO t_big VALUES (5, '2024-05-15');
+
+[UC]function: big_bm=create_bookmark("${db[0]}", "t_big", "h_big")
+
+-- Top-3 cap: array_length = 3 even though 5 partitions exist.
+SELECT array_length(latest_changed_physical_partitions) AS top_n
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${big_bm};
+
+-- Verify descending time order -- each element's time >= next element's time.
+SELECT
+  latest_changed_physical_partitions[1].time >= latest_changed_physical_partitions[2].time AS o1,
+  latest_changed_physical_partitions[2].time >= latest_changed_physical_partitions[3].time AS o2
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${big_bm};
+
+-- < 3 partitions case: a 2-partition table -> array_length = 2 (no NULL pad).
+CREATE TABLE t_small (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO t_small VALUES (1, '2024-01-15');
+[UC]function: small_bm=create_bookmark("${db[0]}", "t_small", "h_small")
+
+SELECT array_length(latest_changed_physical_partitions) AS top_n
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${small_bm};
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t_big", ${big_bm}, "h_big")
+  function: release_bookmark("${db[0]}", "t_small", ${small_bm}, "h_small")
+} END CLEANUP
+
+-- ==============================================================
+-- Section 4: JOIN across all three tables on (db_id, table_id, bookmark_id)
+-- ==============================================================
+-- name: test_table_bookmarks_join @cloud
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+[UC]function: jb=create_bookmark("${db[0]}", "t", "j1")
+
+-- Full 3-way join -- every row should agree on bookmark_id.
+SELECT s.bookmark_id, p.physical_partition_id, r.holder_id
+  FROM information_schema.table_bookmark_summary s
+  JOIN information_schema.table_bookmark_partitions p
+    USING (db_id, table_id, bookmark_id)
+  JOIN information_schema.table_bookmark_references r
+    USING (db_id, table_id, bookmark_id)
+  WHERE s.bookmark_id = ${jb};
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${jb}, "j1")
+} END CLEANUP
+
+-- ==============================================================
+-- Section 5: predicate pushdown -- verify filter columns work end-to-end
+-- ==============================================================
+-- name: test_table_bookmarks_predicate_pushdown @cloud
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+[UC]function: pb=create_bookmark("${db[0]}", "t", "pp_holder")
+
+-- Filter by db_id (numeric EQ) -- resolve via the bookmark, then re-filter.
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary s
+  WHERE s.db_id = (SELECT db_id FROM information_schema.table_bookmark_summary
+                   WHERE bookmark_id = ${pb} LIMIT 1);
+
+-- Filter by bookmark_id (numeric EQ).
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${pb};
+
+-- Filter by holder_id (string EQ, references-table only).
+SELECT bookmark_id FROM information_schema.table_bookmark_references
+  WHERE holder_id = "pp_holder";
+
+-- Filter by physical_partition_id (numeric EQ, partitions-table only).
+SELECT COUNT(*) FROM information_schema.table_bookmark_partitions
+  WHERE bookmark_id = ${pb} AND physical_partition_id > 0;
+
+-- CREATE_TIME range filter (summary).
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${pb} AND create_time > '2020-01-01';
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${pb}, "pp_holder")
+} END CLEANUP
+
+-- ==============================================================
+-- Section 6: projection pushdown -- verify SELECT subset of columns
+-- ==============================================================
+-- name: test_table_bookmarks_projection @cloud
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+[UC]function: prb=create_bookmark("${db[0]}", "t", "proj")
+
+-- Project subset: cheap columns only -- should not even compute LATEST_CHANGED_PHYSICAL_PARTITIONS / OLDEST/NEWEST_REFERENCE.
+SELECT bookmark_id, reference_count
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${prb};
+
+-- Project the expensive columns -- should compute them correctly.
+SELECT array_length(latest_changed_physical_partitions) > 0 AS has_partitions,
+       oldest_reference.id AS oldest,
+       newest_reference.id AS newest
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${prb};
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${prb}, "proj")
+} END CLEANUP
+
+-- ==============================================================
+-- Section 7: multi-db and multi-table coverage
+-- Verifies that (a) bookmarks from multiple databases appear with
+-- distinct DB_IDs, (b) bookmarks from multiple tables in one db
+-- appear with distinct TABLE_IDs, (c) filters by db_id / table_id
+-- isolate correctly, (d) JOIN works across (db, table) rows.
+-- ==============================================================
+-- name: test_table_bookmarks_multi_db_table @cloud
+
+-- Explicitly create both databases. (Framework only auto-creates db[0]
+-- when the case has no CREATE DATABASE; here we drive db naming ourselves
+-- so ${db[0]} is the first explicit name = db_a_${uuid0}.)
+CREATE DATABASE db_a_${uuid0};
+CREATE DATABASE db_b_${uuid0};
+
+USE db_a_${uuid0};
+CREATE TABLE t1 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+CREATE TABLE t2 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t1 VALUES (1);
+INSERT INTO t2 VALUES (2);
+
+USE db_b_${uuid0};
+CREATE TABLE t3 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t3 VALUES (3);
+
+-- Take one bookmark per (db, table). 3 bookmarks total across 2 dbs.
+[UC]function: bm_t1=create_bookmark("db_a_${uuid0}", "t1", "mh1")
+[UC]function: bm_t2=create_bookmark("db_a_${uuid0}", "t2", "mh2")
+[UC]function: bm_t3=create_bookmark("db_b_${uuid0}", "t3", "mh3")
+
+----------------------------------------------------------------------
+-- (a) Two databases visible: 2 distinct DB_IDs for our bookmarks.
+----------------------------------------------------------------------
+SELECT COUNT(DISTINCT db_id) AS distinct_dbs
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${bm_t1}, ${bm_t2}, ${bm_t3});
+
+----------------------------------------------------------------------
+-- (b) Two tables in db A: 2 distinct TABLE_IDs share one DB_ID.
+----------------------------------------------------------------------
+SELECT COUNT(DISTINCT table_id) AS distinct_tables_in_db_a
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${bm_t1}, ${bm_t2});
+
+----------------------------------------------------------------------
+-- (c) Filter isolation:
+--     - WHERE bookmark_id = bm_t3 -> only the t3 row (1 db_id).
+--     - WHERE bookmark_id = bm_t1 -> only the t1 row (1 table_id).
+----------------------------------------------------------------------
+SELECT COUNT(*) AS rows_for_t3
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${bm_t3};
+
+SELECT COUNT(*) AS rows_for_t1
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${bm_t1};
+
+----------------------------------------------------------------------
+-- (d) JOIN summary + partitions + references across both databases.
+--     Group by db_id to show per-db row counts.
+----------------------------------------------------------------------
+SELECT COUNT(DISTINCT s.db_id) AS dbs,
+       COUNT(DISTINCT s.bookmark_id) AS bookmarks,
+       COUNT(DISTINCT p.physical_partition_id) AS partitions,
+       COUNT(DISTINCT r.holder_id) AS holders
+  FROM information_schema.table_bookmark_summary s
+  JOIN information_schema.table_bookmark_partitions p
+    USING (db_id, table_id, bookmark_id)
+  JOIN information_schema.table_bookmark_references r
+    USING (db_id, table_id, bookmark_id)
+  WHERE s.bookmark_id IN (${bm_t1}, ${bm_t2}, ${bm_t3});
+
+----------------------------------------------------------------------
+-- (e) Same table NAME ('t1') across different dbs gets distinct
+--     TABLE_IDs. (Verifies we never collapse rows by id only.)
+----------------------------------------------------------------------
+-- Create same-named table in db B
+USE db_b_${uuid0};
+CREATE TABLE t1 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t1 VALUES (99);
+[UC]function: bm_b_t1=create_bookmark("db_b_${uuid0}", "t1", "mh4")
+
+-- Both 't1' rows visible, distinguished by DB_ID + TABLE_ID.
+SELECT COUNT(DISTINCT db_id) AS distinct_dbs,
+       COUNT(DISTINCT table_id) AS distinct_tables
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${bm_t1}, ${bm_b_t1});
+
+CLEANUP {
+  function: release_bookmark("db_a_${uuid0}", "t1", ${bm_t1}, "mh1")
+  function: release_bookmark("db_a_${uuid0}", "t2", ${bm_t2}, "mh2")
+  function: release_bookmark("db_b_${uuid0}", "t3", ${bm_t3}, "mh3")
+  function: release_bookmark("db_b_${uuid0}", "t1", ${bm_b_t1}, "mh4")
+  DROP DATABASE IF EXISTS db_a_${uuid0} FORCE;
+  DROP DATABASE IF EXISTS db_b_${uuid0} FORCE;
+} END CLEANUP

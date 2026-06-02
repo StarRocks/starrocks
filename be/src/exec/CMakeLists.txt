@@ -444,6 +444,9 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_loads_scanner.cpp
     schema_scanner/schema_load_tracking_logs_scanner.cpp
     schema_scanner/schema_partitions_meta_scanner.cpp
+    schema_scanner/schema_table_bookmark_partitions_scanner.cpp
+    schema_scanner/schema_table_bookmark_references_scanner.cpp
+    schema_scanner/schema_table_bookmark_summary_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp

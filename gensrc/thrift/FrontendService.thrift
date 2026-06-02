@@ -1615,6 +1615,92 @@ struct TGetPartitionsMetaResponse {
     2: optional i64 next_table_id_offset;
 }
 
+// ============== table_bookmark_summary ==============
+
+struct TLatestChangedPhysicalPartitionEntry {
+    1: optional i64 id
+    2: optional i64 version
+    3: optional i64 time
+}
+
+struct TBookmarkReferenceSummary {
+    1: optional string id
+    2: optional i64 time
+}
+
+struct TTableBookmarkSummaryInfo {
+    1:  optional i64 db_id
+    2:  optional i64 table_id
+    3:  optional i64 bookmark_id
+    4:  optional i64 create_time
+    5:  optional i64 logical_partition_count
+    6:  optional i64 physical_partition_count
+    7:  optional i64 reference_count
+    8:  optional list<TLatestChangedPhysicalPartitionEntry> latest_changed_physical_partitions
+    9:  optional TBookmarkReferenceSummary oldest_reference
+    10: optional TBookmarkReferenceSummary newest_reference
+}
+
+struct TGetTableBookmarkSummaryRequest {
+    1: optional TAuthInfo auth_info
+    2: optional i64 db_id
+    3: optional i64 table_id
+    4: optional i64 bookmark_id
+    5: optional list<string> selected_columns
+}
+
+struct TGetTableBookmarkSummaryResponse {
+    1: optional list<TTableBookmarkSummaryInfo> table_bookmark_summary_infos
+}
+
+// ============== table_bookmark_partitions ==============
+
+struct TTableBookmarkPartitionInfo {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 bookmark_id
+    4: optional i64 logical_partition_id
+    5: optional i64 physical_partition_id
+    6: optional i64 visible_version
+    7: optional i64 visible_version_time
+    8: optional i64 base_materialized_index_meta_id
+    9: optional i64 base_materialized_index_id
+}
+
+struct TGetTableBookmarkPartitionsRequest {
+    1: optional TAuthInfo auth_info
+    2: optional i64 db_id
+    3: optional i64 table_id
+    4: optional i64 bookmark_id
+    5: optional list<string> selected_columns
+}
+
+struct TGetTableBookmarkPartitionsResponse {
+    1: optional list<TTableBookmarkPartitionInfo> table_bookmark_partition_infos
+}
+
+// ============== table_bookmark_references ==============
+
+struct TTableBookmarkReferenceInfo {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 bookmark_id
+    4: optional string holder_id
+    5: optional i64 create_time
+}
+
+struct TGetTableBookmarkReferencesRequest {
+    1: optional TAuthInfo auth_info
+    2: optional i64 db_id
+    3: optional i64 table_id
+    4: optional i64 bookmark_id
+    5: optional list<string> selected_columns
+}
+
+struct TGetTableBookmarkReferencesResponse {
+    1: optional list<TTableBookmarkReferenceInfo> table_bookmark_reference_infos
+}
+
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
     2: optional string table_name;
@@ -2552,6 +2638,10 @@ service FrontendService {
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+
+    TGetTableBookmarkSummaryResponse getTableBookmarkSummary(1: optional TGetTableBookmarkSummaryRequest request)
+    TGetTableBookmarkPartitionsResponse getTableBookmarkPartitions(1: optional TGetTableBookmarkPartitionsRequest request)
+    TGetTableBookmarkReferencesResponse getTableBookmarkReferences(1: optional TGetTableBookmarkReferencesRequest request)
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 

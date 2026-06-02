@@ -86,8 +86,14 @@ Status SchemaScanContext::_prepare_params(RuntimeState* state, const std::vector
         _param->limit = _tnode.limit;
     }
 
+    if (_tnode.schema_scan_node.__isset.db_id) {
+        _param->db_id = _tnode.schema_scan_node.db_id;
+    }
     if (_tnode.schema_scan_node.__isset.table_id) {
         _param->table_id = _tnode.schema_scan_node.table_id;
+    }
+    if (_tnode.schema_scan_node.__isset.bookmark_id) {
+        _param->bookmark_id = _tnode.schema_scan_node.bookmark_id;
     }
     if (_tnode.schema_scan_node.__isset.partition_id) {
         _param->partition_id = _tnode.schema_scan_node.partition_id;
@@ -128,6 +134,7 @@ Status SchemaScanContext::_prepare_params(RuntimeState* state, const std::vector
     // tuple_id
     size_t tuple_id = _tnode.schema_scan_node.tuple_id;
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
+    _param->dest_slot_descs = &tuple_desc->slots();
     for (auto* slot : tuple_desc->slots()) {
         _param->slot_id_mapping.emplace(slot->id(), slot);
     }

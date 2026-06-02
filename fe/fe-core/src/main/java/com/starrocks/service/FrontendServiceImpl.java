@@ -80,6 +80,9 @@ import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkPartitionsSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkReferencesSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkSummarySystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
@@ -281,6 +284,12 @@ import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetRoutineLoadJobsResult;
 import com.starrocks.thrift.TGetStreamLoadsResult;
+import com.starrocks.thrift.TGetTableBookmarkPartitionsRequest;
+import com.starrocks.thrift.TGetTableBookmarkPartitionsResponse;
+import com.starrocks.thrift.TGetTableBookmarkReferencesRequest;
+import com.starrocks.thrift.TGetTableBookmarkReferencesResponse;
+import com.starrocks.thrift.TGetTableBookmarkSummaryRequest;
+import com.starrocks.thrift.TGetTableBookmarkSummaryResponse;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
@@ -3006,6 +3015,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetPartitionsMetaResponse getPartitionsMeta(TGetPartitionsMetaRequest request) throws TException {
         return InformationSchemaDataSource.generatePartitionsMetaResponse(request);
+    }
+
+    @Override
+    public TGetTableBookmarkSummaryResponse getTableBookmarkSummary(
+            TGetTableBookmarkSummaryRequest request) throws TException {
+        return TableBookmarkSummarySystemTable.query(request);
+    }
+
+    @Override
+    public TGetTableBookmarkPartitionsResponse getTableBookmarkPartitions(
+            TGetTableBookmarkPartitionsRequest request) throws TException {
+        return TableBookmarkPartitionsSystemTable.query(request);
+    }
+
+    @Override
+    public TGetTableBookmarkReferencesResponse getTableBookmarkReferences(
+            TGetTableBookmarkReferencesRequest request) throws TException {
+        return TableBookmarkReferencesSystemTable.query(request);
     }
 
     @Override

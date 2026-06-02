@@ -619,6 +619,8 @@ struct TSchemaScanNode {
   26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
+  102: optional i64 bookmark_id
+  103: optional i64 db_id
 }
 
 enum TAccessPathType {

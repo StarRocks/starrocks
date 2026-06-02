@@ -30,6 +30,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -185,6 +186,49 @@ public class BookmarkManager extends FrontendDaemon {
         } finally {
             trackerMapLock.readLock().unlock();
         }
+    }
+
+    /**
+     * Cluster-wide listing of every active bookmark in every tracker.
+     * Each tracker is read under its own lock, so the result may reflect
+     * slightly different points-in-time across trackers.
+     *
+     * @param dbId       if present, only entries whose dbId matches
+     * @param tableId    if present, only entries whose tableId matches
+     * @param bookmarkId if present, only entries whose bookmarkId matches
+     */
+    public List<Bookmark.View> listAllBookmarks(
+            Optional<Long> dbId, Optional<Long> tableId, Optional<Long> bookmarkId) {
+        List<Bookmark.View> out = new ArrayList<>();
+        trackerMapLock.readLock().lock();
+        try {
+            Iterable<ConcurrentHashMap<Long, TableBookmarkTracker>> dbMaps;
+            if (dbId.isPresent()) {
+                ConcurrentHashMap<Long, TableBookmarkTracker> m = trackers.get(dbId.get());
+                dbMaps = m == null ? Collections.emptyList() : Collections.singletonList(m);
+            } else {
+                dbMaps = trackers.values();
+            }
+            for (ConcurrentHashMap<Long, TableBookmarkTracker> dbMap : dbMaps) {
+                Iterable<TableBookmarkTracker> tableTrackers;
+                if (tableId.isPresent()) {
+                    TableBookmarkTracker tr = dbMap.get(tableId.get());
+                    tableTrackers = tr == null ? Collections.emptyList() : Collections.singletonList(tr);
+                } else {
+                    tableTrackers = dbMap.values();
+                }
+                for (TableBookmarkTracker tr : tableTrackers) {
+                    if (bookmarkId.isPresent()) {
+                        tr.findBookmarkView(bookmarkId.get()).ifPresent(out::add);
+                    } else {
+                        out.addAll(tr.listAllBookmarks());
+                    }
+                }
+            }
+        } finally {
+            trackerMapLock.readLock().unlock();
+        }
+        return out;
     }
 
     @VisibleForTesting

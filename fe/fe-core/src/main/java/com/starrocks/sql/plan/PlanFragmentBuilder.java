@@ -2017,8 +2017,14 @@ public class PlanFragmentBuilder {
                             case "BE_ID":
                                 scanNode.setBeId(constantOperator.getBigint());
                                 break;
+                            case "DB_ID":
+                                scanNode.setDbId(constantOperator.getBigint());
+                                break;
                             case "TABLE_ID":
                                 scanNode.setTableId(constantOperator.getBigint());
+                                break;
+                            case "BOOKMARK_ID":
+                                scanNode.setBookmarkId(constantOperator.getBigint());
                                 break;
                             case "PARTITION_ID":
                                 scanNode.setPartitionId(constantOperator.getBigint());

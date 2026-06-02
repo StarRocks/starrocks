@@ -1,0 +1,365 @@
+-- name: test_table_bookmarks_basic @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2024-04-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20), (3, '2024-03-15', 30);
+-- result:
+-- !result
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t", "h1")
+SELECT logical_partition_count, physical_partition_count, reference_count
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${bookmark_id};
+-- result:
+3	3	1
+-- !result
+SELECT COUNT(*) AS partition_rows
+  FROM information_schema.table_bookmark_partitions
+  WHERE bookmark_id = ${bookmark_id};
+-- result:
+3
+-- !result
+SELECT holder_id
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${bookmark_id};
+-- result:
+h1
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${bookmark_id}, "h1")
+} END CLEANUP
+
+-- name: test_table_bookmarks_multi @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, '2024-01-15');
+-- result:
+-- !result
+[UC]function: b1=create_bookmark("${db[0]}", "t", "alpha")
+[UC]function: b1_dup=create_bookmark("${db[0]}", "t", "beta")
+INSERT INTO t VALUES (2, '2024-02-15');
+-- result:
+-- !result
+[UC]function: b2=create_bookmark("${db[0]}", "t", "gamma")
+SELECT (bookmark_id = ${b1}) AS is_b1, reference_count
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${b1}, ${b2})
+  ORDER BY bookmark_id;
+-- result:
+1	2
+0	1
+-- !result
+SELECT (bookmark_id = ${b1}) AS is_b1, COUNT(*) AS partition_rows
+  FROM information_schema.table_bookmark_partitions
+  WHERE bookmark_id IN (${b1}, ${b2})
+  GROUP BY bookmark_id
+  ORDER BY bookmark_id;
+-- result:
+1	2
+0	2
+-- !result
+SELECT (bookmark_id = ${b1}) AS is_b1, holder_id
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id IN (${b1}, ${b2})
+  ORDER BY bookmark_id, holder_id;
+-- result:
+1	alpha
+1	beta
+0	gamma
+-- !result
+SELECT
+  oldest_reference.id AS oldest_holder,
+  newest_reference.id AS newest_holder
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${b1};
+-- result:
+[REGEX]alpha	(alpha|beta)
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${b1}, "alpha")
+  function: release_bookmark("${db[0]}", "t", ${b1_dup}, "beta")
+  function: release_bookmark("${db[0]}", "t", ${b2}, "gamma")
+} END CLEANUP
+
+-- name: test_table_bookmarks_latest_updated @cloud
+CREATE TABLE t_big (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2024-04-01'),
+    PARTITION p4 VALUES LESS THAN ('2024-05-01'),
+    PARTITION p5 VALUES LESS THAN ('2024-06-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_big VALUES (1, '2024-01-15');
+-- result:
+-- !result
+INSERT INTO t_big VALUES (2, '2024-02-15');
+-- result:
+-- !result
+INSERT INTO t_big VALUES (3, '2024-03-15');
+-- result:
+-- !result
+INSERT INTO t_big VALUES (4, '2024-04-15');
+-- result:
+-- !result
+INSERT INTO t_big VALUES (5, '2024-05-15');
+-- result:
+-- !result
+[UC]function: big_bm=create_bookmark("${db[0]}", "t_big", "h_big")
+SELECT array_length(latest_changed_physical_partitions) AS top_n
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${big_bm};
+-- result:
+3
+-- !result
+SELECT
+  latest_changed_physical_partitions[1].time >= latest_changed_physical_partitions[2].time AS o1,
+  latest_changed_physical_partitions[2].time >= latest_changed_physical_partitions[3].time AS o2
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${big_bm};
+-- result:
+1	1
+-- !result
+CREATE TABLE t_small (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_small VALUES (1, '2024-01-15');
+-- result:
+-- !result
+[UC]function: small_bm=create_bookmark("${db[0]}", "t_small", "h_small")
+SELECT array_length(latest_changed_physical_partitions) AS top_n
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${small_bm};
+-- result:
+2
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t_big", ${big_bm}, "h_big")
+  function: release_bookmark("${db[0]}", "t_small", ${small_bm}, "h_small")
+} END CLEANUP
+
+-- name: test_table_bookmarks_join @cloud
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]function: jb=create_bookmark("${db[0]}", "t", "j1")
+SELECT s.bookmark_id, p.physical_partition_id, r.holder_id
+  FROM information_schema.table_bookmark_summary s
+  JOIN information_schema.table_bookmark_partitions p
+    USING (db_id, table_id, bookmark_id)
+  JOIN information_schema.table_bookmark_references r
+    USING (db_id, table_id, bookmark_id)
+  WHERE s.bookmark_id = ${jb};
+-- result:
+[REGEX].*[0-9]+\s+[0-9]+\s+j1.*
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${jb}, "j1")
+} END CLEANUP
+
+-- name: test_table_bookmarks_predicate_pushdown @cloud
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]function: pb=create_bookmark("${db[0]}", "t", "pp_holder")
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary s
+  WHERE s.db_id = (SELECT db_id FROM information_schema.table_bookmark_summary
+                   WHERE bookmark_id = ${pb} LIMIT 1);
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${pb};
+-- result:
+1
+-- !result
+SELECT bookmark_id FROM information_schema.table_bookmark_references
+  WHERE holder_id = "pp_holder";
+-- result:
+[REGEX].*[0-9]+.*
+-- !result
+SELECT COUNT(*) FROM information_schema.table_bookmark_partitions
+  WHERE bookmark_id = ${pb} AND physical_partition_id > 0;
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${pb} AND create_time > '2020-01-01';
+-- result:
+1
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${pb}, "pp_holder")
+} END CLEANUP
+
+-- name: test_table_bookmarks_projection @cloud
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]function: prb=create_bookmark("${db[0]}", "t", "proj")
+SELECT bookmark_id, reference_count
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${prb};
+-- result:
+[REGEX].*[0-9]+\s+1.*
+-- !result
+SELECT array_length(latest_changed_physical_partitions) > 0 AS has_partitions,
+       oldest_reference.id AS oldest,
+       newest_reference.id AS newest
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${prb};
+-- result:
+1	proj	proj
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${prb}, "proj")
+} END CLEANUP
+
+-- name: test_table_bookmarks_multi_db_table @cloud
+CREATE DATABASE db_a_${uuid0};
+-- result:
+-- !result
+CREATE DATABASE db_b_${uuid0};
+-- result:
+-- !result
+USE db_a_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE t2 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1 VALUES (1);
+-- result:
+-- !result
+INSERT INTO t2 VALUES (2);
+-- result:
+-- !result
+USE db_b_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t3 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t3 VALUES (3);
+-- result:
+-- !result
+[UC]function: bm_t1=create_bookmark("db_a_${uuid0}", "t1", "mh1")
+[UC]function: bm_t2=create_bookmark("db_a_${uuid0}", "t2", "mh2")
+[UC]function: bm_t3=create_bookmark("db_b_${uuid0}", "t3", "mh3")
+SELECT COUNT(DISTINCT db_id) AS distinct_dbs
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${bm_t1}, ${bm_t2}, ${bm_t3});
+-- result:
+2
+-- !result
+SELECT COUNT(DISTINCT table_id) AS distinct_tables_in_db_a
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${bm_t1}, ${bm_t2});
+-- result:
+2
+-- !result
+SELECT COUNT(*) AS rows_for_t3
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${bm_t3};
+-- result:
+1
+-- !result
+SELECT COUNT(*) AS rows_for_t1
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${bm_t1};
+-- result:
+1
+-- !result
+SELECT COUNT(DISTINCT s.db_id) AS dbs,
+       COUNT(DISTINCT s.bookmark_id) AS bookmarks,
+       COUNT(DISTINCT p.physical_partition_id) AS partitions,
+       COUNT(DISTINCT r.holder_id) AS holders
+  FROM information_schema.table_bookmark_summary s
+  JOIN information_schema.table_bookmark_partitions p
+    USING (db_id, table_id, bookmark_id)
+  JOIN information_schema.table_bookmark_references r
+    USING (db_id, table_id, bookmark_id)
+  WHERE s.bookmark_id IN (${bm_t1}, ${bm_t2}, ${bm_t3});
+-- result:
+2	3	3	3
+-- !result
+USE db_b_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1 VALUES (99);
+-- result:
+-- !result
+[UC]function: bm_b_t1=create_bookmark("db_b_${uuid0}", "t1", "mh4")
+SELECT COUNT(DISTINCT db_id) AS distinct_dbs,
+       COUNT(DISTINCT table_id) AS distinct_tables
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id IN (${bm_t1}, ${bm_b_t1});
+-- result:
+2	2
+-- !result
+CLEANUP {
+  function: release_bookmark("db_a_${uuid0}", "t1", ${bm_t1}, "mh1")
+  function: release_bookmark("db_a_${uuid0}", "t2", ${bm_t2}, "mh2")
+  function: release_bookmark("db_b_${uuid0}", "t3", ${bm_t3}, "mh3")
+  function: release_bookmark("db_b_${uuid0}", "t1", ${bm_b_t1}, "mh4")
+  DROP DATABASE IF EXISTS db_a_${uuid0} FORCE;
+  DROP DATABASE IF EXISTS db_b_${uuid0} FORCE;
+} END CLEANUP

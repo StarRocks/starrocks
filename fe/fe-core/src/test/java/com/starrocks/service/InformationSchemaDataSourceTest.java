@@ -23,6 +23,9 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.information.TableBookmarkPartitionsSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkReferencesSystemTable;
+import com.starrocks.catalog.system.information.TableBookmarkSummarySystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.Config;
@@ -30,7 +33,10 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
+import com.starrocks.lake.bookmark.Bookmark;
+import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -53,6 +59,12 @@ import com.starrocks.thrift.TGetKeywordsRequest;
 import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
+import com.starrocks.thrift.TGetTableBookmarkPartitionsRequest;
+import com.starrocks.thrift.TGetTableBookmarkPartitionsResponse;
+import com.starrocks.thrift.TGetTableBookmarkReferencesRequest;
+import com.starrocks.thrift.TGetTableBookmarkReferencesResponse;
+import com.starrocks.thrift.TGetTableBookmarkSummaryRequest;
+import com.starrocks.thrift.TGetTableBookmarkSummaryResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
@@ -66,6 +78,9 @@ import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TPartitionMetaInfo;
+import com.starrocks.thrift.TTableBookmarkPartitionInfo;
+import com.starrocks.thrift.TTableBookmarkReferenceInfo;
+import com.starrocks.thrift.TTableBookmarkSummaryInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
@@ -972,5 +987,174 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         } finally {
             Config.enable_external_catalog_information_schema_tables_access_full_metadata = originFlag;
         }
+    }
+
+    @Test
+    public void testGetTableBookmarkSummary() throws Exception {
+        // Setup: create a table, take a bookmark on it, hold one reference.
+        starRocksAssert.withDatabase("test_db_bookmark").useDatabase("test_db_bookmark");
+        starRocksAssert.withTable("CREATE TABLE t (k INT) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db_bookmark").getId();
+        long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark").getTable("t").getId();
+
+        BookmarkHolder holder = BookmarkHolder.forEmptyInfo("test-holder");
+        Bookmark b = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .create(dbId, tableId, holder);
+
+        // Issue the RPC
+        TGetTableBookmarkSummaryRequest req = new TGetTableBookmarkSummaryRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test_db_bookmark");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetTableBookmarkSummaryResponse resp =
+                TableBookmarkSummarySystemTable.query(req);
+
+        Assertions.assertNotNull(resp.getTable_bookmark_summary_infos());
+        Assertions.assertEquals(1, resp.getTable_bookmark_summary_infos().size());
+        TTableBookmarkSummaryInfo row = resp.getTable_bookmark_summary_infos().get(0);
+        Assertions.assertEquals(dbId, row.getDb_id());
+        Assertions.assertEquals(tableId, row.getTable_id());
+        Assertions.assertEquals(b.getBookmarkId(), row.getBookmark_id());
+        Assertions.assertEquals(1L, row.getReference_count());
+    }
+
+    @Test
+    public void testGetTableBookmarkPartitions() throws Exception {
+        // Setup: create a table, take a bookmark on it.
+        starRocksAssert.withDatabase("test_db_bookmark_partitions").useDatabase("test_db_bookmark_partitions");
+        starRocksAssert.withTable("CREATE TABLE t (k INT) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark_partitions").getId();
+        long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark_partitions").getTable("t").getId();
+
+        BookmarkHolder holder = BookmarkHolder.forEmptyInfo("test-holder");
+        Bookmark b = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .create(dbId, tableId, holder);
+        long bookmarkId = b.getBookmarkId();
+
+        // Issue the RPC, filtered by bookmark_id.
+        TGetTableBookmarkPartitionsRequest req = new TGetTableBookmarkPartitionsRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test_db_bookmark_partitions");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setBookmark_id(bookmarkId);
+
+        TGetTableBookmarkPartitionsResponse resp =
+                TableBookmarkPartitionsSystemTable.query(req);
+
+        Assertions.assertNotNull(resp.getTable_bookmark_partition_infos());
+        // Table has 1 logical partition x 1 physical partition -> 1 row.
+        Assertions.assertEquals(1, resp.getTable_bookmark_partition_infos().size());
+        TTableBookmarkPartitionInfo row = resp.getTable_bookmark_partition_infos().get(0);
+        Assertions.assertEquals(dbId, row.getDb_id());
+        Assertions.assertEquals(tableId, row.getTable_id());
+        Assertions.assertEquals(bookmarkId, row.getBookmark_id());
+        Assertions.assertTrue(row.getPhysical_partition_id() > 0);
+    }
+
+    @Test
+    public void testGetTableBookmarkReferences() throws Exception {
+        // Setup: create a table, take a bookmark on it, hold one reference.
+        starRocksAssert.withDatabase("test_db_bookmark_refs").useDatabase("test_db_bookmark_refs");
+        starRocksAssert.withTable("CREATE TABLE t (k INT) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark_refs").getId();
+        long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark_refs").getTable("t").getId();
+
+        BookmarkHolder holder = BookmarkHolder.forEmptyInfo("test-holder");
+        Bookmark b = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .create(dbId, tableId, holder);
+        long bookmarkId = b.getBookmarkId();
+
+        // Issue the RPC.
+        TGetTableBookmarkReferencesRequest req = new TGetTableBookmarkReferencesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test_db_bookmark_refs");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetTableBookmarkReferencesResponse resp =
+                TableBookmarkReferencesSystemTable.query(req);
+
+        Assertions.assertNotNull(resp.getTable_bookmark_reference_infos());
+        Assertions.assertEquals(1, resp.getTable_bookmark_reference_infos().size());
+        TTableBookmarkReferenceInfo row = resp.getTable_bookmark_reference_infos().get(0);
+        Assertions.assertEquals(dbId, row.getDb_id());
+        Assertions.assertEquals(tableId, row.getTable_id());
+        Assertions.assertEquals(bookmarkId, row.getBookmark_id());
+        Assertions.assertEquals("test-holder", row.getHolder_id());
+    }
+
+    @Test
+    public void testGetTableBookmarkSummaryPrivilegeFilter() throws Exception {
+        // Two databases, each with one table that has a bookmark.
+        starRocksAssert.withDatabase("priv_yes_db").useDatabase("priv_yes_db");
+        starRocksAssert.withTable("CREATE TABLE t (k INT) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+        starRocksAssert.withDatabase("priv_no_db").useDatabase("priv_no_db");
+        starRocksAssert.withTable("CREATE TABLE t (k INT) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+
+        long yesDbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("priv_yes_db").getId();
+        long yesTableId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("priv_yes_db").getTable("t").getId();
+        long noDbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("priv_no_db").getId();
+        long noTableId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("priv_no_db").getTable("t").getId();
+
+        BookmarkHolder yesHolder = BookmarkHolder.forEmptyInfo("yes-holder");
+        Bookmark yesBookmark = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .create(yesDbId, yesTableId, yesHolder);
+        BookmarkHolder noHolder = BookmarkHolder.forEmptyInfo("no-holder");
+        GlobalStateMgr.getCurrentState().getBookmarkManager().create(noDbId, noTableId, noHolder);
+
+        // Create a user with SELECT only on priv_yes_db.t (no grant on priv_no_db).
+        ConnectContext ctx = starRocksAssert.getCtx();
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("create user priv_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "GRANT SELECT ON TABLE priv_yes_db.t TO USER `priv_user`@`%`", ctx), ctx);
+
+        // Issue the RPC as priv_user with a wildcard pattern that covers both DBs.
+        TGetTableBookmarkSummaryRequest req = new TGetTableBookmarkSummaryRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("priv_user");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setPattern("priv_%_db");
+        req.setAuth_info(authInfo);
+
+        TGetTableBookmarkSummaryResponse resp =
+                TableBookmarkSummarySystemTable.query(req);
+
+        // Only the bookmark on priv_yes_db.t is visible; priv_no_db.t's bookmark is filtered out.
+        Assertions.assertNotNull(resp.getTable_bookmark_summary_infos());
+        Assertions.assertEquals(1, resp.getTable_bookmark_summary_infos().size());
+        TTableBookmarkSummaryInfo row = resp.getTable_bookmark_summary_infos().get(0);
+        Assertions.assertEquals(yesDbId, row.getDb_id());
+        Assertions.assertEquals(yesTableId, row.getTable_id());
+        Assertions.assertEquals(yesBookmark.getBookmarkId(), row.getBookmark_id());
     }
 }

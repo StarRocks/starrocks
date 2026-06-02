@@ -41,4 +41,27 @@ public final class Reference {
     public HolderInfo getHolderInfo() {
         return holderInfo;
     }
+
+    /**
+     * Read-only externalized form of one reference: holder identity as a
+     * string (the holder-type sidecar is dropped) and the acquisition
+     * timestamp.
+     */
+    public static final class View {
+        private final String holderId;
+        private final long acquiredAtMs;
+
+        public View(String holderId, long acquiredAtMs) {
+            this.holderId = holderId;
+            this.acquiredAtMs = acquiredAtMs;
+        }
+
+        public String getHolderId() {
+            return holderId;
+        }
+
+        public long getAcquiredAtMs() {
+            return acquiredAtMs;
+        }
+    }
 }
