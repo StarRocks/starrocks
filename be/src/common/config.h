@@ -37,16 +37,6 @@
 #include "configbase.h"
 
 namespace starrocks::config {
-<<<<<<< HEAD
-=======
-// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
-// columns.
-CONF_mBool(enable_cow_optimization, "false");
-// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means
-// diagnose when use_count > 2.
-CONF_Int32(cow_optimization_diagnose_level, "0");
-
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -2004,7 +1994,7 @@ CONF_mInt64(max_lookup_batch_request, "8");
 CONF_mInt32(table_schema_service_max_retries, "3");
 
 // Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
-CONF_mBool(enable_cow_optimization, "true");
+CONF_mBool(enable_cow_optimization, "false");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
