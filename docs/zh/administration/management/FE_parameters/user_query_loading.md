@@ -761,7 +761,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- 默认值: 10
+- 默认值: 5
 - 类型: Int
 - 单位: -
 - 是否可变: No
