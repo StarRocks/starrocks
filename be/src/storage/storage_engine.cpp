@@ -531,7 +531,6 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     }
 
     // randomize the preferential paths to balance number of tablets each disk has
-    std::srand(std::random_device()());
     std::shuffle(stores.begin(), stores.begin() + last_candidate_idx, std::mt19937(std::random_device()()));
     return stores;
 }

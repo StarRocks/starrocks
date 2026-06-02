@@ -31,6 +31,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/random/random.h"
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "butil/fd_guard.h"
@@ -219,7 +220,7 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         std::lock_guard guard(_mutex);
         auto& workers = _processes[driver_id];
         if (workers.size() > max_worker_per_driver) {
-            worker = workers[rand() % max_worker_per_driver];
+            worker = workers[ThreadLocalRandomUniform(static_cast<int32_t>(max_worker_per_driver))];
         }
     }
     if (worker && worker->is_dead()) {
