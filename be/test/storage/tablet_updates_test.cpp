@@ -3520,7 +3520,7 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         keys.emplace_back(i);
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
-    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), keys.size());
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->columns();
     for (int i = 0; i < 50; i++) {
         cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
