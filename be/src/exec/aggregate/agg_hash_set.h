@@ -20,6 +20,8 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/system/cpu_info.h"
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -31,24 +33,49 @@
 namespace starrocks {
 DECLARE_FAIL_POINT(agg_hash_set_bad_alloc);
 
-const constexpr int32_t prefetch_threhold = 8192;
-// This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
+// Software prefetch only pays off once the bucket array spills L2. Below that
+// the table is L2-resident and the prefetch is a net loss of 4-9% (measured by
+// agg_prefetch_dist_bench across number/string keys, map and set; the crossover
+// sits right at the L2 size). So the prefetch path is gated on the resident
+// footprint vs L2 instead of the old fixed bucket_count >= 8192 threshold.
+inline size_t agg_prefetch_min_bytes() {
+    static const long l2 = []() {
+        const long v = CpuInfo::get_l2_cache_size();
+        return v > 0 ? v : 1L * 1024 * 1024;
+    }();
+    // Ratio read live (mutable knob); L2 size is constant so it is cached.
+    return static_cast<size_t>(static_cast<double>(l2) * config::agg_prefetch_l2_ratio);
+}
+
+// resident footprint = bucket_count * slot_bytes (+1 control byte per slot).
+template <typename Table>
+inline bool agg_should_prefetch_table(const Table& table) {
+    return table.bucket_count() * (sizeof(typename Table::value_type) + 1) >= agg_prefetch_min_bytes();
+}
+
+// Read once per chunk from config::agg_hash_map_prefetch_dist (default 16).
+// The macros below capture it into __prefetch_dist so each inner-loop
+// iteration is a register read, not an atomic load.
+inline size_t agg_hash_map_default_prefetch_dist() {
+    const int32_t v = config::agg_hash_map_prefetch_dist;
+    return v > 0 ? static_cast<size_t>(v) : 0;
+}
 
 #define AGG_HASH_SET_PRECOMPUTE_HASH_VALS()                  \
     hashes.reserve(chunk_size);                              \
     for (size_t i = 0; i < chunk_size; i++) {                \
         hashes[i] = this->hash_set.hash_function()(keys[i]); \
+    }                                                        \
+    const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+
+#define AGG_HASH_SET_PREFETCH_HASH_VAL()                            \
+    if (__prefetch_dist != 0 && i + __prefetch_dist < chunk_size) { \
+        this->hash_set.prefetch_hash(hashes[i + __prefetch_dist]);  \
     }
 
-#define AGG_HASH_SET_PREFETCH_HASH_VAL()                                              \
-    if (i + AGG_HASH_MAP_DEFAULT_PREFETCH_DIST < chunk_size) {                        \
-        this->hash_set.prefetch_hash(hashes[i + AGG_HASH_MAP_DEFAULT_PREFETCH_DIST]); \
-    }
-
-#define AGG_STRING_HASH_SET_PREFETCH_HASH_VAL()                                           \
-    if (i + AGG_HASH_MAP_DEFAULT_PREFETCH_DIST < chunk_size) {                            \
-        this->hash_set.prefetch_hash(cache[i + AGG_HASH_MAP_DEFAULT_PREFETCH_DIST].hash); \
+#define AGG_STRING_HASH_SET_PREFETCH_HASH_VAL()                        \
+    if (__prefetch_dist != 0 && i + __prefetch_dist < chunk_size) {    \
+        this->hash_set.prefetch_hash(cache[i + __prefetch_dist].hash); \
     }
 
 // =====================
@@ -145,7 +172,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
         if constexpr (is_no_prefetch_set<HashSet>) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
-        } else if (this->hash_set.bucket_count() < prefetch_threhold) {
+        } else if (!agg_should_prefetch_table(this->hash_set)) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
         } else {
             this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
@@ -231,7 +258,7 @@ struct AggHashSetOfOneNullableNumberKey
             if constexpr (is_no_prefetch_set<HashSet>) {
                 this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
             } else {
-                if (key_columns[0]->has_null() || this->hash_set.bucket_count() < prefetch_threhold) {
+                if (key_columns[0]->has_null() || !agg_should_prefetch_table(this->hash_set)) {
                     this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool,
                                                                               not_founds);
                 } else {
@@ -325,7 +352,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             not_founds->assign(chunk_size, 0);
         }
 
-        if (this->hash_set.bucket_count() < prefetch_threhold) {
+        if (!agg_should_prefetch_table(this->hash_set)) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
         } else {
             this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
@@ -361,6 +388,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             cache[i] = KeyType(column->get_slice(i));
         }
 
+        const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
@@ -413,7 +441,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         if (key_columns[0]->only_null()) {
             has_null_key = true;
         } else {
-            if (key_columns[0]->has_null() || this->hash_set.bucket_count() < prefetch_threhold) {
+            if (key_columns[0]->has_null() || !agg_should_prefetch_table(this->hash_set)) {
                 this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
             } else {
                 this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
@@ -461,6 +489,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         for (size_t i = 0; i < chunk_size; ++i) {
             cache[i] = KeyType(data_column->get_slice(i));
         }
+        const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
@@ -546,7 +575,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             key_column->serialize_batch(_buffer, slice_sizes, chunk_size, max_one_row_size);
         }
 
-        if (this->hash_set.bucket_count() < prefetch_threhold) {
+        if (!agg_should_prefetch_table(this->hash_set)) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
         } else {
             this->template build_set_prefetch<compute_and_allocate>(chunk_size, pool, not_founds);
@@ -578,6 +607,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             cache[i] = KeyType(Slice(_buffer + i * max_one_row_size, slice_sizes[i]));
         }
 
+        const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
@@ -686,7 +716,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
             }
         }
 
-        if (this->hash_set.bucket_count() < prefetch_threhold) {
+        if (!agg_should_prefetch_table(this->hash_set)) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
         } else {
             this->template build_set_prefetch<compute_and_allocate>(chunk_size, pool, not_founds);
@@ -792,7 +822,7 @@ struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetComp
 
         if constexpr (is_no_prefetch_set<HashSet>) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
-        } else if (this->hash_set.bucket_count() < prefetch_threhold) {
+        } else if (!agg_should_prefetch_table(this->hash_set)) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
         } else {
             this->template build_set_prefetch<compute_and_allocate>(chunk_size, pool, not_founds);
