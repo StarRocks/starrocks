@@ -1051,9 +1051,9 @@ static TabletMetadataPtr make_dup_keys_metadata_with_rowsets(
         r->set_num_rows(num_rows);
         r->set_data_size(data_size);
         r->set_num_dels(0); // explicit to skip the PK delvec fallback in build_rowset_anchor.
-        r->add_segments("seg" + std::to_string(id));
-        r->add_segment_size(data_size);
         auto* sm = r->add_segment_metas();
+        sm->set_filename("seg" + std::to_string(id));
+        sm->set_size(data_size);
         sm->set_num_rows(num_rows);
         *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
         *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
