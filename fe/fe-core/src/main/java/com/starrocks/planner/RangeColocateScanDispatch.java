@@ -109,7 +109,7 @@ public final class RangeColocateScanDispatch {
      * {@code bucketSeq < bucketNum} invariant requires.
      */
     public int bucketCount() {
-        int count = colocateTableIndex.getColocateRangeMgr().getColocateRanges(colocateGroupId).size();
+        int count = colocateTableIndex.getColocateRanges(colocateGroupId).size();
         // ColocateRangeMgr always seeds a group with the [MIN, MAX) range,
         // so a registered group has at least one entry.
         Preconditions.checkState(count > 0,
@@ -274,8 +274,7 @@ public final class RangeColocateScanDispatch {
      */
     @Nullable
     public Map<Long, Integer> computeBucketSeq(MaterializedIndex selectedIndex) {
-        ColocateRangeMgr colocateRangeMgr = colocateTableIndex.getColocateRangeMgr();
-        List<ColocateRange> colocateRanges = colocateRangeMgr.getColocateRanges(colocateGroupId);
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(colocateGroupId);
         Preconditions.checkState(!colocateRanges.isEmpty(),
                 "range colocate group %s has no colocate ranges", colocateGroupId);
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
@@ -296,7 +295,7 @@ public final class RangeColocateScanDispatch {
                     tabletId, colocateGroupId);
             Range<Tuple> tabletRange = tablet.getRange().getRange();
             Tuple prefix = ColocateRangeUtils.extractColocatePrefix(tabletRange, colocateColumnCount);
-            int bucketSeq = colocateRangeMgr.getColocateRangeIndex(colocateGroupId, prefix);
+            int bucketSeq = ColocateRangeMgr.indexOf(colocateRanges, prefix);
             if (bucketSeq < 0) {
                 return null; // tablet prefix does not match any ColocateRange
             }
