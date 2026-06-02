@@ -27,6 +27,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 /**
  * Regression tests for POST-1561: when {@code Locker.lock(Table|Tables)WithIntensiveDbLock}
  * fails partway, it must roll back any partially-acquired locks before re-throwing. Without
@@ -175,13 +182,59 @@ public class LockerIntensiveLockRollbackTest {
     }
 
     /**
-     * Acquire an exclusive lock on {@code rid} from a fresh Locker with a short timeout.
-     * Succeeds only if no other locker still holds a conflicting lock on {@code rid}.
+     * Acquire an exclusive WRITE lock on {@code rid} <b>from a different thread</b> with a
+     * short timeout.
+     *
+     * <p>This MUST run on a different thread than the test thread. {@code Locker.equals} /
+     * {@code hashCode} use {@code threadId} (Locker.java:508-522), so a fresh {@code Locker}
+     * created on the test thread is treated by {@link LockManager} as the same owner as any
+     * Locker leaked by the code under test. {@link com.starrocks.common.util.concurrent.lock.MultiUserLock#tryLock}
+     * (lines 98-130) then either re-enters / upgrades the lock (vacuous pass) or throws
+     * {@code NotSupportLockException} (failure for the wrong reason). Running on a different
+     * thread gives a different {@code threadId} so the LockManager applies the normal
+     * conflict matrix: a leaked IS/IX/READ/WRITE will conflict with a fresh-thread WRITE,
+     * cause the acquire to wait, and time out — which is exactly the signal we want.
      */
-    private void assertCanAcquireExclusively(long rid) throws LockException {
+    private void assertCanAcquireExclusively(long rid) {
         LockManager mgr = GlobalStateMgr.getCurrentState().getLockManager();
-        Locker fresh = new Locker();
-        mgr.lock(rid, fresh, LockType.WRITE, 1_000);
-        mgr.release(rid, fresh, LockType.WRITE);
+        ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "assertCanAcquireExclusively-rid" + rid);
+            t.setDaemon(true);
+            return t;
+        });
+        try {
+            Future<?> future = executor.submit(() -> {
+                Locker fresh = new Locker();
+                try {
+                    mgr.lock(rid, fresh, LockType.WRITE, 1_000);
+                } catch (LockException e) {
+                    throw new RuntimeException(e);
+                }
+                try {
+                    mgr.release(rid, fresh, LockType.WRITE);
+                } catch (Exception releaseEx) {
+                    // Best-effort: the assertion below uses the acquire result; release
+                    // failure here would only mask a (different) bug.
+                }
+            });
+            try {
+                future.get(5, TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                Assertions.fail("Expected to acquire exclusive WRITE on rid " + rid
+                        + " from a different thread, but acquisition failed — a leaked lock"
+                        + " on this rid likely remains. cause=" + e.getCause(), e.getCause());
+            } catch (TimeoutException e) {
+                future.cancel(true);
+                Assertions.fail("Acquiring exclusive WRITE on rid " + rid
+                        + " from a different thread did not return within 5s — the inner lock"
+                        + " timeout (1s) should have surfaced as a LockException long before"
+                        + " this; the test setup is wrong or the LockManager is stuck.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                Assertions.fail("Interrupted while waiting for exclusive WRITE on rid " + rid);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }
