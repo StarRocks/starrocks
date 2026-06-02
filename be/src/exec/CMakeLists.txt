@@ -78,7 +78,7 @@ ADD_BE_LIB(SpillCore
     ${SPILL_CORE_FILES}
 )
 
-target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IO Common Base Gutil StarRocksGen)
+target_link_libraries(SpillCore PUBLIC RuntimeCore Platform FSCore IO Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -337,7 +337,6 @@ set(PIPELINE_EXTENSIONS_SRCS
 )
 
 set(EXEC_NON_PIPELINE_FILES
-    spill/spill_dir_manager_bootstrap.cpp
     catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp

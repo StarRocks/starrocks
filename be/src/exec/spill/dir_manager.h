@@ -22,7 +22,9 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/random/random.h"
 #include "common/status.h"
@@ -96,7 +98,7 @@ public:
     DirManager(std::vector<DirPtr> dirs) : _dirs(std::move(dirs)) {}
     ~DirManager() = default;
 
-    Status init(const std::string& spill_dirs);
+    Status init(const std::string& spill_dirs, const std::vector<std::string>& storage_paths);
 
     StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
 

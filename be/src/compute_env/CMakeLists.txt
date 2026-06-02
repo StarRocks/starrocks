@@ -17,6 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 set(COMPUTE_ENV_SORTING_FILES
     sorting/chunk_cursor.cpp
     sorting/compare_column.cpp
+    sorting/data_segment.cpp
     sorting/merge.cpp
     sorting/merge_cascade.cpp
     sorting/merge_column.cpp

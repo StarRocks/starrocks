@@ -228,7 +228,7 @@ public:
         ASSERT_OK(fs->create_dir_recursive(path));
         LOG(WARNING) << "TRACE:" << path;
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
-        ASSERT_OK(dummy_dir_mgr->init(path));
+        ASSERT_OK(dummy_dir_mgr->init(path, {config::storage_root_path}));
 
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 

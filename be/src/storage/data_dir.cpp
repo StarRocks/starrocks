@@ -49,6 +49,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "platform/path_rw.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
@@ -59,7 +60,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
-#include "storage/utils.h" // for check_dir_existed
 
 using strings::Substitute;
 

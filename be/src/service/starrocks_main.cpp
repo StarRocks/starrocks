@@ -66,6 +66,7 @@
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_provider_bootstrap.h"
+#include "platform/path_rw.h"
 #include "platform/store_path.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
