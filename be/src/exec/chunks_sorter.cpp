@@ -29,14 +29,6 @@
 
 namespace starrocks {
 
-void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
-    chunk = cnk;
-    order_by_columns.reserve(sort_exprs->size());
-    for (ExprContext* expr_ctx : (*sort_exprs)) {
-        order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
-    }
-}
-
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
                            std::string sort_keys, const bool is_topn)
