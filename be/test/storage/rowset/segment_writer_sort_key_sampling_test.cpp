@@ -66,13 +66,8 @@ protected:
     // starting at `start_key`, and column 1 (value) is a constant 0.
     ChunkUniquePtr make_increasing_chunk(int64_t n, int32_t start_key) {
         auto s = ChunkHelper::convert_schema(_schema);
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(s, n);
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(s, n);
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (int64_t i = 0; i < n; ++i) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(start_key + i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
@@ -167,13 +162,9 @@ TEST_F(SegmentWriterSortKeySamplingTest, leading_min_duplicate_samples) {
     ASSERT_OK(w->init(true));
 
     auto s = ChunkHelper::convert_schema(_schema);
-<<<<<<< HEAD
     auto chunk = ChunkHelper::new_chunk(s, num_rows);
-    auto cols = chunk->mutable_columns();
-=======
-    auto chunk = ChunkFactory::new_chunk(s, num_rows);
     auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
+
     for (int64_t i = 0; i < leading; ++i) {
         cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
         cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
@@ -199,13 +190,9 @@ TEST_F(SegmentWriterSortKeySamplingTest, all_identical_key) {
     ASSERT_OK(w->init(true));
 
     auto s = ChunkHelper::convert_schema(_schema);
-<<<<<<< HEAD
     auto chunk = ChunkHelper::new_chunk(s, num_rows);
-    auto cols = chunk->mutable_columns();
-=======
-    auto chunk = ChunkFactory::new_chunk(s, num_rows);
     auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
+
     for (int64_t i = 0; i < num_rows; ++i) {
         cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(42)));
         cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
@@ -235,13 +222,9 @@ TEST_F(SegmentWriterSortKeySamplingTest, vertical_writer_reinit_preserves_sample
 
     // Append key-column-only chunks.
     auto key_schema_view = ChunkHelper::convert_schema(_schema, key_cols);
-<<<<<<< HEAD
     auto key_chunk = ChunkHelper::new_chunk(key_schema_view, num_rows);
-    auto* key_col = key_chunk->mutable_columns()[0].get();
-=======
-    auto key_chunk = ChunkFactory::new_chunk(key_schema_view, num_rows);
     auto* key_col = key_chunk->columns()[0]->as_mutable_ptr().get();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
+
     for (int64_t i = 0; i < num_rows; ++i) {
         key_col->append_datum(Datum(static_cast<int32_t>(i)));
     }
