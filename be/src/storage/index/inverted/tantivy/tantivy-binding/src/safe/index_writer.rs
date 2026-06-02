@@ -26,7 +26,7 @@ use std::path::Path;
 use tantivy::schema::{FAST, IndexRecordOption, Field, Schema, TextFieldIndexing, TextOptions};
 use tantivy::{Index, IndexWriter, TantivyDocument};
 
-use crate::error::Result;
+use crate::error::{Result, TantivyBindingError};
 use crate::safe::tokenizer::{self, TOKENIZER_NAME};
 
 /// Memory budget handed to tantivy's IndexWriter for one BE segment. tantivy
@@ -42,7 +42,11 @@ const WRITER_MEMORY_BUDGET_BYTES: usize = 50 * 1024 * 1024;
 const WRITER_NUM_THREADS: usize = 1;
 
 pub struct IndexWriterWrapper {
-    pub(crate) writer: IndexWriter,
+    // Held in an Option because `commit()` must take ownership of the underlying
+    // `IndexWriter` to call `wait_merging_threads()` (which consumes `self`).
+    // The wrapper is single-use: once `commit()` returns, this field is `None`
+    // and any further `add_strings_batch` / `commit` call errors out.
+    pub(crate) writer: Option<IndexWriter>,
     pub(crate) text_field: Field,
     // Explicit BE row id (segment-local insertion order). tantivy may split docs
     // across internal segments whose reader order is not insertion order, so the
@@ -74,31 +78,66 @@ impl IndexWriterWrapper {
         let writer: IndexWriter =
             index.writer_with_num_threads(WRITER_NUM_THREADS, WRITER_MEMORY_BUDGET_BYTES)?;
 
-        Ok(Self { writer, text_field, row_id_field, next_row_id: 0 })
+        Ok(Self { writer: Some(writer), text_field, row_id_field, next_row_id: 0 })
     }
 
-    /// Append `values.len()` documents in order. Use `""` (empty string) for rows that are null on the BE side; 
+    /// Append `values.len()` documents in order. Use `""` (empty string) for rows that are null on the BE side;
     /// the BE caller is responsible for tracking a separate null bitmap so empty-string and null can be
     /// disambiguated at query time.
     pub fn add_strings_batch(&mut self, values: &[&str]) -> Result<()> {
+        let writer = self
+            .writer
+            .as_mut()
+            .ok_or_else(|| TantivyBindingError::Internal("writer already committed".to_string()))?;
         for v in values {
             let mut doc = TantivyDocument::default();
             doc.add_text(self.text_field, v);
             doc.add_u64(self.row_id_field, self.next_row_id);
             self.next_row_id += 1;
-            self.writer.add_document(doc)?;
+            writer.add_document(doc)?;
         }
         Ok(())
     }
 
+    /// Commit pending docs to disk AND block until every in-flight merge spawned
+    /// by tantivy's internal `LogMergePolicy` has fully completed.
+    ///
+    /// Why both: `IndexWriter::commit()` only flushes the indexing pipeline; it
+    /// schedules merges into a background rayon pool and returns. tantivy's
+    /// `IndexWriter::Drop` does NOT wait for those merge threads. If we let the
+    /// writer drop while merges are in flight, the rayon workers keep running,
+    /// open new tempfiles via `atomic_write` (`tempfile_in(parent_path)`) inside
+    /// our `_temp_dir`, and race against the BE-side `remove_all(parent)` that
+    /// runs right after `pack` consumes the entry. That race surfaces as
+    /// `tantivy_tmp/<...>.ivt/.tmpXXXX: No such file or directory` ENOENT and
+    /// cancels the broker load.
+    ///
+    /// `IndexWriter::wait_merging_threads(mut self)` consumes the writer and
+    /// blocks on `merge_operations.wait_until_empty()`, which is the canonical
+    /// "all background work has finished" barrier. After it returns, our temp
+    /// dir is quiescent and safe to pack + delete.
     pub fn commit(&mut self) -> Result<()> {
-        self.writer.commit()?;
+        let mut writer = self
+            .writer
+            .take()
+            .ok_or_else(|| TantivyBindingError::Internal("writer already committed".to_string()))?;
+        writer.commit()?;
+        writer.wait_merging_threads()?;
         Ok(())
     }
 }
 
 impl Drop for IndexWriterWrapper {
     fn drop(&mut self) {
-        // tantivy's IndexWriter Drop already handles in-flight indexing cleanly; nothing extra to do here.
+        // Failure / abort path: the wrapper is being torn down without a
+        // successful `commit()`. Take the writer out and explicitly
+        // `wait_merging_threads()` so background rayon merges cannot outlive
+        // us into the BE-side `remove_all(.ivt)` and race on the temp dir.
+        // `IndexWriter::Drop` alone only signals shutdown — it does NOT join
+        // the merge pool — so a bare drop would reopen the same race the
+        // happy path closes.
+        if let Some(writer) = self.writer.take() {
+            let _ = writer.wait_merging_threads();
+        }
     }
 }

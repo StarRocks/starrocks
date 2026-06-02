@@ -1742,7 +1742,12 @@ CONF_mBool(enable_cow_optimization, "true");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
-CONF_mBool(tantivy_ignore_write_error, "true");
+// Whether to swallow per-row tantivy write errors stored in
+// `TantivyInvertedWriter::_error_status` so finish_compound still proceeds to
+// commit. Default false: a real tantivy add/commit failure should fail the
+// segment fast (and surface a clear error) instead of being silently
+// committed in a half-written state. Flip back to true only for debugging.
+CONF_mBool(tantivy_ignore_write_error, "false");
 CONF_String(tantivy_index_local_tmp_dir, "tmp/tantivy_tmp");
 
 } // namespace starrocks::config

@@ -58,6 +58,33 @@ fn create_fails_when_index_already_exists() {
 }
 
 #[test]
+fn commit_is_single_use() {
+    // `commit()` now consumes the inner IndexWriter (so it can call
+    // `wait_merging_threads()`), so any second commit / add after the first
+    // commit must error out instead of panicking on `Option::unwrap` or
+    // silently no-op'ing.
+    let tmp = TempDir::new().expect("tempdir");
+    let mut w =
+        IndexWriterWrapper::create(tmp.path(), "f", "english").expect("create");
+    w.add_strings_batch(&["a", "b"]).expect("add ok");
+    w.commit().expect("first commit");
+
+    let add_err = w
+        .add_strings_batch(&["c"])
+        .expect_err("add after commit must fail");
+    assert!(
+        add_err.to_string().to_lowercase().contains("committed"),
+        "expected 'already committed' error from add, got: {add_err}"
+    );
+
+    let commit_err = w.commit().expect_err("second commit must fail");
+    assert!(
+        commit_err.to_string().to_lowercase().contains("committed"),
+        "expected 'already committed' error from commit, got: {commit_err}"
+    );
+}
+
+#[test]
 fn null_placeholders_preserve_doc_id_alignment() {
     let tmp = TempDir::new().expect("tempdir");
     let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english").expect("create");

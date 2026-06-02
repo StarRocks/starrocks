@@ -313,12 +313,15 @@ TEST(IndexDescriptorPathTest, CompoundIndexPathFromSegment_BasicAndEdges) {
 // the legacy fallback for callers that haven't filled them in. SegmentWriter
 // must stay agnostic to the format string, so cover the helper directly.
 TEST(IndexDescriptorPathTest, LakeCompoundIndexBuildDir_TxnAndFallback) {
-    // tablet_id != 0 && txn_id != 0 → per-transaction isolation.
+    // tablet_id != 0 && txn_id != 0 → per-transaction isolation. The instance_key
+    // is appended in lowercase hex so two concurrently-alive SegmentWriter
+    // instances for the same (tablet, txn, seg, idx) never share a temp dir.
     EXPECT_EQ(IndexDescriptor::lake_compound_index_build_dir(
                       "/tmp/tantivy_tmp", 100, 200, 3, 4, 0xCAFE),
-              "/tmp/tantivy_tmp/100_200_3_4.ivt");
+              "/tmp/tantivy_tmp/100_200_3_4_cafe.ivt");
 
-    // tablet_id == 0 → fallback uses instance_key, segment, index_id.
+    // tablet_id == 0 → fallback uses instance_key, segment, index_id (decimal,
+    // legacy shape unchanged).
     EXPECT_EQ(IndexDescriptor::lake_compound_index_build_dir(
                       "/tmp/tantivy_tmp", 0, 200, 3, 4, 0xCAFE),
               "/tmp/tantivy_tmp/51966_3_4.ivt");
@@ -328,6 +331,40 @@ TEST(IndexDescriptorPathTest, LakeCompoundIndexBuildDir_TxnAndFallback) {
                       "/tmp/tantivy_tmp", 100, 200, 3, 4, 0),
               IndexDescriptor::lake_compound_index_build_dir(
                       "/tmp/tantivy_tmp", 100, 201, 3, 4, 0));
+}
+
+// Same (tablet, txn, seg, idx) but different SegmentWriter instances (different
+// instance_key) MUST resolve to different paths so the two writers' init /
+// commit / destructor cleanup never trample each other. This is the load-spill
+// finish path that exposed `tantivy: Index already exists` and `.tmpXXX: No
+// such file or directory` before the fix.
+TEST(IndexDescriptorPathTest, LakeBuildDirIsolatesByInstanceKey) {
+    const std::string root = "/tmp/tantivy_tmp";
+    const int64_t tablet = 100;
+    const int64_t txn = 200;
+    const int seg = 0;
+    const int64_t idx = 50000;
+
+    auto a = IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, 0xAAAA);
+    auto b = IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, 0xBBBB);
+
+    EXPECT_NE(a, b);
+
+    // Lowercase hex contract: callers (e.g., diagnostics greps) can rely on the
+    // `_<hex>.ivt` suffix.
+    EXPECT_TRUE(a.ends_with("_aaaa.ivt")) << a;
+    EXPECT_TRUE(b.ends_with("_bbbb.ivt")) << b;
+
+    // Boundary values must not produce malformed output.
+    auto zero_key = IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, 0);
+    EXPECT_TRUE(zero_key.ends_with("_0.ivt")) << zero_key;
+
+    auto max_key =
+            IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, UINTPTR_MAX);
+    // UINTPTR_MAX in lowercase hex is all 'f's; just check the suffix shape and
+    // that it doesn't equal the zero variant.
+    EXPECT_NE(max_key, zero_key);
+    EXPECT_TRUE(max_key.ends_with(".ivt")) << max_key;
 }
 
 } // namespace starrocks

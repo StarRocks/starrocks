@@ -74,7 +74,8 @@ public:
                                                      int64_t txn_id, int segment_id, int64_t index_id,
                                                      uintptr_t instance_key) {
         if (tablet_id != 0 && txn_id != 0) {
-            return fmt::format("{}/{}_{}_{}_{}.ivt", tmp_root, tablet_id, txn_id, segment_id, index_id);
+            return fmt::format("{}/{}_{}_{}_{}_{:x}.ivt", tmp_root, tablet_id, txn_id, segment_id, index_id,
+                               instance_key);
         }
         return fmt::format("{}/{}_{}_{}.ivt", tmp_root, instance_key, segment_id, index_id);
     }
