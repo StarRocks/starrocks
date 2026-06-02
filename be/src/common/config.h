@@ -808,8 +808,11 @@ CONF_Int32(thrift_rpc_max_body_size, "0");
 // The connection will be closed if it has existed in the connection pool for longer than this value.
 CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
 
-// txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
+// The Thrift RPC timeout (in milliseconds) used by BE stream-load plan (put) and
+// txn prepare/commit calls sent to the FE.
+// NOTE: renamed from `txn_commit_rpc_timeout_ms`, which is kept as a backward-compatible alias.
+CONF_mInt32(stream_load_thrift_rpc_timeout_ms, "60000");
+CONF_Alias(stream_load_thrift_rpc_timeout_ms, txn_commit_rpc_timeout_ms);
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
