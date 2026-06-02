@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL ALTER TABLE 取消正在执行的 ALTER TABLE 操作，包括修改列、优化表结构、创建或删除 Rollup 索引。"
 ---
 
 # CANCEL ALTER TABLE

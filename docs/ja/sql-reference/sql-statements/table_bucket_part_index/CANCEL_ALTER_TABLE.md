@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL ALTER TABLE は実行中の ALTER TABLE 操作（列の変更、テーブルスキーマの最適化、ロールアップインデックスの作成・削除）をキャンセルします。"
 ---
 
 # CANCEL ALTER TABLE
