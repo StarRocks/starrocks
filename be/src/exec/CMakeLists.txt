@@ -194,8 +194,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
-    workgroup/pipeline_executor_set.cpp
-    workgroup/pipeline_executor_set_manager.cpp
 )
 
 set(PIPELINE_ADAPTERS_SRCS
@@ -483,15 +481,6 @@ set(EXEC_NON_PIPELINE_FILES
     jdbc/type_checker_manager.cpp
     jdbc/type_checker_xml_loader.cpp
     connector_scan_node.cpp
-    workgroup/work_group.cpp
-    workgroup/work_group_manager.cpp
-    workgroup/mem_tracker_manager.cpp
-    workgroup/scan_executor.cpp
-    workgroup/scan_task_queue_factory.cpp
-    workgroup/priority_scan_task_queue.cpp
-    workgroup/work_group_scan_task_queue.cpp
-    workgroup/lock_free_scan_task_queue.cpp
-    workgroup/lock_free_work_group_scan_task_queue.cpp
 )
 
 set(EXEC_DATA_SINK_FILES

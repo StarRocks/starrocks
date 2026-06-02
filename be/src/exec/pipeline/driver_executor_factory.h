@@ -21,8 +21,8 @@
 
 #include "common/statusor.h"
 #include "common/thread/cpu_util.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/workgroup/work_group_schedule_policy.h"
 
 namespace starrocks::pipeline {
 

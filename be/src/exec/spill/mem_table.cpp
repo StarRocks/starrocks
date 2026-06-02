@@ -21,12 +21,12 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/workgroup/scan_task.h"
 #include "exec/chunks_sorter.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/task_executor.h"
 #include "exec/spill/yield.h"
-#include "exec/workgroup/scan_task.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 

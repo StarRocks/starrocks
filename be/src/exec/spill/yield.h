@@ -15,8 +15,8 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/workgroup/scan_task_queue.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/scan_task_queue.h"
+#include "compute_env/workgroup/work_group.h"
 #include "gutil/macros.h"
 
 #define BREAK_IF_YIELD(wg, yield, time_spent_ns)                                                     \

@@ -202,7 +202,7 @@
         "be/src/exec/spill/spill_metrics.cpp"
       ],
       "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
       "forbidden_includes": [
         "runtime/exec_env.h",
         "exec/sort_exec_exprs.h"
@@ -429,7 +429,7 @@
     {
       "id": "computeenv",
       "doc_label": "ComputeEnv",
-      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources and pipeline controls below full Exec/Storage and above RuntimeEnv.",
+      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.",
       "owned_targets": ["ComputeEnv"],
       "owned_roots": ["be/src/compute_env"],
       "allowed_include_prefixes": [
@@ -467,7 +467,7 @@
       "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
       "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, shared compute-side service contracts, stable execution primitives, and reusable compute-side sorting algorithms; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
+      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, and reusable compute-side sorting algorithms; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
       "id": "exprcore",
@@ -547,7 +547,7 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
       "forbidden_includes": [
         "exec/data_sink.h",
         "exec/pipeline/fragment_context.h",
@@ -794,7 +794,7 @@
         "be/src/exec/join/**"
       ],
       "allowed_include_prefixes": ["exec/join/", "compute_env/sorting/sort_helper.h", "exprs/", "serde/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "exec/spill/", "exec/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
+      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "exec/spill/", "compute_env/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
       "forbidden_includes": [
         "exec/cross_join_node.h",
         "exec/data_sink.h",
