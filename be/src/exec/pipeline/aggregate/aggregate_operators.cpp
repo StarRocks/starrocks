@@ -29,5 +29,6 @@
 #include "spillable_aggregate_blocking_sink_operator.cpp"
 #include "spillable_aggregate_blocking_source_operator.cpp"
 #include "spillable_aggregate_distinct_blocking_operator.cpp"
+#include "spillable_aggregate_skew_compactor.cpp"
 #include "spillable_partitionwise_aggregate_operator.cpp"
 #include "spillable_partitionwise_distinct_operator.cpp"

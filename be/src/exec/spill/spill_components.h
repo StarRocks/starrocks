@@ -354,7 +354,7 @@ private:
                                    const std::vector<SpilledPartition*>& splitting_partitions);
 
     Status _pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions);
-    Status _compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks, AggregatorParamsPtr& aggregator_params);
+    Status _compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
