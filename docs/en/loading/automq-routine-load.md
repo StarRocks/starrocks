@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: Cloud based Kafka from AutoMQ
+description: "How to load data into StarRocks from AutoMQ Kafka using Routine Load."
 ---
 
 # AutoMQ Kafka

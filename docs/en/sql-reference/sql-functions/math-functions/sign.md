@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the sign of `x`."
+description: "Returns the sign of x."
 ---
 
 # sign

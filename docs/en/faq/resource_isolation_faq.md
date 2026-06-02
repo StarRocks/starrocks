@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic provides answers to some frequently asked questions about resource isolation."
+description: "FAQ for common StarRocks resource isolation questions."
 ---
 
 # Troubleshooting Resource Isolation

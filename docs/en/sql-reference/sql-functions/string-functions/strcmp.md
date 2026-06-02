@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function compares two strings."
+description: "Compares two strings and returns 0 if equal, -1 if the first is smaller, or 1 if larger."
 ---
 
 # strcmp

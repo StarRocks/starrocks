@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`schemata` provides information about databases."
+description: "schemata provides information about databases."
 ---
 
 # schemata

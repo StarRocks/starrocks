@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Integrate your StarRocks cluster with [Marimo](https://marimo.io/), a reactive Python notebook built for reproducibility and interactivity."
+description: "How to integrate StarRocks with Marimo, a reactive Python notebook for reproducible and interactive data analysis."
 ---
 
 # Marimo

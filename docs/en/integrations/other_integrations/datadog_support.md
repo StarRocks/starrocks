@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: Monitor with Datadog
+description: "How to integrate StarRocks with Datadog for cluster monitoring."
 sidebar_label: Datadog
 ---
 

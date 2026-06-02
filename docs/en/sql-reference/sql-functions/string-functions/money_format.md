@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function returns a string formatted as a currency string."
+description: "Formats a numeric value as a currency string with two decimal places and thousands separators."
 ---
 
 # money_format

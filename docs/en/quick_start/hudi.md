@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 4
-description: Data Lakehouse with Apache Hudi
+description: "Quick start guide for querying Apache Hudi data lakes with StarRocks."
 toc_max_heading_level: 3
 ---
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'

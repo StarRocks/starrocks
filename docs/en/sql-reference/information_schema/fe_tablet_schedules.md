@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`fe_tablet_schedules` provides information about tablet scheduling tasks on FE nodes."
+description: "fe_tablet_schedules provides information about tablet scheduling tasks on FE nodes."
 ---
 
 # fe_tablet_schedules

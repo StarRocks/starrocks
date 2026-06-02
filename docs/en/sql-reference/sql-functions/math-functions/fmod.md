@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the floating point remainder of the division ( `dividend`/`divisor` )."
+description: "Returns the floating point remainder of the division ( dividend/divisor )."
 ---
 
 # fmod

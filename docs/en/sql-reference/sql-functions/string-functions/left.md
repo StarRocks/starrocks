@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function returns a specified number of characters from the left side of a given string."
+description: "Returns a specified number of characters from the left side of a string."
 ---
 
 # left

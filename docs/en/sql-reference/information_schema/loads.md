@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`loads` provides the results of load jobs."
+description: "loads provides the results of load jobs."
 ---
 
 # loads

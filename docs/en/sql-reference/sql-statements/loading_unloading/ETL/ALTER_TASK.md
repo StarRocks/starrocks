@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Modifies an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md)."
+description: "Modifies an asynchronous ETL task submitted using SUBMIT TASK."
 ---
 
 # ALTER TASK

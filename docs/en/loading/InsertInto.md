@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "How to load data into StarRocks using INSERT statements: INSERT VALUES, INSERT INTO SELECT, INSERT OVERWRITE, Dynamic Overwrite, and loading from files using FILES()."
+description: "How to load data into StarRocks using INSERT statements: INSERT VALUES, INSERT INTO SELECT, INSERT OVERWRITE, Dynamic Overwrite, and loading from files..."
 ---
 
 # Load data using INSERT

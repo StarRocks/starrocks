@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This document provides detailed instructions on how to compile, run, debug, and test StarRocks on the macOS ARM64 platform (Apple Silicon), making it easier for developers to work on Mac."
+description: "How to compile, run, debug, and test StarRocks on macOS ARM64 (Apple Silicon)."
 ---
 
 # Compile, Run and Test StarRocks on macOS ARM64

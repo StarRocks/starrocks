@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function is used for finding the location of a substring in a string (starting counting from 1 and measured in characters)."
+description: "Returns the 1-based character position of a substring within a string."
 ---
 
 # locate

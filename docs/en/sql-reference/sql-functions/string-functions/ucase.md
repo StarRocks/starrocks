@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function converts a string to upper-case."
+description: "Converts a string to uppercase; alias of upper."
 ---
 
 # ucase

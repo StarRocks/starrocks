@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy Shared-data StarRocks Manually](../deployment/deploy_shared_data_manually.md)."
+description: "How to manually deploy a shared-nothing StarRocks cluster where BE nodes handle both storage and computing."
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

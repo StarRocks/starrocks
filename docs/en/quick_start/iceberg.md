@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 3
-description: Data Lakehouse with Apache Iceberg
+description: "Quick start guide for querying Apache Iceberg data lakes with StarRocks."
 toc_max_heading_level: 2
 keywords: [ 'iceberg' ]
 ---

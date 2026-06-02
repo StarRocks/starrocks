@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['resource groups', 'isolation']
-description: "With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters."
+description: "How to use resource groups in StarRocks to isolate resources and run multiple workloads concurrently in a single cluster."
 ---
 
 import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "In earlier versions, there are no rich metrics or efficient methods to monitor the performance, usage, and health of [Data Cache](./data_cache.md)."
+description: "How to monitor Data Cache performance, usage, and health in StarRocks using built-in observability metrics."
 ---
 
 # Data Cache observability

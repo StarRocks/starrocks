@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files to an external storage system, which can be a distributed file system HDFS or..."
+description: "How to export table data from StarRocks as CSV files to HDFS or object storage using the EXPORT statement."
 ---
 
 # Export data using EXPORT

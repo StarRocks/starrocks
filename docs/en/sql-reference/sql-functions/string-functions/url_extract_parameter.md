@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Extracts the value of the requested `name` parameter from the query string of a URL."
+description: "Extracts the value of the requested name parameter from the query string of a URL."
 ---
 
 # url_extract_parameter
