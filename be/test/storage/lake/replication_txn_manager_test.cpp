@@ -180,13 +180,8 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
-=======
-        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
                 cols[0]->as_mutable_ptr()->append_datum(Datum(key));
