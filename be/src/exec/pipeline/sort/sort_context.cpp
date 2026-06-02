@@ -19,12 +19,6 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
-=======
-#include "exec/pipeline/fragment_context.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
->>>>>>> 8a7b7d3342 ([BugFix] Propagate sort merge provider errors to fragment context  (#73337))
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/runtime_filter_bank.h"
