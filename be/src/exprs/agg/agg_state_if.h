@@ -224,6 +224,8 @@ public:
 
     std::string get_name() const override { return "agg_state_if"; }
 
+    bool support_nullable_immediate_input() const override { return _function->support_nullable_immediate_input(); }
+
 private:
     const AggStateDesc _agg_state_desc;
     const AggregateFunction* _function;
