@@ -5,9 +5,57 @@ keywords: ['arrow flight sql', 'performance', 'best practices', 'optimization', 
 
 # Arrow Flight SQL Best Practices
 
-This page describes how to get the best performance when reading data via Arrow Flight SQL, whether you use the Arrow Flight JDBC driver or the native Flight SQL client with raw `VectorSchemaRoot` batches.
+Arrow Flight SQL is the fastest way to pull large result sets out of StarRocks. Against the MySQL protocol, on the same hardware and against the same cluster, the measured speedup ranges from about **19×** for wide VARCHAR queries up to **189×** for narrow numeric queries. The exact factor you see depends on row count, column shape, and which MySQL client you compare against, but the speedup is not automatic: how the client code reads the result has a large effect on the end-to-end time, and a few simple mistakes can give back most of it.
 
-## JDBC: Use Typed Column Access
+This page shows the overall numbers you can expect, summarises the aspects that affect them, and then describes each aspect with the code change and the measured impact.
+
+## Overall Performance
+
+The headline comparison is Arrow Flight via Python ADBC against PyMySQL — the dominant Python MySQL client. All rows are full network drains (`fetch_arrow_table()` vs `cursor.fetchall()`); see [Test Environment](#test-environment) for the hardware.
+
+| Workload | Rows | PyMySQL | Arrow Flight | Speedup |
+| --- | --- | --- | --- | --- |
+| Single numeric column (`SELECT id`) | 5 M | 23,025 ms | 164 ms | **140.0×** |
+| Single numeric column (`SELECT id`) | 10 M | 47,281 ms | 250 ms | **189.2×** |
+| 20 numeric columns (`SELECT *`) | 5 M | 103,670 ms | 1,252 ms | **82.8×** |
+| 20 numeric columns (`SELECT *`) | 10 M | 183,242 ms | 2,449 ms | **74.8×** |
+| 20 VARCHAR columns (`SELECT *`) | 5 M | 105,364 ms | 5,615 ms | **18.8×** |
+| 20 VARCHAR columns (`SELECT *`) | 10 M | 211,867 ms | 11,059 ms | **19.2×** |
+
+Narrow numeric queries hit the largest ratios because PyMySQL allocates a Python `int` for every cell while Arrow returns the same column as a single primitive buffer.
+
+The per-aspect tables further down use the Java Arrow Flight JDBC driver against Java MySQL JDBC. Those ratios are smaller: for example the same 5 M VARCHAR `SELECT *` takes ~22 s through Java MySQL JDBC versus ~105 s through PyMySQL, because the Java MySQL JDBC connector is much faster at row materialization than PyMySQL. Java MySQL JDBC is the right baseline when you are choosing between Java drivers; PyMySQL is the right baseline when you are choosing between Python clients.
+
+## Test Environment
+
+| Component | Details                                                                                                                                      |
+| --- |----------------------------------------------------------------------------------------------------------------------------------------------|
+| Client host | AWS EC2 `t3.2xlarge`, same VPC subnet as the cluster                                                                                         |
+| Cluster | 3 FE + 2 BE on `m6g.xlarge`; Arrow Flight on `grpcs://…:443`, MySQL on `:9030`                                                               |
+| Java stack | OpenJDK 17, `jdbc:arrow-flight-sql`, `arrow-jdbc`, `parquet-hadoop`                                                                          |
+| Python stack | `python` 3.12, `pyarrow` 24.0, `adbc-driver-flightsql` 1.11, `PyMySQL` 1.2                                                                   |
+| Workload | Two 20-column tables — one VARCHAR-heavy, one all-integer — plus single-column projections; row counts of 5 M and 10 M via `SELECT … LIMIT N` |
+| MySQL drain mode | `cursor.fetchall()` buffered for all measurements                                                                                            |
+
+## Choosing a Client
+
+Before any code-level tuning, the biggest single decision is which client API you read results through. [Interact with StarRocks via Arrow Flight SQL](./arrow_flight.md) covers the full setup for Python ADBC, the Arrow Flight JDBC driver, the Java ADBC driver, and the native `FlightClient`. For performance, those collapse into two paths:
+
+- **Raw Arrow batches via `FlightSqlClient` or ADBC (recommended).** This is the columnar end-to-end path the Flight SQL protocol is designed for: your code receives `VectorSchemaRoot` batches and reads them with primitive-returning vector accessors, with no per-row object allocation. This is the path that hits **18×** over Java MySQL JDBC on numeric data and **up to 189×** over PyMySQL on narrow numeric queries in the Overall Performance tables. Use it whenever your downstream code can consume columnar data (Pandas, Arrow, ML pipelines, Parquet writers, custom analytics).
+- **Arrow Flight JDBC driver (`jdbc:arrow-flight-sql`).** Use this when you need a drop-in `ResultSet` for an existing JDBC code path, or for BI tools like Tableau, Power BI, and DBeaver where the JDBC interface is required. JDBC's API forces the driver to return a boxed `Object` for every cell, so this path cannot reach the performance of raw Arrow batches. The JDBC driver is still substantially faster than MySQL JDBC; it is the right tool when JDBC compatibility is the requirement.
+
+The four aspects below apply within whichever client you choose: Aspect 1 is for JDBC consumers, Aspects 2–3 are for raw-batch consumers, and Aspect 4 covers Parquet output from either.
+
+## What Affects Performance
+
+The speedups above assume the client code is written for Arrow. The following four aspects each move the needle by 2× or more on the right workload. Getting them right is the difference between the "tuned" column in the table above and a fetch that looks no faster than MySQL.
+
+1. **JDBC accessor method.** Use `rs.getObject(i)` with a typed cast for numeric columns. `rs.getString(i)` forces the driver to format every value as a string.
+2. **Vector resolution scope.** When consuming raw `VectorSchemaRoot` batches, resolve each `FieldVector` once per batch outside the row loop, not once per row.
+3. **Typed `.get(i)` for numerics.** On numeric vectors, the typed `.get(i)` returns a primitive with no allocation. The generic accessors box every value.
+4. **Parquet writer choice.** PyArrow writes Parquet directly from the Arrow stream with no row-by-row code. Java has no pre-built library for this — every Java path requires a hand-written `WriteSupport<VectorSchemaRoot>` on top of `parquet-hadoop`.
+
+## Aspect 1 — JDBC: Use Typed Column Access
 
 When using the Arrow Flight JDBC driver, use `rs.getObject(i)` and cast to the expected Java type. This lets the driver return the native Java type directly without an extra conversion step, which matters most for numeric columns.
 
@@ -19,14 +67,16 @@ while (rs.next()) {
 }
 ```
 
-### Benchmark: JDBC Accessor Methods (5M rows, includes network)
+### Benchmark: JDBC Accessor Methods (includes network)
 
-| Approach | VARCHAR table | Numeric table |
-| --------------------------------- | -------------- | -------------- |
-| `getObject()` with typed cast | 17,482 ms | **3,755 ms** |
-| MySQL JDBC (baseline) | 31,901 ms | 26,929 ms |
+| Workload | MySQL JDBC | Arrow Flight JDBC, typed `getObject()` | Speedup |
+| --- | --- | --- | --- |
+| VARCHAR — 5 M | 22,651 ms | 12,660 ms | **1.79×** |
+| VARCHAR — 10 M | 49,216 ms | 27,646 ms | **1.78×** |
+| Numeric — 5 M | 16,043 ms | 3,123 ms | **5.14×** |
+| Numeric — 10 M | 38,134 ms | 9,123 ms | **4.18×** |
 
-## Raw Arrow Batches: Pre-Resolve Vectors and Use Typed Access
+## Aspect 2 — Raw Arrow Batches: Pre-Resolve Vectors and Use Typed Access
 
 When consuming raw Arrow batches via the native `FlightSqlClient` (i.e., iterating over `VectorSchemaRoot` objects), follow two rules.
 
@@ -46,14 +96,18 @@ for (int i = 0; i < rowCount; i++) {
 }
 ```
 
-### Benchmark: Arrow Batch Conversion Cost (5M rows, pre-fetched)
+### Benchmark: Arrow Batch Conversion Cost (pre-fetched)
 
-| Approach | VARCHAR table | Numeric table |
-| --------------------------------- | -------------- | -------------- |
-| Typed `.get*()`, vectors resolved once per batch | **12,476 ms** | **1,055 ms** |
-| MySQL JDBC (baseline) | 31,901 ms | 26,929 ms |
+The Arrow Flight numbers below isolate the conversion cost: batches are drained from the cluster into memory first, then timed.
 
-## Writing Results to Parquet
+| Workload | MySQL JDBC | Typed `.get*()`, vectors resolved once per batch | Speedup |
+| --- | --- | --- | --- |
+| VARCHAR — 5 M | 22,651 ms | 11,921 ms | **1.90×** |
+| VARCHAR — 10 M | 49,216 ms | 24,686 ms | **1.99×** |
+| Numeric — 5 M | 16,043 ms | 1,141 ms | **14.1×** |
+| Numeric — 10 M | 38,134 ms | 2,092 ms | **18.2×** |
+
+## Aspect 3 — Writing Results to Parquet
 
 Apache Arrow does not include a pre-built Parquet writer for `VectorSchemaRoot`. If your goal is simply to export query results to Parquet files, [INSERT INTO FILES](./unload_using_insert_into_files.md) lets StarRocks write the files server-side without any client-side conversion code. The options below apply when you need client-side Parquet output via Arrow Flight.
 
@@ -138,28 +192,34 @@ class ArrowWriteSupport extends WriteSupport<VectorSchemaRoot> {
 
 ### Parquet Benchmark
 
-Numbers include both Parquet encoding and file I/O cost (5M rows, EC2 co-located with cluster). VARCHAR and numeric tables are benchmarked separately because they stress different parts of the Arrow encoding path: VARCHAR columns require offset-buffer arithmetic on variable-length data, while numeric columns use fixed-width typed vectors where the gains from typed access are much larger.
+Numbers include both Parquet encoding and file I/O cost (see [Test Environment](#test-environment)). VARCHAR and numeric tables are benchmarked separately because they stress different parts of the Arrow encoding path: VARCHAR columns require offset-buffer arithmetic on variable-length data, while numeric columns use fixed-width typed vectors where the gains from typed access are much larger.
 
-#### Java
+#### Java (5 M and 10 M rows)
 
-| Approach | VARCHAR UNCOMP | VARCHAR Snappy | Numeric UNCOMP | Numeric Snappy |
-| --------------------------------- | -------------- | -------------- | -------------- | -------------- |
-| MySQL JDBC → Parquet | 61,065 ms | 60,181 ms | 31,852 ms | 33,810 ms |
-| Arrow Flight JDBC → Parquet | 51,563 ms | 49,671 ms | 15,100 ms | 16,583 ms |
+Both rows use the same `parquet-hadoop` write path (`MySqlParquetConverter` + `arrow-jdbc` adapter, batch size 65,536) so the only variable is the inbound JDBC driver.
 
-#### Python (PyArrow 21.0 / ADBC 1.8.0)
+| Approach | Rows | VARCHAR UNCOMP | vs MySQL | VARCHAR Snappy | vs MySQL | Numeric UNCOMP | vs MySQL | Numeric Snappy | vs MySQL |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| MySQL JDBC → Parquet | 5 M | 55,477 ms | 1.0× | 54,888 ms | 1.0× | 24,006 ms | 1.0× | 25,289 ms | 1.0× |
+| Arrow Flight JDBC → Parquet | 5 M | **46,341 ms** | **1.20×** | **47,881 ms** | **1.15×** | **13,978 ms** | **1.72×** | **14,297 ms** | **1.77×** |
+| MySQL JDBC → Parquet | 10 M | 110,229 ms | 1.0× | 116,999 ms | 1.0× | 50,509 ms | 1.0× | 49,126 ms | 1.0× |
+| Arrow Flight JDBC → Parquet | 10 M | **91,386 ms** | **1.21×** | **102,534 ms** | **1.14×** | **29,739 ms** | **1.70×** | **30,102 ms** | **1.63×** |
 
-| Approach | VARCHAR UNCOMP | VARCHAR Snappy | Numeric UNCOMP | Numeric Snappy |
-| --------------------------------- | -------------- | -------------- | -------------- | -------------- |
-| MySQL JDBC → Parquet | 61,065 ms | 60,181 ms | 31,852 ms | 33,810 ms |
-| Arrow Flight + PyArrow | **10,911 ms** | **14,566 ms** | **4,291 ms** | **4,015 ms** |
+#### Python (PyArrow 24.0.0 / ADBC 1.11.0)
+
+The MySQL baseline is the same Java MySQL JDBC → Parquet number from the table above; "MySQL → PyArrow" is not a real path because there is no MySQL → Arrow adapter outside of `arrow-jdbc`. Python numbers were collected at 5 M only.
+
+| Approach | VARCHAR UNCOMP | vs MySQL | VARCHAR Snappy | vs MySQL | Numeric UNCOMP | vs MySQL | Numeric Snappy | vs MySQL |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| MySQL JDBC → Parquet (Java baseline, 5 M) | 55,477 ms | 1.0× | 54,888 ms | 1.0× | 24,006 ms | 1.0× | 25,289 ms | 1.0× |
+| Arrow Flight + PyArrow (5 M) | **10,675 ms** | **5.20×** | **14,128 ms** | **3.89×** | **3,953 ms** | **6.07×** | **3,848 ms** | **6.57×** |
 
 PyArrow adds almost no overhead on top of the raw network fetch and requires far less code than the Java path. Use PyArrow unless Java is a hard requirement.
 
 ## Summary
 
 | Use case | Recommendation |
-| --------------------------------- | -------------- |
+| --- | --- |
 | Arrow Flight JDBC | Use `getObject()` with typed cast |
 | Raw `VectorSchemaRoot` batches | Resolve vectors once per batch; use typed `.get(i)` for numeric columns |
 | Arrow → Parquet in Python | `pyarrow.parquet` via ADBC — single function call, no custom code |
