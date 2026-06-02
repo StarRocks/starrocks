@@ -69,6 +69,12 @@ if [[ $OSTYPE == darwin* ]] ; then
 else
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/libubiqfpe.a ]]; then
         echo "Thirdparty libraries need to be build ..."
+        # Sync thirdparty build scripts from the repo to ${STARROCKS_THIRDPARTY},
+        # so that newly added libraries can be downloaded and built automatically.
+        if [[ "$(realpath ${STARROCKS_THIRDPARTY})" != "$(realpath ${STARROCKS_HOME}/thirdparty)" ]]; then
+            find ${STARROCKS_HOME}/thirdparty -mindepth 1 -maxdepth 1 ! -name installed ! -name src \
+                -exec cp -rf {} ${STARROCKS_THIRDPARTY}/ \;
+        fi
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
     PARALLEL=$[$(nproc)/4+1]
