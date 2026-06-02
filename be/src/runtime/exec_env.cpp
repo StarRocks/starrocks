@@ -564,6 +564,12 @@ void ExecEnv::stop() {
         component_times.emplace_back("load_rpc_pool", MonotonicMillis() - start);
     }
 
+    if (workgroup_manager() != nullptr) {
+        start = MonotonicMillis();
+        _compute_env->stop_workgroup();
+        component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
+    }
+
     if (global_env->thread_pool()) {
         start = MonotonicMillis();
         global_env->thread_pool()->shutdown();
@@ -574,12 +580,6 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _query_context_mgr->clear();
         component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
-    }
-
-    if (workgroup_manager() != nullptr) {
-        start = MonotonicMillis();
-        _compute_env->stop_workgroup();
-        component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
     }
 
     if (_compute_env != nullptr && _compute_env->result_mgr() != nullptr) {
