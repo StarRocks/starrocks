@@ -929,16 +929,26 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    _opts.pred_tree = options.pred_tree;
+    _opts.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
+    _opts.runtime_filter_preds = options.runtime_filter_preds;
+    _opts.delete_predicates = options.delete_predicates;
     _opts.rowid_range_option = options.rowid_range_option;
     _opts.read_state_cache = options.read_state_cache;
     _opts.is_first_split_of_segment = options.is_first_split_of_segment;
     _opts.ranges = options.ranges;
+    _opts.tablet_range = options.tablet_range;
     _opts.runtime_range_pruner = options.runtime_range_pruner;
-    _opts.runtime_filter_preds = options.runtime_filter_preds;
     _opts.short_key_ranges = options.short_key_ranges;
     _opts.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    _opts.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    _opts.global_dictmaps = options.global_dictmaps;
+    _opts.unused_output_column_ids = options.unused_output_column_ids;
+    _opts.is_cancelled = options.is_cancelled;
     _opts.chunk_size = options.chunk_size;
     _chunk_size = options.chunk_size;
+    _predicate_columns = _opts.pred_tree.num_columns();
+    _enable_predicate_col_late_materialize = _opts.enable_predicate_col_late_materialize;
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
@@ -1098,6 +1108,8 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_apply_bitmap_index());
+    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
     RETURN_IF_ERROR(_apply_inverted_index());
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());

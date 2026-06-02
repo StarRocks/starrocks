@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "exec/pipeline/scan/morsel_queue_builder.h"
@@ -24,7 +25,9 @@ MorselQueueBuilderPtr make_physical_split_morsel_queue_builder(Morsels&& morsels
                                                                int64_t splitted_scan_rows);
 MorselQueueBuilderPtr make_logical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
                                                               int64_t splitted_scan_rows);
-MorselQueueBuilderPtr make_lake_prepared_physical_split_morsel_queue_builder(MorselQueueBuilderPtr builder,
+MorselQueueBuilderPtr make_lake_prepared_physical_split_morsel_queue_builder(Morsels&& morsels,
+                                                                             bool has_more_scan_ranges,
+                                                                             size_t max_degree_of_parallelism,
                                                                              int64_t splitted_scan_rows);
 
 } // namespace starrocks::pipeline
