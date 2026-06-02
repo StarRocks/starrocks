@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <coroutine>
 #include <cstdint>
 #include <optional>
@@ -149,6 +150,13 @@ struct JoinHashTableItems {
     bool has_large_column = false;
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
+    // NDV-source classification, set by the hash-map method at build time; drives estimate_ndv().
+    // Only the hash-bucket-chained map is a collision lower bound (HashedLC); value-indexed and
+    // bitset maps occupy one slot per distinct key, so their occupancy is the exact distinct count.
+    // ASOF variants skip temporal-null rows that the runtime filter still reads, so they use Unknown
+    // (row-count fallback) rather than risk under-counting.
+    enum class NdvKind : uint8_t { Unknown, ExactBuckets, ExactBitset, HashedLC };
+    NdvKind ndv_kind = NdvKind::Unknown;
     bool cache_miss_serious = false;
     bool enable_late_materialization = false;
     bool is_collision_free_and_unique = false;
@@ -194,6 +202,54 @@ struct JoinHashTableItems {
                    << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
 
         is_collision_free_and_unique = used_buckets == row_count;
+    }
+
+    // Estimate the number of distinct build-key values, used to size runtime filters and gate their
+    // build by distinct keys rather than row count. Exact for value-indexed and bitset hash maps; a
+    // Linear-Counting estimate for the hash-bucket-chained map, where used_buckets is a collision
+    // lower bound. Counts distinct full join keys, so it is exact per column only for single-key joins;
+    // for a multi-column key it is a per-column estimate that usually over-counts but can under-count
+    // when a non-null-safe column is null. Falls back to row_count when the source is unclassified.
+    size_t estimate_ndv() const {
+        if (row_count == 0) {
+            return 0;
+        }
+        if (is_collision_free_and_unique) {
+            return row_count;
+        }
+        switch (ndv_kind) {
+        case NdvKind::ExactBuckets:
+            return used_buckets;
+        case NdvKind::ExactBitset: {
+            // key_bitset packs one bit per present value, so used_buckets (a non-zero-byte count)
+            // undercounts by up to 8x; popcount the bits for the exact distinct count.
+            size_t bits = 0;
+            for (uint8_t byte : key_bitset) {
+                bits += static_cast<size_t>(__builtin_popcount(byte));
+            }
+            return bits == 0 ? static_cast<size_t>(row_count) : bits;
+        }
+        case NdvKind::HashedLC: {
+            // Linear Counting over the hash-bucket directory: n ~= -m * ln(1 - u/m).
+            const size_t m = bucket_size;
+            const size_t u = used_buckets;
+            if (m == 0 || u >= m) {
+                return row_count;
+            }
+            const double est = -1.0 * static_cast<double>(m) * std::log(1.0 - static_cast<double>(u) / m);
+            auto ndv = static_cast<size_t>(est + 0.5);
+            if (ndv < u) {
+                ndv = u;
+            }
+            if (ndv > row_count) {
+                ndv = row_count;
+            }
+            return ndv;
+        }
+        case NdvKind::Unknown:
+        default:
+            return row_count;
+        }
     }
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
@@ -360,8 +416,10 @@ inline bool is_asof_join(TJoinOp::type join_type) {
 
 constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::type opcode) {
     size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8;
-    size_t offset =
-            (opcode == TExprOpcode::LT) ? 0 : (opcode == TExprOpcode::LE) ? 1 : (opcode == TExprOpcode::GT) ? 2 : 3;
+    size_t offset = (opcode == TExprOpcode::LT)   ? 0
+                    : (opcode == TExprOpcode::LE) ? 1
+                    : (opcode == TExprOpcode::GT) ? 2
+                                                  : 3;
     return base + offset;
 }
 
