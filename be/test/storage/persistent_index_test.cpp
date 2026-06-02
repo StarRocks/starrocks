@@ -1471,13 +1471,8 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
-<<<<<<< HEAD
     auto chunk = ChunkHelper::new_chunk(schema, size);
-    auto cols = chunk->mutable_columns();
-=======
-    auto chunk = ChunkFactory::new_chunk(schema, size);
     auto cols = chunk->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(varlen_keys[i]));
