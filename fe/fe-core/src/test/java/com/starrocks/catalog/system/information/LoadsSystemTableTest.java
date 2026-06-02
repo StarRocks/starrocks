@@ -422,21 +422,22 @@ public class LoadsSystemTableTest {
     }
 
     /**
-     * Phase-5 second-precision contract: the BE pushdown literal is second-
-     * aligned (see SchemaLoadsScanner::literal_to_epoch_ms) and BE materializes
-     * the column at second precision, so FE must compare its full-ms job
-     * timestamp at second precision too. A job finishing at the literal second
-     * with a non-zero ms remainder must pass an at-anchor `<=` upper bound,
-     * matching what BE's post-filter on the materialized column would do.
+     * Ms-precision contract: the BE pushdown literal carries sub-second from
+     * the predicate (here zero - `2026-05-15 02:45:08` has usec=0), and FE
+     * compares the full-ms job timestamp directly. A job at the same rendered
+     * second but with a non-zero ms remainder is strictly greater than the
+     * second-aligned `<=` upper bound and must be dropped by the FE prefilter,
+     * matching how BE's post-filter on the ms-precision materialized column
+     * would evaluate `08.789 <= '08'`.
      */
     @Test
-    public void testQuery_secondPrecisionContractFiltersJobMsRemainder(
+    public void testQuery_msPrecisionDropsJobsAfterRenderedSecond(
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked LoadMgr loadMgr,
             @Mocked StreamLoadMgr streamLoadMgr,
             @Mocked LoadJob jobAtBoundary) {
         long anchorMs = epochMillis("2026-05-15 02:45:08", ZoneId.of("America/New_York"));
-        long jobMsWithRemainder = anchorMs + 789; // same rendered second as the bound
+        long jobMsWithRemainder = anchorMs + 789; // strictly later than the second-aligned bound
 
         new Expectations() {
             {
@@ -474,14 +475,13 @@ public class LoadsSystemTableTest {
         };
 
         TGetLoadsParams req = new TGetLoadsParams();
-        req.setLoad_finish_time_to_ms(anchorMs); // second-aligned bound
+        req.setLoad_finish_time_to_ms(anchorMs); // second-aligned upper bound
 
         TGetLoadsResult result = LoadsSystemTable.query(req);
 
-        // Without phase-5 truncation, the raw-ms compare `anchorMs+789 <= anchorMs`
-        // is false and the row is dropped - even though BE's post-filter on the
-        // second-precision materialized column would have kept it.
-        assertEquals(1, labels(result).size());
-        assertTrue(labels(result).contains("jobAtBoundary"));
+        // anchorMs+789 > anchorMs, so the row fails `value <= upper` at the
+        // FE prefilter; BE post-filter on the ms-precision column would also
+        // reject it.
+        assertEquals(0, labels(result).size());
     }
 }

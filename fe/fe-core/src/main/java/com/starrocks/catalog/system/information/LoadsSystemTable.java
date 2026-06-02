@@ -205,16 +205,10 @@ public class LoadsSystemTable {
         if (value == null || value < 0) {
             return true;
         }
-        // Truncate the full-ms job timestamp to second so this prefilter
-        // matches BE's second-precision materialized column. Otherwise a job
-        // at e.g. ...:08.789 with a `<= ...:08` upper bound is dropped here
-        // but kept by BE's post-filter on the rendered column. To enable ms
-        // support, drop the truncation (the wire carries full ms).
-        long secondAlignedValue = (value / 1000) * 1000;
-        if (lowerBound != null && secondAlignedValue < lowerBound) {
+        if (lowerBound != null && value < lowerBound) {
             return false;
         }
-        return upperBound == null || secondAlignedValue <= upperBound;
+        return upperBound == null || value <= upperBound;
     }
 
     @VisibleForTesting
