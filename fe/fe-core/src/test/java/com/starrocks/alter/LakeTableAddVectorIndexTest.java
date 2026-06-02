@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -339,5 +340,120 @@ public class LakeTableAddVectorIndexTest {
             Assertions.assertFalse(scheduler.getPendingTabletsForTest().containsKey(id),
                     "Shadow tablet " + id + " must be evicted from scheduler after ALTER cancel");
         }
+    }
+
+    /**
+     * Verify that the FE-failover/restart replay path recovers shadow tablet
+     * {@code vectorIndexBuiltVersion} (vibv) into live catalog state.
+     *
+     * <p>This tests the actual replay path, not just GSON round-trip in isolation.
+     * The scenario modelled is:
+     * <ol>
+     *   <li>FE leader runs {@code ALTER TABLE … ADD INDEX … USING VECTOR}, creating a
+     *       {@link LakeTableSchemaChangeJob} in PENDING state with shadow tablets whose
+     *       {@code vibv = V_snap} (baseline covered by Task 5).</li>
+     *   <li>The job advances to WAITING_TXN and its state is persisted to the edit log
+     *       via {@link GsonUtils#GSON} serialisation.</li>
+     *   <li>FE restarts.  The new leader replays the edit-log entry by deserialising the
+     *       JSON back to a {@link LakeTableSchemaChangeJob} and calling
+     *       {@code SchemaChangeHandler.replayAlterJobV2(deserialisedJob)}.</li>
+     *   <li>Because no in-memory job exists yet, the handler calls
+     *       {@code deserialisedJob.replay(deserialisedJob)}, which — for WAITING_TXN state
+     *       — invokes {@code addShadowIndexToCatalog}, attaching the shadow
+     *       {@link MaterializedIndex} (together with its deserialized LakeTablets) to the
+     *       physical partition.</li>
+     *   <li>After replay the physical partition's shadow indexes must contain tablets with
+     *       {@code vibv == V_snap} (NOT 0), so the async {@code VectorIndexBuildScheduler}
+     *       can correctly skip already-built rowsets across the failover.</li>
+     * </ol>
+     *
+     * <p>Mechanically:
+     * <pre>
+     *   1. createTable + alterTable  →  PENDING job, physicalPartitionIndexMap has shadow
+     *      LakeTablets with vibv = vSnap.
+     *   2. GSON round-trip of the job (simulate edit-log persist + reload).
+     *   3. Set deserialisedJob.state = WAITING_TXN, watershedTxnId = 1 (any non-(-1) value).
+     *   4. Clear the handler's in-memory job map (simulate fresh FE — no prior in-memory job).
+     *   5. replayAlterJobV2(deserialisedJob)  →  addShadowIndexToCatalog  →  shadow index
+     *      added to physical partition.
+     *   6. Assert: partition shadow indexes have tablets with vibv == vSnap (not 0).
+     * </pre>
+     */
+    @Test
+    public void testReplayRecoversShadowTabletVibvIntoLiveCatalog() throws Exception {
+        // ---- Step 1: create table + issue vector-index ALTER ----
+        LakeTable table = createTable(
+                "CREATE TABLE t_replay_vibv (" +
+                        "  id BIGINT NOT NULL," +
+                        "  v  ARRAY<FLOAT> NOT NULL" +
+                        ") DUPLICATE KEY(id)" +
+                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
+                        " PROPERTIES('replication_num'='1')");
+
+        // Capture V_snap before ALTER (visible version of the first physical partition).
+        PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
+        long vSnap = pp.getVisibleVersion();
+
+        alterTable(
+                "ALTER TABLE t_replay_vibv ADD INDEX idx_v (v) USING VECTOR" +
+                        " ('index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
+                        "'is_vector_normed'='false','M'='16','efconstruction'='40')");
+
+        // Retrieve the in-memory PENDING job and sanity-check it has shadow tablets.
+        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertEquals(1, jobs.size(), "expected exactly one pending schema-change job");
+        AlterJobV2 pendingJob = jobs.get(0);
+        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, pendingJob);
+
+        // ---- Step 2: GSON round-trip to simulate edit-log persist + reload ----
+        String json = GsonUtils.GSON.toJson(pendingJob);
+        LakeTableSchemaChangeJob deserialisedJob =
+                GsonUtils.GSON.fromJson(json, LakeTableSchemaChangeJob.class);
+
+        // Confirm the deserialisedJob carries shadow tablets (inherited from GSON round-trip).
+        @SuppressWarnings("unchecked")
+        Table<Long, Long, MaterializedIndex> desMap =
+                Deencapsulation.getField(deserialisedJob, "physicalPartitionIndexMap");
+        Assertions.assertNotNull(desMap, "deserialisedJob must have physicalPartitionIndexMap");
+        Assertions.assertFalse(desMap.isEmpty(),
+                "deserialisedJob physicalPartitionIndexMap must not be empty");
+
+        // ---- Step 3: advance deserialisedJob to WAITING_TXN ----
+        // In a real restart the WAITING_TXN edit-log entry is the one replayed; here we
+        // simulate it by advancing the deserialisedJob's state + setting watershedTxnId.
+        deserialisedJob.setJobState(AlterJobV2.JobState.WAITING_TXN);
+        Deencapsulation.setField(deserialisedJob, "watershedTxnId", 1L);
+
+        // ---- Step 4: clear the handler's job map (simulate fresh FE with no prior job) ----
+        GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().clearJobs();
+
+        // ---- Step 5: drive the replay — this is the actual failover path ----
+        // replayAlterJobV2 finds no existing job → calls deserialisedJob.replay(deserialisedJob)
+        // → WAITING_TXN branch → addShadowIndexToCatalog → shadow index attached to partition.
+        GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().replayAlterJobV2(deserialisedJob);
+
+        // ---- Step 6: assert vibv == vSnap in live catalog shadow indexes ----
+        // The physical partition must now have at least one shadow index whose tablets carry vibv.
+        List<MaterializedIndex> shadowIndexes = pp.getLatestMaterializedIndices(IndexExtState.SHADOW);
+        Assertions.assertFalse(shadowIndexes.isEmpty(),
+                "Physical partition must have at least one shadow index after replay");
+
+        boolean foundTablet = false;
+        for (MaterializedIndex shadowIdx : shadowIndexes) {
+            for (Tablet tablet : shadowIdx.getTablets()) {
+                Assertions.assertInstanceOf(LakeTablet.class, tablet,
+                        "shadow tablet must be a LakeTablet after replay");
+                long vibv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
+                Assertions.assertEquals(vSnap, vibv,
+                        "shadow tablet vibv must equal V_snap=" + vSnap +
+                                " after replay (FE-failover recovery), got " + vibv);
+                foundTablet = true;
+            }
+        }
+        Assertions.assertTrue(foundTablet,
+                "expected at least one shadow tablet in the replay-recovered shadow index");
     }
 }
