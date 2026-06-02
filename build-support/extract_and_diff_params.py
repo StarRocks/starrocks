@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -92,6 +93,195 @@ class ParamInfo:
     mutable: bool = False
     description: str = ""
     suggested_doc: str = ""
+
+
+# ── Comment extraction helpers ───────────────────────────────────────────────
+
+def _clean_block_comment(lines: list[str]) -> str:
+    """Strip /** ... */ decoration and return clean prose."""
+    cleaned = []
+    for line in lines:
+        line = re.sub(r"^\s*/\*+\s*", "", line)   # /** or /*
+        line = re.sub(r"\s*\*+/\s*$", "", line)   # */
+        line = re.sub(r"^\s*\*\s?", "", line)      # leading * on body lines
+        line = line.strip()
+        if line and not line.startswith("@"):       # skip Javadoc tags
+            cleaned.append(line)
+    text = " ".join(cleaned)
+    # Collapse runs of whitespace
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+def _clean_line_comments(lines: list[str]) -> str:
+    """Strip // prefix and return clean prose."""
+    cleaned = []
+    for line in lines:
+        line = re.sub(r"^\s*//+\s*", "", line).strip()
+        if line:
+            cleaned.append(line)
+    return " ".join(cleaned)
+
+
+def _preceding_comment(lines: list[str], annotation_idx: int) -> str:
+    """
+    Walk backwards from a @ConfField or CONF_* annotation line and return
+    any Javadoc block (/** ... */) or run of // line comments that sit
+    directly above it (ignoring blank lines and @Deprecated).
+    """
+    j = annotation_idx - 1
+    while j >= 0 and lines[j].strip() in ("", "@Deprecated"):
+        j -= 1
+    if j < 0:
+        return ""
+
+    prev = lines[j].strip()
+
+    if prev.endswith("*/"):
+        # Collect the full block comment walking backwards
+        block: list[str] = []
+        while j >= 0:
+            block.insert(0, lines[j].strip())
+            if lines[j].strip().startswith("/*"):
+                break
+            j -= 1
+        return _clean_block_comment(block)
+
+    if prev.startswith("//"):
+        # Collect consecutive // lines walking backwards
+        block = []
+        while j >= 0 and lines[j].strip().startswith("//"):
+            block.insert(0, lines[j].strip())
+            j -= 1
+        return _clean_line_comments(block)
+
+    return ""
+
+
+# ── AI description generation ─────────────────────────────────────────────────
+
+_AI_SYSTEM_PROMPT = """\
+You write technical reference documentation for StarRocks, an open-source \
+analytical database. Given a configuration parameter or session variable, its \
+metadata, and code snippets showing where it is used, write a single concise \
+description sentence.
+
+Rules:
+- One sentence only, under 160 characters.
+- Start with a verb: Controls, Specifies, Sets, Enables, Defines, Limits, \
+Determines.
+- Describe what the parameter controls or represents — not what value to set.
+- Do not restate the parameter name, type, or default value.
+- Base the description only on the context provided. Do not speculate.
+- If the context is insufficient for an accurate description, respond with \
+exactly the word: INSUFFICIENT_CONTEXT\
+"""
+
+
+def _gather_code_context(name: str, param_type: str) -> str:
+    """Grep for the top usages of a parameter in the relevant source tree."""
+    if param_type == "fe_config":
+        pattern = f"Config\\.{name}"
+        paths = [str(REPO_ROOT / "fe/fe-core/src/main/java")]
+        includes = ["*.java"]
+    elif param_type == "be_config":
+        pattern = name
+        paths = [str(REPO_ROOT / "be/src")]
+        includes = ["*.cpp", "*.h"]
+    else:
+        pattern = f'"{name}"'
+        paths = [str(REPO_ROOT / "fe/fe-core/src/main/java")]
+        includes = ["*.java"]
+
+    snippets: list[str] = []
+    for include in includes:
+        try:
+            r = subprocess.run(
+                ["grep", "-rn", "--include", include, "-A", "3", "-B", "1", pattern]
+                + paths,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+                timeout=10,
+            )
+            if r.stdout.strip():
+                snippets.append(r.stdout.strip()[:3000])
+        except subprocess.SubprocessError:
+            pass
+
+    return "\n---\n".join(snippets[:3])
+
+
+def generate_ai_descriptions(
+    params: list[ParamInfo],
+    api_key: str,
+    model: str = "claude-haiku-4-5-20251001",
+) -> dict[str, str]:
+    """
+    Call the Anthropic API to generate one-sentence descriptions for params
+    that currently have no description. Returns {name: description}.
+
+    Requires the 'anthropic' package: pip install anthropic
+    """
+    try:
+        import anthropic  # type: ignore
+    except ImportError:
+        print(
+            "error: 'anthropic' package not installed. Run: pip install anthropic",
+            file=sys.stderr,
+        )
+        return {}
+
+    client = anthropic.Anthropic(api_key=api_key)
+    results: dict[str, str] = {}
+
+    for idx, param in enumerate(params, 1):
+        print(
+            f"  [{idx}/{len(params)}] {param.name} ...",
+            file=sys.stderr,
+            end="",
+            flush=True,
+        )
+        context = _gather_code_context(param.name, param.param_type)
+        category = {
+            "fe_config": "FE Configuration (Config.java)",
+            "be_config": "BE Configuration (config.h)",
+            "session_var": "Session / Global Variable",
+        }[param.param_type]
+
+        user_msg = (
+            f"Parameter: {param.name}\n"
+            f"Category: {category}\n"
+            f"Type: {param.code_type}\n"
+            f"Default: {param.default}\n"
+            f"Mutable: {param.mutable}\n\n"
+            f"Code context:\n"
+            f"{context if context else '(no usages found in source tree)'}\n\n"
+            "Write a one-sentence description for this parameter."
+        )
+
+        try:
+            resp = client.messages.create(
+                model=model,
+                max_tokens=200,
+                system=[
+                    {
+                        "type": "text",
+                        "text": _AI_SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            desc = resp.content[0].text.strip()
+            if desc == "INSUFFICIENT_CONTEXT":
+                print(" (insufficient context)", file=sys.stderr)
+            else:
+                results[param.name] = desc
+                print(f" ✓", file=sys.stderr)
+        except Exception as exc:
+            print(f" error: {exc}", file=sys.stderr)
+
+    return results
 
 
 # ── FE Config.java parser ────────────────────────────────────────────────────
@@ -167,7 +357,10 @@ def parse_fe_configs(path: Path) -> dict[str, ParamInfo]:
             default = default_m.group(1).strip() if default_m else ""
 
             comment_m = re.search(r'comment\s*=\s*"([^"]*)"', ann_text)
-            description = comment_m.group(1) if comment_m else ""
+            if comment_m:
+                description = comment_m.group(1)
+            else:
+                description = _preceding_comment(lines, i - 1)
 
             params[name] = ParamInfo(
                 name=name,
@@ -212,7 +405,8 @@ def parse_be_configs(path: Path) -> dict[str, ParamInfo]:
     """
     params: dict[str, ParamInfo] = {}
     for scan_path in _be_config_files(path):
-        for line in scan_path.read_text().splitlines():
+        lines = scan_path.read_text().splitlines()
+        for idx, line in enumerate(lines):
             m = _CONF_MACRO_RE.match(line)
             if m:
                 mutable_flag, code_type, name, default = m.groups()
@@ -222,7 +416,7 @@ def parse_be_configs(path: Path) -> dict[str, ParamInfo]:
                     code_type=code_type,
                     default=default,
                     mutable=bool(mutable_flag),
-                    description="",
+                    description=_preceding_comment(lines, idx),
                     suggested_doc="docs/en/administration/management/BE_parameters/",
                 )
     return params
@@ -230,9 +424,16 @@ def parse_be_configs(path: Path) -> dict[str, ParamInfo]:
 
 # ── SessionVariable / GlobalVariable parser ──────────────────────────────────
 
+# Matches single-line:  public static final String FOO = "actual_name";
 _CONST_RE = re.compile(
     r'public\s+static\s+final\s+String\s+(\w+)\s*=\s*"([a-z][a-z0-9_]*)"'
 )
+# Matches the opening of a two-line constant: public static final String FOO =
+_CONST_MULTILINE_START_RE = re.compile(
+    r'public\s+static\s+final\s+String\s+(\w+)\s*=\s*$'
+)
+# Matches the continuation line:     "actual_name";
+_CONST_MULTILINE_VALUE_RE = re.compile(r'^\s*"([a-z][a-z0-9_]*)"\s*;')
 _VARATTR_START_RE = re.compile(r'@(?:VarAttr|VariableMgr\.VarAttr)\s*\(')
 _FIELD_DECL_RE = re.compile(
     r'(?:private|public|protected)\s+(?:static\s+)?(\w+(?:\[\])?)\s+\w+\s*=\s*(.+?)(?:;|$)'
@@ -256,12 +457,18 @@ def parse_session_vars(session_path: Path, global_path: Path) -> dict[str, Param
         lines = src_path.read_text().splitlines()
         n = len(lines)
 
-        # Pass 1: String constants
+        # Pass 1: String constants (handles both single-line and two-line definitions)
         const_map: dict[str, str] = {}
-        for line in lines:
+        for idx, line in enumerate(lines):
             m = _CONST_RE.search(line)
             if m:
                 const_map[m.group(1)] = m.group(2)
+                continue
+            m = _CONST_MULTILINE_START_RE.search(line.strip())
+            if m and idx + 1 < n:
+                vm = _CONST_MULTILINE_VALUE_RE.match(lines[idx + 1])
+                if vm:
+                    const_map[m.group(1)] = vm.group(1)
 
         # Pass 2: @VarAttr annotations
         i = 0
@@ -283,21 +490,45 @@ def parse_session_vars(session_path: Path, global_path: Path) -> dict[str, Param
                 i += 1
                 continue
 
-            # Resolve name
+            # Resolve name= (internal storage name)
             name_m = re.search(r'\bname\s*=\s*(\w+|"[^"]+")', ann_text)
             if not name_m:
                 i += 1
                 continue
 
-            raw = name_m.group(1)
-            if raw.startswith('"'):
-                var_name = raw.strip('"')
-            else:
-                # Constant reference: look up in const_map, fall back to lowercasing
-                var_name = const_map.get(raw, raw.lower())
+            def _resolve(raw: str) -> str:
+                if raw.startswith('"'):
+                    return raw.strip('"')
+                return const_map.get(raw, raw.lower())
 
-            # Skip names that look like class references or non-variable identifiers
-            if not re.fullmatch(r"[a-z_][a-z0-9_]*", var_name):
+            primary_name = _resolve(name_m.group(1))
+
+            # Resolve show= (user-visible name used in SHOW VARIABLES and docs).
+            # Many variables rename internals with a _v2 suffix while keeping the
+            # original name as the show/alias value — docs always use the show name.
+            show_m = re.search(r'\bshow\s*=\s*(\w+|"[^"]+")', ann_text)
+            show_name = _resolve(show_m.group(1)) if show_m else None
+
+            # Resolve alias= (backward-compat names, also user-visible)
+            alias_names = [
+                _resolve(m.group(1))
+                for m in re.finditer(r'\balias\s*=\s*(\w+|"[^"]+")', ann_text)
+            ]
+
+            # Collect user-visible names for doc comparison.
+            # When show= is present it is the name users see in SHOW VARIABLES and
+            # docs — the primary name is an internal implementation detail (_v2 etc.)
+            # and does not need its own doc entry.
+            all_names: list[str] = []
+            if show_name and re.fullmatch(r"[a-z_][a-z0-9_]*", show_name):
+                all_names.append(show_name)
+            elif re.fullmatch(r"[a-z_][a-z0-9_]*", primary_name):
+                all_names.append(primary_name)
+            for alias in alias_names:
+                if re.fullmatch(r"[a-z_][a-z0-9_]*", alias) and alias not in all_names:
+                    all_names.append(alias)
+
+            if not all_names:
                 i += 1
                 continue
 
@@ -311,15 +542,16 @@ def parse_session_vars(session_path: Path, global_path: Path) -> dict[str, Param
                     default = fd.group(2).strip().rstrip(";")
                     break
 
-            params[var_name] = ParamInfo(
-                name=var_name,
-                param_type="session_var",
-                code_type=code_type,
-                default=default,
-                mutable=True,
-                description="",
-                suggested_doc="docs/en/sql-reference/System_variable.md",
-            )
+            for var_name in all_names:
+                params[var_name] = ParamInfo(
+                    name=var_name,
+                    param_type="session_var",
+                    code_type=code_type,
+                    default=default,
+                    mutable=True,
+                    description="",
+                    suggested_doc="docs/en/sql-reference/System_variable.md",
+                )
             i += 1
 
     return params
@@ -381,8 +613,12 @@ def get_new_param_names_from_diff(
             r"public\s+static\s+(?:final\s+)?\S+\s+([a-z_][a-z0-9_]+)\s*=", line
         ):
             names.add(m.group(1))
-        # Java: String constant value = "actual_var_name"
+        # Java: single-line constant  = "actual_var_name"
         for m in re.finditer(r'=\s*"([a-z_][a-z0-9_]+)"', line):
+            names.add(m.group(1))
+        # Java: two-line constant continuation — the added line is just "name";
+        # e.g. +            "enable_optimize_skew_join_v1";
+        for m in re.finditer(r'^\s*"([a-z_][a-z0-9_]+)"\s*;', line[1:]):
             names.add(m.group(1))
         # C++ CONF macro first argument
         for m in re.finditer(
@@ -572,6 +808,25 @@ def main() -> int:
         "--global-var", type=Path, default=GLOBAL_VAR_PATH,
         help="Path to GlobalVariable.java",
     )
+    ap.add_argument(
+        "--with-ai-descriptions",
+        action="store_true",
+        help=(
+            "Use the Anthropic API to generate descriptions for params that have "
+            "no description in their source annotation or Javadoc. "
+            "Requires ANTHROPIC_API_KEY env var or --api-key."
+        ),
+    )
+    ap.add_argument(
+        "--api-key",
+        default=None,
+        help="Anthropic API key (overrides ANTHROPIC_API_KEY env var)",
+    )
+    ap.add_argument(
+        "--param",
+        default=None,
+        help="Only process this single parameter name (useful for testing AI descriptions)",
+    )
     args = ap.parse_args()
 
     # Extract from source code
@@ -614,6 +869,46 @@ def main() -> int:
     sv_missing = sorted(
         [sv_params[n] for n in sv_missing_names], key=lambda x: x.name
     )
+
+    # ── Optional AI description generation ───────────────────────────────────
+    if args.with_ai_descriptions:
+        api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            print(
+                "error: --with-ai-descriptions requires ANTHROPIC_API_KEY env var "
+                "or --api-key",
+                file=sys.stderr,
+            )
+            return 1
+
+        all_missing = fe_missing + be_missing + sv_missing
+        needs_desc = [
+            p for p in all_missing
+            if not p.description
+            and (args.param is None or p.name == args.param)
+        ]
+        if needs_desc:
+            print(
+                f"Generating AI descriptions for {len(needs_desc)} params "
+                f"with no existing description ...",
+                file=sys.stderr,
+            )
+            ai_descs = generate_ai_descriptions(needs_desc, api_key)
+            # Patch descriptions back into the ParamInfo objects in-place
+            for p in all_missing:
+                if p.name in ai_descs:
+                    p.description = ai_descs[p.name]
+        else:
+            print("All params already have descriptions — nothing to generate.", file=sys.stderr)
+
+    # ── Apply --param filter to output ───────────────────────────────────────
+    if args.param:
+        fe_missing = [p for p in fe_missing if p.name == args.param]
+        be_missing = [p for p in be_missing if p.name == args.param]
+        sv_missing = [p for p in sv_missing if p.name == args.param]
+        fe_stale = {n for n in fe_stale if n == args.param}
+        be_stale = {n for n in be_stale if n == args.param}
+        sv_stale = {n for n in sv_stale if n == args.param}
 
     has_gaps = bool(fe_missing or be_missing or sv_missing)
 

@@ -209,3 +209,17 @@ The JSON structure is:
 Each `missing_from_docs` entry has the parameter name, type, default value, mutability, any description extracted from the source annotation, and a suggested doc file to update.
 
 **Stale entries** (`stale_in_docs`) are parameter names that appear in the documentation but no longer exist in the source code. These should be removed or marked as deprecated in the docs.
+
+## Aliases and the missing-from-docs list
+
+Session variables frequently have aliases — shorter or legacy names that resolve to the same underlying variable (e.g. `tx_read_only` is an alias for `transaction_read_only`). The tool flags aliases as missing from docs **intentionally**: aliases need their own entries in `System_variable.md` so that users searching for the name they saw in a blog post, release note, or support article can find it.
+
+A minimal alias entry is sufficient:
+
+```markdown
+### tx_read_only
+
+Alias for [transaction_read_only](#transaction_read_only).
+```
+
+Do not suppress alias entries or redirect them silently — the alias name is what external content uses, and an undocumented alias generates support tickets.
