@@ -42,6 +42,7 @@
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);
+DEFINE_FAIL_POINT(spill_restore_error);
 
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
