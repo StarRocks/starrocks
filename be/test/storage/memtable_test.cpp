@@ -169,13 +169,8 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 }
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
-<<<<<<< HEAD
     shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
-    auto cols = ret->mutable_columns();
-=======
-    shared_ptr<Chunk> ret = RuntimeChunkHelper::new_chunk(slots, size);
     auto cols = ret->columns();
->>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (int ci = 0; ci < cols.size(); ci++) {
         MutableColumnPtr c = cols[ci]->as_mutable_ptr();
         Datum v;
