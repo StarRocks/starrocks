@@ -920,7 +920,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             List<Tablet> regularTablets = new ArrayList<>();
             try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-                OlapTable table = getTableOrThrow(db, tableId);
+                // Use the null-returning getTable (not getTableOrThrow) so a
+                // concurrent db/table drop is a benign skip rather than a
+                // checked AlterCancelException — there is nothing to advance if
+                // the table is gone.
+                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                if (table == null) {
+                    continue;
+                }
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition == null) {
                     // partition gone (concurrent drop); nothing to advance, skip.
