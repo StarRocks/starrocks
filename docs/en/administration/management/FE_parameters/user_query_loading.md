@@ -761,7 +761,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `statistic_cache_thread_pool_size`
 
-- Default: 10
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: No
