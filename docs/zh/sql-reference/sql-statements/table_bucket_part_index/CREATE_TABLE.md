@@ -55,7 +55,8 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 如果您想使用已弃用的 `EXTERNAL` 关键字，请展开**`EXTERNAL` 关键字详情**
 
 <details>
-  <summary>`EXTERNAL` 关键字详情</summary>
+
+<summary>`EXTERNAL` 关键字详情</summary>
 
   要创建外部表以查询外部数据源，请指定 `CREATE EXTERNAL TABLE` 并将 `ENGINE` 设置为以下任意值。您可以参考[外部表](../../../data_source/External_table.md)了解更多信息。
 
