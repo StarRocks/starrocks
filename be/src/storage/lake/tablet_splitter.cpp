@@ -541,8 +541,8 @@ std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetad
         if (rowset.has_data_size()) {
             a.data_size = rowset.data_size();
         } else {
-            for (int i = 0; i < rowset.segment_size_size(); ++i) {
-                a.data_size += rowset.segment_size(i);
+            for (const auto& sm : rowset.segment_metas()) {
+                a.data_size += sm.size();
             }
         }
         if (rowset.has_num_dels()) {
@@ -616,26 +616,20 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
     }
 }
 
-// Build SegmentSplitInfo[] from a tablet's rowsets. Rejects per-rowset segment
-// metadata that is internally inconsistent (segments / segment_size /
-// segment_metas array sizes diverge). Does NOT enforce "segments non-empty" —
-// the data-driven and external-boundaries callers have different semantics on empty (one
-// errors, the other treats it as a no-op fast path) and own that check.
+// Build SegmentSplitInfo[] from a tablet's rowsets. Does NOT enforce "segments
+// non-empty" — the data-driven and external-boundaries callers have different
+// semantics on empty (one errors, the other treats it as a no-op fast path) and
+// own that check.
 Status build_segments_from_rowsets(const RepeatedPtrField<RowsetMetadataPB>& rowsets,
                                    std::vector<SegmentSplitInfo>* segments) {
     for (const auto& rowset : rowsets) {
-        if (rowset.segments_size() != rowset.segment_size_size() ||
-            rowset.segments_size() != rowset.segment_metas_size()) {
-            return Status::InvalidArgument("Segment metadata is inconsistent with segment list");
-        }
-        for (int32_t i = 0; i < rowset.segments_size(); ++i) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
-            const auto& segment_meta = rowset.segment_metas(i);
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
             segment.num_rows = segment_meta.num_rows();
-            segment.data_size = rowset.segment_size(i);
+            segment.data_size = segment_meta.size();
             RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
             segments->push_back(std::move(segment));
         }

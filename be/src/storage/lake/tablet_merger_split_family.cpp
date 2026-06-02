@@ -107,24 +107,26 @@ size_t RowsetPhysicalKeyHash::operator()(const RowsetPhysicalKey& key) const noe
 RowsetPhysicalKey make_rowset_physical_key(const RowsetMetadataPB& rowset_meta) {
     RowsetPhysicalKey key;
     key.version = rowset_meta.version();
-    key.segments.assign(rowset_meta.segments().begin(), rowset_meta.segments().end());
-    key.shared_segments_flags.assign(rowset_meta.shared_segments().begin(), rowset_meta.shared_segments().end());
 
     // Normalize bundle_file_offsets and segment_idx_layout to ALWAYS have one
     // entry per segment, falling back to documented defaults when the PB
     // omits them. Without this, two physically-equivalent rowsets where one
-    // copy has the field populated (e.g., `bundle_file_offsets = [0, 0]`)
-    // and the other has it absent (`bundle_file_offsets = []`) would hash
+    // copy has the field populated (e.g., `bundle_file_offset = 0`)
+    // and the other has it absent would hash
     // and compare unequal — a false-negative family inference that loses the
     // canonical projection. PB defaults match production read semantics:
-    // bundle_file_offsets default to 0 per segment, and segment_idx falls
+    // bundle_file_offset defaults to 0 per segment, and segment_idx falls
     // back to positional index per get_segment_idx() in meta_file.cpp.
-    const int segments_count = rowset_meta.segments_size();
+    const int segments_count = rowset_meta.segment_metas_size();
+    key.segments.reserve(segments_count);
+    key.shared_segments_flags.reserve(segments_count);
     key.bundle_file_offsets.reserve(segments_count);
     key.segment_idx_layout.reserve(segments_count);
     for (int segment_pos = 0; segment_pos < segments_count; ++segment_pos) {
-        const int64_t bundle_offset =
-                segment_pos < rowset_meta.bundle_file_offsets_size() ? rowset_meta.bundle_file_offsets(segment_pos) : 0;
+        const auto& segment_meta = rowset_meta.segment_metas(segment_pos);
+        key.segments.push_back(segment_meta.filename());
+        key.shared_segments_flags.push_back(segment_meta.shared());
+        const int64_t bundle_offset = segment_meta.has_bundle_file_offset() ? segment_meta.bundle_file_offset() : 0;
         key.bundle_file_offsets.push_back(bundle_offset);
         key.segment_idx_layout.push_back(static_cast<int32_t>(get_segment_idx(rowset_meta, segment_pos)));
     }
@@ -132,10 +134,9 @@ RowsetPhysicalKey make_rowset_physical_key(const RowsetMetadataPB& rowset_meta) 
 }
 
 bool is_shared_ancestor_rowset(const RowsetMetadataPB& rowset_meta) {
-    if (rowset_meta.segments_size() == 0) return false;
-    if (rowset_meta.shared_segments_size() != rowset_meta.segments_size()) return false;
-    return std::all_of(rowset_meta.shared_segments().begin(), rowset_meta.shared_segments().end(),
-                       [](bool flag) { return flag; });
+    if (rowset_meta.segment_metas_size() == 0) return false;
+    return std::all_of(rowset_meta.segment_metas().begin(), rowset_meta.segment_metas().end(),
+                       [](const auto& segment_meta) { return segment_meta.shared(); });
 }
 
 StatusOr<InferredSplitFamilies> infer_split_families(const std::vector<SplitFamilyInferenceInput>& inputs) {
@@ -327,7 +328,7 @@ StatusOr<RssidProjectionPlan> build_rssid_projection_plan(const std::vector<Spli
             // narrowing to uint32_t; on overflow it returns nullopt and
             // we mark the family unsafe (matches the wraparound treatment
             // of the int64 overflow check inside try_record_projection).
-            for (int segment_pos = 0; segment_pos < rowset.segments_size(); ++segment_pos) {
+            for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
                 const auto lifted_or = safe_lifted_segment_rssid(rowset, segment_pos);
                 if (!lifted_or.has_value()) {
                     if (family_id != InferredSplitFamilies::kNoFamily) {
@@ -361,7 +362,7 @@ StatusOr<RssidProjectionPlan> build_rssid_projection_plan(const std::vector<Spli
                     plan.explicit_rssid_map.emplace(SourceRssidKey{child_index, rowset.id()},
                                                     static_cast<uint32_t>(rs_id_final));
                 }
-                for (int segment_pos = 0; segment_pos < rowset.segments_size(); ++segment_pos) {
+                for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
                     const auto lifted_or = safe_lifted_segment_rssid(rowset, segment_pos);
                     if (!lifted_or.has_value()) continue;
                     const int64_t segment_final = static_cast<int64_t>(*lifted_or) + family.canonical_rssid_offset;

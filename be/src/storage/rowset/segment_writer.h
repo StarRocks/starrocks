@@ -63,7 +63,6 @@ class Chunk;
 class ColumnWriter;
 class Schema;
 struct SegmentFileInfo;
-class SegmentMetadataPB;
 
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
@@ -166,13 +165,9 @@ public:
 
     // Transfer sort-key min, max, samples, and interval into a SegmentFileInfo.
     // Moves _sort_key_samples out; preserves the carrier invariant
-    // (samples.empty() <=> interval == 0).
+    // (samples.empty() <=> interval == 0). Callers serialize the resulting
+    // SegmentFileInfo to a SegmentMetadataPB via SegmentFileInfo::to_proto().
     void write_sort_key_fields_to(SegmentFileInfo& file_info);
-
-    // Copy sort-key min, max, samples, and interval into a proto.
-    // Used by update_manager.cpp which reads from SegmentWriter directly
-    // instead of going through a SegmentFileInfo carrier.
-    void write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const;
 
     // Accessors for sort-key samples (used in unit tests).
     int64_t get_sort_key_sample_row_interval() const { return _sort_key_sample_row_interval; }

@@ -72,88 +72,100 @@ TEST_F(LakeTabletRetainInfoTest, test_tablet_retain_info_normal) {
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
-        "id": 666,
-        "version": 2,
-        "rowsets": [
-            {
-                "id" : 100,
-                "segments": [
-                    "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
-                    "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"
-                ],
-                "segment_size": [100, 100],
-                "data_size": 200
-            }
-        ],
-        "delvec_meta": {
-            "version_to_file": [
+            "id": 666,
+            "version": 2,
+            "rowsets": [
                 {
-                    "key": 2,
-                    "value": {
-                        "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec",
-                        "size": 23
-                    }
+                    "id": 100,
+                    "data_size": 200,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
+                            "size": 100
+                        },
+                        {
+                            "filename": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat",
+                            "size": 100
+                        }
+                    ]
                 }
             ],
-            "delvecs": [
-                {
-                    "key": 10,
-                    "value": {
-                        "version": 4,
-                        "offset": 0,
-                        "size": 23
+            "delvec_meta": {
+                "version_to_file": [
+                    {
+                        "key": 2,
+                        "value": {
+                            "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec",
+                            "size": 23
+                        }
                     }
-                }
-            ]
-        },
-        "sstable_meta": {
-            "sstables": [
-                {
-                    "filename": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"
-                }
-            ]
-        },
-        "prev_garbage_version": 0,
-        "commit_time": 2
+                ],
+                "delvecs": [
+                    {
+                        "key": 10,
+                        "value": {
+                            "version": 4,
+                            "offset": 0,
+                            "size": 23
+                        }
+                    }
+                ]
+            },
+            "sstable_meta": {
+                "sstables": [
+                    {
+                        "filename": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"
+                    }
+                ]
+            },
+            "prev_garbage_version": 0,
+            "commit_time": 2
         }
         )DEL")));
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
-        "id": 666,
-        "version": 3,
-        "rowsets": [
-            {
-                "id" : 101,
-                "segments": [
-                    "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"
-                ],
-                "segment_size": [100],
-                "data_size": 100
-            }
-        ],
-        "compaction_inputs": [
-            {
-                "segments": [
-                    "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
-                    "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"
-                ],
-                "segment_size": [100, 100],
-                "data_size": 200
-            }
-        ],
-        "orphan_files": [
-            {
-                "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec",
-                "size": 23
-            },
-            {
-                "name": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst",
-                "size": 24
-            }
-        ],
-        "prev_garbage_version": 0,
-        "commit_time": 3
+            "id": 666,
+            "version": 3,
+            "rowsets": [
+                {
+                    "id": 101,
+                    "data_size": 100,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat",
+                            "size": 100
+                        }
+                    ]
+                }
+            ],
+            "compaction_inputs": [
+                {
+                    "data_size": 200,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
+                            "size": 100
+                        },
+                        {
+                            "filename": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat",
+                            "size": 100
+                        }
+                    ]
+                }
+            ],
+            "orphan_files": [
+                {
+                    "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec",
+                    "size": 23
+                },
+                {
+                    "name": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst",
+                    "size": 24
+                }
+            ],
+            "prev_garbage_version": 0,
+            "commit_time": 3
         }
         )DEL")));
 
