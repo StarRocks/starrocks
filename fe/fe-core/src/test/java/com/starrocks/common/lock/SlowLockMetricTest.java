@@ -43,6 +43,60 @@ public class SlowLockMetricTest {
         });
     }
 
+    /** Spawn a holder that keeps the db lock for {@code holdMs}, then take it on this thread,
+     * forcing exactly one slow-lock detection (the main acquire waits behind the holder). */
+    private void triggerSlowLock(long rid, long holdMs) throws InterruptedException {
+        CountDownLatch syncPoint1 = new CountDownLatch(1);
+        CountDownLatch syncPoint2 = new CountDownLatch(1);
+        Thread holder = createLockThread(rid, syncPoint1, syncPoint2, holdMs);
+        holder.start();
+        syncPoint1.await();
+        Locker locker = new Locker();
+        syncPoint2.countDown();
+        locker.lockDatabase(rid, LockType.WRITE);
+        locker.unLockDatabase(rid, LockType.WRITE);
+        holder.join();
+    }
+
+    @Test
+    public void testHeldTimeMetricCountsEveryDetectionRegardlessOfLogThrottle() {
+        // The held-time metric must reflect every slow-lock detection, independent of which log
+        // tier (or suppression) the throttle picks. With the log throttles wide open (high
+        // intervals), the 2nd of two back-to-back slow events is throttled to L3/suppressed, yet
+        // its held time must still be recorded — matching the wait-time metric, which is recorded
+        // once per slow acquisition regardless of logging.
+        long origThreshold = Config.slow_lock_threshold_ms;
+        long origL1 = Config.slow_lock_log_l1_stack_interval_ms;
+        long origL2 = Config.slow_lock_log_l2_info_interval_ms;
+        long origL3 = Config.slow_lock_log_l3_brief_interval_ms;
+        Config.slow_lock_threshold_ms = 500;
+        Config.slow_lock_log_l1_stack_interval_ms = 600000L;
+        Config.slow_lock_log_l2_info_interval_ms = 600000L;
+        Config.slow_lock_log_l3_brief_interval_ms = 600000L;
+        try {
+            Histogram held = MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS;
+            Histogram wait = MetricRepo.HISTO_SLOW_LOCK_WAIT_TIME_MS;
+            long heldBefore = held.getCount();
+            long waitBefore = wait.getCount();
+
+            triggerSlowLock(11280L, 1000L);
+            triggerSlowLock(11281L, 1000L);
+
+            Assertions.assertEquals(waitBefore + 2, wait.getCount(),
+                    "wait-time is recorded once per slow detection");
+            Assertions.assertEquals(heldBefore + 2, held.getCount(),
+                    "held-time must also be recorded once per slow detection, independent of log throttling");
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            Assertions.fail("Test interrupted: " + exception.getMessage());
+        } finally {
+            Config.slow_lock_threshold_ms = origThreshold;
+            Config.slow_lock_log_l1_stack_interval_ms = origL1;
+            Config.slow_lock_log_l2_info_interval_ms = origL2;
+            Config.slow_lock_log_l3_brief_interval_ms = origL3;
+        }
+    }
+
     @Test
     public void testSlowLockHistogramUpdateOnLockContention() {
         Histogram histoLockHeld = MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS;

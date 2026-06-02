@@ -416,6 +416,17 @@ public class LockManager {
             waiters = lock.cloneWaiters();
         }
 
+        // Record the held-time metric for EVERY slow-lock detection, before and independent of the
+        // log-tier decision below. Otherwise throttled (L3/suppressed) events would be dropped from
+        // this histogram while HISTO_SLOW_LOCK_WAIT_TIME_MS (recorded per detection in
+        // lockAcquireSlowPath) still counts them — leaving the two metrics with mismatched sample
+        // sets. (max held time among current owners; 0 if there is no owner.)
+        long maxHeldForTimeMs = 0;
+        for (LockHolder owner : owners) {
+            maxHeldForTimeMs = Math.max(maxHeldForTimeMs, nowMs - owner.getLockAcquireTimeMs());
+        }
+        MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
+
         // One tier decision per event (the only place the GLOBAL gates are consumed). hasHolder is
         // !owners.isEmpty() and gates only L1 (the owner stack): an empty-owners snapshot still
         // emits an L2 line carrying the waiter queue (the signal when waiters are stuck with no
@@ -429,7 +440,8 @@ public class LockManager {
             return;
         }
         if (decision.isBreadcrumb()) {
-            // Floor tier: leave evidence cheaply — no JSON, no stacks, no held-time metric.
+            // Floor tier: leave evidence cheaply — no JSON, no stacks. (The held-time metric was
+            // already recorded above, independent of the tier.)
             LOG.warn("LockManager detects slow lock (throttled detail): rid={}, owners={}, waiters={}",
                     rid, owners.size(), waiters.size());
             return;
@@ -440,14 +452,11 @@ public class LockManager {
         JsonObject ownerInfo = new JsonObject();
         ownerInfo.addProperty("rid", rid);
 
-        // Track the maximum lock held time among all owners for this slow lock event
-        long maxHeldForTimeMs = 0;
         //owner
         JsonArray ownerArray = new JsonArray();
         for (LockHolder owner : owners) {
             Locker locker = owner.getLocker();
             long heldForTimeMs = nowMs - owner.getLockAcquireTimeMs();
-            maxHeldForTimeMs = Math.max(maxHeldForTimeMs, heldForTimeMs);
 
             JsonObject readerInfo = new JsonObject();
             readerInfo.addProperty("id", owner.getLocker().getThreadId());
@@ -498,7 +507,6 @@ public class LockManager {
         }
         ownerInfo.add("waiter", waiterArray);
 
-        MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
         LOG.warn("LockManager detects slow lock : {}", ownerInfo.toString());
     }
 
