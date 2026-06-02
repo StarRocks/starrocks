@@ -26,6 +26,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
@@ -165,6 +166,9 @@ private:
 
 Status LinkedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     new_rowset_metadata->CopyFrom(rowset->metadata());
+    // Linked SC reuses the source segments, so it inherits the source uid; mint one
+    // only if the source predates the uid feature (set-if-absent).
+    tablet_reshard_helper::ensure_rowset_uid(new_rowset_metadata);
     return Status::OK();
 }
 
@@ -248,6 +252,8 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
+    // Fresh uid: a converted (rewritten) rowset is new data, distinct from its base.
+    tablet_reshard_helper::set_rowset_uid(new_rowset_metadata);
     _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
@@ -339,6 +345,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
+    // Fresh uid: a converted (rewritten) rowset is new data, distinct from its base.
+    tablet_reshard_helper::set_rowset_uid(new_rowset_metadata);
     _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
