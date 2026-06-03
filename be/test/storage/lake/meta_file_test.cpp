@@ -2333,8 +2333,8 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_idg_race) {
     // Input rowset id 210 covers two segments at rssid 210 and 211.
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(210);
-    input_rowset->add_segments("a.dat");
-    input_rowset->add_segments("b.dat");
+    input_rowset->add_segment_metas()->set_filename("a.dat");
+    input_rowset->add_segment_metas()->set_filename("b.dat");
 
     // Racing ADD INDEX landed at version 19 on segment 211, *after* the
     // compaction's compact_version (=18). The checker must report a conflict.
@@ -2347,7 +2347,7 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_idg_race) {
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(210);
     op_compaction.set_compact_version(18);
-    op_compaction.mutable_output_rowset()->add_segments("out.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
 
     EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 999, *metadata, &builder));
 }
