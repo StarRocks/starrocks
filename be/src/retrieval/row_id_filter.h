@@ -15,9 +15,8 @@
 #pragma once
 
 #include <cstdint>
-#include <utility>
-
 #include <roaring/roaring.hh>
+#include <utility>
 
 namespace starrocks {
 
