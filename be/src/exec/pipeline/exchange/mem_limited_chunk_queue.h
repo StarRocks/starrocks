@@ -21,6 +21,7 @@
 #include "base/concurrency/spinlock.h"
 #include "base/phmap/phmap.h"
 #include "compute_env/spill/block_manager.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "serde/encode_context.h"
 

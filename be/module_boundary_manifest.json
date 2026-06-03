@@ -473,7 +473,7 @@
     {
       "id": "execprimitive",
       "doc_label": "ExecPrimitive",
-      "summary": "Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator primitives without broader Exec runtime, scheduler, factory, storage, service, or connector coupling.",
+      "summary": "Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",
       "owned_targets": ["ExecPrimitive"],
       "additional_owned_globs": [
         "be/src/exec/runtime_filter/**",
@@ -492,6 +492,7 @@
         "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
+        "exec/pipeline/operator_factory.h",
         "exec/pipeline/primitives/",
         "exec/pipeline/runtime_filter_hub.h",
         "exec/pipeline/runtime_filter_core_types.h",
@@ -516,7 +517,6 @@
       "forbidden_includes": [
         "exec/data_sink.h",
         "exec/pipeline/fragment_context.h",
-        "exec/pipeline/operator_factory.h",
         "exec/pipeline/pipeline.h",
         "exec/pipeline/pipeline_driver.h",
         "exec/pipeline/pipeline_driver_executor.h",
@@ -527,7 +527,7 @@
       "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_primitive_test"],
       "allowed_test_link_deps": ["ExecPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator primitives; move runtime, scheduler, factory, concrete operators, storage, service, and connector integration upward."
+      "remediation": "Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, storage, service, and connector integration upward."
     },
     {
       "id": "connectorprimitive",

@@ -28,6 +28,8 @@ set(EXEC_PRIMITIVE_FILES
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
     pipeline/operator.cpp
+    pipeline/operator_factory.cpp
+    pipeline/source_operator.cpp
     pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
@@ -171,8 +173,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
     pipeline/query_context_manager.cpp
-    pipeline/operator_factory.cpp
-    pipeline/source_operator.cpp
     pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/pipeline_driver_observer.cpp
