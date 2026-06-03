@@ -285,7 +285,7 @@ public class CreateTableAutoTabletTest {
             Assertions.fail(); // should raise Exception
         } catch (Exception e) {
             Assertions.assertEquals("Getting analyzing error. Detail message: Identifier name '"
-                    + longDbName + "' is too long, the maximum length is 256", e.getMessage());
+                    + longDbName + "' is too long, the maximum length is 256.", e.getMessage());
         }
     }
 
