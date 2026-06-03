@@ -480,10 +480,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             if (is_precondition_block()) {
                 set_driver_state(DriverState::PRECONDITION_BLOCK);
                 COUNTER_UPDATE(_block_by_precondition_counter, 1);
-            } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
+            } else if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
                 set_driver_state(DriverState::OUTPUT_FULL);
                 COUNTER_UPDATE(_block_by_output_full_counter, 1);
-            } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            } else if (!source_operator()->has_output() && !source_operator()->is_finished()) {
                 if (source_operator()->is_mutable()) {
                     set_driver_state(DriverState::LOCAL_WAITING);
                     COUNTER_UPDATE(_yield_by_local_wait_counter, 1);
