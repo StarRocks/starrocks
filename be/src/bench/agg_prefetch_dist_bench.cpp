@@ -77,7 +77,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/runtime_profile.h"
-#include "common/system/cpu_info.h"
 #include "exec/aggregate/agg_hash_map.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
@@ -85,6 +84,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/cpu_info.h"
 
 namespace starrocks {
 
