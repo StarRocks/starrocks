@@ -3807,295 +3807,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
-<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info);
-=======
-        GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info, wal -> {
-            tableProperty.modifyTableProperties(analyzedDynamicPartition);
-            tableProperty.buildDynamicProperty();
-            DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), table);
-        });
-    }
-
-    private void alterPartitionLiveNumber(Database db,
-                                          OlapTable table,
-                                          Map<String, String> properties,
-                                          List<Runnable> appliers) throws DdlException {
-        if (!table.getPartitionInfo().isRangePartition()) {
-            throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
-                    + "no need to set partition live number.");
-        }
-        int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
-        TableProperty tableProperty = table.getTableProperty();
-        appliers.add(() -> {
-            tableProperty.modifyTableProperties(
-                    PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, String.valueOf(partitionLiveNumber));
-            tableProperty.setPartitionTTLNumber(partitionLiveNumber);
-            if (partitionLiveNumber == TableProperty.INVALID) {
-                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
-                        .removeTtlPartitionTable(db.getId(), table.getId());
-            } else {
-                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
-                        .registerTtlPartitionTable(db.getId(), table.getId());
-            }
-        });
-    }
-
-    private void alterLoadInitialOpenPartitionNumber(OlapTable table,
-                                                     Map<String, String> properties,
-                                                     List<Runnable> appliers) {
-        int value = PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
-        TableProperty tableProperty = table.getTableProperty();
-        appliers.add(() -> {
-            tableProperty.modifyTableProperties(
-                    PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(value));
-            tableProperty.buildLoadInitialOpenPartitionNumber();
-        });
-    }
-
-    private void alterStorageMedium(OlapTable table,
-                                    Map<String, String> properties,
-                                    List<Runnable> appliers) throws DdlException {
-        try {
-            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(
-                    properties, DataProperty.getInferredDefaultDataProperty(), false);
-            TStorageMedium storageMedium = dataProperty.getStorageMedium();
-            appliers.add(() -> {
-                table.setStorageMedium(storageMedium);
-                table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
-                        String.valueOf(dataProperty.getCooldownTimeMs()));
-            });
-        } catch (AnalysisException ex) {
-            throw new DdlException(ex.getMessage());
-        }
-    }
-
-    private void alterStorageCooldownTTL(OlapTable table,
-                                       Map<String, String> properties,
-                                       List<Runnable> appliers) throws DdlException {
-        try {
-            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
-            PeriodDuration periodDuration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
-            TableProperty tableProperty = table.getTableProperty();
-            appliers.add(() -> {
-                tableProperty.modifyTableProperties(
-                        PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
-                tableProperty.setStorageCoolDownTTL(periodDuration);
-            });
-        } catch (AnalysisException ex) {
-            throw new DdlException(ex.getMessage());
-        }
-    }
-
-    private void alterDataCachePartitionDuration(OlapTable table,
-                                                 Map<String, String> properties,
-                                                 List<Runnable> appliers) throws DdlException {
-        try {
-            String partitionDuration = properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
-            PeriodDuration periodDuration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
-            TableProperty tableProperty = table.getTableProperty();
-            appliers.add(() -> {
-                tableProperty.modifyTableProperties(
-                        PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
-                tableProperty.setDataCachePartitionDuration(periodDuration);
-            });
-        } catch (AnalysisException ex) {
-            throw new DdlException(ex.getMessage());
-        }
-    }
-
-    private void alterLabelsLocation(OlapTable table,
-                                    Map<String, String> properties,
-                                    List<Runnable> appliers) throws DdlException {
-        if (table.getColocateGroup() != null) {
-            throw new DdlException("Cannot set location for colocate table");
-        }
-        String location = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
-        PropertyAnalyzer.analyzeLocation(properties, true);
-        appliers.add(() -> {
-            table.setLocation(location);
-        });
-    }
-
-    private void alterPartitionTTL(OlapTable table,
-                                   Map<String, String> properties,
-                                   List<Runnable> appliers) throws DdlException {
-        if (!table.getPartitionInfo().isRangePartition()) {
-            throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
-                    + "no need to set partition ttl.");
-        }
-        Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
-        TableProperty tableProperty = table.getTableProperty();
-        appliers.add(() -> {
-            tableProperty.modifyTableProperties(
-                    PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
-            tableProperty.setPartitionTTL(ttlDuration.second);
-        });
-    }
-
-    private void alterPartitionRetentionCondition(Database db,
-                                                  OlapTable table,
-                                                  Map<String, String> properties,
-                                                  List<Runnable> appliers) throws DdlException {
-        if (!table.getPartitionInfo().isPartitioned()) {
-            throw new DdlException("Table[" + table.getName() + "] is not partitioned. "
-                    + "no need to set partition retention condition.");
-        }
-        String ttlRetentionCondition = PropertyAnalyzer
-                .analyzePartitionRetentionCondition(db, table, properties, true, null);
-        TableProperty tableProperty = table.getTableProperty();
-        appliers.add(() -> {
-            tableProperty.modifyTableProperties(
-                    PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
-            tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
-            // register or remove ttl partition table
-            if (Strings.isNullOrEmpty(ttlRetentionCondition)) {
-                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
-                        table.getId());
-            } else {
-                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
-                        table.getId());
-            }
-        });
-    }
-
-    private void alterTimeDriftConstraint(OlapTable table,
-                                        Map<String, String> properties,
-                                        List<Runnable> appliers) {
-        String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
-        PropertyAnalyzer.analyzeTimeDriftConstraint(spec, table, properties);
-        TableProperty tableProperty = table.getTableProperty();
-        appliers.add(() -> {
-            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
-            tableProperty.setTimeDriftConstraintSpec(spec);
-        });
-    }
-
-    private void alterEnableStatisticCollectOnFirstLoad(OlapTable table,
-                                                        Map<String, String> properties,
-                                                        List<Runnable> appliers) {
-        boolean enable = PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
-        properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD);
-        appliers.add(() -> {
-            table.setEnableStatisticCollectOnFirstLoad(enable);
-        });
-    }
-
-    private void alterCloudNativeFastSchemaEvolutionV2(OlapTable table,
-                                                       Map<String, String> properties,
-                                                       List<Runnable> appliers) {
-        boolean value = PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, true);
-        appliers.add(() -> {
-            ((LakeTable) table).setFastSchemaEvolutionV2(value);
-        });
-    }
-
-    private void alterLakeCompactionMaxParallel(OlapTable table,
-                                                Map<String, String> properties,
-                                                List<Runnable> appliers) throws DdlException {
-        if (!table.isCloudNativeTableOrMaterializedView()) {
-            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL +
-                    " can only be set for cloud native tables");
-        }
-        String value = properties.remove(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
-        try {
-            int maxParallel = Integer.parseInt(value);
-            if (maxParallel < 0) {
-                throw new DdlException("Invalid lake_compaction_max_parallel value: " + value +
-                        ". Value must be non-negative.");
-            }
-            appliers.add(() -> {
-                table.setLakeCompactionMaxParallel(maxParallel);
-            });
-        } catch (NumberFormatException e) {
-            throw new DdlException("Invalid lake_compaction_max_parallel value: " + value +
-                    ". Value must be an integer.");
-        }
-    }
-
-    private void alterLightWeightTabletCreation(OlapTable table,
-                                                Map<String, String> properties,
-                                                List<Runnable> appliers) throws DdlException {
-        if (!table.isCloudNativeTable()) {
-            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
-                    " can only be set for cloud native tables");
-        }
-        // Strict validation: AlterTableClauseAnalyzer matches at most one branch in its
-        // else-if chain, so if light_weight_tablet_creation comes after another recognized
-        // property in a multi-property ALTER, its analyzer branch is skipped. Validate
-        // here as well to ensure invalid values are always rejected.
-        String value = properties.remove(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION);
-        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
-            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
-                    " must be bool type(false/true)");
-        }
-        boolean newValue = Boolean.parseBoolean(value);
-        appliers.add(() -> table.setLightWeightTabletCreation(newValue));
-    }
-
-    private void alterTableQueryTimeout(OlapTable table,
-                                       Map<String, String> properties,
-                                       List<Runnable> appliers) throws DdlException {
-        try {
-            int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
-            appliers.add(() -> table.setTableQueryTimeout(tableQueryTimeout));
-        } catch (AnalysisException ex) {
-            throw new DdlException(ex.getMessage());
-        }
-    }
-
-    private void alterDataCacheEnable(Database db, OlapTable table,
-                                      Map<String, String> properties,
-                                      List<Runnable> appliers) throws DdlException {
-        // We need hold lock to prevent concurrent partition additions/drops while we iterate over the partition list
-        // and update DataCacheInfo.
-        // However since the caller in AlterJobExecutor have already locked the database, we don't need to lock again here.
-        boolean isEnable;
-        try {
-            isEnable = PropertyAnalyzer.analyzeDataCacheEnable(properties);
-        } catch (AnalysisException ex) {
-            throw new DdlException(ex.getMessage());
-        }
-
-        if (!table.isCloudNativeTableOrMaterializedView()) {
-            throw new DdlException("Property 'datacache.enable' is only supported for cloud native tables");
-        }
-
-        // Collect partitions that need shard group update
-        PartitionInfo partitionInfo = table.getPartitionInfo();
-        Collection<Partition> partitions = table.getPartitions();
-        List<Partition> partitionsToUpdateShardGroup = new ArrayList<>();
-
-        for (Partition partition : partitions) {
-            DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
-            if (dataCacheInfo == null || isEnable != dataCacheInfo.isEnabled()) {
-                partitionsToUpdateShardGroup.add(partition);
-            }
-        }
-
-        // Call StarOS to update shard groups BEFORE persisting
-        if (!partitionsToUpdateShardGroup.isEmpty()) {
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .updateShardGroup(partitionsToUpdateShardGroup, isEnable);
-        }
-
-        // Add applier for table property + partition DataCacheInfo updates.
-        // Note: We do NOT write a separate OP_BATCH_MODIFY_PARTITION log here.
-        // The partition-level DataCacheInfo is derived from the table property during
-        // replay of OP_ALTER_TABLE_PROPERTIES (see replayModifyTableProperty), ensuring
-        // atomicity — a single edit log entry covers both table and partition state.
-        appliers.add(() -> {
-            // Update table property
-            table.setDataCacheEnable(isEnable);
-
-            // Update partition DataCacheInfo in memory
-            for (Partition partition : partitions) {
-                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
-                boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
-                partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(isEnable, asyncWriteBack));
-            }
-        });
->>>>>>> 971916516f ([Enhancement] Open all partitions for LIST tables in OlapTableSink (#74099))
     }
 
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
@@ -4211,8 +3923,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+                int loadInitialOpenPartitionNumber = (int) results.get(key);
+                table.setLoadInitialOpenPartitionNumber(loadInitialOpenPartitionNumber);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
-<<<<<<< HEAD
     }
 
     private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties,
@@ -4225,13 +3943,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
-=======
-        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
-            alterLoadInitialOpenPartitionNumber(table, properties, appliers);
-        }
-        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            alterStorageMedium(table, properties,  appliers);
->>>>>>> 971916516f ([Enhancement] Open all partitions for LIST tables in OlapTableSink (#74099))
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             if (!table.getPartitionInfo().isRangePartition()) {
@@ -4311,6 +4022,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             } catch (AnalysisException ex) {
                 throw new DdlException(ex.getMessage());
             }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            int loadInitialOpenPartitionNumber =
+                    PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
+            results.put(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, loadInitialOpenPartitionNumber);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

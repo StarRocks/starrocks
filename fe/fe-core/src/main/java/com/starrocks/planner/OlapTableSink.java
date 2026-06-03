@@ -68,11 +68,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
->>>>>>> 971916516f ([Enhancement] Open all partitions for LIST tables in OlapTableSink (#74099))
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
