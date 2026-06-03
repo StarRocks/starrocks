@@ -314,6 +314,7 @@ jobs:
       PRE_COMMIT_CONCLUSION: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
       ONLY_TEST: ${{ needs.be-checker.outputs.only_test }}
       BE_CHANGE: ${{ needs.be-checker.outputs.be_change }}
+      DOCKER_API_VERSION: "1.41"
 
     steps:
       - name: clean

@@ -190,7 +190,7 @@ let
       sha256 = "1apyxjd1ixy4g8xkr61p0ny8jiz8vyv1j0k4nxqkxpqrf4g2vf1d";
     };
     "krb5-1.19.4.tar.gz" = {
-      url = "https://kerberos.org/dist/krb5/1.19/krb5-1.19.4.tar.gz";
+      url = "https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz";
       md5 = "ef76083e58f8c49066180642d7c2814a";
       sha256 = "1sslkcbzg4dc98957lhzchwkfnyd2shpkrip75ms5q2db8f9ixa1";
     };
