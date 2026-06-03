@@ -16,11 +16,15 @@ package com.starrocks.qe;
 
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
@@ -33,6 +37,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -111,7 +117,7 @@ public class LeaderOpExecutorTest {
         }
     }
 
-    private static void mockFrontendService(MockFrontendServiceClient client) {
+    private static void mockFrontendService(FrontendService.Client client) {
         ThriftConnectionPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
             @Override
             public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) {
@@ -155,5 +161,75 @@ public class LeaderOpExecutorTest {
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
         Assertions.assertEquals(catalog, request.getCatalog());
         Assertions.assertEquals(database, request.getDb());
+    }
+
+    @Test
+    public void testForwardReturnsLeaderResultWhenFollowerReplayTimeout(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        int oldThriftTimeoutMs = Config.thrift_rpc_timeout_ms;
+        try {
+            Config.thrift_rpc_timeout_ms = 100;
+
+            ConnectContext context = new ConnectContext();
+            SessionVariable sessionVariable = new SessionVariable();
+            sessionVariable.setQueryTimeoutS(60);
+            sessionVariable.setWarehouseName("default_warehouse");
+            Deencapsulation.setField(context, "sessionVariable", sessionVariable);
+            context.setGlobalStateMgr(globalStateMgr);
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(UserIdentity.ROOT);
+            context.setQualifiedUser(UserIdentity.ROOT.getUser());
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setThreadLocalInfo();
+
+            TMasterOpResult leaderResult = new TMasterOpResult();
+            leaderResult.setState(MysqlStateType.OK.name());
+            leaderResult.setMaxJournalId(100L);
+
+            new Expectations() {
+                {
+                    globalStateMgr.isLeader();
+                    result = false;
+                    minTimes = 0;
+
+                    globalStateMgr.getJournalObservable();
+                    result = journalObservable;
+                    minTimes = 0;
+
+                    journalObservable.waitOn(100L, Config.thrift_rpc_timeout_ms);
+                    result = new DdlException("mock replay timeout");
+                }
+            };
+
+            mockFrontendService(new StaticResultFrontendServiceClient(leaderResult));
+
+            LeaderOpExecutor executor = new LeaderOpExecutor(
+                    Pair.create("127.0.0.1", 9010),
+                    null,
+                    new OriginStatement("create database replay_timeout_db"),
+                    context,
+                    RedirectStatus.FORWARD_WITH_SYNC,
+                    false);
+
+            Assertions.assertDoesNotThrow(executor::execute);
+            Assertions.assertEquals(MysqlStateType.OK, context.getState().getStateType());
+        } finally {
+            Config.thrift_rpc_timeout_ms = oldThriftTimeoutMs;
+        }
+    }
+
+    private static class StaticResultFrontendServiceClient extends FrontendService.Client {
+        private final TMasterOpResult result;
+
+        private StaticResultFrontendServiceClient(TMasterOpResult result) {
+            super(null);
+            this.result = result;
+        }
+
+        @Override
+        public TMasterOpResult forward(TMasterOpRequest params) {
+            return result;
+        }
     }
 }

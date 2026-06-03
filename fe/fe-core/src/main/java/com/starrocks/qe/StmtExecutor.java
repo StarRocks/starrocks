@@ -518,21 +518,35 @@ public class StmtExecutor {
         // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
         if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
             long lastPrintTime = -1L;
-            while (true) {
+            long timeoutMs = Math.max(1L, Config.thrift_rpc_timeout_ms);
+            long deadlineMs = System.currentTimeMillis() + timeoutMs;
+            while (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
                 try {
-                    Thread.sleep(1);
-                } catch (InterruptedException ignored) {
+                    Thread.sleep(Math.min(20L, Math.max(1L, deadlineMs - System.currentTimeMillis())));
+                } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    throw new StarRocksPlannerException("interrupted while waiting current FE node transferring to LEADER state",
+                            ErrorType.INTERNAL_ERROR);
                 }
 
-                if (System.currentTimeMillis() - lastPrintTime > 1000L) {
-                    lastPrintTime = System.currentTimeMillis();
+                long now = System.currentTimeMillis();
+                if (now - lastPrintTime > 1000L) {
+                    lastPrintTime = now;
                     LOG.info("waiting for current FE node transferring to LEADER state");
                 }
 
                 if (GlobalStateMgr.getCurrentState().isLeader()) {
                     return false;
                 }
+                if (now >= deadlineMs) {
+                    throw new StarRocksPlannerException(
+                            "timed out after " + timeoutMs
+                                    + " ms waiting current FE node transferring to LEADER state",
+                            ErrorType.INTERNAL_ERROR);
+                }
+            }
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
+                return false;
             }
         }
 
@@ -3629,9 +3643,15 @@ public class StmtExecutor {
 
                 txnStatus = TransactionStatus.COMMITTED;
                 final long waitInterval = 300;
+                boolean stopPublishWaitForLeaderTransfer = false;
                 while (publishWaitMs > 0) {
+                    if (shouldStopPublishWaitAfterCommit()) {
+                        stopPublishWaitForLeaderTransfer = true;
+                        break;
+                    }
 
-                    if (visibleWaiter.await(Math.min(publishWaitMs, waitInterval), TimeUnit.MILLISECONDS)) {
+                    long currentWaitMs = Math.min(publishWaitMs, waitInterval);
+                    if (visibleWaiter.await(currentWaitMs, TimeUnit.MILLISECONDS)) {
                         txnStatus = TransactionStatus.VISIBLE;
                         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                         // collect table-level metrics
@@ -3642,8 +3662,15 @@ public class StmtExecutor {
                         entity.counterInsertLoadBytesTotal.increase(loadedBytes);
                         break;
                     } else {
-                        publishWaitMs -= Math.min(publishWaitMs, waitInterval);
+                        publishWaitMs -= currentWaitMs;
                     }
+                }
+                if (stopPublishWaitForLeaderTransfer) {
+                    LOG.warn("txn {} committed, but stop waiting for publish because this FE is leaving leader role. "
+                            + "feType={}, admissionOpen={}, demoting={}",
+                            transactionId, context.getGlobalStateMgr().getFeType(),
+                            context.getGlobalStateMgr().isLeaderWorkAdmissionOpen(),
+                            context.getGlobalStateMgr().isLeaderDemoting());
                 }
             }
         } catch (Throwable t) {
@@ -3729,12 +3756,16 @@ public class StmtExecutor {
 
         String errMsg = "";
         if (txnStatus.equals(TransactionStatus.COMMITTED)) {
-            String timeoutInfo = transactionMgr.getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
-            LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 240) {
-                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
+            if (shouldStopPublishWaitAfterCommit()) {
+                errMsg = "Publish pending because leader transfer started after transaction commit";
+            } else {
+                String timeoutInfo = transactionMgr.getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
+                LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
+                if (timeoutInfo.length() > 240) {
+                    timeoutInfo = timeoutInfo.substring(0, 240) + "...";
+                }
+                errMsg = "Publish timeout " + timeoutInfo;
             }
-            errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
             if (jobId != -1) {
@@ -3760,6 +3791,14 @@ public class StmtExecutor {
 
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    private boolean shouldStopPublishWaitAfterCommit() {
+        if (context == null || context.getGlobalStateMgr() == null) {
+            return false;
+        }
+        GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
+        return globalStateMgr.shouldStopPublishWaitAfterCommit();
     }
 
     private void recordExternalSinkFailure(Table targetTable, DmlType dmlType, Throwable t) {

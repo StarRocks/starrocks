@@ -1423,20 +1423,31 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     private void replayTxnAttachment(TransactionState txnState) {
-        if (txnState.getTxnCommitAttachment() == null) {
+        TxnCommitAttachment txnCommitAttachment = txnState.getTxnCommitAttachment();
+        if (txnCommitAttachment == null) {
             return;
         }
-        StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnState.getTxnCommitAttachment();
-        this.trackingUrl = attachment.getTrackingURL();
-        this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
-        this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
-        this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
-        this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
-        this.endTimeMs = attachment.getEndTimeMs();
-        this.numRowsNormal = attachment.getNumRowsNormal();
-        this.numRowsAbnormal = attachment.getNumRowsAbnormal();
-        this.numRowsUnselected = attachment.getNumRowsUnselected();
-        this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+        if (txnCommitAttachment instanceof StreamLoadTxnCommitAttachment) {
+            StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnCommitAttachment;
+            this.trackingUrl = attachment.getTrackingURL();
+            this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
+            this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
+            this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
+            this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
+            this.endTimeMs = attachment.getEndTimeMs();
+            this.numRowsNormal = attachment.getNumRowsNormal();
+            this.numRowsAbnormal = attachment.getNumRowsAbnormal();
+            this.numRowsUnselected = attachment.getNumRowsUnselected();
+            this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+            return;
+        }
+        if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
+                || txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
+            setLoadState(txnCommitAttachment, txnState.getReason());
+            return;
+        }
+        LOG.warn("ignore unsupported txn commit attachment {} while replaying stream load task {}",
+                txnCommitAttachment.getClass().getName(), label);
     }
 
     public OlapTable getTable() throws MetaNotFoundException {

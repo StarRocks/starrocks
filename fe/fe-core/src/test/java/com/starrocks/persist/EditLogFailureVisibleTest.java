@@ -22,6 +22,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.server.GlobalStateMgr;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -37,6 +39,14 @@ public class EditLogFailureVisibleTest {
     @BeforeEach
     public void setUp() throws Exception {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        setLeaderRoleState("ACTIVE");
+        setLeaderWorkAdmissionOpen(false);
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        setLeaderRoleState("ACTIVE");
         setLeaderWorkAdmissionOpen(false);
     }
 
@@ -126,6 +136,32 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
+    public void testWaitInfinityStopsWhenJournalTaskAbortedDuringLeaderDemotion() throws Exception {
+        JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
+        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
+                "journal commit failed while sealing"));
+        setLeaderRoleState("DEMOTING");
+
+        CountDownLatch finished = new CountDownLatch(1);
+        AtomicBoolean failedWithAbort = new AtomicBoolean(false);
+        Thread waiter = new Thread(() -> {
+            try {
+                EditLog.waitInfinity(task);
+            } catch (IllegalStateException e) {
+                failedWithAbort.set(e.getCause() instanceof JournalWriteException);
+            } finally {
+                finished.countDown();
+            }
+        });
+        waiter.setDaemon(true);
+        waiter.start();
+
+        Assertions.assertTrue(finished.await(1, TimeUnit.SECONDS),
+                "waitInfinity should stop after a demotion-time journal abort");
+        Assertions.assertTrue(failedWithAbort.get());
+    }
+
+    @Test
     public void testLogJsonObjectLegacyCompletesSuccessfully() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(queue);
@@ -146,6 +182,22 @@ public class EditLogFailureVisibleTest {
         consumer.join();
 
         Assertions.assertTrue(applied.get());
+    }
+
+    @Test
+    public void testLogJsonObjectLegacyWalApplierClosesApplyFenceOnAbort() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        AtomicBoolean applied = new AtomicBoolean(false);
+
+        Thread consumer = abortQueuedTaskAsync(queue);
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                () -> editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true)));
+        consumer.join();
+
+        Assertions.assertInstanceOf(JournalWriteException.class, exception.getCause());
+        Assertions.assertEquals(0, getLeaderWalApplyInFlight());
+        Assertions.assertFalse(applied.get());
     }
 
     @Test
@@ -188,6 +240,22 @@ public class EditLogFailureVisibleTest {
         Assertions.assertFalse(applied.get());
     }
 
+    private Thread abortQueuedTaskAsync(BlockingQueue<JournalTask> queue) {
+        Thread consumer = new Thread(() -> {
+            try {
+                JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+                if (task != null) {
+                    task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
+                            "journal writer closed"));
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        consumer.start();
+        return consumer;
+    }
+
     private Thread succeedQueuedTaskAsync(BlockingQueue<JournalTask> queue) {
         Thread consumer = new Thread(() -> {
             try {
@@ -207,6 +275,20 @@ public class EditLogFailureVisibleTest {
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, "x".repeat(size - 4));
         return buffer;
+    }
+
+    private int getLeaderWalApplyInFlight() throws Exception {
+        Field field = GlobalStateMgr.class.getDeclaredField("leaderWalApplyInFlight");
+        field.setAccessible(true);
+        return (int) field.get(GlobalStateMgr.getCurrentState());
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void setLeaderRoleState(String stateName) throws Exception {
+        Field field = GlobalStateMgr.class.getDeclaredField("leaderRoleState");
+        field.setAccessible(true);
+        Class<? extends Enum> stateClass = (Class<? extends Enum>) field.getType().asSubclass(Enum.class);
+        field.set(GlobalStateMgr.getCurrentState(), Enum.valueOf(stateClass, stateName));
     }
 
     private void setLeaderWorkAdmissionOpen(boolean open) throws Exception {

@@ -139,8 +139,8 @@ public class CheckpointController extends LeaderDaemon {
      * pushImage, deleteOldJournals) are idempotent at the system level - worker FE
      * keeps writing the image regardless of this leader's lifecycle, and the next
      * leader will re-orchestrate pushImage / deleteOldJournals from scratch. So we
-     * only have to release leader-session bookkeeping and ask MetaHelper to break
-     * out of any in-flight HTTP, then let the daemon thread exit.
+     * only have to wake the current checkpoint wait, release leader-session bookkeeping,
+     * and ask MetaHelper to break out of any in-flight HTTP, then let the daemon thread exit.
      *
      * Today {@link MetaHelper#cancelInFlight()} is a no-op (see TODO there), so a
      * push/download stuck in HttpURLConnection.read will block this drain up to its
@@ -149,8 +149,16 @@ public class CheckpointController extends LeaderDaemon {
      * "pending push" / "last-failed-worker" state.
      */
     @Override
-    protected void onStopped() {
+    protected void onStopRequested() {
+        BlockingQueue<CheckpointCompletionStatus> currentResult = result;
+        if (currentResult != null) {
+            currentResult.offer(new CheckpointCompletionStatus(false, "leader checkpoint controller is stopping", null));
+        }
         MetaHelper.cancelInFlight();
+    }
+
+    @Override
+    protected void onStopped() {
         // Leader-session bookkeeping: nodesToPushImage tracks pending pushes from the
         // last createImage round; lastFailedTime drives worker-selection ordering for
         // the next round. Both must reset so a re-elected leader does not inherit
@@ -196,6 +204,9 @@ public class CheckpointController extends LeaderDaemon {
             // Push the image file to all other nodes
             // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
             for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
+                if (isStopped()) {
+                    return createImageRet;
+                }
                 // do not push to the worker node
                 if (!frontend.getNodeName().equals(createImageRet.second)) {
                     nodesToPushImage.add(frontend.getNodeName());
@@ -210,6 +221,9 @@ public class CheckpointController extends LeaderDaemon {
         int needToPushCnt = nodesToPushImage.size();
         long newImageVersion = createImageRet.first ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
+            if (isStopped()) {
+                return createImageRet;
+            }
             pushImage(newImageVersion);
         }
 
@@ -220,6 +234,9 @@ public class CheckpointController extends LeaderDaemon {
         //                we must make sure all the other nodes have got the new image and then delete old journals.
         if ((createImageRet.first && needToPushCnt == 0)
                 || (needToPushCnt > 0 && nodesToPushImage.isEmpty())) {
+            if (isStopped()) {
+                return createImageRet;
+            }
             deleteOldJournals(newImageVersion);
         }
 
@@ -249,8 +266,14 @@ public class CheckpointController extends LeaderDaemon {
             long startNs = System.nanoTime();
             CheckpointCompletionStatus ret = null;
             while (ret == null
+                    && !isStopped()
                     && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
                 ret = result.poll(1, TimeUnit.SECONDS);
+            }
+            if (isStopped()) {
+                LOG.info("stop waiting checkpoint on node: {} because leader checkpoint controller is stopping",
+                        workerNodeName);
+                return Pair.create(false, workerNodeName);
             }
             if (ret == null) {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
@@ -360,6 +383,9 @@ public class CheckpointController extends LeaderDaemon {
     }
 
     private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
+        if (isStopped()) {
+            return false;
+        }
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
@@ -426,6 +452,9 @@ public class CheckpointController extends LeaderDaemon {
         int needToPushCnt = nodesToPushImage.size();
         int successPushedCnt = 0;
         while (iterator.hasNext()) {
+            if (isStopped()) {
+                break;
+            }
             String nodeName = iterator.next();
 
             Frontend frontend = GlobalStateMgr.getServingState().getNodeMgr().getFeByName(nodeName);

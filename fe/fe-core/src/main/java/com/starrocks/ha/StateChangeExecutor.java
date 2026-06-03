@@ -61,6 +61,9 @@ public class StateChangeExecutor extends Daemon {
             String msg = "notify new FE type transfer: " + newType;
             LOG.warn(msg);
             Util.stdoutWithTime(msg);
+            for (StateChangeExecution execution : executions) {
+                execution.notifyNewFETypeTransfer(newType);
+            }
             typeTransferQueue.put(newType);
         } catch (InterruptedException e) {
             LOG.error("failed to put new FE type: {}, {}.", newType, e);
@@ -166,11 +169,24 @@ public class StateChangeExecutor extends Daemon {
                     break;
                 }
                 case LEADER: {
-                    // exit if leader changed to any other type
-                    String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
-                    LOG.error(msg);
-                    Util.stdoutWithTime(msg);
-                    System.exit(-1);
+                    switch (newType) {
+                        case FOLLOWER:
+                        case OBSERVER:
+                        case UNKNOWN: {
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToNonLeader(newType);
+                            }
+                            break;
+                        }
+                        default: {
+                            String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
+                            LOG.error(msg);
+                            Util.stdoutWithTime(msg);
+                            System.exit(-1);
+                            break;
+                        }
+                    }
+                    break;
                 }
                 default:
                     break;

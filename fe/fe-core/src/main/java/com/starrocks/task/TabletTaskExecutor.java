@@ -531,6 +531,14 @@ public class TabletTaskExecutor {
                     }
                 }
 
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                if (globalStateMgr.isLeaderDemoting() || !globalStateMgr.isLeaderWorkAdmissionOpen()) {
+                    String errMsg = "Create tablet cancelled because leader work admission is closed";
+                    LOG.warn(errMsg);
+                    countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, errMsg));
+                    throw new DdlException(errMsg);
+                }
+
                 timeLeft -= waitInterval;
             }
             // timed out

@@ -1374,22 +1374,33 @@ public class EditLog {
     }
 
     private void logEdit(short op, Writable writable, WALApplier walApplier) {
-        JournalTask task = submitLog(op, writable, -1);
-        waitInfinity(task);
-        walApplier.apply(writable);
+        GlobalStateMgr.LeaderWalApplyRegistration<JournalTask> registration =
+                submitLogForWalApply(op, writable, -1);
+        try (GlobalStateMgr.LeaderWalApplyScope scope = registration.getScope()) {
+            waitWalCommitOrThrowUnchecked(registration.getResult());
+            applyWithWalFence(scope, walApplier, writable);
+        }
     }
 
     public void logJsonObjectOrThrow(short op, Object obj, WALApplier applier)
             throws JournalWriteException, InterruptedException {
-        JournalTask task = submitLogOrThrow(op, new Writable() {
+        Writable writable = new Writable() {
             @Override
             public void write(DataOutput out) throws IOException {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
-        }, -1);
-        waitOrThrow(task, -1);
-        if (applier != null) {
-            applier.apply(obj);
+        };
+        if (applier == null) {
+            JournalTask task = submitLogOrThrow(op, writable, -1);
+            waitOrThrow(task, -1);
+            return;
+        }
+        GlobalStateMgr.LeaderWalApplyRegistration<JournalTask> registration =
+                GlobalStateMgr.getCurrentState().runWithLeaderWalApplyAdmissionOrThrow(
+                        op, () -> submitLogOrThrowAfterAdmission(op, writable, -1));
+        try (GlobalStateMgr.LeaderWalApplyScope scope = registration.getScope()) {
+            waitOrThrow(registration.getResult(), -1);
+            applyWithWalFence(scope, applier, obj);
         }
     }
 
@@ -1406,27 +1417,74 @@ public class EditLog {
      * Apply the in-memory change in WALApplier.
      */
     public void logJsonObject(short op, Object obj, WALApplier applier) {
-        logEdit(op, new Writable() {
+        Writable writable = new Writable() {
             @Override
             public void write(DataOutput out) throws IOException {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
-        });
-        applier.apply(obj);
+        };
+        GlobalStateMgr.LeaderWalApplyRegistration<JournalTask> registration =
+                submitLogForWalApply(op, writable, -1);
+        try (GlobalStateMgr.LeaderWalApplyScope scope = registration.getScope()) {
+            waitWalCommitOrThrowUnchecked(registration.getResult());
+            applyWithWalFence(scope, applier, obj);
+        }
+    }
+
+    private static void waitWalCommitOrThrowUnchecked(JournalTask task) {
+        try {
+            waitOrThrow(task, -1);
+        } catch (JournalWriteException e) {
+            throw new IllegalStateException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while waiting for journal task", e);
+        }
     }
 
     /**
      * submit log in queue and return immediately
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        try {
+            return GlobalStateMgr.getCurrentState().runWithLeaderJournalAdmission(
+                    op, () -> submitLogAfterAdmission(op, writable, maxWaitIntervalMs));
+        } catch (JournalWriteException e) {
+            throw new IllegalStateException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while submitting journal task", e);
+        }
+    }
+
+    private GlobalStateMgr.LeaderWalApplyRegistration<JournalTask> submitLogForWalApply(
+            short op, Writable writable, long maxWaitIntervalMs) {
+        try {
+            return GlobalStateMgr.getCurrentState().runWithLeaderWalApplyAdmission(
+                    op, () -> submitLogAfterAdmission(op, writable, maxWaitIntervalMs));
+        } catch (JournalWriteException e) {
+            throw new IllegalStateException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while submitting journal task", e);
+        }
+    }
+
+    private void applyWithWalFence(GlobalStateMgr.LeaderWalApplyScope scope, WALApplier applier, Object obj) {
+        try {
+            applier.apply(obj);
+        } catch (Throwable t) {
+            scope.recordApplyFailure(t);
+            throw t;
+        }
+    }
+
+    private JournalTask submitLogAfterAdmission(short op, Writable writable, long maxWaitIntervalMs) {
         long startTimeNano = System.nanoTime();
 
         // do not check whether global state mgr is leader when writing star mgr journal,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
-        Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, but " +
-                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1465,7 +1523,12 @@ public class EditLog {
 
     public JournalTask submitLogOrThrow(short op, Writable writable, long maxWaitIntervalMs)
             throws JournalWriteException, InterruptedException {
-        ensureLeaderWorkAdmission(op);
+        return GlobalStateMgr.getCurrentState().runWithLeaderJournalAdmissionOrThrow(
+                op, () -> submitLogOrThrowAfterAdmission(op, writable, maxWaitIntervalMs));
+    }
+
+    private JournalTask submitLogOrThrowAfterAdmission(short op, Writable writable, long maxWaitIntervalMs)
+            throws InterruptedException {
         long startTimeNano = System.nanoTime();
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
@@ -1499,7 +1562,19 @@ public class EditLog {
                 // scenario JournalWriter will simply exit the whole process
                 result = task.get();
                 break;
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (InterruptedException e) {
+                if (shouldAbortWaitInfinity(e)) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(
+                            "interrupted while waiting for journal task during leader demotion", e);
+                }
+                LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
+                cnt++;
+            } catch (ExecutionException e) {
+                if (shouldAbortWaitInfinity(e)) {
+                    throw new IllegalStateException(
+                            "journal task failed while leader is demoting", getJournalWaitFailureCause(e));
+                }
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
@@ -1510,6 +1585,20 @@ public class EditLog {
         if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
+    }
+
+    private static boolean shouldAbortWaitInfinity(Throwable throwable) {
+        if (!GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
+            return false;
+        }
+        return throwable instanceof InterruptedException || throwable instanceof ExecutionException;
+    }
+
+    private static Throwable getJournalWaitFailureCause(Throwable throwable) {
+        if (throwable instanceof ExecutionException && throwable.getCause() != null) {
+            return throwable.getCause();
+        }
+        return throwable;
     }
 
     public static void waitOrThrow(JournalTask task, long timeoutMs) throws JournalWriteException, InterruptedException {

@@ -1140,6 +1140,31 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+    public void testPublishWaitStopsAfterCommitWhenLeaderDemotes()
+            throws Exception {
+        Database db = new Database(10, "db0");
+        GlobalStateMgr globalStateMgr = spy(GlobalStateMgrTestUtil.createTestState());
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(globalStateMgr));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, globalStateMgr));
+        TransactionState transactionState = spy(new TransactionState());
+
+        doReturn(true).when(globalStateMgr).isLeader();
+        doReturn(false).when(globalStateMgr).isLeaderWorkAdmissionOpen();
+        doReturn(false).when(globalStateMgr).isLeaderDemoting();
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
+        doReturn(new VisibleStateWaiter(new TransactionState()))
+                .when(dbTransactionMgr)
+                .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
+
+        long startMs = System.currentTimeMillis();
+        Assertions.assertFalse(globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+                Collections.emptyList(), Collections.emptyList(), 1500, null));
+        long elapsedMs = System.currentTimeMillis() - startMs;
+        Assertions.assertTrue(elapsedMs < 1000, "publish wait should stop quickly after leader demotion");
+    }
+
+    @Test
     public void testRetryCommitOnRateLimitExceededThrowUnexpectedException()
             throws StarRocksException {
         Database db = new Database(10, "db0");
@@ -1152,6 +1177,20 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assertions.assertThrows(StarRocksException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
+    }
+
+    @Test
+    public void testRetryCommitMissingTransactionDoesNotThrowNpe()
+            throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+
+        doReturn(null).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+                        Collections.emptyList(), Collections.emptyList(), 10, null));
+        Assertions.assertTrue(exception.getMessage().contains("transaction not found: 1001"));
+        Assertions.assertFalse(exception.getMessage().contains("Cannot invoke"));
     }
 
     @Test

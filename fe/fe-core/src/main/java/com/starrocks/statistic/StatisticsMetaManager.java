@@ -454,16 +454,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-    /**
-     * Sleep for {@code millis} ms. Re-throws {@link InterruptedException} so the caller can stop
-     * the current leader-session cycle promptly. Callers running inside {@link #runAfterLeaseValid}
-     * must propagate the exception (or otherwise return) instead of swallowing it, so that
-     * {@link LeaderDaemon#stopGracefully(long)} can drain the worker on demotion. The interrupt
-     * flag is intentionally cleared by {@link Thread#sleep}; we let the exception itself signal
-     * stop.
-     */
     private void trySleep(long millis) throws InterruptedException {
-        Thread.sleep(millis);
+        long deadline = System.currentTimeMillis() + millis;
+        while (!isStopped()) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return;
+            }
+            Thread.sleep(Math.min(remaining, 100L));
+        }
     }
 
     private boolean createTable(String tableName) {

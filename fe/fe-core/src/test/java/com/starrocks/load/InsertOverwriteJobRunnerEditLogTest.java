@@ -28,6 +28,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.OperationType;
@@ -178,6 +179,34 @@ public class InsertOverwriteJobRunnerEditLogTest {
             Assertions.assertNotNull(sourcePartition);
             Assertions.assertEquals(sourcePartitionId, sourcePartition.getId());
             Assertions.assertTrue(table.existTempPartitions());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testDoCommitEditLogExceptionPreservesJournalFailureMessage() {
+        InsertOverwriteJob job = new InsertOverwriteJob(2007L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(new EditLog(null));
+        JournalWriteException journalException = new JournalWriteException(
+                JournalWriteException.Reason.ADMISSION_CLOSED,
+                "leader is demoting, submit log is not allowed");
+        doThrow(new IllegalStateException(journalException))
+                .when(spyEditLog).logInsertOverwriteStateChange(any(InsertOverwriteStateChangeInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+            DmlException exception = Assertions.assertThrows(DmlException.class, runner::doCommit);
+            Assertions.assertTrue(exception.getMessage().contains("replace partitions failed"));
+            Assertions.assertTrue(exception.getMessage().contains("leader is demoting"),
+                    "error msg must expose journal failure reason, got: " + exception.getMessage());
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }

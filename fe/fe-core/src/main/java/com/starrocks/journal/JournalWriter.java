@@ -113,6 +113,7 @@ public class JournalWriter {
     private final AtomicReference<WriterState> writerState = new AtomicReference<>(WriterState.RUNNING);
     private volatile DrainResult latestDrainResult;
     private volatile JournalTask activeDrainBarrierTask;
+    private volatile Daemon daemon;
 
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
@@ -134,21 +135,78 @@ public class JournalWriter {
     public void startDaemon() {
         // ensure init() is called.
         assert (nextVisibleJournalId > 0);
+        Daemon previous = daemon;
+        if (previous != null && previous.isAlive()) {
+            String msg = "previous JournalWriter daemon is still alive on restart, will exit now.";
+            LOG.error(msg);
+            Util.stdoutWithTime(msg);
+            System.exit(-1);
+        }
         Daemon d = new Daemon("JournalWriter", 0L) {
             @Override
             protected void runOneCycle() {
                 try {
                     writeOneBatch();
+                } catch (InterruptedException e) {
+                    if (writerState.get() == WriterState.RUNNING) {
+                        String msg = "journal writer interrupted while running, will exit now.";
+                        LOG.error(msg, e);
+                        Util.stdoutWithTime(msg);
+                        System.exit(-1);
+                    }
+                    LOG.info("journal writer interrupted while in state {}, will stop", writerState.get());
                 } catch (Throwable t) {
-                    String msg = "got exception when trying to write one batch, will exit now.";
-                    LOG.error(msg, t);
-                    // TODO we should exit gracefully on InterruptedException
-                    Util.stdoutWithTime(msg);
-                    System.exit(-1);
+                    if (writerState.get() != WriterState.RUNNING) {
+                        LOG.warn("journal writer hit error while in state {}, will stop without exit",
+                                writerState.get(), t);
+                        writerState.set(WriterState.CLOSED);
+                    } else {
+                        String msg = "got exception when trying to write one batch, will exit now.";
+                        LOG.error(msg, t);
+                        Util.stdoutWithTime(msg);
+                        System.exit(-1);
+                    }
                 }
             }
         };
+        daemon = d;
         d.start();
+    }
+
+    public DrainResult sealAndStop(long timeoutMs) {
+        DrainResult result;
+        try {
+            result = sealAndGetCommittedWatermark(timeoutMs);
+            LOG.info("journal writer sealed: status={}, lastCommittedJournalId={}",
+                    result.getStatus(), result.getLastCommittedJournalId());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("interrupted while sealing journal writer", e);
+            result = new DrainResult(DrainResult.Status.TIMEOUT, lastCommittedJournalId);
+        }
+        stopDaemon(timeoutMs);
+        return result;
+    }
+
+    private void stopDaemon(long timeoutMs) {
+        Daemon d = daemon;
+        if (d == null) {
+            return;
+        }
+        d.setStop();
+        d.interrupt();
+        try {
+            d.join(Math.max(1L, timeoutMs));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("interrupted while waiting for journal writer daemon to stop", e);
+        }
+        if (d.isAlive()) {
+            LOG.warn("journal writer daemon did not stop within {}ms; keeping reference so restart fails fast",
+                    timeoutMs);
+        } else {
+            daemon = null;
+        }
     }
 
     protected void writeOneBatch() throws InterruptedException {
@@ -196,7 +254,7 @@ public class JournalWriter {
         } finally {
             try {
                 // commit
-                journal.batchWriteCommit();
+                journal.batchWriteCommit(() -> writerState.get() == WriterState.RUNNING);
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
                 lastCommittedJournalId = nextJournalId - 1;
@@ -365,6 +423,11 @@ public class JournalWriter {
 
     public long getLastCommittedJournalId() {
         return lastCommittedJournalId;
+    }
+
+    boolean isDaemonAlive() {
+        Daemon d = daemon;
+        return d != null && d.isAlive();
     }
 
     public synchronized DrainResult sealAndGetCommittedWatermark(long timeoutMs) throws InterruptedException {

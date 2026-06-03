@@ -180,12 +180,23 @@ public class LeaderImpl {
     public TMasterResult finishTask(TFinishTaskRequest request) {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TTaskType taskType = request.getTask_type();
+        long signature = request.getSignature();
+        boolean isLeader = globalStateMgr.isLeader();
+        boolean isLeaderDemoting = isLeader && globalStateMgr.isLeaderDemoting();
+        boolean leaderWorkAdmissionOpen = isLeader && globalStateMgr.isLeaderWorkAdmissionOpen();
+        if (!isLeader || isLeaderDemoting || !leaderWorkAdmissionOpen) {
+            TStatusCode statusCode = taskType == TTaskType.CREATE
+                    ? TStatusCode.LEADER_TRANSFERRED : TStatusCode.INTERNAL_ERROR;
+            String errMsg = isLeader ? "leader is transferring, finish task should retry on new leader"
+                    : "current fe is not master";
+            TStatus status = new TStatus(statusCode);
+            status.setError_msgs(Lists.newArrayList(errMsg));
             result.setStatus(status);
-            LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
-                    request.getTask_type(), request.getSignature());
+            LOG.warn("current node is not active leader, finish task failed, task type: {}. task signature: {}, " +
+                            "isLeader: {}, isLeaderDemoting: {}, leaderWorkAdmissionOpen: {}",
+                    taskType, signature, isLeader, isLeaderDemoting, leaderWorkAdmissionOpen);
             return result;
         }
         TStatus tStatus = new TStatus(TStatusCode.OK);
@@ -223,8 +234,6 @@ public class LeaderImpl {
         }
         backendId = cn.getId();
 
-        TTaskType taskType = request.getTask_type();
-        long signature = request.getSignature();
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
         if (task == null) {
             if (taskType != TTaskType.DROP && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE

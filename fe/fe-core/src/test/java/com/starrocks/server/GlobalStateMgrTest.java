@@ -47,10 +47,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.HAProtocol;
+import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
+import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
@@ -80,18 +84,22 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.InetSocketAddress;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -112,6 +120,18 @@ public class GlobalStateMgrTest {
     public void tearDown() throws Exception {
         FileUtils.deleteQuietly(new File(testMetaDir));
         FileUtils.deleteQuietly(new File(testPluginDir));
+    }
+
+    @Test
+    public void testLeaderTransferFlagSetOnLeaderNotification() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        StateChangeExecution execution = globalStateMgr.getStateChangeExecution();
+
+        execution.notifyNewFETypeTransfer(FrontendNodeType.LEADER);
+        Assertions.assertTrue(globalStateMgr.isInTransferringToLeader());
+
+        execution.notifyNewFETypeTransfer(FrontendNodeType.FOLLOWER);
+        Assertions.assertFalse(globalStateMgr.isInTransferringToLeader());
     }
 
     @Test
@@ -349,6 +369,237 @@ public class GlobalStateMgrTest {
         Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
         Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
         Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
+    }
+
+    @Test
+    public void testStaleLeaderActivationFailureRollsBackWhenBdbMasterChanged() {
+        NodeMgr nodeMgr = new NodeMgr(FrontendNodeType.FOLLOWER, "self", Pair.create("127.0.0.1", 9010));
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(nodeMgr);
+        globalStateMgr.setHaProtocol(new HAProtocol() {
+            @Override
+            public boolean fencing() {
+                return false;
+            }
+
+            @Override
+            public InetSocketAddress getLeader() {
+                return null;
+            }
+
+            @Override
+            public String getLeaderNodeName() {
+                return "other";
+            }
+
+            @Override
+            public List<InetSocketAddress> getObserverNodes() {
+                return java.util.Collections.emptyList();
+            }
+
+            @Override
+            public List<InetSocketAddress> getElectableNodes(boolean leaderIncluded) {
+                return java.util.Collections.emptyList();
+            }
+
+            @Override
+            public boolean removeElectableNode(String nodeName) {
+                return false;
+            }
+
+            @Override
+            public long getLatestEpoch() {
+                return 0;
+            }
+
+            @Override
+            public void removeUnstableNode(String nodeName, int currentFollowerCnt) {
+            }
+        });
+
+        globalStateMgr.beginLeaderActivation();
+
+        Assertions.assertTrue(globalStateMgr.rollbackStaleLeaderActivationIfNeeded(new Exception("fencing failed")));
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
+    }
+
+    @Test
+    public void testSealJournalWriterFailsFastOnTimeoutWithoutAdvancingReplayId() {
+        GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        globalStateMgr.setReplayedJournalIdForTest(10L);
+        globalStateMgr.setJournalWriterForTest(new StubJournalWriter(
+                new JournalWriter.DrainResult(JournalWriter.DrainResult.Status.TIMEOUT, 12L)));
+
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                globalStateMgr::sealJournalWriter);
+
+        Assertions.assertTrue(exception.getMessage().contains("TIMEOUT"));
+        Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
+    }
+
+    @Test
+    public void testSealJournalWriterLeaderLostWaitsForWalApplyFenceBeforeAdvancingReplayId() throws Exception {
+        GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
+        globalStateMgr.setReplayedJournalIdForTest(10L);
+        StubJournalWriter writer = new StubJournalWriter(
+                new JournalWriter.DrainResult(JournalWriter.DrainResult.Status.LEADER_LOST, 12L));
+        globalStateMgr.setJournalWriterForTest(writer);
+
+        GlobalStateMgr.LeaderWalApplyScope applyScope =
+                globalStateMgr.enterLeaderWalApply(OperationType.OP_CREATE_DB_V2);
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> sealFuture = executor.submit(globalStateMgr::sealJournalWriter);
+            Assertions.assertTrue(writer.awaitSealCalled());
+            Thread.sleep(100L);
+
+            Assertions.assertFalse(sealFuture.isDone());
+            Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
+
+            applyScope.close();
+            sealFuture.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(12L, globalStateMgr.getReplayedJournalId());
+        } finally {
+            applyScope.close();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testSealJournalWriterWaitsForWalApplyFenceBeforeAdvancingReplayId() throws Exception {
+        GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
+        globalStateMgr.setReplayedJournalIdForTest(10L);
+        StubJournalWriter writer = new StubJournalWriter(
+                new JournalWriter.DrainResult(JournalWriter.DrainResult.Status.BARRIER_REACHED, 12L));
+        globalStateMgr.setJournalWriterForTest(writer);
+
+        GlobalStateMgr.LeaderWalApplyScope applyScope =
+                globalStateMgr.enterLeaderWalApply(OperationType.OP_CREATE_DB_V2);
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> sealFuture = executor.submit(globalStateMgr::sealJournalWriter);
+            Assertions.assertTrue(writer.awaitSealCalled());
+            Thread.sleep(100L);
+
+            Assertions.assertFalse(sealFuture.isDone());
+            Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
+
+            applyScope.close();
+            sealFuture.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(12L, globalStateMgr.getReplayedJournalId());
+        } finally {
+            applyScope.close();
+            executor.shutdownNow();
+        }
+    }
+
+    private static GlobalStateMgr createActiveLeaderForDemotionTest() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(106L);
+        return globalStateMgr;
+    }
+
+    private static class StubJournalWriter extends JournalWriter {
+        private final DrainResult drainResult;
+        private final CountDownLatch sealCalled = new CountDownLatch(1);
+
+        private StubJournalWriter(DrainResult drainResult) {
+            super(null, new ArrayBlockingQueue<>(1));
+            this.drainResult = drainResult;
+        }
+
+        @Override
+        public DrainResult sealAndStop(long timeoutMs) {
+            sealCalled.countDown();
+            return drainResult;
+        }
+
+        private boolean awaitSealCalled() throws InterruptedException {
+            return sealCalled.await(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    public void testLeaderBootstrapActionsRunOnlyOncePerProcess() throws Exception {
+        boolean oldResetElectionGroup = Config.bdbje_reset_election_group;
+        try {
+            Config.bdbje_reset_election_group = false;
+            BootstrapNodeMgr firstStartupNodeMgr = new BootstrapNodeMgr(true);
+            BootstrapGlobalStateMgr firstStartupMgr = new BootstrapGlobalStateMgr(firstStartupNodeMgr);
+
+            firstStartupMgr.runLeaderBootstrapActions();
+            firstStartupMgr.runLeaderBootstrapActions();
+
+            Assertions.assertEquals(1, firstStartupNodeMgr.resetFrontendsCount);
+            Assertions.assertEquals(1, firstStartupMgr.initCaseInsensitiveCount);
+            Assertions.assertEquals(1, firstStartupMgr.enableAdaptiveSinkDopCount);
+
+            Config.bdbje_reset_election_group = true;
+            BootstrapNodeMgr resetElectionNodeMgr = new BootstrapNodeMgr(false);
+            BootstrapGlobalStateMgr resetElectionMgr = new BootstrapGlobalStateMgr(resetElectionNodeMgr);
+
+            resetElectionMgr.runLeaderBootstrapActions();
+            resetElectionMgr.runLeaderBootstrapActions();
+
+            Assertions.assertEquals(1, resetElectionNodeMgr.resetFrontendsCount);
+            Assertions.assertEquals(0, resetElectionMgr.initCaseInsensitiveCount);
+            Assertions.assertEquals(0, resetElectionMgr.enableAdaptiveSinkDopCount);
+
+            Config.bdbje_reset_election_group = false;
+            BootstrapNodeMgr normalNodeMgr = new BootstrapNodeMgr(false);
+            BootstrapGlobalStateMgr normalMgr = new BootstrapGlobalStateMgr(normalNodeMgr);
+
+            normalMgr.runLeaderBootstrapActions();
+
+            Assertions.assertEquals(0, normalNodeMgr.resetFrontendsCount);
+            Assertions.assertEquals(0, normalMgr.initCaseInsensitiveCount);
+            Assertions.assertEquals(0, normalMgr.enableAdaptiveSinkDopCount);
+        } finally {
+            Config.bdbje_reset_election_group = oldResetElectionGroup;
+        }
+    }
+
+    private static class BootstrapNodeMgr extends NodeMgr {
+        private final boolean firstTimeStartUp;
+        private int resetFrontendsCount;
+
+        private BootstrapNodeMgr(boolean firstTimeStartUp) {
+            this.firstTimeStartUp = firstTimeStartUp;
+        }
+
+        @Override
+        public boolean isFirstTimeStartUp() {
+            return firstTimeStartUp;
+        }
+
+        @Override
+        public void resetFrontends() {
+            resetFrontendsCount++;
+        }
+    }
+
+    private static class BootstrapGlobalStateMgr extends GlobalStateMgr {
+        private int initCaseInsensitiveCount;
+        private int enableAdaptiveSinkDopCount;
+
+        private BootstrapGlobalStateMgr(NodeMgr nodeMgr) {
+            super(nodeMgr);
+        }
+
+        @Override
+        void initCaseInsensitive() {
+            initCaseInsensitiveCount++;
+        }
+
+        @Override
+        void enableAdaptiveSinkDopForFirstStartup() throws StarRocksException {
+            enableAdaptiveSinkDopCount++;
+        }
     }
 
     private static class MyGlobalStateMgr extends GlobalStateMgr {

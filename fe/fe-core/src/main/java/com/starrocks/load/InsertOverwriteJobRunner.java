@@ -786,7 +786,7 @@ public class InsertOverwriteJobRunner {
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
                     job.getTargetDbId(), job.getTargetTableId(), e);
-            throw new DmlException("replace partitions failed", e);
+            throw new DmlException("%s", e, buildReplacePartitionsFailedMessage(e));
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
@@ -795,6 +795,19 @@ public class InsertOverwriteJobRunner {
         // write unlock to avoid holding lock too long
         GlobalStateMgr.getCurrentState().getOperationListenerBus()
                 .onInsertOverwriteJobCommitFinish(db, tmpTargetTable, stats);
+    }
+
+    private static String buildReplacePartitionsFailedMessage(Throwable throwable) {
+        String detail = null;
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (current.getMessage() != null && !current.getMessage().isEmpty()) {
+                detail = current.getMessage();
+            }
+        }
+        if (detail == null) {
+            return "replace partitions failed";
+        }
+        return "replace partitions failed: " + detail;
     }
 
     private void replacePartition(OlapTable targetTable,

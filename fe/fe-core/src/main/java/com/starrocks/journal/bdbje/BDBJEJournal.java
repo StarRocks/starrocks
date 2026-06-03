@@ -54,6 +54,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /*
  * This is the bdb implementation of Journal interface.
@@ -382,6 +384,11 @@ public class BDBJEJournal implements Journal {
      */
     @Override
     public void batchWriteCommit() throws InterruptedException, JournalException {
+        batchWriteCommit(() -> true);
+    }
+
+    @Override
+    public void batchWriteCommit(BooleanSupplier shouldRetry) throws InterruptedException, JournalException {
         if (currentTransaction == null) {
             throw new JournalException("failed to commit because no running txn!");
         }
@@ -391,7 +398,7 @@ public class BDBJEJournal implements Journal {
             for (int i = 0; i < RETRY_TIME; i++) {
                 // retry cleanups
                 if (i != 0) {
-                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
+                    waitBeforeCommitRetry(shouldRetry, exception, i);
 
                     if (currentTransaction == null || !currentTransaction.isValid()) {
                         try {
@@ -419,6 +426,11 @@ public class BDBJEJournal implements Journal {
                     LOG.error(errMsg, e);
                     exception = new JournalException(errMsg);
                     exception.initCause(e);
+                    if (!shouldRetry.getAsBoolean()) {
+                        LOG.warn("skip commit retry because retry predicate is false after {} failed attempts",
+                                i + 1, exception);
+                        throw exception;
+                    }
                 }
             }
             // failed after retried
@@ -430,6 +442,31 @@ public class BDBJEJournal implements Journal {
             currentTransaction = null;
             uncommittedEntries.clear();
         }
+    }
+
+    private void waitBeforeCommitRetry(BooleanSupplier shouldRetry, JournalException exception, int retryIndex)
+            throws InterruptedException, JournalException {
+        long remainingMs = TimeUnit.SECONDS.toMillis(SLEEP_INTERVAL_SEC);
+        while (remainingMs > 0) {
+            if (!shouldRetry.getAsBoolean()) {
+                LOG.warn("skip commit retry {} because retry predicate is false", retryIndex + 1, exception);
+                throw buildRetryDisabledException(exception, retryIndex);
+            }
+            long sleepMs = Math.min(remainingMs, 100L);
+            Thread.sleep(sleepMs);
+            remainingMs -= sleepMs;
+        }
+        if (!shouldRetry.getAsBoolean()) {
+            LOG.warn("skip commit retry {} because retry predicate is false", retryIndex + 1, exception);
+            throw buildRetryDisabledException(exception, retryIndex);
+        }
+    }
+
+    private JournalException buildRetryDisabledException(JournalException exception, int retryIndex) {
+        if (exception != null) {
+            return exception;
+        }
+        return new JournalException("commit retry " + (retryIndex + 1) + " is disabled");
     }
 
     /**

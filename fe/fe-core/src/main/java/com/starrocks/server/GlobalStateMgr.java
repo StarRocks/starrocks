@@ -135,6 +135,7 @@ import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -279,6 +280,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -362,6 +364,10 @@ public class GlobalStateMgr {
     private volatile LeaderRoleState leaderRoleState = LeaderRoleState.INACTIVE;
     private volatile FrontendNodeType pendingDemotionTargetType;
     private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
+    private volatile boolean leaderBootstrapActionsDone = false;
+    private final Object leaderWalApplyFenceLock = new Object();
+    private int leaderWalApplyInFlight = 0;
+    private Throwable leaderWalApplyFailure = null;
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -838,6 +844,11 @@ public class GlobalStateMgr {
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
+            public void notifyNewFETypeTransfer(FrontendNodeType newType) {
+                isInTransferringToLeader = newType == FrontendNodeType.LEADER;
+            }
+
+            @Override
             public void transferToLeader() {
                 isInTransferringToLeader = true;
                 try {
@@ -849,6 +860,7 @@ public class GlobalStateMgr {
 
             @Override
             public void transferToNonLeader(FrontendNodeType newType) {
+                isInTransferringToLeader = false;
                 gsm.transferToNonLeader(newType);
             }
         };
@@ -1385,6 +1397,10 @@ public class GlobalStateMgr {
             nodeMgr.checkCurrentNodeExist();
             journalWriter.init(maxJournalId);
         } catch (Exception e) {
+            if (rollbackStaleLeaderActivationIfNeeded(e)) {
+                restoreNonLeaderReplayAfterStaleLeaderActivation(oldType);
+                return;
+            }
             // TODO: gracefully exit
             LOG.error("failed to init journal after transfer to leader! will exit", e);
             System.exit(-1);
@@ -1400,13 +1416,7 @@ public class GlobalStateMgr {
         try {
             publishLeaderLease(getEpoch());
 
-            if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
-                nodeMgr.resetFrontends();
-            }
-
-            if (nodeMgr.isFirstTimeStartUp()) {
-                initCaseInsensitive();
-            }
+            runLeaderBootstrapActions();
 
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
@@ -1429,17 +1439,6 @@ public class GlobalStateMgr {
             // for leader, there are some new thread pools need to register metric
             ThreadPoolManager.registerAllThreadPoolMetric();
 
-            if (nodeMgr.isFirstTimeStartUp()) {
-                // When the cluster is initially deployed, we set ENABLE_ADAPTIVE_SINK_DOP so
-                // that the load is automatically configured as the best performance
-                // configuration. If it is upgraded from an old version, the original
-                // configuration is retained to avoid system stability problems caused by
-                // changes in concurrency
-                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
-                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                                LiteralExprFactory.create("true", BooleanType.BOOLEAN)),
-                        false);
-            }
             checkCaseInsensitive();
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
@@ -1463,6 +1462,35 @@ public class GlobalStateMgr {
         triggerOnTransferToLeader();
     }
 
+    @VisibleForTesting
+    void runLeaderBootstrapActions() throws StarRocksException {
+        boolean shouldResetFrontends =
+                (nodeMgr.isFirstTimeStartUp() || Config.bdbje_reset_election_group) && !leaderBootstrapActionsDone;
+        boolean runBootStrapActions = nodeMgr.isFirstTimeStartUp() && !leaderBootstrapActionsDone;
+
+        if (shouldResetFrontends) {
+            nodeMgr.resetFrontends();
+        }
+        if (runBootStrapActions) {
+            initCaseInsensitive();
+            enableAdaptiveSinkDopForFirstStartup();
+        }
+        if (shouldResetFrontends || runBootStrapActions) {
+            leaderBootstrapActionsDone = true;
+        }
+    }
+
+    @VisibleForTesting
+    void enableAdaptiveSinkDopForFirstStartup() throws StarRocksException {
+        // When the cluster is initially deployed, set ENABLE_ADAPTIVE_SINK_DOP so that load is
+        // automatically configured for best performance. For upgraded clusters, retain the
+        // original value to avoid stability risk from concurrency changes.
+        variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                        LiteralExprFactory.create("true", BooleanType.BOOLEAN)),
+                false);
+    }
+
     private void triggerOnTransferToLeader() {
         try {
             // trigger to load mv's plan cache async
@@ -1479,41 +1507,287 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     void beginLeaderActivation() {
-        leaderWorkAdmissionOpen.set(false);
-        activeLeaderLease = LeaderLease.INVALID;
-        pendingDemotionTargetType = null;
-        updateLeaderRoleState(LeaderRoleState.ACTIVATING);
+        synchronized (leaderWalApplyFenceLock) {
+            leaderWorkAdmissionOpen.set(false);
+            activeLeaderLease = LeaderLease.INVALID;
+            pendingDemotionTargetType = null;
+            leaderWalApplyFailure = null;
+            updateLeaderRoleState(LeaderRoleState.ACTIVATING);
+        }
     }
 
     @VisibleForTesting
     void publishLeaderLease(long haEpoch) {
-        Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
-        Preconditions.checkState(feType == FrontendNodeType.LEADER,
-                "can only publish leader lease when FE type is LEADER, actual: %s", feType);
-        Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
-                "can only publish leader lease during activation, actual state: %s", leaderRoleState);
-        long generation = leaderGeneration.incrementAndGet();
-        activeLeaderLease = new LeaderLease(haEpoch, generation);
-        leaderWorkAdmissionOpen.set(true);
-        pendingDemotionTargetType = null;
-        updateLeaderRoleState(LeaderRoleState.ACTIVE);
+        synchronized (leaderWalApplyFenceLock) {
+            Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
+            Preconditions.checkState(feType == FrontendNodeType.LEADER,
+                    "can only publish leader lease when FE type is LEADER, actual: %s", feType);
+            Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
+                    "can only publish leader lease during activation, actual state: %s", leaderRoleState);
+            long generation = leaderGeneration.incrementAndGet();
+            activeLeaderLease = new LeaderLease(haEpoch, generation);
+            leaderWorkAdmissionOpen.set(true);
+            pendingDemotionTargetType = null;
+            updateLeaderRoleState(LeaderRoleState.ACTIVE);
+            leaderWalApplyFenceLock.notifyAll();
+        }
     }
 
     @VisibleForTesting
     void rollbackLeaderActivation() {
-        leaderWorkAdmissionOpen.set(false);
-        activeLeaderLease = LeaderLease.INVALID;
-        pendingDemotionTargetType = null;
-        updateLeaderRoleState(LeaderRoleState.INACTIVE);
+        synchronized (leaderWalApplyFenceLock) {
+            leaderWorkAdmissionOpen.set(false);
+            activeLeaderLease = LeaderLease.INVALID;
+            pendingDemotionTargetType = null;
+            updateLeaderRoleState(LeaderRoleState.INACTIVE);
+            leaderWalApplyFenceLock.notifyAll();
+        }
+    }
+
+    @VisibleForTesting
+    boolean rollbackStaleLeaderActivationIfNeeded(Exception cause) {
+        if (leaderRoleState != LeaderRoleState.ACTIVATING || leaderWorkAdmissionOpen.get()) {
+            return false;
+        }
+        if (haProtocol == null || nodeMgr == null || nodeMgr.getNodeName() == null) {
+            return false;
+        }
+
+        String currentBdbMaster;
+        try {
+            currentBdbMaster = haProtocol.getLeaderNodeName();
+        } catch (Throwable t) {
+            LOG.warn("failed to check BDB master after leader activation failure", t);
+            return false;
+        }
+        if (currentBdbMaster == null || Objects.equals(nodeMgr.getNodeName(), currentBdbMaster)) {
+            return false;
+        }
+
+        rollbackLeaderActivation();
+        LOG.warn("leader activation failed after BDB master changed to another node. selfNode={}, "
+                        + "currentBdbMaster={}. Will wait for the next FE type notification.",
+                nodeMgr.getNodeName(), currentBdbMaster, cause);
+        return true;
+    }
+
+    private void restoreNonLeaderReplayAfterStaleLeaderActivation(FrontendNodeType oldType) {
+        if ((oldType == FrontendNodeType.FOLLOWER || oldType == FrontendNodeType.OBSERVER) && replayer == null) {
+            createReplayer();
+            replayer.start();
+        }
     }
 
     @VisibleForTesting
     void beginLeaderDemotion(FrontendNodeType targetType) {
-        leaderWorkAdmissionOpen.set(false);
-        leaderGeneration.incrementAndGet();
-        activeLeaderLease = LeaderLease.INVALID;
-        pendingDemotionTargetType = targetType;
-        updateLeaderRoleState(LeaderRoleState.DEMOTING);
+        synchronized (leaderWalApplyFenceLock) {
+            leaderWorkAdmissionOpen.set(false);
+            leaderGeneration.incrementAndGet();
+            activeLeaderLease = LeaderLease.INVALID;
+            pendingDemotionTargetType = targetType;
+            updateLeaderRoleState(LeaderRoleState.DEMOTING);
+            leaderWalApplyFenceLock.notifyAll();
+        }
+    }
+
+    @VisibleForTesting
+    void completeLeaderDemotion() {
+        synchronized (leaderWalApplyFenceLock) {
+            leaderWorkAdmissionOpen.set(false);
+            activeLeaderLease = LeaderLease.INVALID;
+            pendingDemotionTargetType = null;
+            updateLeaderRoleState(LeaderRoleState.INACTIVE);
+            leaderWalApplyFenceLock.notifyAll();
+        }
+    }
+
+    public <T> T runWithLeaderJournalAdmission(short op, Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        return runWithLeaderJournalAdmission(op, false, action);
+    }
+
+    public <T> T runWithLeaderJournalAdmissionOrThrow(short op, Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        return runWithLeaderJournalAdmission(op, true, action);
+    }
+
+    private <T> T runWithLeaderJournalAdmission(short op, boolean requirePublishedLease, Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        if (op == OperationType.OP_STARMGR) {
+            return callLeaderAdmissionAction(action);
+        }
+        synchronized (leaderWalApplyFenceLock) {
+            ensureLeaderJournalAdmissionLocked(requirePublishedLease);
+            return callLeaderAdmissionAction(action);
+        }
+    }
+
+    public <T> LeaderWalApplyRegistration<T> runWithLeaderWalApplyAdmission(short op, Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        return runWithLeaderWalApplyAdmission(op, false, action);
+    }
+
+    public <T> LeaderWalApplyRegistration<T> runWithLeaderWalApplyAdmissionOrThrow(short op, Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        return runWithLeaderWalApplyAdmission(op, true, action);
+    }
+
+    private <T> LeaderWalApplyRegistration<T> runWithLeaderWalApplyAdmission(
+            short op, boolean requirePublishedLease, Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        if (op == OperationType.OP_STARMGR) {
+            return new LeaderWalApplyRegistration<>(LeaderWalApplyScope.noop(), callLeaderAdmissionAction(action));
+        }
+        synchronized (leaderWalApplyFenceLock) {
+            ensureLeaderJournalAdmissionLocked(requirePublishedLease);
+            leaderWalApplyInFlight++;
+            boolean registered = false;
+            try {
+                T result = callLeaderAdmissionAction(action);
+                registered = true;
+                return new LeaderWalApplyRegistration<>(new LeaderWalApplyScope(this), result);
+            } finally {
+                if (!registered) {
+                    finishLeaderWalApplyLocked(null);
+                }
+            }
+        }
+    }
+
+    @VisibleForTesting
+    LeaderWalApplyScope enterLeaderWalApply(short op) throws JournalWriteException {
+        if (op == OperationType.OP_STARMGR) {
+            return LeaderWalApplyScope.noop();
+        }
+        synchronized (leaderWalApplyFenceLock) {
+            ensureLeaderJournalAdmissionLocked(false);
+            leaderWalApplyInFlight++;
+            return new LeaderWalApplyScope(this);
+        }
+    }
+
+    private <T> T callLeaderAdmissionAction(Callable<T> action)
+            throws JournalWriteException, InterruptedException {
+        try {
+            return action.call();
+        } catch (JournalWriteException | InterruptedException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void ensureLeaderJournalAdmissionLocked(boolean requirePublishedLease) throws JournalWriteException {
+        if (!isLeader()) {
+            throw new JournalWriteException(JournalWriteException.Reason.NOT_LEADER,
+                    String.format("Current node is not leader, but %s, submit log is not allowed", getFeType()));
+        }
+        if (requirePublishedLease && !leaderWorkAdmissionOpen.get()) {
+            throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
+                    "leader work admission is closed");
+        }
+        if (leaderRoleState == LeaderRoleState.DEMOTING) {
+            throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
+                    "leader is demoting, submit log is not allowed");
+        }
+    }
+
+    private void finishLeaderWalApply(Throwable failure) {
+        synchronized (leaderWalApplyFenceLock) {
+            finishLeaderWalApplyLocked(failure);
+        }
+    }
+
+    private void finishLeaderWalApplyLocked(Throwable failure) {
+        if (failure != null && leaderWalApplyFailure == null) {
+            leaderWalApplyFailure = failure;
+        }
+        if (leaderWalApplyInFlight <= 0) {
+            throw new IllegalStateException("leader WAL apply fence underflow");
+        }
+        leaderWalApplyInFlight--;
+        leaderWalApplyFenceLock.notifyAll();
+    }
+
+    private void awaitLeaderWalAppliesDrained(long timeoutMs) {
+        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
+        synchronized (leaderWalApplyFenceLock) {
+            while (leaderWalApplyInFlight > 0) {
+                long remainingNs = deadlineNs - System.nanoTime();
+                if (remainingNs <= 0) {
+                    throw new IllegalStateException("timed out waiting for leader WAL applies to finish. inFlight="
+                            + leaderWalApplyInFlight);
+                }
+                try {
+                    TimeUnit.NANOSECONDS.timedWait(leaderWalApplyFenceLock, remainingNs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted while waiting for leader WAL applies to finish", e);
+                }
+            }
+            if (leaderWalApplyFailure != null) {
+                throw new IllegalStateException("leader WAL apply failed before demotion", leaderWalApplyFailure);
+            }
+        }
+    }
+
+    public static final class LeaderWalApplyRegistration<T> {
+        private final LeaderWalApplyScope scope;
+        private final T result;
+
+        private LeaderWalApplyRegistration(LeaderWalApplyScope scope, T result) {
+            this.scope = scope;
+            this.result = result;
+        }
+
+        public LeaderWalApplyScope getScope() {
+            return scope;
+        }
+
+        public T getResult() {
+            return result;
+        }
+    }
+
+    public static final class LeaderWalApplyScope implements AutoCloseable {
+        private static final LeaderWalApplyScope NOOP = new LeaderWalApplyScope(null);
+
+        private final GlobalStateMgr globalStateMgr;
+        private boolean closed = false;
+        private Throwable failure = null;
+
+        private LeaderWalApplyScope(GlobalStateMgr globalStateMgr) {
+            this.globalStateMgr = globalStateMgr;
+        }
+
+        private static LeaderWalApplyScope noop() {
+            return NOOP;
+        }
+
+        public void recordApplyFailure(Throwable failure) {
+            if (globalStateMgr == null) {
+                return;
+            }
+            if (this.failure == null) {
+                this.failure = failure;
+            }
+        }
+
+        @Override
+        public void close() {
+            if (globalStateMgr == null) {
+                return;
+            }
+            synchronized (this) {
+                if (closed) {
+                    return;
+                }
+                closed = true;
+            }
+            globalStateMgr.finishLeaderWalApply(failure);
+        }
     }
 
     public LeaderLease captureLeaderLease() {
@@ -1549,6 +1823,10 @@ public class GlobalStateMgr {
 
     public boolean isLeaderDemoting() {
         return leaderRoleState == LeaderRoleState.DEMOTING;
+    }
+
+    public boolean shouldStopPublishWaitAfterCommit() {
+        return !isLeader() || !isLeaderWorkAdmissionOpen() || isLeaderDemoting();
     }
 
     @VisibleForTesting
@@ -1846,11 +2124,9 @@ public class GlobalStateMgr {
             initDefaultWarehouse();
         }
 
-        // If this node was serving as LEADER, cleanly stop leader-only daemons before taking on
-        // the new role. Runs after the admission fence is closed by the demotion orchestrator so
-        // no new leader-side work can enter while cleanup is in flight.
-        if (feType == FrontendNodeType.LEADER) {
-            stopLeaderOnlyDaemonThreads();
+        boolean demotedFromLeader = feType == FrontendNodeType.LEADER;
+        if (demotedFromLeader) {
+            executeLeaderDemotionStages(newType);
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
@@ -1863,7 +2139,68 @@ public class GlobalStateMgr {
 
         MetricRepo.init();
 
-        feType = newType;
+        if (!demotedFromLeader) {
+            feType = newType;
+        }
+    }
+
+    @VisibleForTesting
+    void executeLeaderDemotionStages(FrontendNodeType targetType) {
+        LOG.info("leader demotion to {} starting", targetType);
+        long startMs = System.currentTimeMillis();
+        runDemotionStage("beginLeaderDemotion", () -> beginLeaderDemotion(targetType));
+        runDemotionStage("sealJournalWriter", this::sealJournalWriter);
+        runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
+        runDemotionStage("flushLeaderSessionState", this::flushLeaderSessionState);
+        runDemotionStage("switchFrontendType", () -> feType = targetType);
+        runDemotionStage("completeLeaderDemotion", this::completeLeaderDemotion);
+        LOG.info("leader demotion to {} completed in {}ms", targetType, System.currentTimeMillis() - startMs);
+    }
+
+    private void runDemotionStage(String stageName, Runnable stage) {
+        long startMs = System.currentTimeMillis();
+        try {
+            stage.run();
+        } catch (Throwable t) {
+            LOG.error("leader demotion stage '{}' failed after {}ms, will exit",
+                    stageName, System.currentTimeMillis() - startMs, t);
+            System.exit(-1);
+            return;
+        }
+        LOG.info("leader demotion stage '{}' completed in {}ms", stageName, System.currentTimeMillis() - startMs);
+    }
+
+    @VisibleForTesting
+    void sealJournalWriter() {
+        if (journalWriter == null) {
+            return;
+        }
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        JournalWriter.DrainResult result = journalWriter.sealAndStop(timeoutMs);
+        if (result.getStatus() == JournalWriter.DrainResult.Status.TIMEOUT) {
+            throw new IllegalStateException("failed to seal journal writer. status=" + result.getStatus()
+                    + ", lastCommittedJournalId=" + result.getLastCommittedJournalId());
+        } else if (result.getStatus() == JournalWriter.DrainResult.Status.LEADER_LOST) {
+            LOG.warn("journal writer lost leadership while sealing; will advance replayedJournalId only after "
+                    + "leader WAL applies drain, lastCommittedJournalId={}", result.getLastCommittedJournalId());
+        }
+        awaitLeaderWalAppliesDrained(timeoutMs);
+        long watermark = result.getLastCommittedJournalId();
+        long current = replayedJournalId.get();
+        if (watermark > current) {
+            replayedJournalId.set(watermark);
+            LOG.info("advanced replayedJournalId {} -> {} on leader demotion", current, watermark);
+        }
+    }
+
+    @VisibleForTesting
+    void flushLeaderSessionState() {
+        try {
+            insertOverwriteJobMgr.cancelRunningJobs();
+        } catch (Throwable t) {
+            LOG.warn("failed to cancel insert overwrite jobs during leader demotion", t);
+        }
+        dominationStartTimeMs = 0L;
     }
 
     // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
@@ -2679,6 +3016,16 @@ public class GlobalStateMgr {
         this.journal = journal;
     }
 
+    @VisibleForTesting
+    void setJournalWriterForTest(JournalWriter journalWriter) {
+        this.journalWriter = journalWriter;
+    }
+
+    @VisibleForTesting
+    void setReplayedJournalIdForTest(long replayedJournalId) {
+        this.replayedJournalId.set(replayedJournalId);
+    }
+
     public void setNextId(long id) {
         idGenerator.setId(id);
     }
@@ -3111,7 +3458,8 @@ public class GlobalStateMgr {
      * Once set, this value becomes immutable for the entire cluster lifecycle.
      * Any failure during initialization will cause the system to exit.
      */
-    private void initCaseInsensitive() {
+    @VisibleForTesting
+    void initCaseInsensitive() {
         try {
             GlobalStateMgr.getCurrentState().getVariableMgr().setCaseInsensitive(Config.enable_table_name_case_insensitive);
         } catch (Exception e) {

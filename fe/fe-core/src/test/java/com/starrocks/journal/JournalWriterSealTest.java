@@ -25,8 +25,11 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 public class JournalWriterSealTest {
     @Test
@@ -106,6 +109,45 @@ public class JournalWriterSealTest {
     }
 
     @Test
+    public void testCommitRetryDisabledAfterSealStarts() throws Exception {
+        BlockingCommitJournal journal = new BlockingCommitJournal();
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+        JournalWriter writer = new JournalWriter(journal, queue);
+        writer.init(3L);
+
+        JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
+        queue.put(task);
+
+        CompletableFuture<Void> writeFuture = CompletableFuture.runAsync(() -> {
+            try {
+                writer.writeOneBatch();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        });
+
+        Assertions.assertTrue(journal.commitEntered.await(5, TimeUnit.SECONDS));
+        Assertions.assertTrue(journal.retryAllowedBeforeSeal.get());
+
+        CompletableFuture<JournalWriter.DrainResult> resultFuture = runSeal(writer, 5000L);
+        waitUntilQueueSize(queue, 1);
+        journal.allowCommitReturn.countDown();
+
+        JournalWriter.DrainResult result = resultFuture.get(5, TimeUnit.SECONDS);
+        writeFuture.get(5, TimeUnit.SECONDS);
+
+        Assertions.assertEquals(JournalWriter.DrainResult.Status.LEADER_LOST, result.getStatus());
+        Assertions.assertEquals(3L, result.getLastCommittedJournalId());
+        Assertions.assertFalse(journal.retryAllowedAfterSeal.get());
+
+        ExecutionException abortException = Assertions.assertThrows(ExecutionException.class, task::get);
+        Assertions.assertInstanceOf(JournalWriteException.class, abortException.getCause());
+        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED,
+                ((JournalWriteException) abortException.getCause()).getReason());
+    }
+
+    @Test
     public void testSealTimeoutReturnsLatestCommittedWatermark() throws Exception {
         TestJournal journal = new TestJournal();
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
@@ -134,6 +176,31 @@ public class JournalWriterSealTest {
 
         Assertions.assertEquals(first.getStatus(), second.getStatus());
         Assertions.assertEquals(first.getLastCommittedJournalId(), second.getLastCommittedJournalId());
+    }
+
+    @Test
+    public void testSealAndStopStopsDaemonAndAllowsCleanRestart() throws Exception {
+        TestJournal journal = new TestJournal();
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+        JournalWriter writer = new JournalWriter(journal, queue);
+        writer.init(3L);
+
+        writer.startDaemon();
+        waitUntilDaemonAlive(writer);
+        JournalWriter.DrainResult first = writer.sealAndStop(5000L);
+
+        Assertions.assertEquals(JournalWriter.DrainResult.Status.BARRIER_REACHED, first.getStatus());
+        Assertions.assertEquals(3L, first.getLastCommittedJournalId());
+        Assertions.assertFalse(writer.isDaemonAlive());
+
+        writer.init(3L);
+        writer.startDaemon();
+        waitUntilDaemonAlive(writer);
+        JournalWriter.DrainResult second = writer.sealAndStop(5000L);
+
+        Assertions.assertEquals(JournalWriter.DrainResult.Status.BARRIER_REACHED, second.getStatus());
+        Assertions.assertEquals(3L, second.getLastCommittedJournalId());
+        Assertions.assertFalse(writer.isDaemonAlive());
     }
 
     @Test
@@ -173,13 +240,21 @@ public class JournalWriterSealTest {
                 "expected queue size >= " + expectedSize + ", actual=" + queue.size());
     }
 
+    private void waitUntilDaemonAlive(JournalWriter writer) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!writer.isDaemonAlive() && System.nanoTime() < deadline) {
+            Thread.sleep(10L);
+        }
+        Assertions.assertTrue(writer.isDaemonAlive(), "journal writer daemon must start");
+    }
+
     private DataOutputBuffer makeBuffer(int size) throws IOException {
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, "x".repeat(size - 4));
         return buffer;
     }
 
-    private static final class TestJournal implements Journal {
+    private static class TestJournal implements Journal {
         private long maxJournalId = 0L;
         private boolean commitFailure;
         private final List<Long> stagingJournalIds = new ArrayList<>();
@@ -267,6 +342,22 @@ public class JournalWriterSealTest {
 
         public List<Long> getRollJournalIds() {
             return rollJournalIds;
+        }
+    }
+
+    private static final class BlockingCommitJournal extends TestJournal {
+        private final CountDownLatch commitEntered = new CountDownLatch(1);
+        private final CountDownLatch allowCommitReturn = new CountDownLatch(1);
+        private final AtomicBoolean retryAllowedBeforeSeal = new AtomicBoolean(false);
+        private final AtomicBoolean retryAllowedAfterSeal = new AtomicBoolean(true);
+
+        @Override
+        public void batchWriteCommit(BooleanSupplier shouldRetry) throws InterruptedException, JournalException {
+            retryAllowedBeforeSeal.set(shouldRetry.getAsBoolean());
+            commitEntered.countDown();
+            Assertions.assertTrue(allowCommitReturn.await(5, TimeUnit.SECONDS));
+            retryAllowedAfterSeal.set(shouldRetry.getAsBoolean());
+            throw new JournalException("mock commit failure after seal");
         }
     }
 }

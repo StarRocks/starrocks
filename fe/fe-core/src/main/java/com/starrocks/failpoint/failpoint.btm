@@ -32,6 +32,14 @@ IF shouldTrigger("bdb_write_jitter")
 DO sleep(10000);
 ENDRULE
 
+RULE bdb_write_jitter_with_retry_predicate
+CLASS com.starrocks.journal.bdbje.BDBJEJournal
+METHOD batchWriteCommit(java.util.function.BooleanSupplier)
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("bdb_write_jitter")
+DO sleep(10000);
+ENDRULE
+
 # Thrift server accept exception
 RULE thrift_server_accept_exception
 CLASS org.apache.thrift.transport.TServerSocket

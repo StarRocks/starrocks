@@ -143,6 +143,48 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testWaitCurrentFeTransferToLeaderTimeout(@Mocked ConnectContext ctx) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        int oldThriftRpcTimeoutMs = Config.thrift_rpc_timeout_ms;
+        Config.thrift_rpc_timeout_ms = 5;
+
+        try {
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public GlobalStateMgr getCurrentState() {
+                    return state;
+                }
+
+                @Mock
+                public boolean isLeader() {
+                    return false;
+                }
+
+                @Mock
+                public boolean isInTransferringToLeader() {
+                    return true;
+                }
+            };
+
+            new Expectations(ctx) {
+                {
+                    ctx.getSerializer();
+                    minTimes = 0;
+                    result = serializer;
+                }
+            };
+
+            StarRocksPlannerException exception = Assertions.assertThrows(StarRocksPlannerException.class,
+                    () -> new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
+            Assertions.assertTrue(exception.getMessage().contains(
+                    "timed out after 5 ms waiting current FE node transferring to LEADER state"));
+        } finally {
+            Config.thrift_rpc_timeout_ms = oldThriftRpcTimeoutMs;
+        }
+    }
+
+    @Test
     public void testForwardExplicitTxnSelectOnFollower(@Mocked ConnectContext ctx) {
         StatementBase stmt;
         MysqlSerializer serializer = MysqlSerializer.newInstance();

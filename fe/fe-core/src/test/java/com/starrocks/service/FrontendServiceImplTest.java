@@ -653,6 +653,53 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testLoadTxnRequestsRejectLeaderDemoting() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return false;
+            }
+
+            @Mock
+            public boolean isLeaderDemoting() {
+                return true;
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+        beginRequest.setLabel(UUID.randomUUID().toString());
+        beginRequest.setDb("test");
+        beginRequest.setTbl("site_access_auto");
+        beginRequest.setUser("root");
+        beginRequest.setPasswd("");
+        assertLeaderDemotionRejected(impl.loadTxnBegin(beginRequest).getStatus());
+
+        TLoadTxnCommitRequest commitRequest = new TLoadTxnCommitRequest();
+        commitRequest.setDb("test");
+        commitRequest.setTbl("site_access_auto");
+        commitRequest.setTxnId(1001L);
+        assertLeaderDemotionRejected(impl.loadTxnCommit(commitRequest).getStatus());
+        assertLeaderDemotionRejected(impl.loadTxnPrepare(commitRequest).getStatus());
+
+        TLoadTxnRollbackRequest rollbackRequest = new TLoadTxnRollbackRequest();
+        rollbackRequest.setDb("test");
+        rollbackRequest.setTbl("site_access_auto");
+        rollbackRequest.setTxnId(1001L);
+        assertLeaderDemotionRejected(impl.loadTxnRollback(rollbackRequest).getStatus());
+    }
+
+    private static void assertLeaderDemotionRejected(TStatus status) {
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, status.getStatus_code());
+        Assertions.assertTrue(status.getError_msgs().get(0).contains("leader is demoting"));
+    }
+
+    @Test
     public void testCreatePartitionApiSlice() throws TException {
         new MockUp<GlobalTransactionMgr>() {
             @Mock

@@ -28,6 +28,9 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -126,6 +129,19 @@ public class CheckpointControllerTest {
                 "nodesToPushImage must be cleared on demotion");
         Assertions.assertTrue(controller.lastFailedTime.isEmpty(),
                 "lastFailedTime must be cleared on demotion");
+    }
+
+    @Test
+    public void testOnStopRequestedWakesCheckpointWait() throws Exception {
+        BlockingQueue<CheckpointController.CheckpointCompletionStatus> result = new ArrayBlockingQueue<>(1);
+        java.lang.reflect.Field resultField = CheckpointController.class.getDeclaredField("result");
+        resultField.setAccessible(true);
+        resultField.set(controller, result);
+
+        controller.onStopRequested();
+
+        Assertions.assertNotNull(result.poll(1, TimeUnit.SECONDS),
+                "stop request must wake createImage result wait");
     }
 
     @Test

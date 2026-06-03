@@ -51,6 +51,7 @@ public abstract class LeaderDaemon {
     private volatile long intervalMs;
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
+    private final Object stopSignal = new Object();
     private volatile Thread worker;
     private volatile LeaderLease capturedLease = LeaderLease.INVALID;
 
@@ -112,18 +113,30 @@ public abstract class LeaderDaemon {
      * Prefer {@link #stopGracefully(long)} during demotion so cleanup hooks run.
      */
     public void setStop() {
+        requestStop(true);
+    }
+
+    private void requestStop(boolean interruptWorker) {
         if (!isStopped.compareAndSet(false, true)) {
             return;
         }
+        synchronized (stopSignal) {
+            stopSignal.notifyAll();
+        }
+        try {
+            onStopRequested();
+        } catch (Throwable th) {
+            LOG.warn("{} onStopRequested failed", name, th);
+        }
         Thread t = worker;
-        if (t != null) {
+        if (interruptWorker && t != null) {
             t.interrupt();
         }
     }
 
     /**
      * Coordinated stop for leader demotion:
-     *   1. mark stopped + interrupt worker;
+     *   1. mark stopped and wake interval waits without interrupting the current cycle;
      *   2. join up to {@code timeoutMs};
      *   3. on timeout, invoke {@link #onJoinTimeout()} (default: terminate the JVM) and return
      *      without clearing {@code worker}/{@code isRunning} - a subsequent {@link #start()}
@@ -132,7 +145,7 @@ public abstract class LeaderDaemon {
      * Idempotent.
      */
     public final void stopGracefully(long timeoutMs) {
-        setStop();
+        requestStop(false);
         Thread t = worker;
         if (t != null) {
             try {
@@ -173,7 +186,9 @@ public abstract class LeaderDaemon {
                 break;
             }
             try {
-                Thread.sleep(intervalMs);
+                synchronized (stopSignal) {
+                    stopSignal.wait(intervalMs);
+                }
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 if (isStopped.get()) {
@@ -208,8 +223,9 @@ public abstract class LeaderDaemon {
 
     /**
      * The body of each iteration. Runs only after FE is ready and the captured leader lease
-     * is still valid. Subclasses must not block indefinitely - block in interruptible primitives
-     * so {@link #setStop()} can wake them.
+     * is still valid. Subclasses must not block indefinitely; leader demotion waits for the
+     * current cycle to finish and terminates the process on timeout instead of interrupting the
+     * worker inside storage or journal code that may treat interruption as fatal.
      */
     protected abstract void runAfterLeaseValid() throws InterruptedException;
 
@@ -228,6 +244,13 @@ public abstract class LeaderDaemon {
      * join times out - {@link #onJoinTimeout()} fires instead.
      */
     protected void onStopped() {
+    }
+
+    /**
+     * Hook called immediately after a stop request is accepted and before {@link #stopGracefully(long)}
+     * waits for the worker thread. Subclasses should use this to wake their own cancellable waits.
+     */
+    protected void onStopRequested() {
     }
 
     /**
