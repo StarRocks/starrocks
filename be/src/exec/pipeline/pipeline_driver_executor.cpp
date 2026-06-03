@@ -29,6 +29,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"

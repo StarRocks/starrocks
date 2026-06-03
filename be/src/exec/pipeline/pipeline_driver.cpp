@@ -35,6 +35,7 @@
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
