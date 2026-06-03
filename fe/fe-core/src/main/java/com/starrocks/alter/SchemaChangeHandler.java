@@ -3036,9 +3036,47 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
-        // alter job v2's cancel must be called outside the database lock
-        if (!schemaChangeJobV2.cancel(reason)) {
-            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
+        // alter job v2's cancel must be called outside the database lock.
+        // When `FORCE` is supplied on the SQL, lake alter jobs bypass their
+        // FINISHED_REWRITING guard (publish-stuck escape hatch). For non-lake /
+        // non-stuck jobs `force=true` is a no-op (cancelImpl(force) defaults
+        // to delegating to the single-arg form).
+        //
+        // Dispatch carefully: SchemaChangeJobV2 (shared-nothing) and
+        // RollupJobV2 only override `cancel(String)` and do pre-monitor work
+        // there (isCancelling + createReplicaLatch release). They do NOT
+        // override the two-arg form, so routing every cancel through
+        // `cancel(reason, force)` would skip that pre-work and a non-force
+        // cancel against a PENDING job could deadlock until task timeout.
+        // Lake jobs have a two-arg override that preserves the same pre-work,
+        // so the force path stays safe.
+        boolean force = cancelAlterTableStmt.isForce();
+        if (force && !Config.enable_admin_skip_committed_txn) {
+            throw new DdlException(
+                    "CANCEL ALTER TABLE ... FORCE is disabled. "
+                            + "Set FE config enable_admin_skip_committed_txn=true to enable it. "
+                            + "This is an operator-only escape hatch for publish-stuck alter jobs; "
+                            + "disable it again immediately after recovery.");
+        }
+        // FORCE is designed for lake (shared-data) publish-stuck recovery only.
+        // Non-lake alter jobs don't have a stuck-publish failure mode, AND the
+        // two-arg cancel(reason, true) path skips the SchemaChangeJobV2 /
+        // RollupJobV2 one-arg cancel(String) override that releases
+        // createReplicaLatch before entering the synchronized block — applying
+        // it to a PENDING shared-nothing alter would hang until task timeout.
+        // Reject up front rather than silently degrade.
+        if (force && !(schemaChangeJobV2 instanceof LakeTableSchemaChangeJobBase
+                || schemaChangeJobV2 instanceof LakeTableAlterMetaJobBase)) {
+            throw new DdlException(
+                    "CANCEL ALTER TABLE ... FORCE is only supported on shared-data (lake) tables. "
+                            + "For shared-nothing tables, use the regular CANCEL ALTER TABLE syntax.");
+        }
+        boolean cancelled = force
+                ? schemaChangeJobV2.cancel(reason, true)
+                : schemaChangeJobV2.cancel(reason);
+        if (!cancelled) {
+            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState()
+                    + (force ? "" : " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)"));
         }
     }
 

@@ -42,6 +42,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -122,6 +123,17 @@ public abstract class AlterJobV2 implements Writable {
     @SerializedName(value = "computeResource")
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
+    // Set to true when the job was force-cancelled by CANCEL ALTER TABLE ...
+    // FORCE while sitting in FINISHED_REWRITING with a publish-stuck commit.
+    // Persisted for post-mortem audit; pure marker, does not affect the
+    // cancel path itself.
+    @SerializedName(value = "forceSkippedAtCommitted")
+    protected boolean forceSkippedAtCommitted = false;
+
+    public boolean isForceSkippedAtCommitted() {
+        return forceSkippedAtCommitted;
+    }
+
     protected Span span;
 
     protected Future<Boolean> publishVersionFuture = null;
@@ -146,6 +158,32 @@ public abstract class AlterJobV2 implements Writable {
         this.span = TraceManager.startNoopSpan();
     }
 
+<<<<<<< HEAD
+=======
+    protected AlterJobV2(AlterJobV2 job) {
+        this.type = job.type;
+        this.jobId = job.jobId;
+        this.jobState = job.jobState;
+        this.dbId = job.dbId;
+        this.tableId = job.tableId;
+        this.tableName = job.tableName;
+        this.errMsg = job.errMsg;
+        this.createTimeMs = job.createTimeMs;
+        this.finishedTimeMs = job.finishedTimeMs;
+        this.timeoutMs = job.timeoutMs;
+        this.warehouseId = job.warehouseId;
+        this.computeResource = job.computeResource;
+        // FORCE-cancel audit marker. Must be persisted via copyForPersist so a
+        // replay can tell whether to apply the no-op publish version bump,
+        // otherwise FE recovering from a pre-cancel image leaves its
+        // VisibleVersion at commitVersion-1 while BE already has tablet_metadata
+        // at commitVersion (written by lakePublishVersionWithSkip), and
+        // subsequent loads' publish would re-apply the cancelled alter's
+        // txn_log on top of the wrong base.
+        this.forceSkippedAtCommitted = job.forceSkippedAtCommitted;
+    }
+
+>>>>>>> 0b916ce8a6 ([Enhancement] Add CANCEL ALTER TABLE ... FORCE for publish-stuck alter jobs (phase 2) (#73828))
     public long getJobId() {
         return jobId;
     }
@@ -218,6 +256,52 @@ public abstract class AlterJobV2 implements Writable {
         return warehouseId;
     }
 
+<<<<<<< HEAD
+=======
+    public abstract AlterJobV2 copyForPersist();
+
+    protected void copyBaseFields(AlterJobV2 copy) {
+        copy.type = this.type;
+        copy.jobId = this.jobId;
+        copy.jobState = this.jobState;
+        copy.dbId = this.dbId;
+        copy.tableId = this.tableId;
+        copy.tableName = this.tableName;
+        copy.errMsg = this.errMsg;
+        copy.createTimeMs = this.createTimeMs;
+        copy.finishedTimeMs = this.finishedTimeMs;
+        copy.timeoutMs = this.timeoutMs;
+        copy.warehouseId = this.warehouseId;
+        copy.computeResource = this.computeResource;
+        copy.forceSkippedAtCommitted = this.forceSkippedAtCommitted;
+        // NOTE: lake subclasses do NOT call this. Their copyForPersist() uses
+        // subclass copy constructors that chain through AlterJobV2(AlterJobV2)
+        // above. Keep these two in sync if you add new base fields.
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState) {
+        persistStateChange(job, newState, false, null);
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState, Runnable applier) {
+        persistStateChange(job, newState, false, applier);
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState, boolean pruneMeta, Runnable applier) {
+        AlterJobV2 persistJob = job.copyForPersist();
+        persistJob.setJobState(newState);
+        if (pruneMeta) {
+            persistJob.pruneMeta();
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(persistJob, wal -> {
+            if (applier != null) {
+                applier.run();
+            }
+            job.jobState = newState;
+        });
+    }
+
+>>>>>>> 0b916ce8a6 ([Enhancement] Add CANCEL ALTER TABLE ... FORCE for publish-stuck alter jobs (phase 2) (#73828))
     /**
      * The keyword 'synchronized' only protects 2 methods:
      * run() and cancel()
@@ -284,8 +368,73 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public boolean cancel(String errMsg) {
+        return cancel(errMsg, false);
+    }
+
+    /**
+     * Force-cancel entry point used by ADMIN SKIP COMMITTED TRANSACTION
+     * (phase 2). When {@code force=true}, subclasses that normally refuse
+     * to cancel in FINISHED_REWRITING (lake alter jobs whose publish is
+     * stuck) MUST bypass that guard and cancel anyway — that is the whole
+     * point of the operator-only escape hatch.
+     *
+     * <p>{@code cancel(String)} is now an alias for {@code cancel(errMsg, false)};
+     * subclasses that need pre-monitor work (release latches, signal cancelling)
+     * should override this two-arg form so both call sites share that work.
+     */
+    public boolean cancel(String errMsg, boolean force) {
         synchronized (this) {
-            return cancelInternal(errMsg);
+            // NOTE: do NOT set forceSkippedAtCommitted here. The marker drives
+            // the replay-time VisibleVersion bump, so it must be set ONLY when
+            // an actual no-op publish advanced the partition version on BE —
+            // which the lake subclasses do exclusively from the
+            // FINISHED_REWRITING force path inside cancelImpl(force=true),
+            // right before persistStateChange snapshots the job via
+            // copyForPersist. Setting it optimistically here would mark a
+            // force-cancelled PENDING/RUNNING job (no version reserved, no BE
+            // metadata written) and replay would then advance VisibleVersion
+            // to a version that was never published.
+            boolean cancelled = cancelImpl(errMsg, force);
+            cancelHook(cancelled);
+            return cancelled;
+        }
+    }
+
+    /**
+     * Shared FORCE-cancel version bump for all lake alter job types
+     * (heavy schema change, metadata alter, async fast schema change).
+     *
+     * <p>When a lake alter is force-cancelled out of {@code FINISHED_REWRITING},
+     * the no-op publish has already written tablet metadata at {@code commitVersion}
+     * on BE. FE must advance each affected partition's visible version to match so
+     * subsequent loads compute their publish base correctly. This single helper is
+     * used by BOTH the live cancel path and the replay CANCELLED branch of every
+     * subclass, so a leader FE and a replayed/restarted FE stay byte-for-byte
+     * identical (the whole point of the {@code forceSkippedAtCommitted} marker).
+     *
+     * <p>It bumps the visible version ONLY — it does not touch
+     * {@code metadataSwitchVersion} (a force-cancel discards the alter, so no
+     * format switch happened at {@code commitVersion}) — and uses a soft guard
+     * instead of a hard precondition, because it runs inside the edit-log applier
+     * after the CANCELLED entry is already journaled.
+     *
+     * @param commitVersionMap per-partition commit version reserved by the alter;
+     *                         passed in because each subclass owns its own field.
+     */
+    protected void advanceVisibleVersionForForceSkip(OlapTable table, Map<Long, Long> commitVersionMap) {
+        if (table == null || commitVersionMap == null) {
+            return;
+        }
+        for (Map.Entry<Long, Long> entry : commitVersionMap.entrySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(entry.getKey());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long commitVersion = entry.getValue();
+            // Idempotent: a later load may already have advanced past commitVersion.
+            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+            }
         }
     }
 
@@ -344,6 +493,16 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void runFinishedRewritingJob() throws AlterCancelException;
 
     protected abstract boolean cancelImpl(String errMsg);
+
+    /**
+     * Force-aware cancel hook. Subclasses with a FINISHED_REWRITING guard
+     * (lake alter jobs) override this to honor {@code force=true} and bypass
+     * the guard. Default behaviour matches the original {@link #cancelImpl(String)},
+     * so subclasses that don't need the escape hatch don't need any change.
+     */
+    protected boolean cancelImpl(String errMsg, boolean force) {
+        return cancelImpl(errMsg);
+    }
 
     protected abstract void getInfo(List<List<Comparable>> infos);
 
