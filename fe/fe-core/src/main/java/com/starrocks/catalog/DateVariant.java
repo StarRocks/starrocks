@@ -20,6 +20,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.Type;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Objects;
 
@@ -52,7 +53,23 @@ public class DateVariant extends Variant {
 
     @Override
     public String getStringValue() {
-        return Instant.ofEpochSecond(seconds, nanos).toString();
+        // StarRocks canonical date/datetime text ("yyyy-MM-dd[ HH:mm:ss[.ffffff]]").
+        // This is the form the backend expects when it parses a value with
+        // datum_from_string (e.g. external split-boundary tuples); an ISO-8601
+        // instant ("...T...Z") makes the storage engine reject every
+        // date/datetime boundary and silently skip the split.
+        LocalDateTime dateTime = LocalDateTime.ofEpochSecond(seconds, (int) nanos, ZoneOffset.UTC);
+        switch (type.getPrimitiveType()) {
+            case DATE:
+                return dateTime.format(DateUtils.DATE_FORMATTER);
+            case DATETIME:
+                if (nanos == 0) {
+                    return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
+                }
+                return dateTime.format(DateUtils.DATE_TIME_FORMATTER) + "." + String.format("%06d", nanos / 1000);
+            default:
+                return Instant.ofEpochSecond(seconds, nanos).toString();
+        }
     }
 
     @Override

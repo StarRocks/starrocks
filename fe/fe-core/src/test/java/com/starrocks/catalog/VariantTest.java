@@ -395,6 +395,41 @@ public class VariantTest {
         Assertions.assertTrue(v1.compareTo(v2) < 0);
     }
 
+    // The backend parses split-boundary values with datum_from_string, which only
+    // accepts the StarRocks canonical date/datetime text ("yyyy-MM-dd[ HH:mm:ss]").
+    // getStringValue() (and thus the proto/thrift value) must emit that form, not an
+    // ISO-8601 instant ("...T...Z"), or the storage engine rejects every date/datetime
+    // split boundary and silently skips the split.
+
+    @Test
+    public void testDateTimeStringValueIsBackendCanonical() {
+        Variant v = new DateVariant(DateType.DATETIME, "2024-01-15T10:30:00");
+        Assertions.assertEquals("2024-01-15 10:30:00", v.getStringValue());
+        Assertions.assertEquals("2024-01-15 10:30:00", v.toProto().value);
+        Assertions.assertEquals("2024-01-15 10:30:00", v.toThrift().getValue());
+    }
+
+    @Test
+    public void testDateStringValueIsBackendCanonical() {
+        Variant v = new DateVariant(DateType.DATE, "2024-01-15");
+        Assertions.assertEquals("2024-01-15", v.getStringValue());
+        Assertions.assertEquals("2024-01-15", v.toProto().value);
+        Assertions.assertEquals("2024-01-15", v.toThrift().getValue());
+    }
+
+    @Test
+    public void testDateTimeStringValueKeepsMicros() {
+        Variant v = new DateVariant(DateType.DATETIME, Instant.ofEpochSecond(0, 123456000));
+        Assertions.assertEquals("1970-01-01 00:00:00.123456", v.getStringValue());
+    }
+
+    @Test
+    public void testDateTimeStringValueRoundTrips() {
+        DateVariant original = new DateVariant(DateType.DATETIME, "2024-01-15T10:30:00");
+        Variant reparsed = Variant.of(DateType.DATETIME, original.getStringValue());
+        Assertions.assertEquals(original, reparsed);
+    }
+
     // ==================== Variant.of() Factory Method Tests ====================
 
     @Test

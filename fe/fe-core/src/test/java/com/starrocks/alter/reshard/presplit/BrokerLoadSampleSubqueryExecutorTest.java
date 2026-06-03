@@ -17,7 +17,6 @@ package com.starrocks.alter.reshard.presplit;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.NullVariant;
-import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.BrokerDesc;
@@ -60,10 +59,12 @@ class BrokerLoadSampleSubqueryExecutorTest {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(
                 bigintRequest(brokerDesc, fileGroups, fileStatusesPerGroup));
 
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertEquals("100", rows.get(0).get(0).getStringValue());
-        Assertions.assertEquals("200", rows.get(1).get(0).getStringValue());
+        Assertions.assertEquals("100", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("200", rows.get(1).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertTrue(rows.get(0).partitionSourceTuple().isEmpty(),
+                "unpartitioned request must leave the partition-source tuple empty");
         Assertions.assertEquals(4L * 1024L * 1024L, execution.estimates().totalBytes());
 
         Assertions.assertTrue(capturedSql.toString().contains(
@@ -312,11 +313,11 @@ class BrokerLoadSampleSubqueryExecutorTest {
 
         Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
                 "both sort-key columns must appear in the projection: " + capturedSql);
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertEquals(2, rows.get(0).size());
-        Assertions.assertEquals("10", rows.get(0).get(0).getStringValue());
-        Assertions.assertEquals("20", rows.get(0).get(1).getStringValue());
+        Assertions.assertEquals(2, rows.get(0).sortKeyTuple().size());
+        Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("20", rows.get(0).sortKeyTuple().get(1).getStringValue());
     }
 
     @Test
@@ -342,12 +343,12 @@ class BrokerLoadSampleSubqueryExecutorTest {
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
 
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertEquals("1", rows.get(0).get(0).getStringValue());
-        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).get(1),
+        Assertions.assertEquals("1", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).sortKeyTuple().get(1),
                 "nullable trailing column null cell must decode to NullVariant");
-        Assertions.assertEquals("42", rows.get(1).get(1).getStringValue());
+        Assertions.assertEquals("42", rows.get(1).sortKeyTuple().get(1).getStringValue());
     }
 
     @Test

@@ -32,7 +32,8 @@ import java.util.Objects;
  * row still yields a non-empty {@link SampleSet}.
  *
  * <p>The byte limit is enforced against an approximate width: the sum of each
- * value's {@code Variant.getStringValue().length()} in UTF-16 code units. For
+ * value's {@code Variant.getStringValue().length()} in UTF-16 code units (over
+ * the sort-key tuple and, when populated, the partition-source tuple). For
  * ASCII this matches the on-wire UTF-8 byte count; for multi-byte characters
  * (CJK, emoji) the real UTF-8 byte count can be 2-3x higher. The limit is a
  * soft FE-memory guard, not a precise byte counter.
@@ -51,32 +52,49 @@ public final class ReservoirSampler implements Sampler {
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
         long byteLimit = request.getSampleByteLimit();
-        Iterator<List<Variant>> rowIterator = execution.rows();
+        Iterator<SampleRow> rowIterator = execution.rows();
 
-        List<Tuple> tuples = new ArrayList<>();
+        List<Tuple> sortKeyTuples = new ArrayList<>();
+        List<Tuple> partitionSourceTuples = new ArrayList<>();
         long accumulatedBytes = 0L;
 
         while (rowIterator.hasNext()) {
             if (Thread.currentThread().isInterrupted()) {
                 throw new StarRocksException("Sampling interrupted");
             }
-            List<Variant> values = rowIterator.next();
-            if (values == null) {
+            SampleRow row = rowIterator.next();
+            if (row == null) {
                 throw new StarRocksException("Sampling executor returned a null row");
             }
-            long rowBytes = estimateRowBytes(values);
+            // SampleRow's compact constructor rejects null tuple fields; only emptiness
+            // distinguishes the unpartitioned path from the partitioned one here.
+            List<Variant> sortKeyValues = row.sortKeyTuple();
+            List<Variant> partitionSourceValues = row.partitionSourceTuple();
+            long rowBytes = estimateRowBytes(sortKeyValues);
+            if (!partitionSourceValues.isEmpty()) {
+                rowBytes += estimateRowBytes(partitionSourceValues);
+            }
             // Always admit the first row so a single oversize row doesn't return an empty
             // SampleSet; for subsequent rows enforce the soft limit.
-            if (!tuples.isEmpty() && accumulatedBytes + rowBytes > byteLimit) {
+            if (!sortKeyTuples.isEmpty() && accumulatedBytes + rowBytes > byteLimit) {
                 break;
             }
             // Defensive copy: production executors may reuse the row's value list across
             // iterator calls. Wrap into an immutable copy so the stored Tuple is stable.
-            tuples.add(new Tuple(ImmutableList.copyOf(values)));
+            sortKeyTuples.add(new Tuple(ImmutableList.copyOf(sortKeyValues)));
+            if (!partitionSourceValues.isEmpty()) {
+                partitionSourceTuples.add(new Tuple(ImmutableList.copyOf(partitionSourceValues)));
+            }
             accumulatedBytes += rowBytes;
         }
 
-        return tuples.isEmpty() ? SampleSet.EMPTY : new SampleSet(tuples, execution.estimates());
+        if (sortKeyTuples.isEmpty()) {
+            return SampleSet.EMPTY;
+        }
+        // partitionSourceTuples is either empty (executor projected no partition-source
+        // columns) or filled 1:1 with sortKeyTuples. The mid-stream byte-limit break
+        // preserves this invariant because the two lists are appended together per row.
+        return new SampleSet(sortKeyTuples, partitionSourceTuples, execution.estimates());
     }
 
     /**

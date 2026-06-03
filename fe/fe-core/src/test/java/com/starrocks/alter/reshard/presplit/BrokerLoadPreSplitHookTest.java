@@ -23,19 +23,17 @@ import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -74,13 +72,10 @@ public class BrokerLoadPreSplitHookTest {
     public void testSessionOptOutShortCircuits() throws Exception {
         // SET enable_tablet_pre_split=false on the session must short-circuit
         // before the eligibility-target walk AND record the eligibility-skip
-        // counter under disabled_by_session. The hook reads
-        // ConnectContext.getSessionVariableOrDefault() (a static), so stub
-        // that directly. Resolve the SessionVariable mock before the outer
-        // mockStatic.when() — Mockito's per-thread stubbing state does not
-        // tolerate nested mock()/when() inside another when() argument.
-        SessionVariable optedOutSessionVariable = Mockito.mock(SessionVariable.class);
-        Mockito.when(optedOutSessionVariable.isEnableTabletPreSplit()).thenReturn(false);
+        // counter under disabled_by_session. The hook now takes the
+        // ConnectContext directly (parameter-threaded), so we
+        // pass an opted-out context rather than stubbing a static.
+        ConnectContext optedOutContext = mockConnectContextWithSessionPreSplit(false);
         boolean savedHasInit = MetricRepo.hasInit;
         MetricRepo.hasInit = true;
         try {
@@ -88,11 +83,8 @@ public class BrokerLoadPreSplitHookTest {
             long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
                     .getMetric(label).getValue();
 
-            try (MockedStatic<ConnectContext> contextStatic = Mockito.mockStatic(ConnectContext.class)) {
-                contextStatic.when(ConnectContext::getSessionVariableOrDefault).thenReturn(optedOutSessionVariable);
-                assertHookDoesNotDelegate(() ->
-                        invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
-            }
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(optedOutContext, singlePartitionOlapTable(), List.of(), List.of()));
 
             org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
@@ -172,12 +164,24 @@ public class BrokerLoadPreSplitHookTest {
      * mocks for {@code Database}, {@code BrokerDesc}, and {@code ComputeResource}
      * — none of which the early-return branches consult. Tests pass distinct
      * arguments for the three fields the hook actually inspects on the
-     * short-circuit paths: target table, file groups, file statuses.
+     * short-circuit paths: target table, file groups, file statuses. The
+     * default context has {@code enable_tablet_pre_split=true} so the
+     * session opt-out branch is NOT taken.
      */
     private static void invokeHook(
             OlapTable target, List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses) {
+        invokeHook(mockConnectContextWithSessionPreSplit(true), target, fileGroups, fileStatuses);
+    }
+
+    /**
+     * Overload for tests that need to drive a specific {@link ConnectContext}
+     * (e.g. the session opt-out test).
+     */
+    private static void invokeHook(
+            ConnectContext context, OlapTable target,
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses) {
         BrokerLoadPreSplitHook.maybeRunPreSplit(
-                mock(Database.class), target, mock(BrokerDesc.class),
+                context, mock(Database.class), target, mock(BrokerDesc.class),
                 fileGroups, fileStatuses, mock(ComputeResource.class));
     }
 
