@@ -34,6 +34,7 @@
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
@@ -423,6 +424,14 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
         RETURN_IF_ERROR(group->for_each_pipeline(call));
     }
     return Status::OK();
+}
+
+void FragmentContext::iterate_drivers(const std::function<void(const DriverPtr&)>& call) {
+    iterate_pipeline([&](const Pipeline* pipeline) {
+        for (const auto& driver : pipeline->drivers()) {
+            call(driver);
+        }
+    });
 }
 
 Status FragmentContext::prepare_active_drivers() {
