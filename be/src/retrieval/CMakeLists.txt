@@ -16,6 +16,4 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/retrieval")
 
 ADD_BE_LIB(Retrieval
     vector/vector_ann_index.cpp
-    vector/filter_strategy.cpp
-    vector/vector_search_executor.cpp
 )
