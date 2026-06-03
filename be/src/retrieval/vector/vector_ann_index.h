@@ -19,6 +19,7 @@
 #include <memory>
 #include <roaring/roaring.hh>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/status.h"
@@ -123,6 +124,38 @@ private:
 };
 
 // ============================================================
+// AnnIterator — stateful, lazy result stream
+//                (Milvus/Knowhere IndexIterator style)
+//
+// Each VectorAnnIndex implementation returns its own concrete
+// subclass, holding the algorithm-specific traversal state
+// (HNSW visited set + candidate heap, DiskANN beam, Paimon SDK
+// cursor, ...). Results are produced one at a time in best-first
+// (non-increasing relevance) order.
+//
+// When a row filter is supplied at creation time, the iterator
+// validates each candidate against it lazily and keeps advancing
+// the underlying traversal until a matching result is found — this
+// is the native "iterative filter" path.
+//
+// Lifetime: an iterator borrows the index it was created from and
+// must not outlive it.
+// ============================================================
+class AnnIterator {
+public:
+    virtual ~AnnIterator() = default;
+
+    // Whether at least one more result can be produced. May lazily
+    // advance the underlying traversal (expand ef_search / beam,
+    // fetch the next page), hence non-const.
+    virtual bool has_next() = 0;
+
+    // Produce the next (row_id, score) in best-first order.
+    // Precondition: has_next() == true.
+    virtual StatusOr<std::pair<int64_t, float>> next() = 0;
+};
+
+// ============================================================
 // VectorAnnIndex — pure ANN search interface (Layer 1)
 //
 // Each implementation handles a single ANN algorithm and its
@@ -151,6 +184,13 @@ public:
     // Default implementation falls back to unfiltered search + post-filter.
     virtual Status filtered_search(const VectorQuery& query, const RowIdFilter& filter, VectorAnnResult* result);
 
+    // Create a stateful, lazy result iterator. `filter` may be nullptr (no
+    // filtering). The returned iterator borrows *this and must not outlive it.
+    // In iterator semantics, query.top_k is an initial search-window hint
+    // rather than a hard cap — the caller pulls as many results as it wants.
+    virtual StatusOr<std::unique_ptr<AnnIterator>> make_iterator(const VectorQuery& query,
+                                                                 const RowIdFilter* filter) = 0;
+
     virtual Status close() = 0;
 
     virtual int64_t mem_usage() const = 0;
@@ -158,8 +198,8 @@ public:
     virtual VectorIndexType type() const = 0;
 
     // True if the index can efficiently skip filtered rows during traversal
-    // (e.g., HNSW graph walk, DiskANN beam search).
-    // When false, FilterStrategy will prefer post-filter over pre-filter.
+    // (e.g., HNSW graph walk, DiskANN beam search). Callers may use this to
+    // decide between in-search filtering and oversample + post-filter.
     virtual bool supports_efficient_filtered_search() const { return false; }
 };
 
