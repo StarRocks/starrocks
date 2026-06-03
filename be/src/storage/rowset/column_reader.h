@@ -180,11 +180,11 @@ public:
     /// prerequisite:
     /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
     /// - if the original relationship between |predicates| is AND, at least one of them need to support bloom filter.
-    Status original_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
-                                 const IndexReadOptions& opts);
+    Status original_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, bool is_conjunction,
+                                 SparseRange<>* ranges, const IndexReadOptions& opts);
 
-    Status ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
-                              const IndexReadOptions& opts);
+    Status ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, bool is_conjunction,
+                              SparseRange<>* ranges, const IndexReadOptions& opts);
 
     Status load_ordinal_index(const IndexReadOptions& opts);
 
@@ -212,7 +212,7 @@ private:
                                                                  const TabletColumn* column = nullptr);
 
     const std::string& file_name() const { return _segment->file_name(); }
-    template <bool is_original_bf>
+    template <bool is_original_bf, bool is_conjunction>
     Status bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                         const IndexReadOptions& opts);
     struct private_type {

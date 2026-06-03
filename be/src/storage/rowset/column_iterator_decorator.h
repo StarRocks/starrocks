@@ -54,8 +54,8 @@ public:
     bool has_original_bloom_filter_index() const override { return _parent->has_original_bloom_filter_index(); }
     bool has_ngram_bloom_filter_index() const override { return _parent->has_ngram_bloom_filter_index(); }
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                          SparseRange<>* row_ranges) override {
-        return _parent->get_row_ranges_by_bloom_filter(predicates, row_ranges);
+                                          SparseRange<>* row_ranges, bool is_conjunction) override {
+        return _parent->get_row_ranges_by_bloom_filter(predicates, row_ranges, is_conjunction);
     }
 
     bool all_page_dict_encoded() const override { return _parent->all_page_dict_encoded(); }

@@ -78,8 +78,8 @@ public:
 
     bool has_original_bloom_filter_index() const override;
     bool has_ngram_bloom_filter_index() const override;
-    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                          SparseRange<>* range) override;
+    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* range,
+                                          bool is_conjunction) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 

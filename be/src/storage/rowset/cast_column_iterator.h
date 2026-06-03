@@ -48,7 +48,7 @@ public:
     bool has_original_bloom_filter_index() const override { return false; }
     bool has_ngram_bloom_filter_index() const override { return false; }
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                          SparseRange<>* row_ranges) override {
+                                          SparseRange<>* row_ranges, bool is_conjunction) override {
         return Status::OK();
     }
 
