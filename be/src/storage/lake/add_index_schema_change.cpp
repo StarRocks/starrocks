@@ -165,7 +165,7 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     }
 
     for (const auto& rowset : base_metadata->rowsets()) {
-        for (int seg_idx = 0; seg_idx < rowset.segments_size(); ++seg_idx) {
+        for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
             uint32_t rssid = get_rssid(rowset, seg_idx);
             // Capture by value to keep task self-contained; the `rowset`
             // reference would dangle if we captured by reference and the
@@ -227,7 +227,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
                                                    uint32_t rssid, IndexDeltaGroupEntryPB* out_entry) {
     DCHECK(out_entry != nullptr);
 
-    const auto& seg_name = rowset_meta.segments(seg_idx_in_rowset);
+    const auto& seg_name = rowset_meta.segment_metas(seg_idx_in_rowset).filename();
     // segments in rowset_meta carry relative filenames; resolve them against
     // the new tablet's segment location (same bucket/dir as the base tablet
     // on lake, since the fast path never copies or rewrites segment data).
@@ -239,18 +239,18 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     //    this one-shot scan, mirroring schema_change.cpp's existing
     //    convention).
     FileInfo seg_fileinfo{.path = seg_path};
-    if (seg_idx_in_rowset < rowset_meta.segment_encryption_metas_size()) {
-        seg_fileinfo.encryption_meta = rowset_meta.segment_encryption_metas(seg_idx_in_rowset);
+    if (rowset_meta.segment_metas(seg_idx_in_rowset).has_encryption_meta()) {
+        seg_fileinfo.encryption_meta = rowset_meta.segment_metas(seg_idx_in_rowset).encryption_meta();
     }
-    if (seg_idx_in_rowset < rowset_meta.segment_size_size()) {
-        seg_fileinfo.size = rowset_meta.segment_size(seg_idx_in_rowset);
+    if (rowset_meta.segment_metas(seg_idx_in_rowset).has_size()) {
+        seg_fileinfo.size = rowset_meta.segment_metas(seg_idx_in_rowset).size();
     }
     // Bundled rowsets pack multiple logical segments into one physical file;
     // without this offset the RandomAccessFile starts at byte 0 of the bundle
     // and column reads return the wrong bytes (observed as page checksum
     // mismatch on the first column read in the fast path).
-    if (seg_idx_in_rowset < rowset_meta.bundle_file_offsets_size()) {
-        seg_fileinfo.bundle_file_offset = rowset_meta.bundle_file_offsets(seg_idx_in_rowset);
+    if (rowset_meta.segment_metas(seg_idx_in_rowset).has_bundle_file_offset()) {
+        seg_fileinfo.bundle_file_offset = rowset_meta.segment_metas(seg_idx_in_rowset).bundle_file_offset();
     }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
