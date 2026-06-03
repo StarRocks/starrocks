@@ -561,3 +561,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：過去のタブレット SPLIT/MERGE ジョブの最大保持期間。
 - 導入時期：v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_files`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`INSERT INTO ... SELECT FROM FILES()` 形式の取り込みに対して、サンプリングベースのタブレット事前分割（Sample-Based Tablet Pre-Split）を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
+- 導入時期：v4.1.0
+
+### `enable_tablet_pre_split_for_broker_load`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Broker Load に対してサンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
+- 導入時期：v4.1.0
+
+### `tablet_pre_split_pre_submit_timeout_seconds`
+
+- デフォルト：30
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：サンプリングベースのタブレット事前分割における「提出前フェーズ」（サンプリング + 境界プランニング + reshard ジョブの構築）の壁時計予算。超過するとコーディネーターは事前分割をスキップし、取り込みは元の単一タブレット経路で続行されます。
+- 導入時期：v4.1.0
+
+### `tablet_pre_split_post_submit_wait_seconds`
+
+- デフォルト：300
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：サンプリングベースのタブレット事前分割のコーディネーターが、受理済み reshard ジョブの `FINISHED` を待機する最長時間。取り込み経路ごとに意味が異なります：INSERT-from-FILES は同期的に待機し、タイムアウト時は **中止せずに継続実行** します — INSERT はその時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウトとなり得ます）。`tablet_pre_split_post_submit_hard_cap` カウンタがタイムアウトを記録します。テスト用の厳格な `runPreSplit` ラッパーはタイムアウト時に `PreSplitPostSubmitTimeoutException` を送出して呼び出し元の取り込みを中止します。Broker Load は fire-and-forget で全く待機しません（取り込みが reshard デーモンを待つことはありません）。
+- 導入時期：v4.1.0
+
+### `tablet_pre_split_sample_byte_limit`
+
+- デフォルト：16777216 (16 MiB)
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：サンプリングベースのタブレット事前分割の data-tier リザーバーサンプラーが FE 側の累積バッファに保持できるソフトバイト上限。累積値がこの上限を超えるとサンプラーは読み取りを停止します。最初の 1 行は常に採用されるため、サイズ超過の単一行でも空でないサンプルが得られます。
+- 導入時期：v4.1.0
+
+### `tablet_pre_split_meta_tier_overlap_threshold`
+
+- デフォルト：0.3
+- タイプ：Double
+- 単位：-
+- 変更可能：Yes
+- 説明：サンプリングベースのタブレット事前分割の meta tier（Parquet/ORC の row-group メタデータ）が境界を計算する際に許容される重なり率の最大値。この閾値を超えると、最小値でソートした累積行数が単調でなくなるため、meta tier は data tier（行サンプリング）にフォールバックします。
+- 導入時期：v4.1.0
+
+#### サンプリングベースのタブレット事前分割のロールバック
+
+ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
+
+1. `enable_tablet_pre_split_for_insert_from_files = false` と `enable_tablet_pre_split_for_broker_load = false` を同時に設定します。新規取り込みは即座に事前分割をスキップします。
+2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
+3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
+
+#### 本番デプロイのガイダンス
+
+本番クラスタでは `enable_execute_script_on_frontend = false` に設定してください。サンプリングベースのタブレット事前分割は FE 側のスクリプト実行に依存する SQL インタフェースを持たず、本番経路ではコネクタ + プランナーを介して直接サンプリングします。`enable_execute_script_on_frontend = true` のまま運用しても、事前分割の機能が追加で得られることはなく、FE の攻撃面が広がるだけです。本番クラスタの安全な既定値は無効化です。
