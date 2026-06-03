@@ -16,9 +16,9 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <vector>
 
-#include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -55,8 +55,6 @@ public:
 
 public:
     static EventPtr create_event();
-    static EventPtr create_collect_stats_source_initialize_event(DriverExecutor* executor,
-                                                                 std::vector<Pipeline*>&& pipelines);
     static EventPtr depends_all(const std::vector<EventPtr>& events);
 
 protected:
