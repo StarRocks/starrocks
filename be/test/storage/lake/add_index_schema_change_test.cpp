@@ -532,9 +532,18 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bitmap_iterator_smoke) {
     auto meta = vt2.metadata();
     ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
     const auto& rowset = meta->rowsets(0);
-    ASSERT_GT(rowset.segments_size(), 0);
-    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, rowset.segments(0))};
-    if (rowset.segment_size_size() > 0) seg_fi.size = rowset.segment_size(0);
+    ASSERT_GT(rowset.segment_metas_size(), 0);
+    const auto& segment_meta = rowset.segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) {
+        seg_fi.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        seg_fi.encryption_meta = segment_meta.encryption_meta();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
     size_t footer_hint = 16 * 1024;
     ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                 LakeIOOptions{.fill_data_cache = false},
@@ -604,9 +613,18 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bloom_filter_smoke) {
     auto meta = vt2.metadata();
     ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
     const auto& rowset = meta->rowsets(0);
-    ASSERT_GT(rowset.segments_size(), 0);
-    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, rowset.segments(0))};
-    if (rowset.segment_size_size() > 0) seg_fi.size = rowset.segment_size(0);
+    ASSERT_GT(rowset.segment_metas_size(), 0);
+    const auto& segment_meta = rowset.segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) {
+        seg_fi.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        seg_fi.encryption_meta = segment_meta.encryption_meta();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
     size_t footer_hint = 16 * 1024;
     ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                 LakeIOOptions{.fill_data_cache = false},
