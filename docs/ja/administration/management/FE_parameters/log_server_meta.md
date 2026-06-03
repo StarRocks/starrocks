@@ -238,6 +238,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、FE 監査サブシステムは、ConnectProcessor によって処理されたステートメントの SQL テキストを FE 監査ログ (`fe.audit.log`) に記録します。格納されたステートメントは、他の制御に従います。暗号化されたステートメントは編集され (`AuditEncryptionChecker`)、`enable_sql_desensitize_in_log` が設定されている場合、機密性の高い資格情報は編集または非機密化される可能性があり、ダイジェストレコーディングは `enable_sql_digest` によって制御されます。`false` に設定されている場合、ConnectProcessor は監査イベントのステートメントテキストを "?" に置き換えます。他の監査フィールド (ユーザー、ホスト、期間、ステータス、`qe_slow_log_ms` を介した低速クエリ検出、およびメトリック) は引き続き記録されます。SQL 監査を有効にすると、フォレンジックとトラブルシューティングの可視性が向上しますが、機密性の高い SQL コンテンツが公開され、ログのボリュームと I/O が増加する可能性があります。無効にすると、監査ログでの完全なステートメントの可視性を失う代わりにプライバシーが向上します。
 - 導入時期：-
 
+### `enable_print_load_profile_to_log`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` に設定すると、ロード profile（Stream Load、Routine Load、Broker Load、Merge Commit など）が `ProfileManager` にプッシュされる際に、INFO レベルで profile ログ (`fe.profile.log`) にも、query profile log と同じ単一行 JSON 形式で出力されます。これにより、`profile_info_reserved_num` の上限によってロード profile が `ProfileManager` から削除された後でも、ログから復元できます。`fe.log` ではなく profile ログを使うのは、その JSON レイアウトの文字列上限が `sys_log_json_max_string_length` よりもはるかに大きい `sys_log_json_profile_max_string_length` であり、大きなロード profile が切り詰められないためです。このファイルのローテーションと保持は `profile_log_*` パラメータで制御されます。クエリタイプが `Load` の profile のみが出力され、クエリ profile には影響しません。ロード profile は実際に収集された場合（例えば `enable_profile` が有効な場合、またはロードが大規模ロード profile のしきい値を超えた場合）にのみ出力されます。
+- 導入時期：-
+
 ### `enable_profile_log`
 
 - デフォルト：true
