@@ -85,7 +85,6 @@ public:
     virtual StatusOr<std::pair<int64_t, float>> next() = 0;
 };
 
-
 // Each implementation handles a single ANN algorithm and its own
 // index file I/O. The interface is stateless per one-shot search:
 // search() may be invoked multiple times. For lazy / iterative
