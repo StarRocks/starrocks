@@ -19,6 +19,7 @@
 #include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_morsel.h"

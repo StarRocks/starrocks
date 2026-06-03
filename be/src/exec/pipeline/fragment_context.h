@@ -14,8 +14,13 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <map>
 #include <memory>
+#include <memory_resource>
 #include <unordered_map>
+#include <vector>
 
 #include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
@@ -25,7 +30,6 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel_queue.h"
@@ -112,14 +116,7 @@ public:
 
     Status prepare_all_pipelines();
 
-    template <class Func>
-    void iterate_drivers(Func&& call) {
-        iterate_pipeline([&](const Pipeline* pipeline) {
-            for (auto& driver : pipeline->drivers()) {
-                call(driver);
-            }
-        });
-    }
+    void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
     void clear_all_drivers();
     void close_all_execution_groups();

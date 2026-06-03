@@ -28,6 +28,7 @@
 #include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/driver_state.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
@@ -39,7 +40,6 @@ namespace starrocks::pipeline {
 
 class AuditStatisticsReporter;
 class DriverQueue;
-enum DriverState : uint32_t;
 struct DriverExecutorMetrics;
 class PipelineDriverPoller;
 class PipelineExecutorMetrics;
