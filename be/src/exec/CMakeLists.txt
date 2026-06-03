@@ -30,6 +30,7 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/operator.cpp
     pipeline/operator_factory.cpp
     pipeline/source_operator.cpp
+    pipeline/primitives/event.cpp
     pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
@@ -298,8 +299,8 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
+    pipeline/adaptive/collect_stats_event.cpp
     pipeline/adaptive/utils.cpp
-    pipeline/adaptive/event.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
     query_cache/multilane_operator.cpp
