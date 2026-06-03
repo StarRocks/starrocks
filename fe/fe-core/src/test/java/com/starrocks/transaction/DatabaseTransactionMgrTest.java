@@ -1142,7 +1142,16 @@ public class DatabaseTransactionMgrTest {
             // Run commit to completion on the main thread. After this returns,
             // idToRunningTransactionState[raceTxnId] holds a brand-new
             // TransactionState (status=COMMITTED), not the object A captured above.
-            masterTransMgr.commitPreparedTransaction(db, raceTxnId, 1000L);
+            // commitPreparedTransaction upserts the COMMITTED state into the running
+            // map before it waits for publish; in UT there is no publish daemon, so
+            // the publish-wait always times out with a "publish timeout" StarRocksException.
+            // That timeout is expected and harmless here — the COMMITTED map entry is
+            // already in place — so tolerate it exactly like the sibling commit-race test.
+            try {
+                masterTransMgr.commitPreparedTransaction(db, raceTxnId, 1000L);
+            } catch (Throwable t) {
+                assertPublishTimeoutOrNull(t);
+            }
 
             TransactionState mapEntryAfterCommit = masterDbTransMgr.getTransactionState(raceTxnId);
             assertNotNull(mapEntryAfterCommit);

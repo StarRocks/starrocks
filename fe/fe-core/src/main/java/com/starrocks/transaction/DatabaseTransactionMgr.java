@@ -624,7 +624,14 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        transactionState.writeLock();
+        // Keep a stable reference to the object whose writeLock we actually acquire,
+        // so the finally block always unlocks the same object. The local
+        // `transactionState` reference may be reassigned to `latest` below when a
+        // concurrent commit has replaced the map entry; unlocking that reassigned
+        // object (which this thread never locked) would throw IllegalMonitorStateException
+        // and leak the lock on the original object.
+        final TransactionState lockedState = transactionState;
+        lockedState.writeLock();
         TransactionState copiedState = null;
         try {
             // Re-fetch the latest TransactionState under writeLock. Between releasing
@@ -671,7 +678,7 @@ public class DatabaseTransactionMgr {
                 LOG.warn("transaction after state transform failed: {}", transactionState, t);
             }
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
 
         if (copiedState.getTransactionStatus() != TransactionStatus.ABORTED) {
