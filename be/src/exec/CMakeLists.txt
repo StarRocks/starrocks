@@ -169,6 +169,7 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
+    pipeline/fragment_context_manager.cpp
     pipeline/query_context.cpp
     pipeline/query_context_manager.cpp
     pipeline/operator_factory.cpp
