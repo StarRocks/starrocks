@@ -93,7 +93,7 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-latest"}]}' || '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"}]}') }}
+      matrix: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-latest"}]}' || '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"}]}') }}
 
     steps:
       - uses: actions/checkout@v6
