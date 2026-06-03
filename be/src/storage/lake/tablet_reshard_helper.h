@@ -50,9 +50,43 @@ bool has_valid_uid(const RowsetMetadataPB& rowset_metadata);
 // rowset across split siblings. The single source of truth for MERGE dedup.
 bool same_rowset_uid(const RowsetMetadataPB& a, const RowsetMetadataPB& b);
 
+// Gives |dst| the identity of |src|: copies src's uid if it has a valid one, else mints a
+// fresh uid on |dst|. The validity check keys off |src|, not |dst| (which may already hold a
+// stale or default uid, e.g. after proto MergeFrom), so this is NOT interchangeable with
+// ensure_rowset_uid. Used by the publish combine paths and column-mode partial update so a
+// rowset adopts its source's uid; a source predating the uid field (legacy rolling-upgrade
+// log, never cross-published) is backfilled rather than failing the in-flight publish.
+void inherit_or_set_uid(RowsetMetadataPB* dst, const RowsetMetadataPB& src);
+
 void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata);
 void set_all_data_files_shared(TxnLogPB* txn_log);
+
+// Whole-tablet variant: marks every rowset's segments shared (delegates per
+// rowset to set_all_data_files_shared(RowsetMetadataPB*)) AND marks every
+// non-segment file (dcg, sstable, and unless skip_delvecs is true, delvec)
+// shared. Composed of the rowset loop plus set_non_segment_files_shared
+// below; the split exists so the SPLIT path can call only the non-segment
+// portion after computing per-segment ownership.
+//
+// skip_delvecs=true is the MERGE source-tablet path: when marking the source
+// old tablets all-shared for ownership transfer to the merged new tablet,
+// delvecs are deliberately left as-is. Delvecs are per-tablet versioned
+// bitmaps that the merged tablet rebuilds independently; the source's delvec
+// files become unreferenced after merge and vacuum reclaims them, so marking
+// them shared would only inflate retention.
 void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs = false);
+
+// Marks only non-segment files (delvec, dcg, sstable) shared, leaving every
+// rowset's segment_metas[].shared untouched so the caller can decide per-segment
+// ownership. The TabletMetadataPB set_all_data_files_shared wrapper delegates
+// the non-segment portion here. skip_delvecs has the same meaning as above.
+void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs = false);
+
+// Sets a delta-column-group's per-file shared flags uniformly to |shared|, sized
+// to its column_files. Centralizes the "mark a whole dcg shared / private" idiom
+// used by set_non_segment_files_shared (shared) and tablet split's per-segment
+// ownership propagation (private for an exclusive segment).
+void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
@@ -88,7 +122,8 @@ StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
 // Mirrors Rowset::get_seek_range() fallback chain:
 //   rowset.range if has_range, else ctx_metadata.range if has_range,
 //   else an unbounded singleton owned by this function.
-const TabletRangePB& effective_child_local_range(const RowsetMetadataPB& rowset, const TabletMetadataPB& ctx_metadata);
+const TabletRangePB& effective_old_tablet_local_range(const RowsetMetadataPB& rowset,
+                                                      const TabletMetadataPB& ctx_metadata);
 
 void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index);
 void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index);
@@ -97,9 +132,9 @@ void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t s
 // |txn_log|, resolved under |txn_log.tablet_id()| (the tablet where the
 // compaction writer emitted them).
 //
-// Used by MERGING cross-publish: a compaction txn committed on a source tablet
+// Used by MERGING cross-publish: a compaction txn committed on an old tablet
 // may be published after the merge, and its output files were written under
-// the source tablet's directory. Dropping the compaction leaves those files
+// the old tablet's directory. Dropping the compaction leaves those files
 // unreferenced; the caller should pass the returned paths to delete_files_async.
 //
 // Only output-side files are collected. Input rowsets/sstables are deliberately

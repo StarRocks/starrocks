@@ -53,6 +53,20 @@ bool same_rowset_uid(const RowsetMetadataPB& a, const RowsetMetadataPB& b) {
     return has_valid_uid(a) && has_valid_uid(b) && UniqueId(a.uid()) == UniqueId(b.uid());
 }
 
+// Gives |dst| the identity of |src|: copies src's uid if it has a valid one, else mints a
+// fresh uid on |dst|. The validity check keys off |src| (not |dst|, which may already hold a
+// stale or default uid, e.g. after proto MergeFrom), so this is not interchangeable with
+// ensure_rowset_uid (which keys off |dst|). Used where a rowset should adopt a source's
+// identity but the source might predate the uid field (legacy rolling-upgrade txn log, never
+// cross-published) — that case is backfilled rather than failing the in-flight publish.
+void inherit_or_set_uid(RowsetMetadataPB* dst, const RowsetMetadataPB& src) {
+    if (has_valid_uid(src)) {
+        dst->mutable_uid()->CopyFrom(src.uid());
+    } else {
+        set_rowset_uid(dst);
+    }
+}
+
 void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out) {
     DCHECK(out != nullptr);
     DCHECK_GE(total, 0);
@@ -240,7 +254,7 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
     if (txn_log->has_op_replication()) {
         // Each replication op_write flows through the same apply_opwrite path on
         // publish (see txn_log_applier.cpp apply_write_log). Share the same rule as
-        // the top-level op_write so shared_dels / ssts are populated consistently.
+        // the top-level op_write so dels_meta[].shared / ssts are populated consistently.
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
             set_all_data_files_shared(&op_write);
         }
@@ -264,11 +278,7 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
     }
 }
 
-void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
-    for (auto& rowset_metadata : *tablet_metadata->mutable_rowsets()) {
-        set_all_data_files_shared(&rowset_metadata);
-    }
-
+void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
     if (!skip_delvecs && tablet_metadata->has_delvec_meta()) {
         for (auto& pair : *tablet_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
             pair.second.set_shared(true);
@@ -277,9 +287,7 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
 
     if (tablet_metadata->has_dcg_meta()) {
         for (auto& dcg : *tablet_metadata->mutable_dcg_meta()->mutable_dcgs()) {
-            auto* shared_files = dcg.second.mutable_shared_files();
-            shared_files->Clear();
-            shared_files->Resize(dcg.second.column_files_size(), true);
+            set_dcg_shared(&dcg.second, true);
         }
     }
 
@@ -288,6 +296,19 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
             sstable.set_shared(true);
         }
     }
+}
+
+void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared) {
+    auto* shared_files = dcg->mutable_shared_files();
+    shared_files->Clear();
+    shared_files->Resize(dcg->column_files_size(), shared);
+}
+
+void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
+    for (auto& rowset_metadata : *tablet_metadata->mutable_rowsets()) {
+        set_all_data_files_shared(&rowset_metadata);
+    }
+    set_non_segment_files_shared(tablet_metadata, skip_delvecs);
 }
 
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
@@ -460,7 +481,8 @@ StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
     return compute_disjoint_gaps_within(unbounded, sorted_disjoint_children);
 }
 
-const TabletRangePB& effective_child_local_range(const RowsetMetadataPB& rowset, const TabletMetadataPB& ctx_metadata) {
+const TabletRangePB& effective_old_tablet_local_range(const RowsetMetadataPB& rowset,
+                                                      const TabletMetadataPB& ctx_metadata) {
     static const TabletRangePB kUnbounded;
     if (rowset.has_range()) return rowset.range();
     if (ctx_metadata.has_range()) return ctx_metadata.range();
