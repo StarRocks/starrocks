@@ -14,8 +14,6 @@
 
 package com.starrocks.alter.reshard.presplit;
 
-import com.starrocks.alter.reshard.TabletReshardJob;
-import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
@@ -26,7 +24,6 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.LoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,8 +49,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 
 /**
@@ -71,10 +66,10 @@ import java.util.List;
  * reach {@code FINISHED} (bounded by
  * {@code tablet_pre_split_post_submit_wait_seconds}) so the triggering
  * {@code INSERT}'s plan sees the post-split tablet layout — not just
- * subsequent loads. The Broker Load path takes the fire-and-forget route
- * instead; see {@link #awaitFinishedAllowingFallback} for why sync-await is
- * deadlock-safe for {@code INSERT INTO ... SELECT * FROM FILES(...)}
- * specifically and what happens on timeout.
+ * subsequent loads. The shared fail-safe wait helpers live on
+ * {@link TabletPreSplitCoordinator#awaitFinishedAllowingFallback} and
+ * {@link TabletPreSplitCoordinator#awaitCombinedJobAllowingFallback}; both
+ * paths log + proceed on timeout, never abort the load.
  *
  * <h2>Detection</h2>
  * <p>The hook only matches the strict {@code INSERT INTO target SELECT *
@@ -197,8 +192,8 @@ public final class InsertFromFilesPreSplitHook {
     /**
      * Legacy single-partition path: resolve the unique partition + base tablet,
      * then go through {@link DefaultPreSplitPipeline} + {@link TabletPreSplitCoordinator#submitAsynchronously}
-     * + {@link #awaitFinishedAllowingFallback}. Unpartitioned-table behavior is
-     * unchanged.
+     * + {@link TabletPreSplitCoordinator#awaitFinishedAllowingFallback}.
+     * Unpartitioned-table behavior is unchanged.
      */
     private static void runSinglePartitionFlow(
             Database database, OlapTable table, TableFunctionTable sourceTable, ConnectContext context) {
@@ -215,9 +210,9 @@ public final class InsertFromFilesPreSplitHook {
      * partitions, and submit ONE combined reshard via
      * {@link TabletPreSplitCoordinator#submitForPartitionsCombined}.
      *
-     * <p>{@link #awaitCombinedJobAllowingFallback} waits once on the combined
-     * job before the planner runs; timeout / abort proceeds against the
-     * currently visible layout without aborting the INSERT.
+     * <p>{@link TabletPreSplitCoordinator#awaitCombinedJobAllowingFallback}
+     * waits once on the combined job before the planner runs; timeout / abort
+     * proceeds against the currently visible layout without aborting the INSERT.
      */
     private static void runMultiPartitionFlow(
             Database database, OlapTable table, TableFunctionTable sourceTable, ConnectContext context) {
@@ -250,7 +245,15 @@ public final class InsertFromFilesPreSplitHook {
             // (see SplitTabletJobFactory.forExternalBoundariesMultiTablet), so the hook
             // only blocks on a single reshard before plan() — bounded by
             // tablet_pre_split_post_submit_wait_seconds regardless of partition count.
-            awaitCombinedJobAllowingFallback(table, submittedCombined.combinedJob());
+            // shouldAbort = context::isKilled: if the user issues KILL <query_id>
+            // during the wait, the helper releases the session thread promptly
+            // instead of running out the post-submit deadline.
+            // No post-await identity-check on `table` (cf.
+            // BrokerLoadJob#buildLoadingTasksUnderReadLock): control returns to
+            // StatementPlanner.plan() which re-resolves through the analyzer,
+            // so a DROP/CREATE during the wait is caught upstream.
+            TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                    LoadKind.INSERT_FROM_FILES, table, submittedCombined.combinedJob(), context::isKilled);
         }
     }
 
@@ -274,9 +277,14 @@ public final class InsertFromFilesPreSplitHook {
                     table.getPartitionInfo().getPartitionColumns(table.getIdToColumn());
             InsertFromFilesScanContext scanContext =
                     new InsertFromFilesScanContext(sourceTable, computeResource);
+            // Cap the BE sample at the pre-submit budget — the same bound the
+            // single-partition path applies via DefaultPreSplitPipeline.runDataTier.
+            // This multi-partition path bypasses the pipeline, so without the cap the
+            // sample would run until the default query_timeout.
             SampleRequest request = new SampleRequest(
                     scanContext, sortKey, partitionSourceColumns,
-                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
+                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
             Sampler sampler = new ReservoirSampler(new InsertFromFilesSampleSubqueryExecutor());
             return sampler.sample(request);
         } catch (StarRocksException sampleFailure) {
@@ -302,6 +310,11 @@ public final class InsertFromFilesPreSplitHook {
      */
     private static InsertStmt qualifyingInsertStmt(StatementBase parsedStmt, ConnectContext context) {
         if (!Config.enable_tablet_pre_split_for_insert_from_files) {
+            // Record here: the coordinator's checkConfigAndSession is never
+            // reached on this early return, so it can't bump the bucket itself.
+            // The remaining return-null branches below are "not an INSERT-from-
+            // FILES candidate" pre-filters and intentionally record nothing.
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_CONFIG);
             return null;
         }
         if (!(parsedStmt instanceof InsertStmt insertStmt)) {
@@ -511,118 +524,12 @@ public final class InsertFromFilesPreSplitHook {
                 target.olapTable().getName(), outcome);
 
         if (outcome instanceof PreSplitOutcome.Submitted submitted) {
-            awaitFinishedAllowingFallback(target.olapTable(), pipeline, submitted.preparedJob());
-        }
-    }
-
-    /**
-     * Fail-safe variant of {@link TabletPreSplitCoordinator#awaitFinishedAndRecordMetrics}:
-     * any timeout or wait failure is logged and the INSERT proceeds without
-     * abort — its plan sees whatever tablet layout is currently visible
-     * (could be the original layout if the daemon hasn't progressed, or
-     * partially / fully post-split if it raced past the wait giving up).
-     * {@code tablet_pre_split_load_abort} is intentionally not incremented
-     * (the INSERT itself is not aborted) — the shared helper updates the
-     * latency histogram and hard-cap counter.
-     *
-     * <p>Sync-await is deadlock-safe here specifically because this hook runs
-     * in {@code StmtExecutor.executeStmt} <b>before</b>
-     * {@code StatementPlanner.plan()} opens the load transaction. The reshard
-     * daemon's cleaning-phase {@code isPreviousTransactionsFinished} wait
-     * therefore does not include the not-yet-allocated load txn, so the AB-BA
-     * cycle the Broker Load path has to dodge with fire-and-forget does not
-     * exist on this path.
-     */
-    private static void awaitFinishedAllowingFallback(
-            OlapTable olapTable, DefaultPreSplitPipeline pipeline,
-            PreSplitPipeline.PreparedReshardJob preparedJob) {
-        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
-        try {
-            TabletPreSplitCoordinator.awaitFinishedAndRecordMetrics(pipeline, preparedJob, postSubmitTimeout);
-        } catch (PreSplitPostSubmitTimeoutException timeout) {
-            LOG.warn("Pre-split awaitFinished timed out for table {} after {}s; "
-                            + "INSERT will proceed without abort against the currently visible layout: {}",
-                    olapTable.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
-        } catch (StarRocksException waitFailure) {
-            LOG.warn("Pre-split awaitFinished failed for table {}; "
-                            + "INSERT will proceed without abort against the currently visible layout: {}",
-                    olapTable.getName(), waitFailure.getMessage());
-        }
-    }
-
-    /**
-     * Multi-partition variant of {@link #awaitFinishedAllowingFallback}. Polls
-     * {@link TabletReshardJobMgr} for the combined job's terminal state,
-     * bounded by {@code tablet_pre_split_post_submit_wait_seconds}.
-     *
-     * <p>The combined-job path bypasses {@link PreSplitPipeline}'s plan/submit
-     * stages (the coordinator's {@code submitForPartitionsCombined} builds and
-     * admits the {@link TabletReshardJob} directly), so there is no
-     * {@link PreSplitPipeline.PreparedReshardJob} wrapper to feed into the
-     * pipeline's polling helper. Polling logic here mirrors
-     * {@link DefaultPreSplitPipeline#awaitFinished}'s loop: poll
-     * {@code TabletReshardJobMgr.getTabletReshardJob} on a fixed interval,
-     * return when the job reaches a final state or the deadline expires.
-     *
-     * <p>Same fail-safe semantics as {@link #awaitFinishedAllowingFallback}:
-     * timeout / abort / wait failure is logged and the INSERT proceeds against
-     * whatever tablet layout is currently visible — never aborts the load. The
-     * post-submit latency histogram is updated unconditionally; the hard-cap
-     * counter is bumped on timeout, mirroring
-     * {@link TabletPreSplitCoordinator#awaitFinishedAndRecordMetrics}.
-     */
-    // Package-private for tests: drives the post-submit await loop without
-    // routing through the full hook (which depends on Authorizer + catalog state).
-    static void awaitCombinedJobAllowingFallback(OlapTable olapTable, TabletReshardJob combinedJob) {
-        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
-        long jobId = combinedJob.getJobId();
-        TabletReshardJobMgr tabletReshardJobManager =
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        Instant deadline = Instant.now().plus(postSubmitTimeout);
-        long postSubmitStartMillis = System.currentTimeMillis();
-        try {
-            while (true) {
-                TabletReshardJob latest = tabletReshardJobManager.getTabletReshardJob(jobId);
-                if (latest == null) {
-                    LOG.warn("Pre-split combined job {} disappeared for table {}; "
-                                    + "INSERT will proceed against the currently visible layout",
-                            jobId, olapTable.getName());
-                    return;
-                }
-                TabletReshardJob.JobState state = latest.getJobState();
-                if (state == TabletReshardJob.JobState.FINISHED) {
-                    return;
-                }
-                if (state.isFinalState()) {
-                    LOG.warn("Pre-split combined job {} aborted for table {}: {}; "
-                                    + "INSERT will proceed against the currently visible layout",
-                            jobId, olapTable.getName(), latest.getErrorMessage());
-                    return;
-                }
-                if (Instant.now().isAfter(deadline)) {
-                    if (MetricRepo.hasInit) {
-                        MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
-                    }
-                    LOG.warn("Pre-split combined job {} did not finish in {}s for table {}; "
-                                    + "INSERT will proceed without abort against the currently visible layout",
-                            jobId, postSubmitTimeout.toSeconds(), olapTable.getName());
-                    return;
-                }
-                try {
-                    Thread.sleep(DefaultPreSplitPipeline.DEFAULT_POLL_INTERVAL.toMillis());
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    LOG.warn("Pre-split combined-job await interrupted for table {}; "
-                                    + "INSERT will proceed against the currently visible layout",
-                            olapTable.getName());
-                    return;
-                }
-            }
-        } finally {
-            if (MetricRepo.hasInit) {
-                MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS.update(
-                        System.currentTimeMillis() - postSubmitStartMillis);
-            }
+            // shouldAbort = context::isKilled: KILL <query_id> during the wait
+            // releases the session thread promptly. See runMultiPartitionFlow
+            // for the same reasoning on the multi-partition path.
+            TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
+                    LoadKind.INSERT_FROM_FILES, target.olapTable(), pipeline, submitted.preparedJob(),
+                    context::isKilled);
         }
     }
 

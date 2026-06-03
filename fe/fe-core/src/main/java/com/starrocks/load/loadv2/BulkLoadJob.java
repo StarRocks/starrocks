@@ -304,7 +304,20 @@ public abstract class BulkLoadJob extends LoadJob {
             writeUnlock();
         }
 
-        // For retryable failure, should abort the transaction and retry as soon as possible
+        // For retryable failure, should abort the transaction and retry as soon as possible.
+        // !hasBegunTransaction() means the broker pending task failed before BrokerLoadJob
+        // began its load transaction (the pre-split hook runs between the two); there is
+        // no GTM record to abort, so the GTM cannot fire afterAborted to drive the retry.
+        // Hand off to the subclass hook (passing taskId so the override can ignore stale
+        // callbacks from a prior attempt) so a retryable pending-task failure still
+        // triggers a retry attempt or terminal cancel if retries are exhausted.
+        if (!hasBegunTransaction()) {
+            LOG.debug("Loading task failed before transaction was begun — driving retry directly. " +
+                            "job_id: {}, task_id: {}, task fail message: {}",
+                    id, taskId, failMsg.getMsg());
+            retryWithoutTransaction(taskId, failMsg);
+            return;
+        }
         try {
             LOG.debug("Loading task with retryable failure try to abort transaction, " +
                             "job_id: {}, task_id: {}, txn_id: {}, task fail message: {}",
@@ -315,6 +328,23 @@ public abstract class BulkLoadJob extends LoadJob {
             LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
                     "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
         }
+    }
+
+    /**
+     * Subclass hook invoked from {@link #onTaskFailed} when a retryable failure
+     * fires before {@link LoadJob#beginTxn()} has run, so the normal GTM
+     * abort → {@code afterAborted} retry cycle never starts. The default is a
+     * no-op (matches {@code SparkLoadJob}, which always begins its txn first).
+     * {@link BrokerLoadJob} overrides to clear in-flight task state, decrement
+     * the retry counter, and resubmit the pending task; without this hook a
+     * retryable broker-side failure would leave the load stuck in {@code PENDING}.
+     *
+     * <p>The {@code taskId} is the failing task's id. Overrides must verify
+     * under the job write lock that the id refers to the current attempt's
+     * pending task and that {@link #hasBegunTransaction()} is still false;
+     * stale callbacks from a prior attempt's tasks must be ignored.
+     */
+    protected void retryWithoutTransaction(long taskId, FailMsg failMsg) {
     }
 
     /**
