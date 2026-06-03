@@ -36,6 +36,9 @@
 
 namespace starrocks::lake {
 
+// Forward-declare internal helper exposed for testing (defined in vacuum.cpp).
+int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries);
+
 struct VacuumTestArg {
     int64_t min_batch_size;
 };
@@ -2508,6 +2511,49 @@ TEST(LakeVacuumTest2, test_delete_files_retry4) {
     ASSERT_TRUE(future.get().ok());
     ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files_retry.txt"));
     EXPECT_GT(attempts, 1);
+}
+
+TEST(LakeVacuumTest2, test_calculate_retry_delay_jitter) {
+    // Pure helper: no global config dependency. All knobs passed in.
+    const int64_t base = 100;
+    const int64_t max_retries = 5;
+    const int64_t cap = base * (1L << max_retries); // = 3200
+    constexpr int kSamples = 200;
+
+    // 1. First call: last_delay = base. Window is [base, min(cap, base*3)] = [100, 300].
+    {
+        std::set<int64_t> observed;
+        for (int i = 0; i < kSamples; ++i) {
+            int64_t delay = calculate_retry_delay(base, base, max_retries);
+            EXPECT_GE(delay, base) << "delay=" << delay;
+            EXPECT_LE(delay, std::min(cap, base * 3)) << "delay=" << delay;
+            observed.insert(delay);
+        }
+        EXPECT_GT(observed.size(), 1U) << "first-call jitter inactive";
+    }
+
+    // 2. Cap clamping: once last_delay * 3 exceeds cap, delays must not exceed cap.
+    {
+        int64_t large_last = cap; // last_delay already at cap
+        std::set<int64_t> observed;
+        for (int i = 0; i < kSamples; ++i) {
+            int64_t delay = calculate_retry_delay(large_last, base, max_retries);
+            EXPECT_GE(delay, base);
+            EXPECT_LE(delay, cap) << "cap not enforced, delay=" << delay;
+            observed.insert(delay);
+        }
+        EXPECT_GT(observed.size(), 1U) << "cap-clamped jitter inactive";
+    }
+
+    // 3. Simulated retry chain: feed last_delay back; every step stays in [base, cap].
+    {
+        int64_t last_delay = base;
+        for (int step = 0; step < 20; ++step) {
+            last_delay = calculate_retry_delay(last_delay, base, max_retries);
+            EXPECT_GE(last_delay, base) << "step=" << step;
+            EXPECT_LE(last_delay, cap) << "step=" << step;
+        }
+    }
 }
 
 TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
