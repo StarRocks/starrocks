@@ -247,6 +247,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，FE 审计子系统会将 ConnectProcessor 处理的 SQL 语句文本记录到 FE 审计日志 (`fe.audit.log`) 中。存储的语句遵循其他控制：加密语句将被 redacted (`AuditEncryptionChecker`)，如果设置了 `enable_sql_desensitize_in_log`，敏感凭据可能会被 redacted 或脱敏，并且 digest 记录由 `enable_sql_digest` 控制。当设置为 `false` 时，ConnectProcessor 会在审计事件中将语句文本替换为 "?" — 其他审计字段（用户、主机、持续时间、状态、通过 `qe_slow_log_ms` 进行的慢查询检测以及指标）仍会记录。启用 SQL 审计会增加取证和故障排除的可见性，但可能会暴露敏感的 SQL 内容并增加日志量和 I/O；禁用它会提高隐私性，但代价是审计日志中会丢失完整的语句可见性。
 - 引入版本: -
 
+### `enable_print_load_profile_to_log`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，导入 profile（如 Stream Load、Routine Load、Broker Load、Merge Commit 等）在被推送到 `ProfileManager` 时，会额外以 INFO 级别写入 profile 日志 (`fe.profile.log`)，格式为单行 JSON，与 query profile log 一致。这样即使导入 profile 因 `profile_info_reserved_num` 限制而从 `ProfileManager` 中被淘汰，仍可从日志中找回。之所以写入 profile 日志而非 `fe.log`，是因为其 JSON layout 的字符串上限是 `sys_log_json_profile_max_string_length`，而非小得多的 `sys_log_json_max_string_length`，因此较大的导入 profile 不会被截断；该文件的轮转与保留由 `profile_log_*` 系列参数控制。仅打印查询类型为 `Load` 的 profile，查询 profile 不受影响。只有在导入 profile 实际被收集时（例如启用了 `enable_profile`，或导入耗时超过大导入 profile 阈值）才会打印。
+- 引入版本: -
+
 ### `enable_profile_log`
 
 - 默认值: true

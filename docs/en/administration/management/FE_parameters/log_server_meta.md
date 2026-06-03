@@ -248,6 +248,15 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the FE audit subsystem records the SQL text of statements into FE audit logs (`fe.audit.log`) processed by ConnectProcessor. The stored statement respects other controls: encrypted statements are redacted (`AuditEncryptionChecker`), sensitive credentials may be redacted or desensitized if `enable_sql_desensitize_in_log` is set, and digest recording is controlled by `enable_sql_digest`. When it is set to `false`, ConnectProcessor replaces the statement text with "?" in audit events — other audit fields (user, host, duration, status, slow-query detection via `qe_slow_log_ms`, and metrics) are still recorded. Enabling SQL audit increases forensic and troubleshooting visibility but may expose sensitive SQL content and increase log volume and I/O; disabling it improves privacy at the cost of losing full-statement visibility in audit logs.
 - Introduced in: -
 
+### `enable_print_load_profile_to_log`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, load profiles (such as Stream Load, Routine Load, Broker Load, and Merge Commit) are additionally written to the profile log (`fe.profile.log`) at INFO level when they are pushed to `ProfileManager`, as a single-line JSON record in the same format as the query profile log. This makes load profiles recoverable from the log even after they are evicted from `ProfileManager` due to the `profile_info_reserved_num` limit. The profile log is used (rather than `fe.log`) because its JSON layout caps strings at `sys_log_json_profile_max_string_length` instead of the much smaller `sys_log_json_max_string_length`, so large load profiles are not truncated; the file is rotated and retained by the `profile_log_*` parameters. Only profiles whose query type is `Load` are printed; query profiles are not affected. A load profile is printed only when it is actually collected (for example, when `enable_profile` is enabled or the load exceeds the big-load profile threshold).
+- Introduced in: -
+
 ### `enable_profile_log`
 
 - Default: true
