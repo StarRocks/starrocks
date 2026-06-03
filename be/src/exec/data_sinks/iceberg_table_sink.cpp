@@ -532,7 +532,10 @@ Status IcebergTableSink::create_row_delta_sink_context(
         TTupleDescriptorBuilder tuple_builder;
         for (size_t i = 0; i < num_data_evaluators; ++i) {
             const auto* slot = slots[data_column_start + i];
-            tuple_builder.add_slot(slot_builder.type(slot->type().type)
+            // Pass the full TypeDescriptor (not just slot->type().type) so complex types
+            // (ARRAY/MAP/STRUCT) keep their children and scalar types keep len/precision/scale.
+            // A childless ARRAY/MAP descriptor crashes TypeDescriptor::to_thrift() on children[0].
+            tuple_builder.add_slot(slot_builder.type(slot->type())
                                            .nullable(slot->is_nullable())
                                            .is_materialized(true)
                                            .column_name(std::string(slot->col_name()))
