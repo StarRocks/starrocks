@@ -14,10 +14,6 @@
 
 #include "column/binary_column.h"
 
-#ifdef __x86_64__
-#include <immintrin.h>
-#endif
-
 #include "base/container/raw_container.h"
 #include "base/hash/hash_util.hpp"
 #include "column/bytes.h"
@@ -30,6 +26,7 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
 template <typename T>
 BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
         : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
@@ -240,6 +237,7 @@ StatusOr<MutableColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>
     for (auto i = 0; i < src_size; ++i) {
         auto bytes_size = _offsets[i + 1] - _offsets[i];
         for (auto j = offsets[i]; j < offsets[i + 1]; ++j) {
+            // _data_base() returns _resource for zero-copy columns where _bytes is empty.
             strings::memcpy_inlined(dest_bytes.data() + pos, src_bytes + _offsets[i], bytes_size);
             pos += bytes_size;
             dest_offsets[j + 1] = pos;
@@ -584,17 +582,45 @@ void BinaryColumnBase<T>::assign(size_t n, size_t idx) {
     invalidate_slice_cache();
 }
 
-//TODO(kks): improve this
+// Optimized in-place implementation - avoids creating temporary column
 template <typename T>
 void BinaryColumnBase<T>::remove_first_n_values(size_t count) {
     DCHECK_LE(count, _offsets.size() - 1);
-    size_t remain_size = _offsets.size() - 1 - count;
+    if (count == 0) {
+        return;
+    }
 
-    MutableColumnPtr column = cut(count, remain_size);
-    auto* binary_column = down_cast<BinaryColumnBase<T>*>(column.get());
-    _offsets = std::move(binary_column->_offsets);
-    _bytes = std::move(binary_column->get_bytes());
-    _resource.reset();
+    size_t remain_size = _offsets.size() - 1 - count;
+    if (remain_size == 0) {
+        // Drop the zero-copy backing so the column doesn't keep an external owner
+        // alive while reporting itself empty.
+        _resource = {};
+        _bytes.clear();
+        _offsets.resize(1);
+        _offsets[0] = 0;
+        invalidate_slice_cache();
+        return;
+    }
+
+    // In-place memmove writes into _bytes, so unshare from any zero-copy backing first.
+    _ensure_materialized();
+
+    T bytes_to_remove = _offsets[count];
+    T total_bytes = _offsets.back();
+    T remaining_bytes = total_bytes - bytes_to_remove;
+
+    // Move bytes in-place using memmove (handles overlapping regions)
+    if (remaining_bytes > 0) {
+        memmove(_bytes.data(), _bytes.data() + bytes_to_remove, remaining_bytes);
+    }
+    _bytes.resize(remaining_bytes);
+
+    // Adjust offsets in-place: shift and subtract delta
+    for (size_t i = 0; i <= remain_size; ++i) {
+        _offsets[i] = _offsets[i + count] - bytes_to_remove;
+    }
+    _offsets.resize(remain_size + 1);
+
     invalidate_slice_cache();
 }
 
