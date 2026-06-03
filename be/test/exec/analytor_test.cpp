@@ -16,7 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
 #include "gen_cpp/PlanNodes_types.h"
 
@@ -126,6 +128,67 @@ TEST_F(AnalytorTest, find_partition_end) {
     analytor3._find_partition_end();
     ASSERT_FALSE(analytor3._partition.is_real);
     ASSERT_EQ(analytor3._partition.end, 0);
+}
+
+// Regression for the BE crash in enable_push_down_pre_agg_with_rank: the merge-count input state buffer is
+// non-nullable (serialized partial counts are non-nullable by contract), but the FE may mark the intermediate
+// slot nullable so the evaluated input arrives as a no-null NullableColumn. _append_column must unwrap it into
+// the bare destination; appending the NullableColumn directly would down_cast NullableColumn -> Int64Column and
+// crash (SIGSEGV in release / down_cast assert in ASAN).
+// NOLINTNEXTLINE
+TEST_F(AnalytorTest, append_nullable_src_into_non_nullable_dst_unwraps) {
+    TPlanNode plan_node;
+    RowDescriptor row_desc;
+    Analytor analytor(plan_node, row_desc, nullptr, false);
+
+    // src: NullableColumn(BIGINT) with no actual nulls, values {10, 20, 30}.
+    auto src_mut = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), /*nullable=*/true);
+    src_mut->append_datum(Datum(int64_t{10}));
+    src_mut->append_datum(Datum(int64_t{20}));
+    src_mut->append_datum(Datum(int64_t{30}));
+    ColumnPtr src = std::move(src_mut);
+    ASSERT_TRUE(src->is_nullable());
+    ASSERT_FALSE(down_cast<const NullableColumn*>(src.get())->has_null());
+
+    // dst: bare BIGINT column (the non-nullable merge-count state buffer).
+    auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), /*nullable=*/false);
+
+    analytor._append_column(3, dst.get(), src);
+
+    // Unwrapped into the bare buffer without crashing; values preserved, dst stays non-nullable.
+    ASSERT_FALSE(dst->is_nullable());
+    ASSERT_EQ(3, dst->size());
+    ASSERT_EQ(10, dst->get(0).get_int64());
+    ASSERT_EQ(20, dst->get(1).get_int64());
+    ASSERT_EQ(30, dst->get(2).get_int64());
+}
+
+// Guard that the unwrap branch does not hijack the normal nullable -> nullable path: when the destination is
+// nullable, the source NullableColumn (including its null mask) must be appended verbatim.
+// NOLINTNEXTLINE
+TEST_F(AnalytorTest, append_nullable_src_into_nullable_dst_preserves_nulls) {
+    TPlanNode plan_node;
+    RowDescriptor row_desc;
+    Analytor analytor(plan_node, row_desc, nullptr, false);
+
+    // src: NullableColumn(BIGINT) {1, NULL, 3}.
+    auto src_mut = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), /*nullable=*/true);
+    src_mut->append_datum(Datum(int64_t{1}));
+    src_mut->append_nulls(1);
+    src_mut->append_datum(Datum(int64_t{3}));
+    ColumnPtr src = std::move(src_mut);
+    ASSERT_TRUE(down_cast<const NullableColumn*>(src.get())->has_null());
+
+    // dst: empty nullable BIGINT column.
+    auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), /*nullable=*/true);
+
+    analytor._append_column(3, dst.get(), src);
+
+    ASSERT_TRUE(dst->is_nullable());
+    ASSERT_EQ(3, dst->size());
+    ASSERT_FALSE(dst->is_null(0));
+    ASSERT_TRUE(dst->is_null(1));
+    ASSERT_FALSE(dst->is_null(2));
 }
 
 } // namespace starrocks

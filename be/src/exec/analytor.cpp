@@ -764,6 +764,10 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
         auto* data_column = const_column->data_column_raw_ptr();
         data_column->assign(chunk_size, 0);
         dst_column->append(*data_column, 0, chunk_size);
+    } else if (src_column->is_nullable() && !dst_column->is_nullable()) {
+        const auto* nullable_src = down_cast<const NullableColumn*>(src_column.get());
+        DCHECK(!nullable_src->has_null());
+        dst_column->append(*nullable_src->data_column(), 0, chunk_size);
     } else {
         // Most cases.
         dst_column->append(*src_column, 0, chunk_size);
