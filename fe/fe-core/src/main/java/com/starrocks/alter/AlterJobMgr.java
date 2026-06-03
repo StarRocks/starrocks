@@ -61,11 +61,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-<<<<<<< HEAD
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
-=======
->>>>>>> e1696a3ef7 ([BugFix] Use DB WRITE lock for RENAME and SWAP (table and materialized view) (#74100))
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
@@ -544,14 +540,6 @@ public class AlterJobMgr {
     }
 
     public void replaySwapTable(SwapTableOperationLog log) {
-<<<<<<< HEAD
-        try {
-            swapTableInternal(log);
-        } catch (DdlException e) {
-            LOG.warn("should not happen", e);
-        }
-=======
->>>>>>> e1696a3ef7 ([BugFix] Use DB WRITE lock for RENAME and SWAP (table and materialized view) (#74100))
         long dbId = log.getDbId();
         long origTblId = log.getOrigTblId();
         long newTblId = log.getNewTblId();
@@ -569,6 +557,8 @@ public class AlterJobMgr {
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
             LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
                     newTbl.getName());
+        } catch (DdlException e) {
+            LOG.warn("should not happen", e);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }

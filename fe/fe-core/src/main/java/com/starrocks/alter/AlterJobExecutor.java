@@ -330,13 +330,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         + "Do not allow to do ALTER ops");
             }
 
-<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
-            visit(stmt.getAlterTableClause());
-            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
-=======
             visit(alterClause);
->>>>>>> e1696a3ef7 ([BugFix] Use DB WRITE lock for RENAME and SWAP (table and materialized view) (#74100))
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
         } finally {
             if (dbLevelClause) {
