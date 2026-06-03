@@ -16,6 +16,12 @@
 
 namespace starrocks {
 
+// Default: iterative search is unsupported. Indexes with a native lazy cursor
+// override make_iterator() and supports_iterative_search().
+StatusOr<std::unique_ptr<AnnIterator>> VectorAnnIndex::make_iterator(const VectorQuery& /*query*/) {
+    return Status::NotSupported("iterative search is not supported by this index");
+}
+
 // Default filtered_search: oversample + post-filter.
 Status VectorAnnIndex::filtered_search(const VectorQuery& query, const RowIdFilter& filter, ScoredResult* result) {
     constexpr int32_t kDefaultOversampleFactor = 3;
