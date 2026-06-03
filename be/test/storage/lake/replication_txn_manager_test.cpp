@@ -18,7 +18,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
+#include <thread>
 
 #include "common/config.h"
 #include "fs/fs.h"
@@ -87,7 +89,18 @@ public:
     void TearDown() override {
         auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
         EXPECT_TRUE(status.ok()) << status;
-        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        // For primary key tablets, `rowset_commit` schedules an async ApplyCommitTask that holds a
+        // reference to the tablet. `drop_tablet` only waits until the apply logic finishes
+        // (_apply_running == false), not until the task object is destroyed, so there is a short
+        // window where the tablet's use_count is still > 1 and delete_shutdown_tablet() returns
+        // ResourceBusy. The extra reference is transient, so retry until the task is reclaimed.
+        for (int i = 0; i < 100; ++i) {
+            status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+            if (!status.is_resource_busy()) {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
         EXPECT_TRUE(status.ok()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
