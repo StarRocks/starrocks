@@ -164,7 +164,7 @@ Status init_udaf_context(int64_t fid, const std::string& url, const std::string&
 
 int64_t Aggregator::get_two_level_threahold() {
     if (config::two_level_memory_threshold < 0) {
-        return agg::two_level_memory_threshold;
+        return agg::two_level_memory_threshold();
     }
     return config::two_level_memory_threshold;
 }

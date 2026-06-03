@@ -89,13 +89,19 @@ public:
 
     static long get_l2_cache_size() {
         const auto& cache_sizes = CpuInfo::get_cache_sizes();
-        return cache_sizes[CpuInfo::L2_CACHE] ? cache_sizes[CpuInfo::L2_CACHE] : DEFAULT_L2_CACHE_SIZE;
+        return cache_sizes[CpuInfo::L2_CACHE] > 0 ? cache_sizes[CpuInfo::L2_CACHE] : DEFAULT_L2_CACHE_SIZE;
     }
 
+    // Returns the size of the last-level cache. A CPU with no shared L3 (e.g.
+    // ARM Cortex-A, some small x86) still reports a real L2, which is then the
+    // last-level cache, so fall back to it; fall back to a fixed default only
+    // when neither level is reported (cache info unreadable). Always positive,
+    // so callers can use the result directly without re-guarding it.
     static long get_l3_cache_size() {
-        auto& cache_sizes = get_cache_sizes();
-        return cache_sizes[CacheLevel::L3_CACHE] ? cache_sizes[CacheLevel::L3_CACHE]
-                                                 : cache_sizes[CacheLevel::L2_CACHE];
+        const auto& cache_sizes = CpuInfo::get_cache_sizes();
+        if (cache_sizes[CpuInfo::L3_CACHE] > 0) return cache_sizes[CpuInfo::L3_CACHE];
+        if (cache_sizes[CpuInfo::L2_CACHE] > 0) return cache_sizes[CpuInfo::L2_CACHE];
+        return DEFAULT_L3_CACHE_SIZE;
     }
 
     static std::vector<size_t> get_core_ids();
@@ -124,6 +130,7 @@ private:
     static int64_t _parse_cpu_flags(const std::string& values);
 
     static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
+    static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
 
     /// Initialize NUMA-related state - called from Init();
     static void _init_numa();
