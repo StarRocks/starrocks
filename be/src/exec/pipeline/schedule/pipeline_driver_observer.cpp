@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/utils.h"
