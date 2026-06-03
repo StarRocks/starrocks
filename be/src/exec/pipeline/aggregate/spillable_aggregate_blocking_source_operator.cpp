@@ -17,8 +17,8 @@
 #include <algorithm>
 
 #include "common/status.h"
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
-#include "exec/spill/mem_tracker_guard.h"
 
 namespace starrocks::pipeline {
 Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
