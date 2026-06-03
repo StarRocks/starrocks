@@ -1138,15 +1138,57 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     int64_t get_next_cost_us = 0;
     int64_t pk_encode_cost_us = 0;
     int64_t build_values_cost_us = 0;
-    // Rowset whose version is between max_sstable_version and base_version should be recovered.
+
+    // One decoded chunk-worth of keys+values, with the key bytes COPIED into an owned buffer so
+    // the batch stays valid after the scan column is reset/freed. `keys` are rebuilt to point
+    // into `key_bytes` (binary: variable stride; non-encoded: fixed `_key_size` stride).
+    struct InsertBatch {
+        std::vector<uint8_t> key_bytes;   // owned backing store for all keys in this batch
+        std::vector<Slice> keys;          // Slices into key_bytes
+        std::vector<IndexValue> values;   // (rssid<<32)+rowid
+    };
+    // One flat parallel scan unit: exactly one segment of one rebuild rowset. `global_seq` ascends in
+    // (rowset version order, segment order) so Phase C can insert in the correct order by walking
+    // scan_units in index order. `itr` is owned by `rowset_iters` (see below) and stays alive through
+    // the scan; the unit only borrows it.
+    struct ScanUnit {
+        size_t global_seq = 0;
+        int rowset_ord = 0;   // index into `rebuild_rowsets`
+        int seg_ord = 0;      // segment index within the rowset
+        int64_t rowset_version = 0;
+        ChunkIterator* itr = nullptr;
+        uint32_t rssid = 0;
+    };
+    // Per-segment scan output, indexed by ScanUnit::global_seq. Each slot is written by exactly one
+    // task → no mutex needed.
+    struct ScanUnitResult {
+        std::vector<InsertBatch> batches; // ordered as produced by get_next
+        int64_t num_rows = 0;             // rebuild_index_num_rows contribution
+    };
+    // One rebuild rowset, recorded in rowset (version) order during Phase A. Phase C uses this to apply
+    // each rowset's del files after that rowset's segment inserts and before the next rowset.
+    struct RebuildRowset {
+        RowsetPtr rowset;
+        int64_t rowset_version = 0;
+        bool has_del_files = false;
+    };
+
+    // Owns the per-rowset iterator vectors built in Phase A; must outlive the Phase B scan. Index is
+    // aligned with `rebuild_rowsets` (ScanUnit::rowset_ord).
+    std::vector<std::vector<ChunkIteratorPtr>> rowset_iters;
+    std::vector<RebuildRowset> rebuild_rowsets;
+    std::vector<ScanUnit> scan_units;
+
+    // Phase A (SERIAL, caller thread): walk rowsets in version order. For each that needs rebuild,
+    // compute its version + per-segment rowid ranges, then build its segment iterators via
+    // get_each_segment_iterator_with_delvec (which internally parallelises across segments via its own
+    // threadpool — DO NOT parallelise Phase A or you risk nested-pool deadlock). Own the iterators in
+    // `rowset_iters` and append one flat ScanUnit per non-null, non-skipped segment. `global_seq` is the
+    // running append index, so it ascends in (rowset version order, segment order).
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
@@ -1178,22 +1220,25 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         }
         StatusOr<std::vector<ChunkIteratorPtr>> res;
         {
+            // Stays serial; internally parallelises across segments via its own segment threadpool.
             TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
             res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats,
                                                                 &rowid_ranges);
         }
-        if (!res.ok()) {
-            return res.status();
-        }
+        RETURN_IF_ERROR(res.status());
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+
+        const int rowset_ord = static_cast<int>(rebuild_rowsets.size());
+        rebuild_rowsets.push_back(
+                RebuildRowset{rowset, rowset_version, rowset->metadata().del_files_size() > 0});
+        // Append flat scan units for this rowset's eligible segments. Iterators are owned by
+        // `rowset_iters` (moved in below); ScanUnit borrows the raw pointer.
         for (size_t i = 0; i < itrs.size(); i++) {
-            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            auto itr = itrs[i].get();
+            auto* itr = itrs[i].get();
             if (itr == nullptr) {
                 continue;
             }
-            DeferOp close_iter([&] { itr->close(); });
             uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
             if (rssid < rebuild_rss_id) {
                 // lower than rebuild point, skip
@@ -1201,63 +1246,195 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 // there are maybe some rows need to rebuild.
                 continue;
             }
-            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
-            while (true) {
-                chunk->reset();
-                rowids.clear();
-                int64_t t1 = GetCurrentTimeMicros();
-                auto st = itr->get_next(chunk, &rowids);
-                get_next_cost_us += GetCurrentTimeMicros() - t1;
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    Column* pkc = nullptr;
-                    if (pk_column) {
-                        int64_t t2 = GetCurrentTimeMicros();
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
-                        pk_encode_cost_us += GetCurrentTimeMicros() - t2;
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = const_cast<Column*>(chunk->columns()[0].get());
-                    }
-                    int64_t t3 = GetCurrentTimeMicros();
-                    uint64_t base = ((uint64_t)rssid) << 32;
-                    std::vector<IndexValue> values;
-                    values.reserve(pkc->size());
-                    DCHECK(pkc->size() <= rowids.size());
-                    for (uint32_t i = 0; i < pkc->size(); i++) {
-                        values.emplace_back(base + rowids[i]);
-                    }
-                    build_values_cost_us += GetCurrentTimeMicros() - t3;
-                    if (values.back().get_value() <= rebuild_rss_rowid_point) {
-                        // lower AND equal than rebuild point, skip
-                        continue;
-                    }
-                    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                                               values.data(), rowset_version));
-                    } else {
-                        std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
-                            keys.emplace_back(fkeys, _key_size);
-                            fkeys += _key_size;
-                        }
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
-                                               rowset_version));
-                    }
-                }
+            ScanUnit unit;
+            unit.global_seq = scan_units.size();
+            unit.rowset_ord = rowset_ord;
+            unit.seg_ord = static_cast<int>(i);
+            unit.rowset_version = rowset_version;
+            unit.itr = itr;
+            unit.rssid = rssid;
+            scan_units.emplace_back(unit);
+        }
+        rowset_iters.emplace_back(std::move(itrs));
+    }
+
+    std::vector<ScanUnitResult> unit_results(scan_units.size());
+
+    // Per-cost atomics so worker threads can accumulate without a lock.
+    std::atomic<int64_t> get_next_cost_us_atomic{0};
+    std::atomic<int64_t> pk_encode_cost_us_atomic{0};
+    std::atomic<int64_t> build_values_cost_us_atomic{0};
+    std::mutex scan_err_mutex;
+    Status scan_status;
+    auto record_scan_err = [&](const Status& s) {
+        std::lock_guard<std::mutex> l(scan_err_mutex);
+        scan_status.update(s);
+    };
+
+    // Scan a single segment (one ScanUnit) into its result slot. Read-only and thread-safe: uses
+    // worker-local chunk/rowids/pk-encoder column and never touches _memtable/insert/load_dels. Closes
+    // the segment's iterator once its scan finishes (it stays alive in `rowset_iters` until then). Bind
+    // of the shared read `stats` is intentional (see note below). Runs either inline or on a worker
+    // thread.
+    auto scan_one_unit = [&](const ScanUnit& unit) {
+        auto* itr = unit.itr;
+        DeferOp close_iter([&] { itr->close(); });
+        auto& result = unit_results[unit.global_seq];
+        const uint32_t rssid = unit.rssid;
+
+        int64_t local_get_next = 0;
+        int64_t local_pk_encode = 0;
+        int64_t local_build_values = 0;
+        // Worker-local scratch: the shared scan `pk_column` is NOT thread-safe, so the task gets its
+        // own chunk/rowids/pk-encoder column. The read `stats`, by contrast, was bound into every
+        // segment's SegmentReadOptions at iterator-creation time (above,
+        // `seg_options_template.stats = stats`); the iterator's deep column readers captured that exact
+        // pointer, so there is no in-iterator hook to redirect IO accounting to a task-local object.
+        // Tasks therefore accumulate directly into the shared `stats`. These are diagnostic TRACE
+        // counters (io_count_*/io_ns_*); concurrent `+=` may tear an increment but cannot corrupt the
+        // index. This matches the existing accepted behavior in the same creation path, where
+        // get_delvec_ns/get_delta_column_group_ns are already written to this shared `stats` from
+        // worker threads. All writes complete before the post-`wait()` trace read.
+        std::vector<uint32_t> local_rowids;
+        local_rowids.reserve(4096);
+        auto local_chunk_sp = ChunkHelper::new_chunk(pkey_schema, 4096);
+        auto* local_chunk = local_chunk_sp.get();
+        MutableColumnPtr local_pk_column;
+        if (pk_column) {
+            if (!PrimaryKeyEncoder::create_column(pkey_schema, &local_pk_column, pk_encoding_type).ok()) {
+                CHECK(false) << "create column for primary key encoder failed";
             }
         }
-        // Rebuild from del files
-        if (rowset->metadata().del_files_size() > 0) {
-            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
+
+        while (true) {
+            local_chunk->reset();
+            local_rowids.clear();
+            int64_t t1 = GetCurrentTimeMicros();
+            auto st = itr->get_next(local_chunk, &local_rowids);
+            local_get_next += GetCurrentTimeMicros() - t1;
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                record_scan_err(st);
+                break;
+            }
+            Column* pkc = nullptr;
+            if (local_pk_column) {
+                int64_t t2 = GetCurrentTimeMicros();
+                local_pk_column->reset_column();
+                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(),
+                                          local_pk_column.get(), pk_encoding_type);
+                local_pk_encode += GetCurrentTimeMicros() - t2;
+                pkc = local_pk_column.get();
+            } else {
+                pkc = const_cast<Column*>(local_chunk->columns()[0].get());
+            }
+            int64_t t3 = GetCurrentTimeMicros();
+            uint64_t base = ((uint64_t)rssid) << 32;
+            std::vector<IndexValue> values;
+            values.reserve(pkc->size());
+            DCHECK(pkc->size() <= local_rowids.size());
+            for (uint32_t r = 0; r < pkc->size(); r++) {
+                values.emplace_back(base + local_rowids[r]);
+            }
+            local_build_values += GetCurrentTimeMicros() - t3;
+            if (values.back().get_value() <= rebuild_rss_rowid_point) {
+                // lower AND equal than rebuild point, skip
+                continue;
+            }
+            result.num_rows += pkc->size();
+
+            // Copy key bytes into an owned buffer so the batch outlives `local_chunk`/`local_pk_column`.
+            InsertBatch batch;
+            batch.values = std::move(values);
+            const size_t n = pkc->size();
+            batch.keys.reserve(n);
+            if (pkc->is_binary()) {
+                const auto* src = reinterpret_cast<const Slice*>(pkc->raw_data());
+                size_t total = 0;
+                for (size_t k = 0; k < n; ++k) {
+                    total += src[k].size;
+                }
+                batch.key_bytes.resize(total);
+                size_t off = 0;
+                for (size_t k = 0; k < n; ++k) {
+                    memcpy(batch.key_bytes.data() + off, src[k].data, src[k].size);
+                    batch.keys.emplace_back(
+                            reinterpret_cast<const char*>(batch.key_bytes.data()) + off, src[k].size);
+                    off += src[k].size;
+                }
+            } else {
+                batch.key_bytes.resize(n * _key_size);
+                memcpy(batch.key_bytes.data(), pkc->continuous_data(), n * _key_size);
+                for (size_t k = 0; k < n; ++k) {
+                    batch.keys.emplace_back(
+                            reinterpret_cast<const char*>(batch.key_bytes.data()) + k * _key_size, _key_size);
+                }
+            }
+            result.batches.emplace_back(std::move(batch));
+        }
+        get_next_cost_us_atomic += local_get_next;
+        pk_encode_cost_us_atomic += local_pk_encode;
+        build_values_cost_us_atomic += local_build_values;
+    };
+
+    // Phase B (PARALLEL, single layer): submit one task per ScanUnit — i.e. per (rowset, segment) — to
+    // pk_index_execution_thread_pool() via ONE CONCURRENT token. This is the only parallel layer; Phase
+    // A's get_each_segment_iterator stays serial (it has its own internal pool), so no task on this pool
+    // submits to it. Both "many rowsets × 1 segment" and "1 rowset × many segments" now parallelise.
+    // Gated on the config flag and >1 scan unit; else inline.
+    const bool parallel_scan = config::enable_pk_index_parallel_execution && scan_units.size() > 1;
+    if (parallel_scan) {
+        auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+        for (const auto& unit : scan_units) {
+            const auto* unit_ptr = &unit;
+            auto st = token->submit_func([&scan_one_unit, unit_ptr]() { scan_one_unit(*unit_ptr); });
+            if (!st.ok()) {
+                // Fall back to inline scan for this unit on submit failure.
+                scan_one_unit(unit);
+            }
+        }
+        token->wait();
+    } else {
+        for (const auto& unit : scan_units) {
+            scan_one_unit(unit);
+        }
+    }
+    // Propagate the first scan error before mutating the shared index.
+    RETURN_IF_ERROR(scan_status);
+
+    get_next_cost_us += get_next_cost_us_atomic.load();
+    pk_encode_cost_us += pk_encode_cost_us_atomic.load();
+    build_values_cost_us += build_values_cost_us_atomic.load();
+
+    // Phase C (SERIAL, caller thread): walk rebuild_rowsets in version order. For each rowset, insert
+    // its scan units' batches in segment order, then apply that rowset's del files — preserving the
+    // original "this rowset's segments, then this rowset's del files, then the next rowset" ordering,
+    // including for rowsets whose segments were all skipped (no units). scan_units are appended in
+    // (rowset_ord, seg_ord) order, so each rowset's units form a contiguous run that we consume with a
+    // single advancing cursor. insert()/_memtable/load_dels are NOT thread-safe and MUST run on the
+    // caller thread only.
+    size_t unit_cursor = 0;
+    for (size_t ro = 0; ro < rebuild_rowsets.size(); ro++) {
+        while (unit_cursor < scan_units.size() &&
+               static_cast<size_t>(scan_units[unit_cursor].rowset_ord) == ro) {
+            const auto& unit = scan_units[unit_cursor];
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
+            auto& result = unit_results[unit.global_seq];
+            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+            TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
+            for (auto& batch : result.batches) {
+                RETURN_IF_ERROR(insert(batch.keys.size(),
+                                       reinterpret_cast<const Slice*>(batch.keys.data()), batch.values.data(),
+                                       unit.rowset_version));
+            }
+            unit_cursor++;
+        }
+        // Apply this rowset's del files after its segments, before the next rowset.
+        if (rebuild_rowsets[ro].has_del_files) {
+            RETURN_IF_ERROR(
+                    load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
         }
     }
     TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
