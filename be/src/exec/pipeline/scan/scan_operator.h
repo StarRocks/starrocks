@@ -19,10 +19,12 @@
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {

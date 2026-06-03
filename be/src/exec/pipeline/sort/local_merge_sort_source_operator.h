@@ -22,6 +22,8 @@
 #include "exprs/sort_exec_exprs.h"
 
 namespace starrocks::pipeline {
+class ScanMorsel;
+using Morsel = ScanMorsel;
 class SortContext;
 
 /*

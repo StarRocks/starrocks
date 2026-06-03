@@ -14,8 +14,8 @@
 
 #include "exec/pipeline/source_operator.h"
 
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include <algorithm>
+#include <numeric>
 
 namespace starrocks::pipeline {
 

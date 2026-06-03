@@ -14,6 +14,7 @@
 
 #include "storage/dictionary_cache_manager.h"
 
+#include "base/string/faststring.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "exec/tablet_info.h"

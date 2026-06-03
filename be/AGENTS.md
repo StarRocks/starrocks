@@ -223,12 +223,12 @@ Core expression infrastructure that depends only on RuntimeCore and lower layers
 - Remediation: Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs.
 
 ### ExecPrimitive (`execprimitive`)
-Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator primitives without broader Exec runtime, scheduler, factory, storage, service, or connector coupling.
+Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
 - Targets: `ExecPrimitive`
-- Allowed internal include prefixes: `exec/runtime_filter/`, `exec/query_cache/ticket_checker.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_hub.h`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `exec/runtime_filter/`, `exec/query_cache/ticket_checker.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/operator_factory.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_hub.h`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_primitive_test`
-- Remediation: Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator primitives; move runtime, scheduler, factory, concrete operators, storage, service, and connector integration upward.
+- Remediation: Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, storage, service, and connector integration upward.
 
 ### ConnectorPrimitive (`connectorprimitive`)
 Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.

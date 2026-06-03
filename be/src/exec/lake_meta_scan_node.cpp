@@ -19,6 +19,7 @@
 #include "exec/pipeline/scan/lake_meta_scan_prepare_operator.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 
 namespace starrocks {
 
