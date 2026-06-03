@@ -4013,12 +4013,6 @@ public class Config extends ConfigBase {
     public static boolean allow_system_reserved_names = false;
 
     /**
-     * Whether to use LockManager to manage lock usage
-     */
-    @ConfField
-    public static boolean lock_manager_enabled = true;
-
-    /**
      * Number of Hash of Lock Table
      */
     @ConfField

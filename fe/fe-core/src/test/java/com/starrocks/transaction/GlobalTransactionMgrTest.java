@@ -391,7 +391,14 @@ public class GlobalTransactionMgrTest {
                         partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
-        TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(1L), 1L, "label", null,
+        // The table id must differ from the db id (1L): finishTransactionNew acquires an
+        // INTENTION_EXCLUSIVE lock on the db rid and a WRITE lock on each table rid, and LockManager
+        // forbids requesting a WRITE lock on a rid that already holds an intention lock. Use a dummy
+        // id that is not a real table in the test catalog, so updateCatalogAfterVisible stays a no-op
+        // and the metric entity stays isolated from sibling tests (which commit to table 2).
+        long loadTableId = 1000L;
+        TransactionState transactionState =
+                new TransactionState(1L, Lists.newArrayList(loadTableId), 1L, "label", null,
                 LoadJobSourceType.ROUTINE_LOAD_TASK, new TxnCoordinator(TxnSourceType.BE, "be1"),
                 routineLoadJob.getId(),
                 Config.stream_load_default_timeout_second);
@@ -454,16 +461,25 @@ public class GlobalTransactionMgrTest {
         // todo(ml): change to assert queue
         // Assert.assertEquals(1, routineLoadManager.getNeedScheduleTasksQueue().size());
         // Assert.assertNotEquals("label", routineLoadManager.getNeedScheduleTasksQueue().peek().getId());
+<<<<<<< HEAD
         boolean oldValue = Config.lock_manager_enabled;
         Config.lock_manager_enabled = false;
         masterTransMgr.finishTransactionNew(transactionState, Sets.newHashSet());
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(1L);
+=======
+        TransactionState originalState = masterTransMgr.getTransactionState(1L, 1L);
+        TransactionStatus originalStatus = originalState.getTransactionStatus();
+        transactionState = masterTransMgr.finishTransactionNew(originalState, Sets.newHashSet());
+        Assertions.assertNotSame(originalState, transactionState);
+        assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
+        assertEquals(originalStatus, originalState.getTransactionStatus());
+        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(loadTableId);
+>>>>>>> 087598adac ([Refactor] Remove lock_manager_enabled config and hardwire LockManager (#74158))
         assertEquals(100, entity.counterRoutineLoadRowsTotal.getValue().intValue());
         assertEquals(10000, entity.counterRoutineLoadBytesTotal.getValue().intValue());
         assertEquals(1, entity.counterRoutineLoadFinishedTotal.getValue().intValue());
         assertEquals(1, entity.counterRoutineLoadErrorRowsTotal.getValue().intValue());
         assertEquals(1, entity.counterRoutineLoadUnselectedRowsTotal.getValue().intValue());
-        Config.lock_manager_enabled = oldValue;
     }
 
     @Test
