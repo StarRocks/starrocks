@@ -95,6 +95,30 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * GROUP BY without aggregates (a DISTINCT-on-keys MV) must yield QUERY_COMPUTED, not
+     * AUTO_INCREMENT — otherwise the MV row-id type disagrees with the refresh plan.
+     */
+    @Test
+    public void testGroupByWithoutAggregateYieldsQueryComputedStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_distinct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "GROUP BY-only MV query must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "GROUP BY without aggregate must yield QUERY_COMPUTED, not AUTO_INCREMENT");
+    }
+
+    /**
      * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
      * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
      * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away
@@ -125,6 +149,54 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
             assertTrue(ex.getMessage().contains("does not support distinct aggregate"),
                     "error message must mention distinct rejection, got: " + ex.getMessage());
         }
+    }
+
+    /**
+     * HAVING that references an aggregate must be rejected: aggregate IVM is UPSERT-only,
+     * so a group crossing the HAVING threshold across refreshes can't be maintained.
+     * Without this gate the rewrite failed with the opaque "__AGG_STATE__ columns size"
+     * mismatch because the HAVING aggregate survived un-rewritten.
+     */
+    @Test
+    public void testRejectHavingWithAggregate() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_having "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` "
+                + "GROUP BY id HAVING SUM(c1) > 10";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject HAVING that references an aggregate");
+        assertTrue(ex.getMessage().contains("does not support HAVING"),
+                "error message must mention HAVING rejection, got: " + ex.getMessage());
+    }
+
+    /**
+     * HAVING over only group-by keys (no aggregate) is equivalent to a post-aggregation
+     * filter on stable keys — no threshold crossing — so it must still be accepted.
+     */
+    @Test
+    public void testAcceptHavingOnGroupKey() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_having_key "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` "
+                + "GROUP BY id HAVING id > 0";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+        assertTrue(result.isPresent(), "HAVING over only group-by keys must be accepted");
     }
 
     /**

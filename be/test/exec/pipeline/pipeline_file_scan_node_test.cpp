@@ -31,6 +31,7 @@
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
@@ -39,8 +40,10 @@
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
@@ -95,7 +98,7 @@ public:
         _runtime_state->set_chunk_size(config::vector_chunk_size);
         _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
         _runtime_state->set_be_number(_request.backend_num);
-        _runtime_state->set_query_ctx(_query_ctx);
+        _query_ctx->attach_to_runtime_state(_runtime_state);
         _runtime_state->set_fragment_ctx(_fragment_ctx);
         _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
         _pool = _runtime_state->obj_pool();

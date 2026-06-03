@@ -762,7 +762,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `statistic_cache_thread_pool_size`
 
-- Default: 10
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: No
@@ -1062,6 +1062,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`.
+- Introduced in: -
+
+### `max_load_initial_open_partition_number`
+
+- Default: 4096
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The upper bound on how many partitions a load can open up front. The value is used as a cap in two scenarios: (1) for LIST-partitioned tables (which open all partitions by default) and (2) for RANGE-partitioned tables loaded via INSERT / Broker Load / Spark Load (which also open all partitions by default). Stream Load and Routine Load on RANGE-partitioned tables ignore this cap and keep the conservative latest-32 default. The per-table property `load_initial_open_partition_number` overrides this value, bypasses this cap, and is the highest-priority setting. From v4.0 onwards, the default value is increased from 32 to 4096.
 - Introduced in: -
 
 ### `max_load_timeout_second`

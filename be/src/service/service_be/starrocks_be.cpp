@@ -380,6 +380,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     delete storage_engine;
 
+    // Tear down the SR-owned VectorIndexCache before global_env->stop()
+    // destroys the MemTracker hierarchy the entry deleters consume against.
+    // See ExecEnv::destroy_vector_index_cache().
+    exec_env->destroy_vector_index_cache();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": vector index cache destroy successfully";
+
 #ifndef __APPLE__
     cache_env->destroy();
     LOG(ERROR) << process_name << " exit step " << exit_step++ << ": cache env destroy successfully";

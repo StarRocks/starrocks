@@ -14,11 +14,12 @@
 
 #include "exec/pipeline/nljoin/spillable_nljoin_build_operator.h"
 
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_helper.h"
 

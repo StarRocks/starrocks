@@ -14,20 +14,22 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Collection;
 import java.util.List;
 
 /**
  * Shared eligibility helpers used by the load-path hooks to short-circuit
- * before constructing the pipeline. The P1 contract requires a
+ * before constructing the pipeline. The single-partition contract requires a
  * single-physical-partition, single-base-tablet target; these helpers encode
- * that contract in one place so every hook (and any D3+ caller) checks the
+ * that contract in one place so every hook (and any future caller) checks the
  * same shape.
  *
  * <p>Each helper returns a sentinel ({@code null} or {@code -1}) for "no
@@ -35,6 +37,18 @@ import java.util.List;
  * The eligibility gate inside {@link TabletPreSplitCoordinator#maybeAct}
  * re-runs equivalent checks against the resolved {@code physicalPartitionId};
  * the helpers here only let the hook skip the pipeline construction.
+ *
+ * <p><b>Two slices</b>:
+ * <ul>
+ *   <li>{@link #findEligibleTable} — table-only structural gate (range
+ *       distribution, NORMAL state, no MV/rollup, supported sort key) used
+ *       by the multi-partition coordinator's defensive re-check. The
+ *       multi-partition coordinator does per-partition checks on its own
+ *       under a short READ lock after pre-create.</li>
+ *   <li>{@link #findEligibleTarget} — single-partition gate; performs the
+ *       per-partition slice (single physical partition, single base tablet)
+ *       and continues to gate the existing single-partition hooks unchanged.</li>
+ * </ul>
  */
 final class PreSplitTargets {
 
@@ -46,6 +60,51 @@ final class PreSplitTargets {
      * this through to the coordinator as one value.
      */
     record EligibleTarget(Database database, OlapTable olapTable, long partitionId, long oldTabletId) {
+    }
+
+    /**
+     * Table-level eligibility check shared by the multi-partition path
+     * ({@link TabletPreSplitCoordinator#submitForPartitionsCombined}) and the
+     * single-partition path (which still relies on the equivalent inline
+     * checks inside {@link TabletPreSplitCoordinator#maybeAct}). Per-partition
+     * checks (empty, single-tablet) stay with the caller; the multi-partition
+     * coordinator runs them per-bucket under its post-pre-create READ lock.
+     *
+     * <p>Returns the matching {@link SkipReason} (which the caller routes into
+     * the eligibility-skip bvar) when any structural table-level check fails;
+     * {@code null} when the table is eligible.
+     */
+    static SkipReason findEligibleTable(Database database, OlapTable table) {
+        // The reshard substrate (SplitTabletJobFactory.validateTableLevel) only accepts
+        // cloud-native tables. Reject here too, before the multi-partition path pre-creates
+        // any partition that the factory would then reject — otherwise non-cloud-native
+        // range-distributed tables (reachable in shared-nothing mode) leave orphaned
+        // partitions behind.
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            return SkipReason.NOT_CLOUD_NATIVE;
+        }
+        if (!table.isRangeDistribution()) {
+            return SkipReason.NOT_RANGE_DISTRIBUTION;
+        }
+        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+            return SkipReason.TABLE_NOT_NORMAL;
+        }
+        if (table.getVisibleIndexMetas().size() != 1) {
+            return SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP;
+        }
+        // Mirrors TabletPreSplitCoordinator.areSortKeyColumnsSupported: every
+        // sort-key column must be scalar; deeper per-column validation runs
+        // at plan time.
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        if (sortKeyColumns.isEmpty()) {
+            return SkipReason.UNSUPPORTED_SORT_KEY;
+        }
+        for (Column column : sortKeyColumns) {
+            if (!column.getType().isScalarType()) {
+                return SkipReason.UNSUPPORTED_SORT_KEY;
+            }
+        }
+        return null;
     }
 
     /**
@@ -73,7 +132,7 @@ final class PreSplitTargets {
     /**
      * @return the unique {@link PhysicalPartition} of {@code table}, or
      *         {@code null} when the table has zero or multiple partitions.
-     *         Multi-partition loads are out of scope for P1 because per-row
+     *         Multi-partition loads are out of scope for the single-partition gate because per-row
      *         partition routing makes the target-partition set unknowable.
      */
     static PhysicalPartition findUniquePhysicalPartition(OlapTable table) {

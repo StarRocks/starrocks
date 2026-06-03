@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function repeats `str` by a number of times according to `count`."
+description: "Returns a string repeated a specified number of times."
 ---
 
 # repeat

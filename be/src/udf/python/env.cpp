@@ -31,6 +31,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/random/random.h"
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "butil/fd_guard.h"
@@ -102,7 +103,11 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     }
     posix_spawn_file_actions_addclose(&actions, pipefd[0]);
 
+#ifdef __APPLE__
+    DIR* dir = opendir("/dev/fd");
+#else
     DIR* dir = opendir("/proc/self/fd");
+#endif
     auto defer = DeferOp([&dir]() {
         if (dir != nullptr) {
             closedir(dir);
@@ -110,7 +115,11 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     });
 
     if (dir == nullptr) {
+#ifdef __APPLE__
+        return Status::InternalError(fmt::format("open /dev/fd error {}", std::strerror(errno)));
+#else
         return Status::InternalError(fmt::format("open /proc/self/fd error {}", std::strerror(errno)));
+#endif
     }
 
     {
@@ -122,12 +131,19 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
 
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
-        if (entry->d_type == DT_LNK) {
+#ifdef __APPLE__
+        int fd = atoi(entry->d_name);
+        if (fd >= 3 && fd != pipefd[0] && fd != pipefd[1]) {
+            posix_spawn_file_actions_addclose(&actions, fd);
+        }
+#else
+        if (entry->d_type == DT_LNK || entry->d_type == DT_UNKNOWN) {
             int fd = atoi(entry->d_name);
-            if (fd > 3 && fd != pipefd[0] && fd != pipefd[1]) {
+            if (fd >= 3 && fd != pipefd[0] && fd != pipefd[1]) {
                 posix_spawn_file_actions_addclose(&actions, fd);
             }
         }
+#endif
     }
 
     std::string script = PyWorkerManager::bootstrap();
@@ -204,7 +220,7 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         std::lock_guard guard(_mutex);
         auto& workers = _processes[driver_id];
         if (workers.size() > max_worker_per_driver) {
-            worker = workers[rand() % max_worker_per_driver];
+            worker = workers[ThreadLocalRandomUniform(static_cast<int32_t>(max_worker_per_driver))];
         }
     }
     if (worker && worker->is_dead()) {

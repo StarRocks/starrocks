@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "To deploy a shared-nothing StarRocks cluster (in which BE is responsible for both storage and computing), see [Deploy Shared-nothing StarRocks Manually](../deployment/deploy_manually.md)."
+description: "How to manually deploy a shared-data StarRocks cluster with decoupled storage and computing."
 ---
 
 import Tabs from '@theme/Tabs';

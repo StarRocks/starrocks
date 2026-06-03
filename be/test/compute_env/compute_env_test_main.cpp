@@ -14,15 +14,39 @@
 
 #include <gtest/gtest.h>
 
+#include <iostream>
+
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_thrift_server_fwd.h"
+#include "common/configbase.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "runtime/env/global_env.h"
 
 int main(int argc, char** argv) {
+    if (!starrocks::config::init(nullptr)) {
+        std::cerr << "failed to initialize config defaults" << std::endl;
+        return 1;
+    }
+
     starrocks::config::max_memory_sink_batch_count = 20;
     starrocks::config::thrift_max_message_size = 1073741824;
     starrocks::config::thrift_max_frame_size = 16384000;
     starrocks::config::thrift_max_recursion_depth = 64;
 
+    starrocks::CpuInfo::init();
+    starrocks::DiskInfo::init();
+    starrocks::MemInfo::init();
+
+    auto global_env_status = starrocks::GlobalEnv::GetInstance()->init(nullptr);
+    if (!global_env_status.ok()) {
+        std::cerr << "failed to initialize GlobalEnv: " << global_env_status << std::endl;
+        return 1;
+    }
+
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    const int result = RUN_ALL_TESTS();
+    starrocks::GlobalEnv::GetInstance()->stop();
+    return result;
 }

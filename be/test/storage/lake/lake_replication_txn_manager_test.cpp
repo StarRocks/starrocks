@@ -1039,8 +1039,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Inject source tablet metadata via SyncPoint to avoid metacache dependency
@@ -1085,8 +1085,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Inject source tablet metadata via SyncPoint to avoid metacache dependency
@@ -1148,7 +1148,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Inject source tablet metadata via SyncPoint to avoid metacache dependency
@@ -1198,10 +1198,16 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segment_size(1024); // src_file_size for segment 1
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
-    rowset->add_segment_size(2048); // src_file_size for segment 2
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+        sm->set_size(1024); // src_file_size for segment 1
+    }
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+        sm->set_size(2048); // src_file_size for segment 2
+    }
     // Add a delvec for non-segment path
     auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
     auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
@@ -1265,10 +1271,16 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_ope
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segment_size(1024);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
-    rowset->add_segment_size(2048);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+        sm->set_size(1024);
+    }
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+        sm->set_size(2048);
+    }
     auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
     auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
     delvec_entry.set_name("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.delvec");
@@ -1333,8 +1345,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
-    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",

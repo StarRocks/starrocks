@@ -18,9 +18,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -49,7 +49,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(brokerFileStatus("oss://bucket/data/a.parquet", 4L * 1024L * 1024L)));
 
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[100],\"meta\":[{\"name\":\"sort_key\",\"type\":\"BIGINT\"}]}",
                         "{\"data\":[200]}",
                         "{\"data\":[300]}")));
@@ -57,11 +57,13 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(
                 bigintRequest(sourceTable, sortKeyColumn));
 
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(3, rows.size());
-        Assertions.assertEquals("100", rows.get(0).get(0).getStringValue());
-        Assertions.assertEquals("200", rows.get(1).get(0).getStringValue());
-        Assertions.assertEquals("300", rows.get(2).get(0).getStringValue());
+        Assertions.assertEquals("100", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("200", rows.get(1).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("300", rows.get(2).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertTrue(rows.get(0).partitionSourceTuple().isEmpty(),
+                "unpartitioned request must leave the partition-source tuple empty");
         Assertions.assertEquals(4L * 1024L * 1024L, execution.estimates().totalBytes());
     }
 
@@ -72,7 +74,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(brokerFileStatus("s3://b/c/x.parquet", 1024L)));
 
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(
                 bigintRequest(sourceTable, bigintColumn("sort_key")));
@@ -94,7 +96,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*seed=*/ 0L);
 
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
     }
@@ -104,7 +106,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         StarRocksException injected = new StarRocksException("planner blew up");
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     throw injected;
                 });
 
@@ -117,7 +119,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     void queryRunnerRuntimeExceptionIsWrapped() {
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     throw new IllegalStateException("BE crashed");
                 });
 
@@ -133,7 +135,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         // violates the schema invariant, sampler must reject.
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch("{\"data\":[null]}")));
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) ->
+                        List.of(jsonResultBatch("{\"data\":[null]}")));
 
         Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(sourceTable, bigintColumn("sort_key"))));
@@ -150,25 +153,26 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(brokerFileStatus("s3://b/x/a.parquet", 1024L)));
         Column nullableSortKey = nullableBigintColumn("trailing");
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[null]}", "{\"data\":[42]}")));
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
                 List.of(nullableSortKey), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).get(0),
+        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).sortKeyTuple().get(0),
                 "nullable column null cell must decode to NullVariant");
-        Assertions.assertEquals("42", rows.get(1).get(0).getStringValue());
+        Assertions.assertEquals("42", rows.get(1).sortKeyTuple().get(0).getStringValue());
     }
 
     @Test
     void multiColumnRowThrows() {
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch("{\"data\":[1,2]}")));
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) ->
+                        List.of(jsonResultBatch("{\"data\":[1,2]}")));
 
         Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(sourceTable, bigintColumn("sort_key"))));
@@ -178,7 +182,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     void malformedJsonThrows() {
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch("not json at all")));
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) ->
+                        List.of(jsonResultBatch("not json at all")));
 
         Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(sourceTable, bigintColumn("sort_key"))));
@@ -192,7 +197,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Column sortKeyColumn = new Column("weird`name", IntegerType.BIGINT);
 
         String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties, List.of(sortKeyColumn), /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
+                properties, List.of(sortKeyColumn), List.of(),
+                /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
 
         Assertions.assertTrue(sql.contains("`weird``name`"), "backtick in identifier must be doubled: " + sql);
         // Both double-quote AND backslash must be escaped inside the property's
@@ -216,7 +222,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         StringBuilder capturedSql = new StringBuilder();
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of();
                 });
@@ -239,7 +245,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         StringBuilder capturedSql = new StringBuilder();
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of();
                 });
@@ -260,7 +266,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(brokerFileStatus("s3://bucket/data/a.parquet", 4L * 1024L * 1024L)));
         StringBuilder capturedSql = new StringBuilder();
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of(jsonResultBatch(
                             "{\"data\":[100, 200],\"meta\":[{\"name\":\"tenant\"},{\"name\":\"position\"}]}",
@@ -276,13 +282,14 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
                 "both sort-key columns must appear in the projection: " + capturedSql);
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertEquals(2, rows.get(0).size(), "each decoded row carries a value per sort-key column");
-        Assertions.assertEquals("100", rows.get(0).get(0).getStringValue());
-        Assertions.assertEquals("200", rows.get(0).get(1).getStringValue());
-        Assertions.assertEquals("100", rows.get(1).get(0).getStringValue());
-        Assertions.assertEquals("300", rows.get(1).get(1).getStringValue());
+        Assertions.assertEquals(2, rows.get(0).sortKeyTuple().size(),
+                "each decoded row carries a value per sort-key column");
+        Assertions.assertEquals("100", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("200", rows.get(0).sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("100", rows.get(1).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("300", rows.get(1).sortKeyTuple().get(1).getStringValue());
     }
 
     @Test
@@ -292,7 +299,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         // as a clean StarRocksException (mapped to SkipReason.SAMPLE_FAILED) rather
         // than letting downstream tuple compare blow up.
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch("{\"data\":[100]}")));
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) ->
+                        List.of(jsonResultBatch("{\"data\":[100]}")));
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
                 List.of(bigintColumn("tenant"), bigintColumn("position")),
@@ -310,7 +318,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         StringBuilder capturedSql = new StringBuilder();
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of();
                 });
@@ -336,7 +344,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         List<ComputeResource> capturedResources = new ArrayList<>();
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedResources.add(computeResource);
                     return List.of();
                 });
@@ -361,7 +369,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
         ConnectContext returned = FilesSampleSubqueryExecutor.configureSampleContext(
-                sampleContext, computeResource);
+                sampleContext, computeResource, /*queryTimeoutSeconds=*/ 0);
 
         Assertions.assertSame(sampleContext, returned);
         InOrder inOrder = Mockito.inOrder(sampleContext);
@@ -369,6 +377,26 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         inOrder.verify(sampleContext).setCurrentComputeResource(computeResource);
         inOrder.verify(sampleContext).setNeedQueued(false);
         inOrder.verify(sampleContext).setStartTime();
+        // queryTimeoutSeconds == 0 → no cap applied, session variable untouched.
+        Mockito.verify(sampleContext, Mockito.never()).getSessionVariable();
+    }
+
+    @Test
+    void configureSampleContextSetsQueryTimeoutWhenCapped() {
+        // The data-tier pipeline caps the sample at the remaining pre-submit
+        // budget; configureSampleContext must push that onto the sample
+        // session's query_timeout (the BE reads it via SessionVariable.toThrift
+        // on the executeDQL path — a SET_VAR SQL hint would be ignored there).
+        ConnectContext sampleContext = Mockito.mock(ConnectContext.class);
+        SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(sampleContext.getSessionVariable()).thenReturn(sessionVariable);
+        ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        Mockito.when(computeResource.getWarehouseId()).thenReturn(7L);
+
+        FilesSampleSubqueryExecutor.configureSampleContext(
+                sampleContext, computeResource, /*queryTimeoutSeconds=*/ 45);
+
+        Mockito.verify(sessionVariable).setQueryTimeoutS(45);
     }
 
     @Test
@@ -380,7 +408,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(directoryEntry, brokerFileStatus("s3://b/dir/x.parquet", 512L)));
 
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(
                 bigintRequest(sourceTable, bigintColumn("sort_key")));

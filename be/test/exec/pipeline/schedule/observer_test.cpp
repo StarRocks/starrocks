@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/pipeline/observer.h"
-
 #include <unistd.h>
 
 #include <atomic>
@@ -33,8 +31,10 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/utils.h"
@@ -176,7 +176,7 @@ public:
         _runtime_state->set_exec_env(exec_env);
         _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
         _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
-        _runtime_state->set_query_ctx(_dummy_query_ctx.get());
+        _dummy_query_ctx->attach_to_runtime_state(_runtime_state.get());
         _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
         _runtime_state->set_fragment_dict_state(_dummy_fragment_ctx->dict_state());
         _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");

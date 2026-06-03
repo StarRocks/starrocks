@@ -760,6 +760,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
+            // load initial open partition number
+            if (properties != null
+                    && properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+                int loadInitialOpenPartitionNumber =
+                        PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
+                table.setLoadInitialOpenPartitionNumber(loadInitialOpenPartitionNumber);
+            }
+
             // analyze partition ttl duration
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                 Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);

@@ -88,10 +88,16 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * executor unit-testable without bringing up the full FE planner/coordinator
      * stack — production wires this to {@link SimpleExecutor#executeDQL} via a
      * scoped {@link ConnectContext} carrying the load's compute resource.
+     *
+     * <p>{@code queryTimeoutSeconds} caps the sub-query's wall-clock runtime
+     * ({@code 0} = uncapped); the production runner applies it via
+     * {@code query_timeout} on the sample context so an over-budget sample is
+     * cancelled by the BE. Test stubs return canned batches and ignore it.
      */
     @FunctionalInterface
     interface SampleQueryRunner {
-        List<TResultBatch> run(String sampleSql, ComputeResource computeResource) throws StarRocksException;
+        List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
+                throws StarRocksException;
     }
 
     /** Subclass-supplied FILES sub-query inputs. */
@@ -131,14 +137,18 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
     public final SampleExecution execute(SampleRequest request) throws StarRocksException {
         Source source = resolveSource(request);
         List<Column> sortKeyColumns = request.getSortKey();
+        List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
 
         double samplingRate = pickSamplingRate(source.totalFileBytes());
         int rowLimit = pickRowLimit(request.getSampleByteLimit());
 
         String sampleSql = buildSampleSql(
-                source.filesProperties(), sortKeyColumns, samplingRate, rowLimit, request.getSeed());
-        List<TResultBatch> resultBatches = runSampleQuery(sampleSql, source.computeResource());
-        Iterator<List<Variant>> rowIterator = decodeRows(resultBatches, sortKeyColumns).iterator();
+                source.filesProperties(), sortKeyColumns, partitionSourceColumns,
+                samplingRate, rowLimit, request.getSeed());
+        List<TResultBatch> resultBatches = runSampleQuery(
+                sampleSql, source.computeResource(), request.getQueryTimeoutSeconds());
+        Iterator<SampleRow> rowIterator =
+                decodeRows(resultBatches, sortKeyColumns, partitionSourceColumns).iterator();
         return new SampleExecution(rowIterator, new Estimates(source.totalFileBytes(), 0L));
     }
 
@@ -165,23 +175,37 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
 
     /**
      * Builds the sampling SELECT against the supplied FILES properties. Projects
-     * every sort-key column so multi-column sort keys produce tuple-valued
-     * samples that {@link BoundaryPlanner} can lex-sort and quantile-cut.
+     * every sort-key column followed by every partition-source column (so the
+     * projection list is {@code sortKey, partitionSource} in order) — multi-
+     * column sort keys produce tuple-valued samples that {@link BoundaryPlanner}
+     * can lex-sort and quantile-cut, and the trailing partition-source columns
+     * feed a downstream multi-partition grouper. When
+     * {@code partitionSourceColumns} is empty the projection collapses to the
+     * sort key alone, identical to the pre-extension shape.
      *
      * <p>String literal escaping covers both {@code "} and {@code \} so a
      * crafted property value cannot break out of the double-quoted form and
      * inject SQL into the internal-context sub-query. The {@code ORDER BY
      * rand(seed XOR 0x5...)} before {@code LIMIT} re-shuffles the
      * {@code WHERE}-survivors so an over-rate truncation does not bias
-     * toward earlier files in scan order.
+     * toward earlier files in scan order. When {@code partitionSourceColumns}
+     * is empty the projection collapses to the sort key alone.
      */
     @VisibleForTesting
     static String buildSampleSql(
-            Map<String, String> filesProperties, List<Column> sortKeyColumns,
+            Map<String, String> filesProperties,
+            List<Column> sortKeyColumns,
+            List<Column> partitionSourceColumns,
             double samplingRate, int rowLimit, long seed) {
-        String projection = sortKeyColumns.stream()
-                .map(column -> SqlUtils.getIdentSql(column.getName()))
-                .collect(Collectors.joining(", "));
+        List<String> projectedIdentifiers = new ArrayList<>(
+                sortKeyColumns.size() + partitionSourceColumns.size());
+        for (Column column : sortKeyColumns) {
+            projectedIdentifiers.add(SqlUtils.getIdentSql(column.getName()));
+        }
+        for (Column column : partitionSourceColumns) {
+            projectedIdentifiers.add(SqlUtils.getIdentSql(column.getName()));
+        }
+        String projection = String.join(", ", projectedIdentifiers);
         String propertiesClause = filesProperties.entrySet().stream()
                 .map(property -> '"' + escapeDoubleQuoted(property.getKey()) + "\" = \""
                         + escapeDoubleQuoted(property.getValue()) + '"')
@@ -211,10 +235,10 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private List<TResultBatch> runSampleQuery(String sampleSql, ComputeResource computeResource)
-            throws StarRocksException {
+    private List<TResultBatch> runSampleQuery(
+            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) throws StarRocksException {
         try {
-            return sampleQueryRunner.run(sampleSql, computeResource);
+            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds);
         } catch (RuntimeException runtimeFailure) {
             throw new StarRocksException(
                     errorPrefix + "sample sub-query failed: " + runtimeFailure.getMessage(), runtimeFailure);
@@ -229,9 +253,11 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * local context handling follows the same prior-context save/restore
      * pattern {@code SimpleExecutor.executeDQL(String)} uses internally.
      */
-    private static List<TResultBatch> runViaSimpleExecutor(String sampleSql, ComputeResource computeResource) {
+    private static List<TResultBatch> runViaSimpleExecutor(
+            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) {
         ConnectContext priorContext = ConnectContext.get();
-        ConnectContext sampleContext = configureSampleContext(StatisticUtils.buildConnectContext(), computeResource);
+        ConnectContext sampleContext = configureSampleContext(
+                StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds);
         sampleContext.setThreadLocalInfo();
         try {
             return PRODUCTION_SIMPLE_EXECUTOR.executeDQL(sampleSql, sampleContext);
@@ -251,9 +277,20 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * disagrees with the context's {@code currentWarehouseId}, so omitting
      * the warehouse-id alignment silently routes the sub-query to the
      * statistics-default warehouse instead of the load's.
+     *
+     * <p>{@code queryTimeoutSeconds > 0} sets {@code query_timeout} on the
+     * sample session so the BE cancels an over-budget sample (the data-tier
+     * pipeline derives this from the remaining pre-submit budget); {@code 0}
+     * leaves the built context's default timeout untouched. This is the seam
+     * that makes the pre-submit deadline hard — {@code executeDQL} reads the
+     * cap from {@code SessionVariable.toThrift()}, not from any SQL hint.
      */
     @VisibleForTesting
-    static ConnectContext configureSampleContext(ConnectContext context, ComputeResource computeResource) {
+    static ConnectContext configureSampleContext(
+            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds) {
+        if (queryTimeoutSeconds > 0) {
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+        }
         context.setCurrentWarehouseId(computeResource.getWarehouseId());
         context.setCurrentComputeResource(computeResource);
         context.setNeedQueued(false);
@@ -261,9 +298,11 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         return context;
     }
 
-    private List<List<Variant>> decodeRows(List<TResultBatch> resultBatches, List<Column> sortKeyColumns)
-            throws StarRocksException {
-        List<List<Variant>> rows = new ArrayList<>();
+    private List<SampleRow> decodeRows(
+            List<TResultBatch> resultBatches,
+            List<Column> sortKeyColumns,
+            List<Column> partitionSourceColumns) throws StarRocksException {
+        List<SampleRow> rows = new ArrayList<>();
         if (resultBatches == null) {
             return rows;
         }
@@ -273,28 +312,47 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
                 continue;
             }
             for (ByteBuffer rowBuffer : batchRows) {
-                rows.add(decodeRow(rowBuffer, sortKeyColumns));
+                rows.add(decodeRow(rowBuffer, sortKeyColumns, partitionSourceColumns));
             }
         }
         return rows;
     }
 
     /**
-     * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into
-     * a sort-key tuple. Nullable columns accept JSON nulls and decode to
-     * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface
-     * a null cell as an executor failure rather than silently dropping the
-     * row. Any shape deviation or type-coerce failure becomes a
+     * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into a
+     * {@link SampleRow}. The JSON array carries
+     * {@code sortKeyColumns.size() + partitionSourceColumns.size()} cells in
+     * projection order: the first slice fills the row's sort-key tuple, the
+     * trailing slice fills its partition-source tuple. When
+     * {@code partitionSourceColumns} is empty the trailing slice is empty and
+     * the row collapses to the pre-extension single-tuple shape.
+     *
+     * <p>Nullable columns accept JSON nulls and decode to
+     * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface a
+     * null cell as an executor failure rather than silently dropping the row.
+     * Any shape deviation or type-coerce failure becomes a
      * {@link StarRocksException} so the coordinator records SAMPLE_FAILED
      * instead of letting an unchecked exception unwind the load thread.
      */
-    private List<Variant> decodeRow(ByteBuffer rowBuffer, List<Column> sortKeyColumns) throws StarRocksException {
-        JsonArray dataArray = extractDataArray(rowBuffer, sortKeyColumns.size());
-        List<Variant> tupleValues = new ArrayList<>(sortKeyColumns.size());
+    private SampleRow decodeRow(
+            ByteBuffer rowBuffer,
+            List<Column> sortKeyColumns,
+            List<Column> partitionSourceColumns) throws StarRocksException {
+        int expectedArity = sortKeyColumns.size() + partitionSourceColumns.size();
+        JsonArray dataArray = extractDataArray(rowBuffer, expectedArity);
+        List<Variant> sortKeyValues = new ArrayList<>(sortKeyColumns.size());
         for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
-            tupleValues.add(decodeCell(dataArray.get(columnIndex), sortKeyColumns.get(columnIndex)));
+            sortKeyValues.add(decodeCell(
+                    dataArray.get(columnIndex), sortKeyColumns.get(columnIndex), COLUMN_ROLE_SORT_KEY));
         }
-        return tupleValues;
+        List<Variant> partitionSourceValues = new ArrayList<>(partitionSourceColumns.size());
+        for (int columnIndex = 0; columnIndex < partitionSourceColumns.size(); columnIndex++) {
+            partitionSourceValues.add(decodeCell(
+                    dataArray.get(sortKeyColumns.size() + columnIndex),
+                    partitionSourceColumns.get(columnIndex),
+                    COLUMN_ROLE_PARTITION_SOURCE));
+        }
+        return new SampleRow(sortKeyValues, partitionSourceValues);
     }
 
     /**
@@ -331,22 +389,28 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * type. Null cells produce a typed {@link Variant#nullVariant} for nullable
      * columns (BoundaryPlanner's compareTo orders {@code NullVariant} lower
      * than any non-null value); non-nullable columns reject null as a schema
-     * invariant violation.
+     * invariant violation. {@code columnRole} names the projection slice the
+     * cell belongs to (sort-key or partition-source) so a non-null violation
+     * reports the schema an operator should actually inspect.
      */
-    private Variant decodeCell(JsonElement valueElement, Column column) throws StarRocksException {
+    private Variant decodeCell(JsonElement valueElement, Column column, String columnRole) throws StarRocksException {
         if (valueElement.isJsonNull()) {
             if (column.isAllowNull()) {
                 return Variant.nullVariant(column.getType());
             }
-            throw new StarRocksException(errorPrefix + "sample returned a null value for non-nullable sort-key column "
-                    + column.getName());
+            throw new StarRocksException(errorPrefix + "sample returned a null value for non-nullable "
+                    + columnRole + " column " + column.getName());
         }
         try {
             return Variant.of(column.getType(), valueElement.getAsString());
         } catch (RuntimeException variantFailure) {
-            throw new StarRocksException(errorPrefix + "failed to coerce sample value for column "
-                    + column.getName() + " to " + column.getType().toSql() + ": " + variantFailure.getMessage(),
+            throw new StarRocksException(errorPrefix + "failed to coerce sample value for " + columnRole
+                    + " column " + column.getName() + " to " + column.getType().toSql() + ": "
+                    + variantFailure.getMessage(),
                     variantFailure);
         }
     }
+
+    private static final String COLUMN_ROLE_SORT_KEY = "sort-key";
+    private static final String COLUMN_ROLE_PARTITION_SOURCE = "partition-source";
 }

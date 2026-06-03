@@ -33,6 +33,7 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "storage/storage_metrics.h"
@@ -55,14 +56,14 @@ uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_po
 
 uint32_t get_max_segment_idx(const RowsetMetadataPB& rowset_meta) {
     uint32_t max_idx = 0;
-    for (int i = 0; i < rowset_meta.segments_size(); ++i) {
+    for (int i = 0; i < rowset_meta.segment_metas_size(); ++i) {
         max_idx = std::max(max_idx, get_segment_idx(rowset_meta, i));
     }
     return max_idx;
 }
 
 uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta) {
-    if (rowset_meta.segments_size() == 0) {
+    if (rowset_meta.segment_metas_size() == 0) {
         return 1;
     }
     return get_max_segment_idx(rowset_meta) + 1;
@@ -84,11 +85,11 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
 // Collect rssids that belong to this rowset.
 // Rowset without segments still occupies one rssid (rowset.id()) for delete-file operation.
 static void collect_rowset_rssids(const RowsetMetadataPB& rowset_meta, std::unordered_set<uint32_t>* rssids) {
-    if (rowset_meta.segments_size() == 0) {
+    if (rowset_meta.segment_metas_size() == 0) {
         rssids->insert(rowset_meta.id());
         return;
     }
-    for (int i = 0; i < rowset_meta.segments_size(); ++i) {
+    for (int i = 0; i < rowset_meta.segment_metas_size(); ++i) {
         rssids->insert(get_rssid(rowset_meta, i));
     }
 }
@@ -112,15 +113,19 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
 
 void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list) {
+                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                                 const std::vector<int64_t>& file_sizes) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
+    DCHECK(file_with_encryption_metas.size() == file_sizes.size());
     for (int i = 0; i < file_with_encryption_metas.size(); i++) {
         new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
+        // Keep column_file_sizes strictly 1:1 with column_files so readers can index by position.
+        new_dcg_ver.add_column_file_sizes(file_sizes[i]);
         if (!file_with_encryption_metas[i].second.empty()) {
             new_dcg_ver.add_encryption_metas(file_with_encryption_metas[i].second);
         }
@@ -144,6 +149,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         if (!mcids->empty()) {
             new_dcg_ver.add_unique_column_ids()->CopyFrom(dcg_ver.unique_column_ids(i));
             new_dcg_ver.add_column_files(dcg_ver.column_files(i));
+            // Carry forward the old size, or 0 (unknown) for data written before this field existed,
+            // so column_file_sizes stays aligned with column_files.
+            new_dcg_ver.add_column_file_sizes(i < dcg_ver.column_file_sizes_size() ? dcg_ver.column_file_sizes(i) : 0);
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
@@ -167,49 +175,50 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
 
-    auto segment_size_size = rowset->segment_size_size();
-    auto segment_file_size = rowset->segments_size();
-    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
-            << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
-            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
-
     for (const auto& replace_seg : replace_segments) {
         // when handle partial update, replace old segments with new rewrite segments
-        rowset->set_segments(replace_seg.first, replace_seg.second.path);
-        rowset->set_segment_size(replace_seg.first, replace_seg.second.size.value());
-        if (replace_seg.first < rowset->segment_encryption_metas_size()) {
-            rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
+        auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
+        segment_meta->set_filename(replace_seg.second.path);
+        segment_meta->set_size(replace_seg.second.size.value());
+        if (segment_meta->has_encryption_meta()) {
+            segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
         // cross-publish, clear the flag so GC routes the rewrite file through the normal
         // deleter instead of the shared-file path (which would leak it under
         // is_range_distribution in delete_tablets_impl).
-        if (replace_seg.first < rowset->shared_segments_size()) {
-            rowset->set_shared_segments(replace_seg.first, false);
+        if (segment_meta->has_shared()) {
+            segment_meta->set_shared(false);
         }
-        rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
+    }
+    if (!replace_segments.empty()) {
+        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
+        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
+            segment_metadata.clear_bundle_file_offset();
+        }
+        // A rewritten segment makes this rowset's data private to this tablet, so it must not
+        // alias a cross-published sibling: mint a fresh uid. With no rewrite, the CopyFrom above
+        // preserves the op_write's write-time uid, which is identical across cross-published
+        // children.
+        tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
     // collect del files
-    for (int i = 0; i < op_write.dels_size(); i++) {
+    for (const auto& del_meta : op_write.dels_meta()) {
         DelfileWithRowsetId del_file_with_rid;
-        del_file_with_rid.set_name(op_write.dels(i));
+        del_file_with_rid.set_name(del_meta.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // For now, op_offset is always max segment's id
         del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
-        if (op_write.del_encryption_metas_size() > 0) {
-            CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
-                    << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
-                                   op_write.dels_size());
-            del_file_with_rid.set_encryption_meta(op_write.del_encryption_metas(i));
+        if (del_meta.has_encryption_meta()) {
+            del_file_with_rid.set_encryption_meta(del_meta.encryption_meta());
         }
-        // Preserve the per-del shared flag from cross-publish (tablet split). The list
-        // is either empty (all dels private) or parallel to op_write.dels.
-        if (i < op_write.shared_dels_size()) {
-            del_file_with_rid.set_shared(op_write.shared_dels(i));
+        // Preserve the per-del shared flag from cross-publish (tablet split).
+        if (del_meta.has_shared()) {
+            del_file_with_rid.set_shared(del_meta.shared());
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
@@ -232,11 +241,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 
 void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) {
     // remove all segments that only contains partial columns.
-    for (int i = 0; i < op_write.rowset().segments_size(); ++i) {
+    for (const auto& segment_meta : op_write.rowset().segment_metas()) {
         FileMetaPB file_meta;
-        file_meta.set_name(op_write.rowset().segments(i));
-        if (op_write.rowset().shared_segments_size() > 0) {
-            file_meta.set_shared(op_write.rowset().shared_segments(i));
+        file_meta.set_name(segment_meta.filename());
+        if (segment_meta.has_shared()) {
+            file_meta.set_shared(segment_meta.shared());
         }
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
@@ -306,33 +315,24 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
     if (op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1) != last_input_rowset.id()) {
         return;
     }
-    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segments_size() > 0 &&
-        last_input_rowset.segments_size() > 0) {
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segment_metas_size() > 0 &&
+        last_input_rowset.segment_metas_size() > 0) {
         // iterate all segments in last input rowset, find if any of them exists in
         // compaction output rowset, if is, erase them from last input rowset
-        size_t before = last_input_rowset.segments_size();
-        auto iter = last_input_rowset.segments().begin();
-        while (iter != last_input_rowset.segments().end()) {
-            auto it = std::find_if(op_compaction.output_rowset().segments().begin(),
-                                   op_compaction.output_rowset().segments().end(),
-                                   [iter](const std::string& segment) { return *iter == segment; });
-            if (it != op_compaction.output_rowset().segments().end()) {
-                auto pos = iter - last_input_rowset.segments().begin();
-                if (last_input_rowset.shared_segments_size() > 0) {
-                    last_input_rowset.mutable_shared_segments()->erase(pos +
-                                                                       last_input_rowset.shared_segments().begin());
-                }
-                if (pos < last_input_rowset.segment_metas_size()) {
-                    last_input_rowset.mutable_segment_metas()->erase(
-                            last_input_rowset.mutable_segment_metas()->begin() + pos);
-                }
-
-                iter = last_input_rowset.mutable_segments()->erase(iter);
+        size_t before = last_input_rowset.segment_metas_size();
+        auto* metas = last_input_rowset.mutable_segment_metas();
+        auto iter = metas->begin();
+        while (iter != metas->end()) {
+            const auto& output_metas = op_compaction.output_rowset().segment_metas();
+            auto it = std::find_if(output_metas.begin(), output_metas.end(),
+                                   [iter](const SegmentMetadataPB& seg) { return iter->filename() == seg.filename(); });
+            if (it != output_metas.end()) {
+                iter = metas->erase(iter);
             } else {
                 ++iter;
             }
         }
-        size_t after = last_input_rowset.segments_size();
+        size_t after = last_input_rowset.segment_metas_size();
         if (after - before > 0) {
             LOG(INFO) << "find partial compaction, tablet: " << metadata->id() << ", version: " << metadata->version()
                       << ", last input rowset id: " << last_input_rowset.id()
@@ -489,7 +489,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     bool has_output_rowset = false;
     uint32_t output_rowset_id = 0;
     if (op_compaction.has_output_rowset() &&
-        (op_compaction.output_rowset().segments_size() > 0 || !collect_del_files.empty())) {
+        (op_compaction.output_rowset().segment_metas_size() > 0 || !collect_del_files.empty())) {
         // NOTICE: we need output rowset in two scenarios:
         // 1. We have output segments after compactions.
         // 2. We need del files to rebuild cloud native PK index.
@@ -508,8 +508,8 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
 
     // update rowset schema id
     if (!_tablet_meta->rowset_to_schema().empty()) {
-        for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
-            _tablet_meta->mutable_rowset_to_schema()->erase(op_compaction.input_rowsets(i));
+        for (const auto& input_rowset : op_compaction.input_rowsets()) {
+            _tablet_meta->mutable_rowset_to_schema()->erase(input_rowset);
         }
 
         if (has_output_rowset) {
@@ -570,11 +570,11 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
 void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction) {
     // add output segments to orphan files
     const auto& rowset_metadata = op_compaction.output_rowset();
-    for (int i = 0; i < rowset_metadata.segments_size(); i++) {
+    for (const auto& segment_meta : rowset_metadata.segment_metas()) {
         FileMetaPB file_meta;
-        file_meta.set_name(rowset_metadata.segments(i));
-        if (rowset_metadata.shared_segments_size() > 0) {
-            file_meta.set_shared(rowset_metadata.shared_segments(i));
+        file_meta.set_name(segment_meta.filename());
+        if (segment_meta.has_shared()) {
+            file_meta.set_shared(segment_meta.shared());
         }
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
@@ -584,7 +584,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
     std::map<uint32_t, RowsetMetadataPB*> segment_id_to_rowset;
     for (int i = 0; i < _tablet_meta->rowsets_size(); i++) {
         auto* mutable_rowset = _tablet_meta->mutable_rowsets(i);
-        for (int j = 0; j < mutable_rowset->segments_size(); j++) {
+        for (int j = 0; j < mutable_rowset->segment_metas_size(); j++) {
             segment_id_to_rowset[mutable_rowset->id() + get_segment_idx(*mutable_rowset, j)] = mutable_rowset;
         }
     }
@@ -592,9 +592,9 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
     // we need to supplement their segment mapping here.
     // Their rowset id will be set to the current next_rowset_id when set_final_rowset() is called,
     // so we use next_rowset_id to predict it here.
-    if (_pending_rowset_data.rowset_pb.segments_size() > 0) {
+    if (_pending_rowset_data.rowset_pb.segment_metas_size() > 0) {
         uint32_t pending_rowset_id = _tablet_meta->next_rowset_id();
-        for (int j = 0; j < _pending_rowset_data.rowset_pb.segments_size(); j++) {
+        for (int j = 0; j < _pending_rowset_data.rowset_pb.segment_metas_size(); j++) {
             segment_id_to_rowset[pending_rowset_id + get_segment_idx(_pending_rowset_data.rowset_pb, j)] =
                     &_pending_rowset_data.rowset_pb;
         }
@@ -960,46 +960,32 @@ bool is_primary_key(const TabletMetadata& metadata) {
 void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
     // If this is the first call, copy rowset_pb directly
-    if (_pending_rowset_data.rowset_pb.segments_size() == 0) {
+    if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
-        int first_segment_metas_size = _pending_rowset_data.rowset_pb.segment_metas_size();
-        for (int i = 0; i < _pending_rowset_data.rowset_pb.segments_size(); i++) {
-            if (i >= first_segment_metas_size) {
-                _pending_rowset_data.rowset_pb.add_segment_metas();
-            }
+        for (int i = 0; i < _pending_rowset_data.rowset_pb.segment_metas_size(); i++) {
             _pending_rowset_data.rowset_pb.mutable_segment_metas(i)->set_segment_idx(
                     _pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
         }
     } else {
-        // Merge segments
-        for (int i = 0; i < rowset_pb.segments_size(); i++) {
-            _pending_rowset_data.rowset_pb.add_segments(rowset_pb.segments(i));
-        }
-        // Merge segment_size
-        for (int i = 0; i < rowset_pb.segment_size_size(); i++) {
-            _pending_rowset_data.rowset_pb.add_segment_size(rowset_pb.segment_size(i));
-        }
-        // Merge segment_encryption_metas
-        for (int i = 0; i < rowset_pb.segment_encryption_metas_size(); i++) {
-            _pending_rowset_data.rowset_pb.add_segment_encryption_metas(rowset_pb.segment_encryption_metas(i));
-        }
-        // Merge shared_segments
-        for (int i = 0; i < rowset_pb.shared_segments_size(); i++) {
-            _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
-        }
-        // Merge segment metadatas
-        for (int i = 0; i < rowset_pb.segments_size(); i++) {
+        // The first op_write was CopyFrom'd above (carrying its num_rows/data_size/num_dels);
+        // subsequent op_writes only append their segments below, so their row/size/del counts
+        // must be SUMMED into the composite rowset. Otherwise the rowset keeps just the first
+        // op_write's counts while holding every op_write's segments — a multi-statement / batch
+        // (incl. cross-publish) PK txn would then report e.g. num_rows=1 for a 10001-row rowset,
+        // corrupting reads until compaction rewrites the rowset. A composite spanning multiple
+        // op_writes can also carry overlapping keys, so mark it overlapped (as the non-PK batch
+        // path does via set_overlapped(all_segments.size() > 1)).
+        _pending_rowset_data.rowset_pb.set_num_rows(_pending_rowset_data.rowset_pb.num_rows() + rowset_pb.num_rows());
+        _pending_rowset_data.rowset_pb.set_data_size(_pending_rowset_data.rowset_pb.data_size() +
+                                                     rowset_pb.data_size());
+        _pending_rowset_data.rowset_pb.set_num_dels(_pending_rowset_data.rowset_pb.num_dels() + rowset_pb.num_dels());
+        _pending_rowset_data.rowset_pb.set_overlapped(true);
+        // Merge segment metadatas (canonical: carries filename/size/encryption/shared/bundle_offset).
+        for (int i = 0; i < rowset_pb.segment_metas_size(); i++) {
             auto* segment_meta = _pending_rowset_data.rowset_pb.add_segment_metas();
-            if (i < rowset_pb.segment_metas_size()) {
-                segment_meta->CopyFrom(rowset_pb.segment_metas(i));
-            }
+            segment_meta->CopyFrom(rowset_pb.segment_metas(i));
             // Remap segment_idx to the merged rowset's local segment id space.
             segment_meta->set_segment_idx(_pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
-        }
-        // Merge bundle_file_offsets for bundled data files.
-        // Must maintain 1:1 correspondence with segments.
-        for (int i = 0; i < rowset_pb.bundle_file_offsets_size(); i++) {
-            _pending_rowset_data.rowset_pb.add_bundle_file_offsets(rowset_pb.bundle_file_offsets(i));
         }
     }
 
@@ -1020,43 +1006,37 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
 }
 
 Status MetaFileBuilder::set_final_rowset() {
-    if (_pending_rowset_data.rowset_pb.segments_size() == 0 && _pending_rowset_data.dels.empty()) {
+    if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0 && _pending_rowset_data.dels.empty()) {
         return Status::OK(); // Nothing to do
     }
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
 
-    auto segment_size_size = rowset->segment_size_size();
-    auto segment_file_size = rowset->segments_size();
-    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
-            << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
-            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
-
-    // Validate bundle_file_offsets 1:1 correspondence with segments before applying replace_segments.
-    // During batch apply of multiple opwrites, some may have offsets and some may not, leading to
-    // inconsistent counts. This is an error that must abort publish to prevent data corruption —
-    // silently clearing offsets would leave bundled segment paths without positional info.
-    if (rowset->bundle_file_offsets_size() > 0 && rowset->bundle_file_offsets_size() != rowset->segments_size()) {
-        return Status::InternalError(
-                fmt::format("bundle_file_offsets count mismatch in merged rowset for tablet {}: "
-                            "offsets={} segments={}. Aborting publish to prevent data corruption.",
-                            _tablet.id(), rowset->bundle_file_offsets_size(), rowset->segments_size()));
-    }
-
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
-        rowset->set_segments(replace_seg.first, replace_seg.second.path);
-        rowset->set_segment_size(replace_seg.first, replace_seg.second.size.value());
-        if (replace_seg.first < rowset->segment_encryption_metas_size()) {
-            rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
+        auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
+        segment_meta->set_filename(replace_seg.second.path);
+        segment_meta->set_size(replace_seg.second.size.value());
+        if (segment_meta->has_encryption_meta()) {
+            segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.
-        if (replace_seg.first < rowset->shared_segments_size()) {
-            rowset->set_shared_segments(replace_seg.first, false);
+        if (segment_meta->has_shared()) {
+            segment_meta->set_shared(false);
         }
-        rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
+    }
+    if (!_pending_rowset_data.replace_segments.empty()) {
+        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
+        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
+            segment_metadata.clear_bundle_file_offset();
+        }
+        // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
+        // initial CopyFrom in add_rowset) so cross-published children converge on the same
+        // identity. If any segment was physically rewritten, the data is now private to this
+        // tablet and must not alias a sibling: mint a fresh uid.
+        tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
@@ -1104,28 +1084,11 @@ Status MetaFileBuilder::set_final_rowset() {
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
                                           const std::map<int, FileInfo>& replace_segments,
                                           const std::vector<FileMetaPB>& orphan_files) {
-    // Pack each del into a FileMetaPB carrying name + shared + encryption_meta together.
-    // The parallel repeated fields on the proto (dels / del_encryption_metas / shared_dels)
-    // must all agree in length or be empty. We validate the encryption-meta size just like
-    // apply_opwrite does; shared_dels is optional (empty means "all private") and is
-    // read positionally.
-    if (op_write.del_encryption_metas_size() > 0) {
-        CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
-                << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
-                               op_write.dels_size());
-    }
-
+    // Each del already carries name + shared + encryption_meta together in its FileMetaPB.
     std::vector<FileMetaPB> dels;
-    dels.reserve(op_write.dels_size());
-    for (int i = 0; i < op_write.dels_size(); i++) {
-        auto& del = dels.emplace_back();
-        del.set_name(op_write.dels(i));
-        if (i < op_write.del_encryption_metas_size()) {
-            del.set_encryption_meta(op_write.del_encryption_metas(i));
-        }
-        if (i < op_write.shared_dels_size()) {
-            del.set_shared(op_write.shared_dels(i));
-        }
+    dels.reserve(op_write.dels_meta_size());
+    for (const auto& del_meta : op_write.dels_meta()) {
+        dels.emplace_back(del_meta);
     }
 
     // Accumulate into pending rowset

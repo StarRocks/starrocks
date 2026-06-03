@@ -286,12 +286,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
 
     const uint64_t row_count = table_items->row_count;
     const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
-    static const size_t HALF_L3_CACHE_SIZE = [] {
-        static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
-        const auto& cache_sizes = CpuInfo::get_cache_sizes();
-        const auto l3_cache = cache_sizes[CpuInfo::L3_CACHE] ? cache_sizes[CpuInfo::L3_CACHE] : DEFAULT_L3_CACHE_SIZE;
-        return l3_cache / 2;
-    }();
+    static const size_t HALF_L3_CACHE_SIZE = CpuInfo::get_l3_cache_size() / 2;
     static const size_t L2_CACHE_SIZE = CpuInfo::get_l2_cache_size();
 
     if ((table_items->join_type == TJoinOp::LEFT_ANTI_JOIN || table_items->join_type == TJoinOp::LEFT_SEMI_JOIN) &&

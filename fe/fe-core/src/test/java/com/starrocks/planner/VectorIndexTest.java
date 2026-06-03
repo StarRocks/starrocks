@@ -597,6 +597,140 @@ public class VectorIndexTest extends PlanTestBase {
         assertPlanContains(sql8, "VECTORINDEX: ON");
     }
 
+    // Prepared statements that send the query vector as a string parameter end
+    // up with `CAST(StringLiteral AS ARRAY<FLOAT>)` in the AST after analysis.
+    // The rewrite rule must recognize this form, parse the literal, and dispatch
+    // through the same VECTORINDEX path as a native array literal.
+    @Test
+    public void testPreparedStatementCastStringArrayHnsw() throws Exception {
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,2.2,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan,
+                "Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, "
+                        + "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5]");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayWithWhitespace() throws Exception {
+        // Tokens with surrounding whitespace are trimmed; the resulting query vector
+        // should be byte-identical to the no-whitespace form.
+        String sql = "select c1 from test.test_l2 "
+                + "order by approx_l2_distance(CAST('[ 1.1 , 2.2 , 3.3 , 4.4 , 5.5 ]' AS ARRAY<FLOAT>), c1) "
+                + "limit 10";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan,
+                "Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, "
+                        + "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5]");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayIvfpq() throws Exception {
+        // IVFPQ keeps its existing eager path: the rewrite rule recognizes the cast,
+        // builds the query vector, but does not swap the order-by expression (refine
+        // pass is in the TopN). VECTORINDEX must still be ON with IVFPQ: ON.
+        String sql = "select c1, approx_l2_distance(CAST('[1.1,2.2,3.3,4.4]' AS ARRAY<FLOAT>), c1) as score "
+                + "from test.test_ivfpq order by score limit 10";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "IVFPQ: ON");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayDimMismatch() throws Exception {
+        // String literal has 4 floats but the index is dim=5 — the existing dim check
+        // must fire just as it does for native array literals.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,2.2,3.3,4.4]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("not equal to the vector index dimension");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayMissingBrackets() throws Exception {
+        // Malformed string literal — no enclosing `[..]` brackets.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('1.1,2.2,3.3,4.4,5.5' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("must be enclosed in [..]");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayInvalidFloat() throws Exception {
+        // Non-numeric token inside the array.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,abc,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Invalid float in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayEmptyElement() throws Exception {
+        // Two adjacent commas yield an empty interior token.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,2.2,,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Empty element in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayTrailingComma() throws Exception {
+        // A comma at the very end of the array must be rejected; otherwise the literal
+        // would be silently truncated to N-1 elements (and could accidentally match dim).
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,2.2,3.3,4.4,5.5,]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Trailing comma in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayNaNRejected() throws Exception {
+        // BE cast_expr rejects NaN when casting string -> float; the rewrite path must
+        // do the same so rule-fires vs rule-misses produce identical semantics.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,NaN,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Non-finite float in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayInfinityRejected() throws Exception {
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,Infinity,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Non-finite float in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayOverflowRejected() throws Exception {
+        // Double.parseDouble("1e5000") returns Double.POSITIVE_INFINITY, which is the same
+        // overflow path BE rejects. Cover it explicitly so future parseDouble swaps don't
+        // silently re-open the hole.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,1e5000,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Non-finite float in vector array literal");
+    }
+
     // Late-materialization behavior for vector queries:
     //   * HNSW: BE produces the distance via id2distance_map, the rewrite swaps the order-by
     //     to reference that virtual distance column, so the embedding column can be deferred

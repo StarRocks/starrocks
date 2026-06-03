@@ -97,6 +97,41 @@ description: "Alphabetical i - p"
 - 标签：`time_travel_type` (`branch`、`tag`、`snapshot` 或 `timestamp`) 用于分类系列。
 - 描述：Iceberg 时间旅行查询总数。未标记的系列对每个时间旅行查询计数一次。标记的系列对查询使用的每种不同时间旅行类型计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
 
+## `iceberg_update_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `UPDATE` 任务写入的总字节数，按文件类型拆分。`data` 表示包含更新后新行的数据文件大小；`position_delete` 表示标记被更新旧行的位置删除文件大小。
+
+## `iceberg_update_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积
+- 描述：Iceberg `UPDATE` 任务的总执行时间（毫秒）。每个任务的耗时在其结束后累加。
+
+## `iceberg_update_files`
+
+- 单位：计数
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `UPDATE` 任务写入的文件总数，按文件类型拆分。`data` 统计新数据文件个数，`position_delete` 统计位置删除文件个数。
+
+## `iceberg_update_rows`
+
+- 单位：行
+- 类型：累积
+- 描述：Iceberg `UPDATE` 任务影响的总行数。每行仅计一次，不会因为生成多个文件而重复计数。
+
+## `iceberg_update_total`
+
+- 单位：计数
+- 类型：累积
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+- 描述：目标表为 Iceberg 的 `UPDATE` 任务总数。无论任务成功还是失败，每当任务结束时该指标都会加 1。Iceberg UPDATE 采用 V2 Merge-On-Read 模型，在单个 snapshot 中原子写入数据文件和位置删除文件。
+
 ## `iceberg_write_bytes`
 
 - 单位：字节

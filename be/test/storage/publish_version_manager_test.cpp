@@ -24,6 +24,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "common/config_storage_fwd.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"

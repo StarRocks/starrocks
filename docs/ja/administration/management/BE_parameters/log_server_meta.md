@@ -438,6 +438,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
 
+### stream_load_thrift_rpc_timeout_ms
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: BE の stream load およびトランザクションコミット呼び出しで使用される Thrift RPC 接続の最大有効時間（ミリ秒）。StarRocks はこの値を FE へ送るリクエストの `thrift_rpc_timeout_ms` として設定します（stream load のプランニング、loadTxnBegin/loadTxnPrepare/loadTxnCommit、および getLoadTxnStatus で使用されます）。接続がこの値より長くコネクションプールに留まっている場合は閉じられます。リクエストごとのタイムアウト（`ctx->timeout_second`）が指定されている場合、BE は RPC タイムアウトを rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, stream_load_thrift_rpc_timeout_ms)) として計算するため、実効 RPC タイムアウトはコンテキストとこの設定の両方によって制限されます。タイムアウトの不一致を避けるため、FE の `thrift_client_timeout_ms` と一致させてください。旧名称 `txn_commit_rpc_timeout_ms` は後方互換のエイリアスとして引き続き使用できます。
+- 導入バージョン: v3.2.0
+
 ### transaction_apply_thread_pool_num_min
 
 - デフォルト: 0

@@ -20,7 +20,6 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
-#include "common/config_primary_key_fwd.h"
 #include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
@@ -39,123 +38,6 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
-
-Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
-    auto chunk_container = _pk_column_chunk->clone_empty();
-    if (_iter != nullptr) {
-        while (true) {
-            chunk_container->reset();
-            Status st;
-            // Capture the segment-wide physical rowid base (= iterator's range_start)
-            // from the first non-empty emit only. Subsequent emits use the plain form
-            // since the base is already known and contiguity is structurally guaranteed
-            // by get_each_segment_iterator (no delvec / predicates / sparse ranges).
-            if (!_physical_rowid_base.has_value()) {
-                std::vector<uint32_t> rowid_buffer;
-                {
-                    TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
-                    st = _iter->get_next(chunk_container.get(), &rowid_buffer);
-                }
-                if (st.ok() && !rowid_buffer.empty()) {
-                    _physical_rowid_base = rowid_buffer.front();
-                }
-            } else {
-                TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
-                st = _iter->get_next(chunk_container.get());
-            }
-            if (st.is_end_of_file()) {
-                break;
-            }
-            if (!st.ok()) {
-                return st;
-            }
-            TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
-            if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                               _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
-                break;
-            }
-        }
-    }
-    if (!_lazy_load && _standalone_pk_column == nullptr) {
-        // In some place, like partial update handler, we need to get standalone pk column,
-        // so we can't use lazy load mode.
-        ASSIGN_OR_RETURN(_standalone_pk_column, encoded_pk_column(_pk_column_chunk.get()));
-    }
-    if (_pk_column_chunk->num_rows() == 0) {
-        return Status::OK();
-    }
-    _current_rows += _pk_column_chunk->num_rows();
-    _begin_rowid_offsets.push_back(_current_rows);
-    return Status::OK();
-}
-
-Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                               PrimaryKeyEncodingType encoding_type, bool defer_data_load) {
-    _iter = iter;
-    _pkey_schema = pkey_schema;
-    _lazy_load = lazy_load;
-    _defer_data_load = defer_data_load;
-    _begin_rowid_offsets.push_back(0);
-    RETURN_IF(encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
-              Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
-    _encoding_type = encoding_type;
-    if (!_defer_data_load) {
-        _status = _load();
-        if (_status.ok()) {
-            _memory_usage = _pk_column_chunk->memory_usage() +
-                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
-        }
-    }
-    return _status;
-}
-
-bool SegmentPKIterator::done() {
-    // Deferred first load: trigger on first done() call
-    if (_defer_data_load) {
-        _defer_data_load = false;
-        _status = _load();
-        if (_status.ok() && _pk_column_chunk != nullptr) {
-            _memory_usage = _pk_column_chunk->memory_usage() +
-                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
-        }
-    }
-    return (_pk_column_chunk == nullptr || _pk_column_chunk->is_empty()) || !_status.ok();
-}
-
-Status SegmentPKIterator::status() {
-    return _status;
-}
-
-void SegmentPKIterator::next() {
-    _status = _load();
-    if (_status.ok()) {
-        _current_pk_column_idx++;
-    }
-}
-
-SegmentPKChunkRef SegmentPKIterator::current() {
-    SegmentPKChunkRef ref;
-    const size_t logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
-    ref.physical_rowid_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(logical_rowid_offset);
-    ref.chunk = std::move(_pk_column_chunk);
-    return ref;
-}
-
-StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("pk_encode_us");
-    MutableColumnPtr pk_column;
-    RETURN_IF(_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
-              Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column, _encoding_type));
-    TRY_CATCH_BAD_ALLOC(
-            PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), _encoding_type));
-    return std::move(pk_column);
-}
-
-void SegmentPKIterator::close() {
-    _iter->close();
-}
 
 RowsetUpdateState::RowsetUpdateState() = default;
 
@@ -555,11 +437,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
+    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
         rowset_meta.num_rows() == 0) {
         return Status::OK();
     }
-    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
+    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
     // currently assume it's a partial update
     const auto& txn_meta = params.op_write.txn_meta();
     std::vector<ColumnId> unmodified_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
@@ -582,24 +464,20 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     }
 
     bool need_rename = true;
-    const auto& src_path = rowset_meta.segments(segment_id);
+    const auto& src_seg_meta = rowset_meta.segment_metas(segment_id);
+    const auto& src_path = src_seg_meta.filename();
     const auto& dest_path = gen_segment_filename(txn_id);
     DCHECK(src_path != dest_path);
 
-    FileInfo src{.path = params.tablet->segment_location(src_path), .size = rowset_meta.segment_size(segment_id)};
-    auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
-    if (segment_encryption_metas_size > 0) {
-        if (segment_id >= segment_encryption_metas_size) {
-            string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}",
-                                     params.tablet->tablet_id(), params.op_write.rowset().id(), segment_id,
-                                     segment_encryption_metas_size);
-            LOG(ERROR) << msg;
-            return Status::Corruption(msg);
-        }
-        src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    if (src_seg_meta.has_size()) {
+        src.size = src_seg_meta.size();
     }
-    if (rowset_meta.bundle_file_offsets_size() > 0) {
-        src.bundle_file_offset = rowset_meta.bundle_file_offsets(segment_id);
+    if (src_seg_meta.has_encryption_meta()) {
+        src.encryption_meta = src_seg_meta.encryption_meta();
+    }
+    if (src_seg_meta.has_bundle_file_offset()) {
+        src.bundle_file_offset = src_seg_meta.bundle_file_offset();
     }
 
     int64_t t_rewrite_start = MonotonicMillis();
@@ -634,9 +512,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     if (need_rename) {
         // after rename, add old segment to orphan files, for gc later.
         FileMetaPB file_meta;
-        file_meta.set_name(rowset_meta.segments(segment_id));
-        if (rowset_meta.shared_segments_size() > 0) {
-            file_meta.set_shared(rowset_meta.shared_segments(segment_id));
+        file_meta.set_name(src_seg_meta.filename());
+        if (src_seg_meta.has_shared()) {
+            file_meta.set_shared(src_seg_meta.shared());
         }
         orphan_files->push_back(std::move(file_meta));
     }
@@ -656,7 +534,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     _base_versions[segment_id] = base_version;
     TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     // skip resolve conflict when not partial update happen.
-    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0) {
+    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segment_metas_size() == 0) {
         return Status::OK();
     }
 
@@ -896,7 +774,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
     TRACE_COUNTER_SCOPE_LATENCY_US("load_delete_us");
-    _deletes.resize(params.op_write.dels_size());
+    _deletes.resize(params.op_write.dels_meta_size());
     if (_deletes[del_id] != nullptr) {
         // Already load.
         return Status::OK();
@@ -913,11 +791,12 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
 
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
-    const std::string& path = params.op_write.dels(del_id);
+    const auto& del_meta = params.op_write.dels_meta(del_id);
+    const std::string& path = del_meta.name();
     RandomAccessFileOptions opts;
-    if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
-        // When upgrade from old version, `del_encryption_metas` could be empty.
-        auto& meta = params.op_write.del_encryption_metas(del_id);
+    if (del_meta.has_encryption_meta()) {
+        // When upgrade from old version, `encryption_meta` could be empty.
+        auto& meta = del_meta.encryption_meta();
         if (!meta.empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
             opts.encryption_info = std::move(info);

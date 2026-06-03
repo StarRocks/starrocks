@@ -44,6 +44,8 @@ import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
@@ -263,6 +265,12 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support order by clause, " +
                     "but got: %s", selectRelation.getOrderBy());
         }
+        // Aggregate IVM is UPSERT-only: a group crossing the HAVING threshold across
+        // refreshes can't be added/removed, so reject instead of silently miscomputing.
+        if (selectRelation.getHaving() != null && ExprUtils.containsAggregate(selectRelation.getHaving())) {
+            throw new SemanticException("IVMAnalyzer does not support HAVING with aggregate functions, " +
+                    "but got: %s", ExprToSql.toSql(selectRelation.getHaving()));
+        }
         boolean isRetractable = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
         isRetractable |= checkRelation(innerRelation);
@@ -313,16 +321,19 @@ public class IVMAnalyzer {
 
     private boolean checkAggregate(SelectRelation selectRelation) throws AnalysisException {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
-        if (CollectionUtils.isEmpty(aggregateExprs)) {
+        List<Expr> groupByExprs = selectRelation.getGroupBy();
+
+        // Gate on GROUP BY, not aggregates: the refresh path (IvmDeltaAggregateRule) keys on
+        // GROUP BY, so a GROUP BY-only query must also get QUERY_COMPUTED row ids here — else the
+        // AUTO_INCREMENT MV it would otherwise build crashes refresh on a row-id type mismatch.
+        if (CollectionUtils.isEmpty(groupByExprs)) {
+            if (CollectionUtils.isNotEmpty(aggregateExprs)) {
+                throw new SemanticException("IVMAnalyzer requires group by expressions for incremental view maintenance.");
+            }
             return false;
         }
 
-        List<Expr> groupByExprs = selectRelation.getGroupBy();
-        if (CollectionUtils.isEmpty(groupByExprs)) {
-            // If there are no group by expressions, we cannot apply IVM optimizations.
-            throw new SemanticException("IVMAnalyzer requires group by expressions for incremental view maintenance.");
-        }
-        // new aggregate functions
+        // getAggregate() is non-null post-analysis, so for no aggregates this loop just no-ops.
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
@@ -338,7 +349,6 @@ public class IVMAnalyzer {
             // are allowed. Unsupported combinations would either fail at refresh time or silently
             // produce wrong data; reject them here so the user sees a clear CREATE-time error.
             checkAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
-            // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
             String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
 

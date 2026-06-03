@@ -28,6 +28,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
@@ -604,7 +605,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             // single load_id field carried over from the first source no longer applies.
             merged->clear_load_id();
             if (txn_logs.size() > 1) {
-                // MergeFrom appends repeated fields (segments, dels, segment_size, ...)
+                // MergeFrom appends repeated fields (segment_metas, dels_meta, ...)
                 // and recursively merges optional message fields, which is what we want
                 // for the per-segment lists. But it overwrites scalar accumulators with
                 // the last source's value, so sum num_rows / data_size / num_dels back
@@ -629,7 +630,11 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     rowset->set_num_rows(num_rows);
                     rowset->set_data_size(data_size);
                     rowset->set_num_dels(num_dels);
-                    rowset->set_overlapped(rowset->segments_size() > 1);
+                    rowset->set_overlapped(rowset->segment_metas_size() > 1);
+                    // MergeFrom above overwrote the combined rowset's uid with the last source's;
+                    // restore the first log's identity by re-reading txn_logs.front() (MergeFrom
+                    // never mutates the sources) so it stays stable across cross-published children.
+                    tablet_reshard_helper::inherit_or_set_uid(rowset, txn_logs.front()->op_write().rowset());
                 }
             }
 
@@ -680,20 +685,20 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
 
     // Helper to collect .vi files tracked in a rowset's segment_metas
     auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
-        for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
-            for (int64_t vi_id : rowset.segment_metas(i).vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
     };
 
     if (txn_log.has_op_write()) {
-        for (const auto& segment : txn_log.op_write().rowset().segments()) {
-            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+        for (const auto& segment_meta : txn_log.op_write().rowset().segment_metas()) {
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
         }
-        for (const auto& del_file : txn_log.op_write().dels()) {
-            files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+        for (const auto& del_meta : txn_log.op_write().dels_meta()) {
+            files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
         collect_vi_files(txn_log.op_write().rowset());
     }
@@ -702,33 +707,33 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         size_t new_segment_offset = txn_log.op_compaction().new_segment_offset();
         size_t new_segment_count = txn_log.op_compaction().new_segment_count();
         const auto& output_rowset = txn_log.op_compaction().output_rowset();
-        const auto& segments = output_rowset.segments();
-        for (size_t idx = new_segment_offset, cnt = 0; idx < segments.size() && cnt < new_segment_count; ++idx, ++cnt) {
-            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segments[idx]));
+        const auto& segment_metas = output_rowset.segment_metas();
+        for (size_t idx = new_segment_offset, cnt = 0; idx < segment_metas.size() && cnt < new_segment_count;
+             ++idx, ++cnt) {
+            const auto& segment_name = segment_metas[idx].filename();
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_name));
             // Delete .vi files for this new segment
-            if (idx < output_rowset.segment_metas_size()) {
-                for (int64_t vi_id : output_rowset.segment_metas(idx).vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(segments[idx], vi_id);
-                    files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
-                }
+            for (int64_t vi_id : segment_metas[idx].vector_index_ids()) {
+                auto vi_name = gen_vector_index_filename(segment_name, vi_id);
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
         for (const auto& rowset : txn_log.op_schema_change().rowsets()) {
-            for (const auto& segment : rowset.segments()) {
-                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
             }
             collect_vi_files(rowset);
         }
     }
     if (txn_log.has_op_replication()) {
         for (const auto& op_write : txn_log.op_replication().op_writes()) {
-            for (const auto& segment : op_write.rowset().segments()) {
-                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+            for (const auto& segment_meta : op_write.rowset().segment_metas()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
             }
-            for (const auto& del_file : op_write.dels()) {
-                files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+            for (const auto& del_meta : op_write.dels_meta()) {
+                files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
             }
             collect_vi_files(op_write.rowset());
         }

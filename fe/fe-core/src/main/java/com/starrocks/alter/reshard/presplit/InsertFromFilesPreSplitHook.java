@@ -49,7 +49,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Duration;
 import java.util.List;
 
 /**
@@ -67,10 +66,10 @@ import java.util.List;
  * reach {@code FINISHED} (bounded by
  * {@code tablet_pre_split_post_submit_wait_seconds}) so the triggering
  * {@code INSERT}'s plan sees the post-split tablet layout — not just
- * subsequent loads. The Broker Load path takes the fire-and-forget route
- * instead; see {@link #awaitFinishedAllowingFallback} for why sync-await is
- * deadlock-safe for {@code INSERT INTO ... SELECT * FROM FILES(...)}
- * specifically and what happens on timeout.
+ * subsequent loads. The shared fail-safe wait helpers live on
+ * {@link TabletPreSplitCoordinator#awaitFinishedAllowingFallback} and
+ * {@link TabletPreSplitCoordinator#awaitCombinedJobAllowingFallback}; both
+ * paths log + proceed on timeout, never abort the load.
  *
  * <h2>Detection</h2>
  * <p>The hook only matches the strict {@code INSERT INTO target SELECT *
@@ -144,8 +143,8 @@ public final class InsertFromFilesPreSplitHook {
         if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
             return;
         }
-        PreSplitTargets.EligibleTarget target = resolveEligibleTarget(insertStmt, context);
-        if (target == null) {
+        ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
+        if (resolvedTable == null) {
             return;
         }
         // Authorize the side effects this hook is about to trigger: INSERT on
@@ -161,8 +160,8 @@ public final class InsertFromFilesPreSplitHook {
         // re-runs its full check and surfaces the actual auth error.
         if (!context.isBypassAuthorizerCheck()) {
             Authorizer.checkTableAction(context,
-                    target.database().getFullName(),
-                    target.olapTable().getName(),
+                    resolvedTable.database().getFullName(),
+                    resolvedTable.olapTable().getName(),
                     PrivilegeType.INSERT);
             Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getWarehouse(context.getCurrentComputeResource().getWarehouseId());
@@ -174,10 +173,131 @@ public final class InsertFromFilesPreSplitHook {
         if (sourceTable == null) {
             return;
         }
-        if (!schemasAlignForByPositionInsert(insertStmt, target.olapTable(), sourceTable)) {
+        if (!schemasAlignForByPositionInsert(insertStmt, resolvedTable.olapTable(), sourceTable)) {
+            return;
+        }
+        // Branch on partitioned vs unpartitioned. Partitioned tables go through the
+        // multi-partition flow (sampler → grouper → submitForPartitionsCombined),
+        // which forces the data tier sub-query sampler (the meta tier's per-column min/max
+        // is fundamentally lossy under expression-based partitioning) and submits ONE
+        // combined reshard spanning every predicted partition. Unpartitioned tables
+        // keep the legacy single-partition path.
+        if (resolvedTable.olapTable().getPartitionInfo().isPartitioned()) {
+            runMultiPartitionFlow(resolvedTable.database(), resolvedTable.olapTable(), sourceTable, context);
+        } else {
+            runSinglePartitionFlow(resolvedTable.database(), resolvedTable.olapTable(), sourceTable, context);
+        }
+    }
+
+    /**
+     * Legacy single-partition path: resolve the unique partition + base tablet,
+     * then go through {@link DefaultPreSplitPipeline} + {@link TabletPreSplitCoordinator#submitAsynchronously}
+     * + {@link TabletPreSplitCoordinator#awaitFinishedAllowingFallback}.
+     * Unpartitioned-table behavior is unchanged.
+     */
+    private static void runSinglePartitionFlow(
+            Database database, OlapTable table, TableFunctionTable sourceTable, ConnectContext context) {
+        PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTarget(database, table);
+        if (target == null) {
             return;
         }
         submitToCoordinator(target, sourceTable, context);
+    }
+
+    /**
+     * Multi-partition path: sample the load's input via the data tier,
+     * group sample rows by predicted partition value, pre-create missing
+     * partitions, and submit ONE combined reshard via
+     * {@link TabletPreSplitCoordinator#submitForPartitionsCombined}.
+     *
+     * <p>{@link TabletPreSplitCoordinator#awaitCombinedJobAllowingFallback}
+     * waits once on the combined job before the planner runs; timeout / abort
+     * proceeds against the currently visible layout without aborting the INSERT.
+     */
+    private static void runMultiPartitionFlow(
+            Database database, OlapTable table, TableFunctionTable sourceTable, ConnectContext context) {
+        ComputeResource computeResource = context.getCurrentComputeResource();
+        int activeComputeNodeCount = Math.max(1,
+                LoadScanNode.getAvailableComputeNodes(computeResource).size());
+        long fileTotalBytes = sumFileBytes(sourceTable);
+
+        SampleSet samples = runDataTierSampler(table, sourceTable, computeResource);
+        if (samples == null) {
+            return;
+        }
+
+        List<PartitionSamples> groups = PartitionSampleGrouper.group(
+                samples, table, context, database.getId(), fileTotalBytes);
+        if (groups.isEmpty()) {
+            // Grouper already recorded the skip reason bvar.
+            return;
+        }
+
+        PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                database, table, groups, activeComputeNodeCount, context);
+        LOG.info("Sample-Based Tablet Pre-Split (multi-partition) outcome for table {}: {}",
+                table.getName(), outcome);
+
+        if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
+            // Single call site: awaitCombinedJobAllowingFallback is invoked ONCE per
+            // combined-job submission, NOT once per PartitionSamples. The coordinator
+            // batches every contributing partition's boundaries into ONE TabletReshardJob
+            // (see SplitTabletJobFactory.forExternalBoundariesMultiTablet), so the hook
+            // only blocks on a single reshard before plan() — bounded by
+            // tablet_pre_split_post_submit_wait_seconds regardless of partition count.
+            // shouldAbort = context::isKilled: if the user issues KILL <query_id>
+            // during the wait, the helper releases the session thread promptly
+            // instead of running out the post-submit deadline.
+            // No post-await identity-check on `table` (cf.
+            // BrokerLoadJob#buildLoadingTasksUnderReadLock): control returns to
+            // StatementPlanner.plan() which re-resolves through the analyzer,
+            // so a DROP/CREATE during the wait is caught upstream.
+            TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                    LoadKind.INSERT_FROM_FILES, table, submittedCombined.combinedJob(), context::isKilled);
+        }
+    }
+
+    /**
+     * Run the data-tier sampler directly (no {@link DefaultPreSplitPipeline}).
+     * The pipeline orchestrates plan + submit for a single partition; the
+     * multi-partition flow plans + submits per-partition inside
+     * {@link TabletPreSplitCoordinator#submitForPartitionsCombined}, so we only
+     * need the sample step here. Sort-key columns drive boundary planning;
+     * partition-source columns let the grouper project per-row partition values
+     * for bucketing.
+     *
+     * @return the sampled rows, or {@code null} when the sampler failed
+     *         (caller no-ops; bvar recorded inline).
+     */
+    private static SampleSet runDataTierSampler(
+            OlapTable table, TableFunctionTable sourceTable, ComputeResource computeResource) {
+        try {
+            List<Column> sortKey = MetaUtils.getRangeDistributionColumns(table);
+            List<Column> partitionSourceColumns =
+                    table.getPartitionInfo().getPartitionColumns(table.getIdToColumn());
+            InsertFromFilesScanContext scanContext =
+                    new InsertFromFilesScanContext(sourceTable, computeResource);
+            // Cap the BE sample at the pre-submit budget — the same bound the
+            // single-partition path applies via DefaultPreSplitPipeline.runDataTier.
+            // This multi-partition path bypasses the pipeline, so without the cap the
+            // sample would run until the default query_timeout.
+            SampleRequest request = new SampleRequest(
+                    scanContext, sortKey, partitionSourceColumns,
+                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
+            Sampler sampler = new ReservoirSampler(new InsertFromFilesSampleSubqueryExecutor());
+            return sampler.sample(request);
+        } catch (StarRocksException sampleFailure) {
+            LOG.info("Pre-split skipped for table {}: data-tier sampling failed — {}",
+                    table.getName(), sampleFailure.getMessage());
+            PreSplitMetrics.recordSamplerFailed(SkipReason.SAMPLE_FAILED);
+            return null;
+        } catch (RuntimeException sampleFailure) {
+            LOG.warn("Pre-split skipped for table {}: data-tier sampling errored — {}",
+                    table.getName(), sampleFailure.getMessage());
+            PreSplitMetrics.recordSamplerFailed(SkipReason.SAMPLE_FAILED);
+            return null;
+        }
     }
 
     /**
@@ -190,6 +310,11 @@ public final class InsertFromFilesPreSplitHook {
      */
     private static InsertStmt qualifyingInsertStmt(StatementBase parsedStmt, ConnectContext context) {
         if (!Config.enable_tablet_pre_split_for_insert_from_files) {
+            // Record here: the coordinator's checkConfigAndSession is never
+            // reached on this early return, so it can't bump the bucket itself.
+            // The remaining return-null branches below are "not an INSERT-from-
+            // FILES candidate" pre-filters and intentionally record nothing.
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_CONFIG);
             return null;
         }
         if (!(parsedStmt instanceof InsertStmt insertStmt)) {
@@ -325,16 +450,19 @@ public final class InsertFromFilesPreSplitHook {
     }
 
     /**
-     * Walks the catalog to confirm the INSERT target is a single-partition,
-     * single-tablet OlapTable. Returns {@code null} (no log) for any branch
-     * that the eligibility gate inside {@link TabletPreSplitCoordinator} would
-     * also reject — checking here avoids paying for the FILES() schema RPC.
+     * Walks the catalog and applies the table-level eligibility gate
+     * ({@link PreSplitTargets#findEligibleTable}). Per-partition checks
+     * (single physical partition, single base tablet, empty partition) are
+     * deferred so the partitioned multi-partition flow can run them per-bucket
+     * after pre-create; the legacy single-partition flow continues to apply
+     * them via {@link PreSplitTargets#findEligibleTarget} downstream.
      *
-     * @return the resolved {@link PreSplitTargets.EligibleTarget}, or {@code null}
-     *         when target resolution or any cheap eligibility check fails
-     *         (caller no-ops).
+     * @return the resolved {@link ResolvedTable}, or {@code null} when target
+     *         resolution or the table-level eligibility check fails (caller
+     *         no-ops; the table-level helper records the eligibility-skip
+     *         bvar).
      */
-    private static PreSplitTargets.EligibleTarget resolveEligibleTarget(InsertStmt insertStmt, ConnectContext context) {
+    private static ResolvedTable resolveEligibleTable(InsertStmt insertStmt, ConnectContext context) {
         TableRef normalizedTableRef = normalizeTableRefOrNull(insertStmt, context);
         if (normalizedTableRef == null) {
             return null;
@@ -347,8 +475,16 @@ public final class InsertFromFilesPreSplitHook {
         if (olapTable == null) {
             return null;
         }
-        return PreSplitTargets.findEligibleTarget(database, olapTable);
+        SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(database, olapTable);
+        if (tableLevelSkip != null) {
+            PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
+            return null;
+        }
+        return new ResolvedTable(database, olapTable);
     }
+
+    /** Database + table bundle returned by {@link #resolveEligibleTable}. */
+    private record ResolvedTable(Database database, OlapTable olapTable) { }
 
     /**
      * Triggers FILES() schema inference via the analyzer's lock-free path and
@@ -388,42 +524,12 @@ public final class InsertFromFilesPreSplitHook {
                 target.olapTable().getName(), outcome);
 
         if (outcome instanceof PreSplitOutcome.Submitted submitted) {
-            awaitFinishedAllowingFallback(target.olapTable(), pipeline, submitted.preparedJob());
-        }
-    }
-
-    /**
-     * Fail-safe variant of {@link TabletPreSplitCoordinator#awaitFinishedAndRecordMetrics}:
-     * any timeout or wait failure is logged and the INSERT proceeds without
-     * abort — its plan sees whatever tablet layout is currently visible
-     * (could be the original layout if the daemon hasn't progressed, or
-     * partially / fully post-split if it raced past the wait giving up).
-     * {@code tablet_pre_split_load_abort} is intentionally not incremented
-     * (the INSERT itself is not aborted) — the shared helper updates the
-     * latency histogram and hard-cap counter.
-     *
-     * <p>Sync-await is deadlock-safe here specifically because this hook runs
-     * in {@code StmtExecutor.executeStmt} <b>before</b>
-     * {@code StatementPlanner.plan()} opens the load transaction. The reshard
-     * daemon's cleaning-phase {@code isPreviousTransactionsFinished} wait
-     * therefore does not include the not-yet-allocated load txn, so the AB-BA
-     * cycle the Broker Load path has to dodge with fire-and-forget does not
-     * exist on this path.
-     */
-    private static void awaitFinishedAllowingFallback(
-            OlapTable olapTable, DefaultPreSplitPipeline pipeline,
-            PreSplitPipeline.PreparedReshardJob preparedJob) {
-        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
-        try {
-            TabletPreSplitCoordinator.awaitFinishedAndRecordMetrics(pipeline, preparedJob, postSubmitTimeout);
-        } catch (PreSplitPostSubmitTimeoutException timeout) {
-            LOG.warn("Pre-split awaitFinished timed out for table {} after {}s; "
-                            + "INSERT will proceed without abort against the currently visible layout: {}",
-                    olapTable.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
-        } catch (StarRocksException waitFailure) {
-            LOG.warn("Pre-split awaitFinished failed for table {}; "
-                            + "INSERT will proceed without abort against the currently visible layout: {}",
-                    olapTable.getName(), waitFailure.getMessage());
+            // shouldAbort = context::isKilled: KILL <query_id> during the wait
+            // releases the session thread promptly. See runMultiPartitionFlow
+            // for the same reasoning on the multi-partition path.
+            TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
+                    LoadKind.INSERT_FROM_FILES, target.olapTable(), pipeline, submitted.preparedJob(),
+                    context::isKilled);
         }
     }
 

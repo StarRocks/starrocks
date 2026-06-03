@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "[Apache Superset](https://superset.apache.org) is a modern data exploration and visualization platform."
+description: "How to connect Apache Superset to StarRocks for data exploration and visualization."
 ---
 
 # Superset Support
