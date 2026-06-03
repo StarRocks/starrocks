@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "retrieval/index.h"
 #include "retrieval/row_id_filter.h"
 #include "retrieval/scored_result.h"
