@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
+        ./connector/footer_prefetch_task_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
@@ -73,6 +74,7 @@ set(EXEC_FILES
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/fragment_executor_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/scan/footer_prefetch_state_test.cpp
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp

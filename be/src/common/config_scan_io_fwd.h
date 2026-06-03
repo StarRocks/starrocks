@@ -159,6 +159,10 @@ CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// Kill-switch for stall-time Parquet footer prefetch (warm upcoming files' footers into cache on
+// idle scan-executor tasks while a connector scan is back-pressured). Bounds derive from scan dop.
+CONF_mBool(enable_connector_footer_prefetch_on_stall, "true");
+
 // larger buffer size means fewer reads, but higher memory usage
 CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 

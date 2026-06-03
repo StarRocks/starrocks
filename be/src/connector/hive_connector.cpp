@@ -1075,6 +1075,153 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
     *min_value = *max_value = size;
 }
 
+namespace {
+// Resolve a scan range's native file path exactly as HiveDataSource::_init_scanner does, so the
+// footer prefetcher opens the same file the real scan will. Empty string => cannot resolve.
+std::string resolve_footer_native_path(const THdfsScanRange& scan_range, const HiveTableDescriptor* hive_table) {
+    std::string native_file_path = scan_range.full_path;
+    if (hive_table != nullptr && hive_table->has_partition() && !hive_table->has_base_path()) {
+        auto* partition_desc = hive_table->get_partition(scan_range.partition_id);
+        if (partition_desc == nullptr) {
+            return "";
+        }
+        std::filesystem::path file_path(partition_desc->location());
+        file_path /= scan_range.relative_path;
+        native_file_path = file_path.native();
+    }
+    if (native_file_path.empty() && hive_table != nullptr) {
+        bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
+        native_file_path = std::string(hive_table->get_base_path()) +
+                           (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
+    }
+    return native_file_path;
+}
+} // namespace
+
+FooterPrefetchPlan HiveDataSourceProvider::build_footer_prefetch_items(
+        RuntimeState* state, const std::vector<TScanRangeParams>& scan_ranges) {
+    FooterPrefetchPlan plan;
+    // Partition-only scans resolve through HdfsPartitionScanner and never open the data file, so
+    // there are no footers to warm. Mirror HiveDataSource::_use_partition_column_value_only.
+    if (_hdfs_scan_node.__isset.use_partition_column_value_only && _hdfs_scan_node.use_partition_column_value_only) {
+        return plan;
+    }
+    // Compute the warmable-cache flags before inspecting scan_ranges: an empty range list (the
+    // pipeline install path hands us none up front) still needs metacache_on/datacache_populate_on
+    // so the operator factory can install an empty prefetch state that the upfront and incremental
+    // append paths later populate. With no ranges the item loop below simply produces no items.
+    const auto& query_options = state->query_options();
+
+    // Which cache can hold a warmed footer? Parsed-footer PageCache (file metacache, default on
+    // when a page cache is available) and/or raw-footer BlockCache (scan datacache + populate).
+    // If neither, there is nowhere durable to warm -> skip.
+    // File metacache is only honored under starcache (mirror HiveDataSource::_init_scanner);
+    // without it the real scan does not pass a page cache to the parser, so warming PageCache
+    // here would only pollute it.
+#ifdef WITH_STARCACHE
+    plan.metacache_on = (!query_options.__isset.enable_file_metacache || query_options.enable_file_metacache) &&
+                        DataCache::GetInstance()->page_cache_available();
+#endif
+
+    const bool block_cache_avail = BlockCache::instance() != nullptr && BlockCache::instance()->available();
+    const bool enable_scan_datacache =
+            query_options.__isset.enable_scan_datacache && query_options.enable_scan_datacache;
+    if (block_cache_avail && enable_scan_datacache) {
+        if (_hdfs_scan_node.__isset.datacache_options &&
+            _hdfs_scan_node.datacache_options.__isset.enable_populate_datacache) {
+            plan.datacache_populate_on = _hdfs_scan_node.datacache_options.enable_populate_datacache;
+        } else if (query_options.__isset.enable_populate_datacache) {
+            plan.datacache_populate_on = query_options.enable_populate_datacache;
+        }
+    }
+    if (!plan.metacache_on && !plan.datacache_populate_on) {
+        return plan;
+    }
+
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(_hdfs_scan_node.tuple_id);
+    const HiveTableDescriptor* hive_table =
+            tuple_desc != nullptr ? dynamic_cast<const HiveTableDescriptor*>(tuple_desc->table_desc()) : nullptr;
+
+    FSOptions fs_options(_hdfs_scan_node.__isset.cloud_configuration ? &_hdfs_scan_node.cloud_configuration : nullptr);
+
+    // Build the shared open context once and reuse it across incremental batches so the
+    // FileSystem is created a single time per scan, not per batch on the coordinator RPC thread.
+    // (Initial build and incremental appends for one scan node run sequentially, never racing.)
+    if (_footer_open_ctx == nullptr) {
+        _footer_open_ctx = std::make_shared<pipeline::FooterOpenContext>();
+        _footer_open_ctx->case_sensitive = _hdfs_scan_node.__isset.case_sensitive && _hdfs_scan_node.case_sensitive;
+        // Mirror HiveDataSource::_init_scanner's normal-query datacache policy so warmed BlockCache
+        // entries match the real scan (modification_time is per file, set on warm).
+        _footer_open_ctx->datacache_options.enable_datacache = block_cache_avail && enable_scan_datacache;
+        _footer_open_ctx->datacache_options.enable_cache_select = false;
+        _footer_open_ctx->datacache_options.enable_populate_datacache = plan.datacache_populate_on;
+        _footer_open_ctx->datacache_options.enable_datacache_async_populate_mode =
+                query_options.__isset.enable_datacache_async_populate_mode &&
+                query_options.enable_datacache_async_populate_mode;
+        _footer_open_ctx->datacache_options.enable_datacache_io_adaptor =
+                query_options.__isset.enable_datacache_io_adaptor && query_options.enable_datacache_io_adaptor;
+        _footer_open_ctx->datacache_options.datacache_evict_probability =
+                query_options.__isset.datacache_evict_probability ? query_options.datacache_evict_probability : 100;
+        _footer_open_ctx->datacache_options.datacache_priority =
+                query_options.__isset.datacache_priority ? query_options.datacache_priority : 0;
+        _footer_open_ctx->datacache_options.datacache_ttl_seconds =
+                query_options.__isset.datacache_ttl_seconds ? query_options.datacache_ttl_seconds : 0;
+    }
+    auto& open_ctx = _footer_open_ctx;
+
+    plan.items.reserve(scan_ranges.size());
+    for (const auto& params : scan_ranges) {
+        const TScanRange& scan_range = params.scan_range;
+        if (!scan_range.__isset.hdfs_scan_range) {
+            continue;
+        }
+        const THdfsScanRange& hdfs = scan_range.hdfs_scan_range;
+        if (!(hdfs.__isset.file_format && hdfs.file_format == THdfsFileFormat::PARQUET)) {
+            continue; // Parquet only
+        }
+        // JNI-backed readers (Hudi MOR / Paimon / ODPS / Iceberg metadata / Kudu) take precedence
+        // over the native HdfsParquetScanner in _init_scanner, so a footer warmed here would never
+        // be consumed. Skip those ranges to mirror the native-reader branch conditions.
+        if ((hdfs.__isset.use_hudi_jni_reader && hdfs.use_hudi_jni_reader) ||
+            (hdfs.__isset.use_paimon_jni_reader && hdfs.use_paimon_jni_reader) ||
+            (hdfs.__isset.use_odps_jni_reader && hdfs.use_odps_jni_reader) ||
+            (hdfs.__isset.use_iceberg_jni_metadata_reader && hdfs.use_iceberg_jni_metadata_reader) ||
+            (hdfs.__isset.use_kudu_jni_reader && hdfs.use_kudu_jni_reader)) {
+            continue;
+        }
+        // priority == -1 means the user keeps this range out of the data cache (mirror
+        // _init_scanner); don't speculatively warm it.
+        if (hdfs.__isset.datacache_options && hdfs.datacache_options.__isset.priority &&
+            hdfs.datacache_options.priority == -1) {
+            continue;
+        }
+        std::string native_path = resolve_footer_native_path(hdfs, hive_table);
+        if (native_path.empty()) {
+            continue;
+        }
+        if (open_ctx->fs == nullptr) {
+            // One FileSystem per scan: files share scheme + cloud config. If even the first
+            // file's FS cannot be created, give up on prefetch (the real scan will report it).
+            auto fs_or = FileSystemFactory::CreateUniqueFromString(native_path, fs_options);
+            if (!fs_or.ok()) {
+                return FooterPrefetchPlan{};
+            }
+            open_ctx->fs = std::shared_ptr<FileSystem>(std::move(fs_or.value()));
+        }
+        pipeline::FooterPrefetchItem item;
+        item.key = footer_prefetch_key(scan_range);
+        item.path = native_path;
+        item.file_size = hdfs.file_length;
+        item.modification_time = hdfs.__isset.modification_time ? hdfs.modification_time : 0;
+        item.open_ctx = open_ctx;
+        plan.items.emplace_back(std::move(item));
+    }
+    if (open_ctx->fs == nullptr) {
+        plan.items.clear();
+    }
+    return plan;
+}
+
 void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
     if (_scanner == nullptr) return;
     _scanner->move_split_tasks(split_tasks);

@@ -19,6 +19,7 @@
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "connector/footer_prefetch_task.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "hive_chunk_sink.h"
@@ -56,6 +57,13 @@ public:
     void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
 
+    // Build the stall-time footer-prefetch sidecar for these (Parquet) scan ranges: resolve
+    // each root file's native path the same way the real scan does, share one FileSystem and
+    // datacache policy. Empty if no cache can hold a warmed footer. Reusable for incremental
+    // batches (tail-append into FooterPrefetchState).
+    FooterPrefetchPlan build_footer_prefetch_items(RuntimeState* state,
+                                                   const std::vector<TScanRangeParams>& scan_ranges);
+
     friend class HiveDataSource;
 
 protected:
@@ -64,6 +72,9 @@ protected:
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
     std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+    // Shared footer-prefetch open context (one FileSystem per scan), built once and reused
+    // across the initial and incremental build_footer_prefetch_items calls.
+    std::shared_ptr<pipeline::FooterOpenContext> _footer_open_ctx;
 };
 
 class HiveDataSource final : public DataSource {
