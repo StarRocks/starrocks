@@ -272,7 +272,7 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support HAVING with aggregate functions, " +
                     "but got: %s", ExprToSql.toSql(selectRelation.getHaving()));
         }
-        IvmAggKeyBaseValidator.validate(selectRelation);
+        IvmBaseTableValidator.validate(selectRelation);
         boolean isRetractable = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
         isRetractable |= checkRelation(innerRelation);

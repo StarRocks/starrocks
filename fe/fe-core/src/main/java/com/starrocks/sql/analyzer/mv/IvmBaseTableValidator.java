@@ -40,21 +40,27 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
- * Enterprise-only validation that an IVM materialized view over a cloud-native AGGREGATE KEY
- * base table is a strict rollup of the base. Kept in its own file (not in the community-shared
- * {@code IVMAnalyzer}) so upstream syncs of {@code IVMAnalyzer} never conflict with this logic;
- * {@code IVMAnalyzer} only calls {@link #validate}.
+ * Enterprise-only validation of a cloud-native base table's suitability for IVM. Kept in its own
+ * file (not in the community-shared {@code IVMAnalyzer}) so upstream syncs of {@code IVMAnalyzer}
+ * never conflict with this logic; {@code IVMAnalyzer} only calls {@link #validate}.
  *
- * <p>CDC delta on AGG_KEYS emits raw pre-merge rowset rows, so MV state matches a
- * SELECT-from-base only when each MV group corresponds to one or more post-merge base groups
- * and each aggregate is invariant under base merging.
+ * <p>Two policies, both rooted in the append-only CDC delta stream:
+ * <ul>
+ *   <li>PRIMARY KEY / UNIQUE KEY bases are rejected: their replace/upsert semantics can't be
+ *       maintained by an append-only delta (a key update emits an append, so the MV would keep
+ *       the stale pre-update row alongside the new one).
+ *   <li>An AGGREGATE KEY base MV must be a strict rollup: CDC delta on AGG_KEYS emits raw
+ *       pre-merge rowset rows, so MV state matches a SELECT-from-base only when each MV group
+ *       maps to whole post-merge base groups and each aggregate is invariant under base merging.
+ * </ul>
  */
-public final class IvmAggKeyBaseValidator {
+public final class IvmBaseTableValidator {
 
-    private IvmAggKeyBaseValidator() {
+    private IvmBaseTableValidator() {
     }
 
     /**
@@ -76,11 +82,26 @@ public final class IvmAggKeyBaseValidator {
     private static final Set<String> DELTA_ROLLUP_AGGS_FOR_AGG_BASE =
             ImmutableSet.copyOf(COMPATIBLE_MV_AGG_BY_BASE_AGG_TYPE.values());
 
+    private static final Predicate<OlapTable> IS_AGG_KEYS = t -> t.getKeysType() == KeysType.AGG_KEYS;
+    private static final Predicate<OlapTable> IS_REPLACE_FAMILY =
+            t -> t.getKeysType() == KeysType.PRIMARY_KEYS || t.getKeysType() == KeysType.UNIQUE_KEYS;
+
     public static void validate(SelectRelation selectRelation) {
         Relation inner = selectRelation.getRelation();
+
+        // Reject anywhere in the relation tree: a PK/UNIQUE join input is as unmaintainable as a sole base.
+        OlapTable replaceBase = findAnyCloudNativeBase(inner, IS_REPLACE_FAMILY);
+        if (replaceBase != null) {
+            throw new SemanticException(
+                    "IVM on cloud-native %s base '%s' is not supported: the CDC delta stream is " +
+                            "append-only and cannot maintain replace/upsert semantics, so the MV " +
+                            "would retain stale rows after a key update",
+                    replaceBase.getKeysType(), replaceBase.getName());
+        }
+
         OlapTable aggBase = findDirectCloudNativeAggBase(inner);
         if (aggBase == null) {
-            OlapTable nested = findAnyCloudNativeAggBase(inner);
+            OlapTable nested = findAnyCloudNativeBase(inner, IS_AGG_KEYS);
             if (nested != null) {
                 throw new SemanticException(
                         "IVM on cloud-native AGGREGATE KEY base '%s' is only supported when the base " +
@@ -194,28 +215,28 @@ public final class IvmAggKeyBaseValidator {
         if (!(relation instanceof TableRelation)) {
             return null;
         }
-        return asCloudNativeAggBase(((TableRelation) relation).getTable());
+        return asCloudNativeBase(((TableRelation) relation).getTable(), IS_AGG_KEYS);
     }
 
-    private static OlapTable findAnyCloudNativeAggBase(Relation relation) {
+    private static OlapTable findAnyCloudNativeBase(Relation relation, Predicate<OlapTable> match) {
         if (relation == null) {
             return null;
         }
         if (relation instanceof TableRelation) {
-            return asCloudNativeAggBase(((TableRelation) relation).getTable());
+            return asCloudNativeBase(((TableRelation) relation).getTable(), match);
         }
         if (relation instanceof JoinRelation) {
             JoinRelation join = (JoinRelation) relation;
-            OlapTable left = findAnyCloudNativeAggBase(join.getLeft());
-            return left != null ? left : findAnyCloudNativeAggBase(join.getRight());
+            OlapTable left = findAnyCloudNativeBase(join.getLeft(), match);
+            return left != null ? left : findAnyCloudNativeBase(join.getRight(), match);
         }
         if (relation instanceof SubqueryRelation) {
-            return findAnyCloudNativeAggBase(
-                    ((SubqueryRelation) relation).getQueryStatement().getQueryRelation());
+            return findAnyCloudNativeBase(
+                    ((SubqueryRelation) relation).getQueryStatement().getQueryRelation(), match);
         }
         if (relation instanceof UnionRelation) {
             for (QueryRelation child : ((UnionRelation) relation).getRelations()) {
-                OlapTable found = findAnyCloudNativeAggBase(child);
+                OlapTable found = findAnyCloudNativeBase(child, match);
                 if (found != null) {
                     return found;
                 }
@@ -223,12 +244,12 @@ public final class IvmAggKeyBaseValidator {
             return null;
         }
         if (relation instanceof SelectRelation) {
-            return findAnyCloudNativeAggBase(((SelectRelation) relation).getRelation());
+            return findAnyCloudNativeBase(((SelectRelation) relation).getRelation(), match);
         }
         return null;
     }
 
-    private static OlapTable asCloudNativeAggBase(Table table) {
+    private static OlapTable asCloudNativeBase(Table table, Predicate<OlapTable> match) {
         if (!(table instanceof OlapTable)) {
             return null;
         }
@@ -236,9 +257,6 @@ public final class IvmAggKeyBaseValidator {
         if (!olap.isCloudNativeTableOrMaterializedView()) {
             return null;
         }
-        if (olap.getKeysType() != KeysType.AGG_KEYS) {
-            return null;
-        }
-        return olap;
+        return match.test(olap) ? olap : null;
     }
 }
