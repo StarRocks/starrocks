@@ -41,7 +41,7 @@
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/group_execution/execution_group.h"
@@ -735,7 +735,7 @@ static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGro
     auto* driver_executor = wg->executors()->driver_executor();
     for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
         EventPtr group_initialize_event =
-                Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
+                create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
 
         if (auto blocking_event = leader_source_op->adaptive_blocking_event(); blocking_event != nullptr) {
             group_initialize_event->add_dependency(blocking_event.get());
