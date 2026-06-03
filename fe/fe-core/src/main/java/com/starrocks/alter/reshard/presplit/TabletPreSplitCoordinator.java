@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -39,12 +40,14 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 /**
  * FE-side orchestrator for Sample-Based Tablet Pre-Split.
@@ -187,11 +190,15 @@ public final class TabletPreSplitCoordinator {
      * {@link com.starrocks.alter.reshard.TabletReshardJobMgr}, then return
      * immediately — the reshard daemon completes the split asynchronously.
      *
-     * <p>This is the fire-and-forget entry point used by the integrating load
-     * path. The synchronous-await variant is {@link #runPreSplit}; that one
-     * cannot be used from inside the planner because the daemon's
-     * {@code TABLET_RESHARD} write-lock acquisition would deadlock with the
-     * planner's read-lock.
+     * <p>This is the non-blocking submit entry point used by the integrating
+     * load path. The load hook drives the await separately via
+     * {@link #awaitFinishedAllowingFallback} or
+     * {@link #awaitCombinedJobAllowingFallback}, which fail-safe on timeout
+     * rather than aborting the load. The strict synchronous-await variant
+     * {@link #runPreSplit} also exists for callers that want abort-on-timeout
+     * semantics; it cannot be used from inside the planner because the
+     * daemon's {@code TABLET_RESHARD} write-lock acquisition would deadlock
+     * with the planner's read-lock.
      *
      * <p>Failures are mapped to {@link PreSplitOutcome.Skipped} with a specific
      * {@link SkipReason} so the load proceeds against the original single tablet:
@@ -287,7 +294,7 @@ public final class TabletPreSplitCoordinator {
         }
         Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
         try {
-            awaitFinishedAndRecordMetrics(pipeline, submitted.preparedJob(), postSubmitTimeout);
+            awaitFinishedAndRecordMetrics(pipeline, submitted.preparedJob(), postSubmitTimeout, () -> false);
         } catch (PreSplitPostSubmitTimeoutException timeout) {
             // Strict-abort semantics: caller opted into runPreSplit, so a timeout
             // aborts the calling load. The hard-cap counter was bumped inside
@@ -318,16 +325,144 @@ public final class TabletPreSplitCoordinator {
      * or failure, so operators see the wait distribution even for failed waits.
      */
     static void awaitFinishedAndRecordMetrics(
-            PreSplitPipeline pipeline, PreSplitPipeline.PreparedReshardJob preparedJob, Duration timeout)
+            PreSplitPipeline pipeline, PreSplitPipeline.PreparedReshardJob preparedJob, Duration timeout,
+            BooleanSupplier shouldAbort)
             throws PreSplitPostSubmitTimeoutException, StarRocksException {
         long postSubmitStartMillis = System.currentTimeMillis();
         try {
-            pipeline.awaitFinished(preparedJob, timeout);
+            pipeline.awaitFinished(preparedJob, timeout, shouldAbort);
         } catch (TimeoutException timeoutException) {
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
             }
             throw PreSplitPostSubmitTimeoutException.from(timeoutException);
+        } finally {
+            if (MetricRepo.hasInit) {
+                MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS.update(
+                        System.currentTimeMillis() - postSubmitStartMillis);
+            }
+        }
+    }
+
+    /**
+     * Fail-safe wrapper around {@link #awaitFinishedAndRecordMetrics}: any
+     * timeout or wait failure is logged and the calling load proceeds without
+     * abort against whatever tablet layout is currently visible.
+     * {@code tablet_pre_split_load_abort} is intentionally not incremented;
+     * the inner helper still updates the latency histogram and bumps the
+     * hard-cap counter on timeout.
+     *
+     * <p>Used by both load-kind hooks ({@link InsertFromFilesPreSplitHook} and
+     * {@link BrokerLoadPreSplitHook}). Sync-await is deadlock-safe in both
+     * cases — INSERT-from-FILES runs the hook before {@code StatementPlanner.plan()}
+     * begins the load txn; Broker Load defers {@code BrokerLoadJob.beginTxn}
+     * until after the hook returns. In neither case can the reshard daemon's
+     * cleanup-phase {@code isPreviousTransactionsFinished} wait include the
+     * not-yet-allocated load txn.
+     *
+     * @param loadKind      which integration path is calling — supplies the
+     *                      operator-facing display name for log messages.
+     * @param shouldAbort   polled between pipeline polls; once it returns
+     *                      {@code true} the helper logs and returns
+     *                      immediately so the caller's pool slot is released
+     *                      (the calling load has been cancelled or timed out
+     *                      mid-wait). Pass {@code () -> false} to disable.
+     */
+    public static void awaitFinishedAllowingFallback(
+            LoadKind loadKind, OlapTable olapTable,
+            PreSplitPipeline pipeline, PreSplitPipeline.PreparedReshardJob preparedJob,
+            BooleanSupplier shouldAbort) {
+        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
+        String loadKindLabel = loadKind.displayName();
+        try {
+            awaitFinishedAndRecordMetrics(pipeline, preparedJob, postSubmitTimeout, shouldAbort);
+        } catch (PreSplitPostSubmitTimeoutException timeout) {
+            LOG.warn("Pre-split awaitFinished timed out for {} on table {} after {}s; "
+                            + "load will proceed without abort against the currently visible layout: {}",
+                    loadKindLabel, olapTable.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
+        } catch (StarRocksException waitFailure) {
+            LOG.warn("Pre-split awaitFinished failed for {} on table {}; "
+                            + "load will proceed without abort against the currently visible layout: {}",
+                    loadKindLabel, olapTable.getName(), waitFailure.getMessage());
+        }
+    }
+
+    /**
+     * Multi-partition counterpart of {@link #awaitFinishedAllowingFallback}.
+     * Polls {@link TabletReshardJobMgr} for the combined reshard job's terminal
+     * state, bounded by {@code tablet_pre_split_post_submit_wait_seconds}.
+     *
+     * <p>The combined-job path bypasses {@link PreSplitPipeline}'s plan/submit
+     * stages ({@code submitForPartitionsCombined} builds and admits the
+     * {@link TabletReshardJob} directly), so there is no
+     * {@link PreSplitPipeline.PreparedReshardJob} wrapper to feed into the
+     * pipeline's polling helper. Same fail-safe contract: timeout / abort /
+     * wait failure is logged and the load proceeds without abort. The
+     * post-submit latency histogram is updated unconditionally; the hard-cap
+     * counter is bumped on timeout.
+     *
+     * @param loadKind      which integration path is calling — supplies the
+     *                      operator-facing display name for log messages.
+     * @param shouldAbort   polled between job-state polls; once it returns
+     *                      {@code true} the helper logs and returns
+     *                      immediately so the caller's pool slot is released
+     *                      (the calling load has been cancelled or timed out
+     *                      mid-wait). Pass {@code () -> false} to disable.
+     */
+    public static void awaitCombinedJobAllowingFallback(
+            LoadKind loadKind, OlapTable olapTable, TabletReshardJob combinedJob,
+            BooleanSupplier shouldAbort) {
+        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
+        long jobId = combinedJob.getJobId();
+        TabletReshardJobMgr tabletReshardJobManager =
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        Instant deadline = Instant.now().plus(postSubmitTimeout);
+        long postSubmitStartMillis = System.currentTimeMillis();
+        String loadKindLabel = loadKind.displayName();
+        try {
+            while (true) {
+                if (shouldAbort.getAsBoolean()) {
+                    LOG.info("Pre-split combined-job await abandoned for {} on table {} (caller " +
+                                    "signalled abort); load will proceed against the currently visible layout",
+                            loadKindLabel, olapTable.getName());
+                    return;
+                }
+                TabletReshardJob latest = tabletReshardJobManager.getTabletReshardJob(jobId);
+                if (latest == null) {
+                    LOG.warn("Pre-split combined job {} disappeared for {} on table {}; "
+                                    + "load will proceed against the currently visible layout",
+                            jobId, loadKindLabel, olapTable.getName());
+                    return;
+                }
+                TabletReshardJob.JobState state = latest.getJobState();
+                if (state == TabletReshardJob.JobState.FINISHED) {
+                    return;
+                }
+                if (state.isFinalState()) {
+                    LOG.warn("Pre-split combined job {} aborted for {} on table {}: {}; "
+                                    + "load will proceed against the currently visible layout",
+                            jobId, loadKindLabel, olapTable.getName(), latest.getErrorMessage());
+                    return;
+                }
+                if (Instant.now().isAfter(deadline)) {
+                    if (MetricRepo.hasInit) {
+                        MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
+                    }
+                    LOG.warn("Pre-split combined job {} did not finish in {}s for {} on table {}; "
+                                    + "load will proceed without abort against the currently visible layout",
+                            jobId, postSubmitTimeout.toSeconds(), loadKindLabel, olapTable.getName());
+                    return;
+                }
+                try {
+                    Thread.sleep(DefaultPreSplitPipeline.DEFAULT_POLL_INTERVAL.toMillis());
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    LOG.warn("Pre-split combined-job await interrupted for {} on table {}; "
+                                    + "load will proceed against the currently visible layout",
+                            loadKindLabel, olapTable.getName());
+                    return;
+                }
+            }
         } finally {
             if (MetricRepo.hasInit) {
                 MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS.update(

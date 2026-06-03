@@ -63,9 +63,27 @@ public class BrokerLoadPreSplitHookTest {
 
     @Test
     public void testConfigFlagOffShortCircuits() throws Exception {
+        // Cluster-wide opt-out must short-circuit before the coordinator AND
+        // record the eligibility-skip counter under disabled_by_config — the
+        // hook returns ahead of the coordinator, so checkConfigAndSession would
+        // otherwise never bump the bucket.
         Config.enable_tablet_pre_split_for_broker_load = false;
-        assertHookDoesNotDelegate(() ->
-                invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_CONFIG.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
+
+            org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "config opt-out must bump the disabled_by_config bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     @Test
@@ -182,7 +200,7 @@ public class BrokerLoadPreSplitHookTest {
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses) {
         BrokerLoadPreSplitHook.maybeRunPreSplit(
                 context, mock(Database.class), target, mock(BrokerDesc.class),
-                fileGroups, fileStatuses, mock(ComputeResource.class));
+                fileGroups, fileStatuses, mock(ComputeResource.class), () -> false);
     }
 
     private static OlapTable singlePartitionOlapTable() {

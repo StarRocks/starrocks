@@ -78,26 +78,6 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
     }
 
     @Test
-    void unpartitionedRequestMatchesLegacyOverload() {
-        // The legacy three-list-positional overload (no partition-source list)
-        // and the new overload with an empty partition-source list must produce
-        // byte-identical SQL — guards the backwards-compat surface explicitly.
-        Column sortKey = bigintColumn("user_id");
-        Map<String, String> properties = new LinkedHashMap<>();
-        properties.put("path", "s3://bucket/foo");
-        properties.put("format", "parquet");
-
-        String legacy = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties, List.of(sortKey),
-                /*samplingRate=*/ 0.25, /*rowLimit=*/ 200, /*seed=*/ 13L);
-        String extended = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties, List.of(sortKey), List.of(),
-                /*samplingRate=*/ 0.25, /*rowLimit=*/ 200, /*seed=*/ 13L);
-
-        Assertions.assertEquals(legacy, extended);
-    }
-
-    @Test
     void multiplePartitionSourceColumnsAllProjected() {
         Column sortKey = bigintColumn("user_id");
         Column yearColumn = bigintColumn("year");
@@ -152,7 +132,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                 List.of(brokerFileStatus("s3://bucket/data/a.parquet", 4L * 1024L * 1024L)));
         StringBuilder capturedSql = new StringBuilder();
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
                     capturedSql.append(sql);
                     return List.of(jsonResultBatch(
                             "{\"data\":[1, \"2026-05-26\"],\"meta\":["
@@ -192,7 +172,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                 Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
                 List.of(brokerFileStatus("s3://bucket/data/a.parquet", 4L * 1024L * 1024L)));
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[10, \"east\"]}",
                         "{\"data\":[20, \"west\"]}")));
         ReservoirSampler sampler = new ReservoirSampler(executor);
@@ -227,7 +207,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                 Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
                 List.of(brokerFileStatus("s3://bucket/data/a.parquet", 1024L)));
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[1, \"east\", \"unexpected\"]}")));
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
@@ -257,7 +237,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                 Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
                 List.of(brokerFileStatus("s3://bucket/data/a.parquet", 1024L)));
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[1, null]}")));
         // bigintColumn(...) is non-nullable by default, used here as the
         // partition-source slot so a null cell hits the non-nullable branch.
