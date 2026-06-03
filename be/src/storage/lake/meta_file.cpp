@@ -26,6 +26,7 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "util/coding.h"
@@ -189,11 +190,16 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
             segment_meta->set_shared(false);
         }
     }
-    // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
     if (!replace_segments.empty()) {
+        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
         }
+        // A rewritten segment makes this rowset's data private to this tablet, so it must not
+        // alias a cross-published sibling: mint a fresh uid. With no rewrite, the CopyFrom above
+        // preserves the op_write's write-time uid, which is identical across cross-published
+        // children.
+        tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
@@ -1019,11 +1025,16 @@ Status MetaFileBuilder::set_final_rowset() {
             segment_meta->set_shared(false);
         }
     }
-    // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
     if (!_pending_rowset_data.replace_segments.empty()) {
+        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
         }
+        // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
+        // initial CopyFrom in add_rowset) so cross-published children converge on the same
+        // identity. If any segment was physically rewritten, the data is now private to this
+        // tablet and must not alias a sibling: mint a fresh uid.
+        tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
