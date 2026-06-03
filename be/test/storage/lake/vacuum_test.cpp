@@ -34,6 +34,9 @@
 
 namespace starrocks::lake {
 
+// Forward-declare internal helper exposed for testing (defined in vacuum.cpp).
+int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries);
+
 struct VacuumTestArg {
     int64_t min_batch_size;
 };
@@ -1634,4 +1637,1948 @@ TEST(LakeVacuumTest2, test_delete_files_retry4) {
     EXPECT_GT(attempts, 1);
 }
 
+<<<<<<< HEAD
+=======
+TEST(LakeVacuumTest2, test_calculate_retry_delay_jitter) {
+    // Pure helper: no global config dependency. All knobs passed in.
+    const int64_t base = 100;
+    const int64_t max_retries = 5;
+    const int64_t cap = base * (1L << max_retries); // = 3200
+    constexpr int kSamples = 200;
+
+    // 1. First call: last_delay = base. Window is [base, min(cap, base*3)] = [100, 300].
+    {
+        std::set<int64_t> observed;
+        for (int i = 0; i < kSamples; ++i) {
+            int64_t delay = calculate_retry_delay(base, base, max_retries);
+            EXPECT_GE(delay, base) << "delay=" << delay;
+            EXPECT_LE(delay, std::min(cap, base * 3)) << "delay=" << delay;
+            observed.insert(delay);
+        }
+        EXPECT_GT(observed.size(), 1U) << "first-call jitter inactive";
+    }
+
+    // 2. Cap clamping: once last_delay * 3 exceeds cap, delays must not exceed cap.
+    {
+        int64_t large_last = cap; // last_delay already at cap
+        std::set<int64_t> observed;
+        for (int i = 0; i < kSamples; ++i) {
+            int64_t delay = calculate_retry_delay(large_last, base, max_retries);
+            EXPECT_GE(delay, base);
+            EXPECT_LE(delay, cap) << "cap not enforced, delay=" << delay;
+            observed.insert(delay);
+        }
+        EXPECT_GT(observed.size(), 1U) << "cap-clamped jitter inactive";
+    }
+
+    // 3. Simulated retry chain: feed last_delay back; every step stays in [base, cap].
+    {
+        int64_t last_delay = base;
+        for (int step = 0; step < 20; ++step) {
+            last_delay = calculate_retry_delay(last_delay, base, max_retries);
+            EXPECT_GE(last_delay, base) << "step=" << step;
+            EXPECT_LE(last_delay, cap) << "step=" << step;
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
+    create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat");
+    create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat");
+
+    auto t600_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 1,
+        "rowsets": []
+        }
+        )DEL");
+
+    auto t601_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 601,
+        "version": 1,
+        "rowsets": []
+        }
+        )DEL");
+
+    auto t600_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    auto t601_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 601,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    auto t600_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 8192,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                        },
+                        {
+                            "filename": "00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    auto t601_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 601,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 8192,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"
+                        },
+                        {
+                            "filename": "00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    TabletSchemaPB schema_pb1;
+    {
+        schema_pb1.set_id(0);
+        schema_pb1.set_num_short_key_columns(1);
+        schema_pb1.set_keys_type(DUP_KEYS);
+    }
+    // create SharedTabletMetadata
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v1;
+    t600_v1->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v1[600] = *t600_v1;
+    tablet_metas_v1[601] = *t601_v1;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    t600_v2->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v2[600] = *t600_v2;
+    tablet_metas_v2[601] = *t601_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
+    t600_v3->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v3[600] = *t600_v3;
+    tablet_metas_v3[601] = *t601_v3;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
+    auto* metacache = _tablet_mgr->metacache();
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2), t600_v2);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2), t601_v2);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), t600_v3);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3), t601_v3);
+
+    int64_t grace_timestamp = 1687331159;
+
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_file_modified_time", [=](void* arg) {
+        *(uint64_t*)arg = grace_timestamp; // modification time of version 3 tablet metadata
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    // No file will be deleted
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(grace_timestamp);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(2, response.vacuumed_files());
+        // The size of deleted metadata files is not counted in vacuumed_file_size.
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 1)));
+        // version 2 is the last version created before "grace_timestamp", should be retained
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"));
+    }
+
+    // tablet metadata of version 1, 2 will be deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        request.set_min_retain_version(3);
+        // Now version 3 becomes the last version created before grace_timestamp, version 1/2 can be
+        // deleted
+        request.set_grace_timestamp(grace_timestamp + 1);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(4, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"));
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
+    create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat");
+    create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat");
+    TabletSchemaPB schema_pb1;
+    {
+        schema_pb1.set_id(0);
+        schema_pb1.set_num_short_key_columns(1);
+        schema_pb1.set_keys_type(DUP_KEYS);
+    }
+
+    auto t600_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 1,
+        "rowsets": []
+        }
+        )DEL");
+
+    auto t601_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 601,
+        "version": 1,
+        "rowsets": []
+        }
+        )DEL");
+
+    auto t600_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    auto t601_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 601,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    auto t600_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                },
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    auto t601_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 601,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                },
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    // after compaction
+    auto t600_v4 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 4,
+            "rowsets": [
+                {
+                    "data_size": 8192,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                        }
+                    ]
+                }
+            ],
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                },
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 3
+        }
+        )DEL");
+
+    auto t601_v4 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 601,
+            "version": 4,
+            "rowsets": [
+                {
+                    "data_size": 8192,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"
+                        }
+                    ]
+                }
+            ],
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                },
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    // create SharedTabletMetadata
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v1;
+    t600_v1->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v1[600] = *t600_v1;
+    tablet_metas_v1[601] = *t601_v1;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    t600_v2->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v2[600] = *t600_v2;
+    tablet_metas_v2[601] = *t601_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
+    t600_v3->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v3[600] = *t600_v3;
+    tablet_metas_v3[601] = *t601_v3;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
+    auto* metacache = _tablet_mgr->metacache();
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2), t600_v2);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2), t601_v2);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), t600_v3);
+    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3), t601_v3);
+
+    int64_t grace_timestamp = 1687331159;
+
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_file_modified_time", [=](void* arg) {
+        *(uint64_t*)arg = grace_timestamp; // modification time of version 3 tablet metadata
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    // No file will be deleted
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(grace_timestamp);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(2, response.vacuumed_files());
+        // The size of deleted metadata files is not counted in vacuumed_file_size.
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 1)));
+        // version 2 is the last version created before "grace_timestamp", should be retained
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+    }
+
+    // tablet metadata of version 1, 2 will be deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        request.set_min_retain_version(3);
+        // Now version 3 becomes the last version created before grace_timestamp, version 1/2 can be
+        // deleted
+        request.set_grace_timestamp(grace_timestamp + 1);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(4, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+    }
+
+    // after compaction
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v4;
+    t600_v4->mutable_schema()->CopyFrom(schema_pb1);
+    tablet_metas_v4[600] = *t600_v4;
+    tablet_metas_v4[601] = *t601_v4;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
+
+    // shared cleanup is false, shared files will not be deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        TabletInfoPB tablet_info1;
+        tablet_info1.set_tablet_id(600);
+        tablet_info1.set_min_version(3);
+        TabletInfoPB tablet_info2;
+        tablet_info2.set_tablet_id(601);
+        tablet_info2.set_min_version(3);
+        request.add_tablet_infos()->CopyFrom(tablet_info1);
+        request.add_tablet_infos()->CopyFrom(tablet_info2);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(grace_timestamp + 1);
+        request.set_min_active_txn_id(12345);
+        // If shared cleanup is false, we need to clear the shared_file_deleter.
+        request.set_enable_shared_file_cleanup(false);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"));
+    }
+
+    // shared files will be deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        TabletInfoPB tablet_info1;
+        tablet_info1.set_tablet_id(600);
+        tablet_info1.set_min_version(3);
+        TabletInfoPB tablet_info2;
+        tablet_info2.set_tablet_id(601);
+        tablet_info2.set_min_version(3);
+        request.add_tablet_infos()->CopyFrom(tablet_info1);
+        request.add_tablet_infos()->CopyFrom(tablet_info2);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(grace_timestamp + 1);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(7, response.vacuumed_files());
+        EXPECT_EQ(16384, response.vacuumed_file_size());
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
+
+        EXPECT_FALSE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_FALSE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"));
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup) {
+    const std::string compaction_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    const std::string orphan_file = "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat";
+    create_data_file(compaction_file);
+    create_data_file(orphan_file);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 700,
+            "version": 2,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "orphan_files": [
+                {
+                    "name": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat",
+                    "size": 4096,
+                    "shared": true
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(700);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(compaction_file));
+    EXPECT_FALSE(file_exist(orphan_file));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_without_file_bundling) {
+    const std::string shared_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2f1d.dat";
+    create_data_file(shared_file);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 705,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 705,
+        "version": 2,
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 705,
+            "version": 3,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2f1d.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 2
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(705);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_file_bundling(false);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(705, 1)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(705, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(705, 3)));
+    EXPECT_FALSE(file_exist(shared_file));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_without_bundling_flag) {
+    const std::string shared_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2f2d.dat";
+    create_data_file(shared_file);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 706,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 706,
+        "version": 2,
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 706,
+            "version": 3,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2f2d.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 2
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(706);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(706, 1)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(706, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(706, 3)));
+    EXPECT_FALSE(file_exist(shared_file));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_keep_referenced) {
+    const std::string shared_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(shared_file);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 710,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 710,
+            "version": 2,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 711,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 711,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info_710;
+    tablet_info_710.set_tablet_id(710);
+    tablet_info_710.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_710);
+    TabletInfoPB tablet_info_711;
+    tablet_info_711.set_tablet_id(711);
+    tablet_info_711.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_711);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_TRUE(file_exist(shared_file));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_reference_scan) {
+    const std::string shared_segment = "00000000000000a1_44444444-4444-4444-4444-444444444444.dat";
+    const std::string shared_del = "00000000000000a2_55555555-5555-5555-5555-555555555555.del";
+    create_data_file(shared_segment);
+    create_data_file(shared_del);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 720,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 720,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "del_files": [
+                        {
+                            "name": "00000000000000a4_77777777-7777-7777-7777-777777777777.del",
+                            "shared": true
+                        }
+                    ],
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000000a3_66666666-6666-6666-6666-666666666666.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "delvec_meta": {
+                "version_to_file": [
+                    {
+                        "key": 1,
+                        "value": {
+                            "name": "00000000000000a5_88888888-8888-8888-8888-888888888888.delvec",
+                            "shared": true
+                        }
+                    }
+                ]
+            },
+            "dcg_meta": {
+                "dcgs": [
+                    {
+                        "key": 1,
+                        "value": {
+                            "column_files": [
+                                "00000000000000a6_99999999-9999-9999-9999-999999999999.cols"
+                            ],
+                            "shared_files": [
+                                true
+                            ]
+                        }
+                    }
+                ]
+            },
+            "sstable_meta": {
+                "sstables": [
+                    {
+                        "filename": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.sst",
+                        "shared": true
+                    }
+                ]
+            },
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "del_files": [
+                        {
+                            "name": "00000000000000a2_55555555-5555-5555-5555-555555555555.del",
+                            "shared": true
+                        }
+                    ],
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000000a1_44444444-4444-4444-4444-444444444444.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(720);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+    EXPECT_FALSE(file_exist(shared_del));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_skip_bundle_range) {
+    const std::string shared_segment = "00000000000000b1_66666666-6666-6666-6666-666666666666.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 730,
+            "version": 3,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000000b1_66666666-6666-6666-6666-666666666666.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 731,
+        "version": 1
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 731,
+        "version": 3,
+        "rowsets": []
+        }
+        )DEL")));
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(0);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+
+    auto t730_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 730,
+        "version": 2,
+        "rowsets": []
+        }
+        )DEL");
+    t730_v2->mutable_schema()->CopyFrom(schema_pb);
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[730] = *t730_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info_730;
+    tablet_info_730.set_tablet_id(730);
+    tablet_info_730.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_730);
+    TabletInfoPB tablet_info_731;
+    tablet_info_731.set_tablet_id(731);
+    tablet_info_731.set_min_version(2);
+    request.add_tablet_infos()->CopyFrom(tablet_info_731);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_bundle_meta_read_and_missing_meta) {
+    const std::string shared_segment = "00000000000000c1_77777777-7777-7777-7777-777777777777.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 740,
+            "version": 2,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000000c1_77777777-7777-7777-7777-777777777777.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(0);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    auto t740_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 740,
+        "version": 2,
+        "rowsets": []
+        }
+        )DEL");
+    t740_v2->mutable_schema()->CopyFrom(schema_pb);
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[740] = *t740_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    std::string meta_dir = join_path(kTestDir, kMetadataDirectoryName);
+    std::string broken_meta = join_path(meta_dir, tablet_metadata_filename(0, 0xabc402));
+    std::string broken_single_meta = join_path(meta_dir, tablet_metadata_filename(742, 0xabc403));
+    DeferOp cleanup_symlink_files([&]() {
+        (void)FileSystem::Default()->delete_file(broken_meta);
+        (void)FileSystem::Default()->delete_file(broken_single_meta);
+    });
+    auto delete_status = FileSystem::Default()->delete_file(broken_meta);
+    if (!delete_status.ok() && !delete_status.is_not_found()) {
+        ASSERT_OK(delete_status);
+    }
+    ASSERT_EQ(0, symlink("missing_target", broken_meta.c_str()));
+    delete_status = FileSystem::Default()->delete_file(broken_single_meta);
+    if (!delete_status.ok() && !delete_status.is_not_found()) {
+        ASSERT_OK(delete_status);
+    }
+    ASSERT_EQ(0, symlink("missing_target", broken_single_meta.c_str()));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info_740;
+    tablet_info_740.set_tablet_id(740);
+    tablet_info_740.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_740);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_scan_error) {
+    const std::string shared_segment = "00000000000000d1_88888888-8888-8888-8888-888888888888.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 750,
+            "version": 2,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000000d1_88888888-8888-8888-8888-888888888888.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    std::string meta_dir = join_path(kTestDir, kMetadataDirectoryName);
+    std::string corrupt_bundle_meta = join_path(meta_dir, tablet_metadata_filename(0, 2));
+    ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(corrupt_bundle_meta));
+    ASSERT_OK(f->append("corrupted"));
+    ASSERT_OK(f->close());
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(750);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_skip_new_txn) {
+    const std::string shared_segment = "00000000000000f1_99999999-9999-9999-9999-999999999999.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 760,
+            "version": 2,
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000000f1_99999999-9999-9999-9999-999999999999.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(760);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+}
+
+TEST_P(LakeVacuumTest, test_garbage_file_check) {
+    create_data_file("00000000000359e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 800,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000359e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL")));
+
+    auto res = garbage_file_check(kTestDir);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(1, res.value());
+}
+
+// Test for the fix that skips deleting txnlog files for tablets being deleted
+TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets) {
+    // Create data files referenced by different tablets
+    create_data_file("00000000001359e4_tablet1_file.dat");
+    create_data_file("00000000002359e4_tablet2_file.dat");
+    create_data_file("00000000003359e4_tablet3_file.dat");
+
+    // Create combined txn log containing multiple tablets
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+                {
+                    "tablet_id": 1000,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segment_metas": [
+                                {
+                                    "filename": "00000000001359e4_tablet1_file.dat"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 1001,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segment_metas": [
+                                {
+                                    "filename": "00000000002359e4_tablet2_file.dat"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 1002,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segment_metas": [
+                                {
+                                    "filename": "00000000003359e4_tablet3_file.dat"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+        )DEL")));
+
+    // Verify combined txn log and all data files exist
+    EXPECT_TRUE(file_exist(combined_txn_log_filename(5000)));
+    EXPECT_TRUE(file_exist("00000000001359e4_tablet1_file.dat"));
+    EXPECT_TRUE(file_exist("00000000002359e4_tablet2_file.dat"));
+    EXPECT_TRUE(file_exist("00000000003359e4_tablet3_file.dat"));
+
+    {
+        // Delete only tablets 1000 and 1001, leaving 1002 alive
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(1000);
+        request.add_tablet_ids(1001);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Combined txn log should still exist because tablet 1002 is alive
+        EXPECT_TRUE(file_exist(combined_txn_log_filename(5000)));
+
+        // Files for deleted tablets (1000, 1001) should be deleted
+        // But file for alive tablet (1002) should be preserved
+        // Note: The fix ensures that delete_files_under_txnlog is NOT called for tablets being deleted
+        // So files for tablets 1000 and 1001 should actually be preserved
+        // because they are in the deletion list
+        EXPECT_FALSE(file_exist("00000000001359e4_tablet1_file.dat"));
+        EXPECT_FALSE(file_exist("00000000002359e4_tablet2_file.dat"));
+        EXPECT_TRUE(file_exist("00000000003359e4_tablet3_file.dat"));
+    }
+
+    {
+        // Now delete the remaining tablet 1002
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(1000);
+        request.add_tablet_ids(1001);
+        request.add_tablet_ids(1002);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Now combined txn log should be deleted since all tablets are deleted
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(5000)));
+
+        // All data files should be deleted now
+        EXPECT_FALSE(file_exist("00000000001359e4_tablet1_file.dat"));
+        EXPECT_FALSE(file_exist("00000000002359e4_tablet2_file.dat"));
+        EXPECT_FALSE(file_exist("00000000003359e4_tablet3_file.dat"));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_metadata_data_files) {
+    // Simulate deleting old range distribution tablets after tablet split.
+    // The latest metadata contains data files (segments, delvecs, sstables, del files, dcg files)
+    // that may be shared with new split tablets. All data files should be retained for range
+    // distribution tablets; they will be cleaned up by new tablets' regular vacuum.
+    const std::string segment1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat";
+    const std::string segment2 = "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat";
+    const std::string delvec1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f2.delvec";
+    const std::string sstable1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f3.sst";
+    const std::string del_file1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del";
+    const std::string del_file2 = "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del";
+    create_data_file(segment1);
+    create_data_file(segment2);
+    create_data_file(delvec1);
+    create_data_file(sstable1);
+    create_data_file(del_file1);
+    create_data_file(del_file2);
+
+    // Txn log: file is NOT marked as shared (written before split).
+    ASSERT_OK(_tablet_mgr->put_txn_log(*json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 5000,
+            "txn_id": 9900,
+            "partition_id": 111,
+            "op_write": {
+                "rowset": {
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat"
+                        },
+                        {
+                            "filename": "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat"
+                        }
+                    ]
+                },
+                "dels_meta": [
+                    {
+                        "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del"
+                    },
+                    {
+                        "name": "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del"
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    // Metadata v2: range distribution tablet with data files.
+    // Some files are marked shared, some are not. After split, ALL data files should be
+    // retained regardless of shared flag.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5000,
+            "version": 2,
+            "range": {
+                "lower_bound_included": true,
+                "upper_bound_included": false
+            },
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "del_files": [
+                        {
+                            "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del",
+                            "shared": true
+                        },
+                        {
+                            "name": "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del",
+                            "shared": false
+                        }
+                    ],
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat",
+                            "shared": true
+                        },
+                        {
+                            "filename": "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat",
+                            "shared": false
+                        }
+                    ]
+                }
+            ],
+            "delvec_meta": {
+                "version_to_file": [
+                    {
+                        "key": 2,
+                        "value": {
+                            "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f2.delvec",
+                            "size": 32,
+                            "shared": true
+                        }
+                    }
+                ]
+            },
+            "sstable_meta": {
+                "sstables": [
+                    {
+                        "filename": "0000000000f659e4_66666666-6666-6666-6666-6666666666f3.sst",
+                        "shared": true
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(5000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // All data files should be retained for range distribution tablets.
+        // Both shared and private files are kept because after split, even "private"
+        // files in pre-split metadata may be referenced by new tablets.
+        EXPECT_TRUE(file_exist(segment1));
+        EXPECT_TRUE(file_exist(segment2));
+        EXPECT_TRUE(file_exist(delvec1));
+        EXPECT_TRUE(file_exist(sstable1));
+        EXPECT_TRUE(file_exist(del_file1));
+        EXPECT_TRUE(file_exist(del_file2));
+
+        // Txn log and metadata files should be deleted.
+        EXPECT_FALSE(file_exist(txn_log_filename(5000, 9900)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_txnlog_data_files) {
+    // Simulate deleting old range distribution tablets after tablet split.
+    // Txn logs of the old tablet reference data files that have been applied to new split tablets,
+    // so those data files must NOT be deleted.
+    const std::string segment1 = "00000000001259e4_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat";
+    const std::string del_file1 = "00000000001259e4_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.del";
+    const std::string compaction_segment = "00000000002259e4_cccccccc-cccc-cccc-cccc-cccccccccccc.dat";
+    const std::string schema_change_segment = "00000000003259e4_dddddddd-dddd-dddd-dddd-dddddddddddd.dat";
+    create_data_file(segment1);
+    create_data_file(del_file1);
+    create_data_file(compaction_segment);
+    create_data_file(schema_change_segment);
+
+    // Tablet metadata with range field (range distribution tablet)
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6000,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    // Txn log with op_write
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 7000,
+            "op_write": {
+                "rowset": {
+                    "segment_metas": [
+                        {
+                            "filename": "00000000001259e4_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat"
+                        }
+                    ]
+                },
+                "dels_meta": [
+                    {
+                        "name": "00000000001259e4_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.del"
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    // Txn log with op_compaction
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 8000,
+            "op_compaction": {
+                "output_rowset": {
+                    "segment_metas": [
+                        {
+                            "filename": "00000000002259e4_cccccccc-cccc-cccc-cccc-cccccccccccc.dat"
+                        }
+                    ]
+                }
+            }
+        }
+        )DEL")));
+
+    // Txn log with op_schema_change
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 9000,
+            "op_schema_change": {
+                "rowsets": [
+                    {
+                        "segment_metas": [
+                            {
+                                "filename": "00000000003259e4_dddddddd-dddd-dddd-dddd-dddddddddddd.dat"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(6000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Data files referenced by txn logs should be retained (not deleted).
+        EXPECT_TRUE(file_exist(segment1));
+        EXPECT_TRUE(file_exist(del_file1));
+        EXPECT_TRUE(file_exist(compaction_segment));
+        EXPECT_TRUE(file_exist(schema_change_segment));
+
+        // Txn log files themselves should be deleted.
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 7000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 8000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 9000)));
+
+        // Metadata file should be deleted.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6000, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_combined_txnlog_data_files) {
+    // Simulate deleting range distribution tablets with combined txn logs after tablet split.
+    const std::string segment1 = "00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat";
+    create_data_file(segment1);
+
+    // Tablet metadata with range field for both tablets
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6100,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6101,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    // Combined txn log referencing data file from both tablets
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+                {
+                    "tablet_id": 6100,
+                    "txn_id": 7100,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segment_metas": [
+                                {
+                                    "filename": "00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 6101,
+                    "txn_id": 7100,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segment_metas": [
+                                {
+                                    "filename": "00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+        )DEL")));
+
+    {
+        // Delete both tablets
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(6100);
+        request.add_tablet_ids(6101);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Data file should be retained.
+        EXPECT_TRUE(file_exist(segment1));
+
+        // Combined txn log file should be deleted.
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(7100)));
+
+        // Metadata files should be deleted.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6100, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6101, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_shared_orphan_files) {
+    // Verify that shared files in orphan_files and compaction_inputs are NOT deleted
+    // for range distribution tablets, even when can_bundle_meta_file_to_be_deleted
+    // would allow it. This protects files that may still be referenced by new split tablets.
+    const std::string shared_orphan = "0000000000f859e4_88888888-8888-8888-8888-8888888888h1.dat";
+    const std::string private_orphan = "0000000000f859e4_88888888-8888-8888-8888-8888888888h2.dat";
+    const std::string shared_compaction_input = "0000000000f859e4_88888888-8888-8888-8888-8888888888h3.dat";
+    const std::string latest_segment = "0000000000f959e4_99999999-9999-9999-9999-9999999999i1.dat";
+    create_data_file(shared_orphan);
+    create_data_file(private_orphan);
+    create_data_file(shared_compaction_input);
+    create_data_file(latest_segment);
+
+    // Version 3 (latest): range distribution tablet with orphan_files and compaction_inputs
+    // from a previous compaction. One orphan file is shared, one is not.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 7000,
+            "version": 3,
+            "range": {
+                "lower_bound_included": true,
+                "upper_bound_included": false
+            },
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f959e4_99999999-9999-9999-9999-9999999999i1.dat"
+                        }
+                    ]
+                }
+            ],
+            "orphan_files": [
+                {
+                    "name": "0000000000f859e4_88888888-8888-8888-8888-8888888888h1.dat",
+                    "size": 100,
+                    "shared": true
+                },
+                {
+                    "name": "0000000000f859e4_88888888-8888-8888-8888-8888888888h2.dat",
+                    "size": 100,
+                    "shared": false
+                }
+            ],
+            "compaction_inputs": [
+                {
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f859e4_88888888-8888-8888-8888-8888888888h3.dat",
+                            "shared": true
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(7000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Shared orphan file should be retained (protected by range distribution check)
+        EXPECT_TRUE(file_exist(shared_orphan));
+        // Shared compaction input should be retained
+        EXPECT_TRUE(file_exist(shared_compaction_input));
+        // Private orphan file can be deleted (not shared, so safe)
+        EXPECT_FALSE(file_exist(private_orphan));
+        // Latest metadata data files should be retained (existing is_range_distribution protection)
+        EXPECT_TRUE(file_exist(latest_segment));
+
+        // Metadata file should be deleted
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(7000, 3)));
+    }
+}
+
+// ============================================================================
+// vacuum_load_spill (flat-layout) tests
+// ----------------------------------------------------------------------------
+// All tests below operate on raw files under <kTestDir>/load_spill_txns/ (flat
+// layout) and <kTestDir>/load_spill/ (legacy). They do not go through
+// LoadSpillBlockManager — vacuum_load_spill only cares about file names and
+// directory layout, so we synthesize files directly to keep tests focused.
+// ============================================================================
+
+namespace {
+
+// Create an empty file at |full_path|. Parent directories are created lazily.
+void create_flat_spill_file(const std::string& full_path) {
+    auto dir = full_path.substr(0, full_path.find_last_of('/'));
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir));
+    ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(full_path));
+    ASSERT_OK(f->close());
+}
+
+bool path_exists(const std::string& full_path) {
+    auto st = FileSystem::Default()->path_exists(full_path);
+    CHECK(st.ok() || st.is_not_found()) << st;
+    return st.ok();
+}
+
+} // namespace
+
+// A flat file whose hex-encoded txn_id < min_active_txn_id is reclaimed.
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_parses_valid_name) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    // 0x100 = 256, well below min_active_txn_id (1000) below.
+    auto victim = join_path(txns_dir, "100_aaaa_bbbb_0");
+    create_flat_spill_file(victim);
+    ASSERT_TRUE(path_exists(victim));
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    EXPECT_FALSE(path_exists(victim));
+    EXPECT_EQ(1, deleted);
+}
+
+// A flat file whose hex-encoded txn_id >= min_active_txn_id is retained.
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_keeps_active_txn) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    // 0x3e8 = 1000, exactly equal to min_active_txn_id below — must be retained.
+    auto active = join_path(txns_dir, "3e8_aaaa_bbbb_0");
+    create_flat_spill_file(active);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(active));
+    EXPECT_EQ(0, deleted);
+}
+
+// A residual sub-directory under flat load_spill_txns/ is left untouched
+// (defensive guard against accidental deletion of an unexpected layout).
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_skips_subdirectory) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    // Nested file so the parent appears as a directory in iterate_dir2.
+    auto nested = join_path(txns_dir, "stray_subdir/100_aaaa_bbbb_0");
+    create_flat_spill_file(nested);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    // Sub-directory must not be auto-removed.
+    EXPECT_TRUE(path_exists(nested));
+    EXPECT_EQ(0, deleted);
+}
+
+// A file whose name does NOT match "<hex>_..." is skipped (not deleted).
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_skips_unparseable_name) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto bad1 = join_path(txns_dir, "_leading_underscore_0");          // sep == 0
+    auto bad2 = join_path(txns_dir, "noseparator");                    // no '_'
+    auto bad3 = join_path(txns_dir, "0123456789abcdef0_too_long_hex"); // sep > 16
+    create_flat_spill_file(bad1);
+    create_flat_spill_file(bad2);
+    create_flat_spill_file(bad3);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(bad1));
+    EXPECT_TRUE(path_exists(bad2));
+    EXPECT_TRUE(path_exists(bad3));
+    EXPECT_EQ(0, deleted);
+}
+
+// Threshold semantics is strict less-than: txn_id == min_active_txn_id is kept,
+// txn_id == min_active_txn_id - 1 is deleted.
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_threshold_strict_less_than) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto kept = join_path(txns_dir, "64_a_b_0");   // 0x64 = 100
+    auto victim = join_path(txns_dir, "63_a_b_0"); // 0x63 = 99
+    create_flat_spill_file(kept);
+    create_flat_spill_file(victim);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/100,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    EXPECT_TRUE(path_exists(kept));
+    EXPECT_FALSE(path_exists(victim));
+    EXPECT_EQ(1, deleted);
+}
+
+// Legacy <root>/load_spill/ tree is left untouched when
+// cleanup_legacy_load_spill = false (default).
+TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_skipped_by_default) {
+    auto legacy_dir = join_path(kTestDir, "load_spill");
+    auto legacy_file = join_path(legacy_dir, "some_load_uuid/data.bin");
+    create_flat_spill_file(legacy_file);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(legacy_file));
+    EXPECT_EQ(0, deleted);
+}
+
+// Legacy tree is fully reclaimed in one shot (delete_dir_recursive) when
+// cleanup_legacy_load_spill = true, regardless of min_active_txn_id (the legacy
+// layout has no txn_id metadata). The deleted-files counter is incremented by 1
+// logical unit — the recursive delete does not surface a per-file count.
+TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_cleanup_when_optin) {
+    auto legacy_dir = join_path(kTestDir, "load_spill");
+    auto legacy_subdir = join_path(legacy_dir, "load_uuid_a");
+    auto legacy_file = join_path(legacy_subdir, "data.bin");
+    auto legacy_topfile = join_path(legacy_dir, "stray_topfile.bin");
+    create_flat_spill_file(legacy_file);
+    create_flat_spill_file(legacy_topfile);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    EXPECT_FALSE(path_exists(legacy_file));
+    EXPECT_FALSE(path_exists(legacy_subdir));
+    EXPECT_FALSE(path_exists(legacy_topfile));
+    EXPECT_FALSE(path_exists(legacy_dir));
+    EXPECT_EQ(1, deleted); // one logical unit for the recursive subtree delete
+}
+
+// vacuum is idempotent / no-op when neither directory exists.
+TEST_P(LakeVacuumTest, vacuum_load_spill_idempotent_on_missing_dir) {
+    // Neither <kTestDir>/load_spill_txns nor <kTestDir>/load_spill is created.
+    int64_t deleted = 42; // sentinel — must remain non-decreasing
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    EXPECT_EQ(42, deleted);
+
+    // Calling twice on an empty tree must still succeed.
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    EXPECT_EQ(42, deleted);
+}
+
+// |*deleted_files| accumulates across both layouts in a single call. The legacy
+// subtree contributes 1 logical unit (one delete_dir_recursive call), regardless
+// of how many files lived underneath.
+TEST_P(LakeVacuumTest, vacuum_load_spill_increments_deleted_files_counter) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto legacy_dir = join_path(kTestDir, "load_spill");
+    create_flat_spill_file(join_path(txns_dir, "1_a_b_0"));
+    create_flat_spill_file(join_path(txns_dir, "2_a_b_0"));
+    create_flat_spill_file(join_path(legacy_dir, "uuid_a/data.bin"));
+
+    int64_t deleted = 100; // pre-existing counter — must accumulate, not reset
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    // 2 flat files + 1 legacy-subtree logical unit = 3 deletions, on top of 100.
+    EXPECT_EQ(103, deleted);
+}
+
+// Various invalid hex prefixes are skipped (txn_id <= 0, parse failure).
+TEST_P(LakeVacuumTest, vacuum_load_spill_handles_invalid_hex_prefix) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto zero_txn = join_path(txns_dir, "0_a_b_0");   // txn_id == 0 → skip
+    auto non_hex = join_path(txns_dir, "ghij_a_b_0"); // not hex → parse fail
+    create_flat_spill_file(zero_txn);
+    create_flat_spill_file(non_hex);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(zero_txn));
+    EXPECT_TRUE(path_exists(non_hex));
+    EXPECT_EQ(0, deleted);
+}
+
+>>>>>>> 7f1f368ebf ([BugFix] Add decorrelated jitter to lake vacuum retry backoff (#74108))
 } // namespace starrocks::lake
