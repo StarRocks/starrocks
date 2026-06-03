@@ -270,21 +270,45 @@ public class MetaUtils {
     }
 
     public static List<Column> getRangeDistributionColumns(OlapTable olapTable) {
-        List<Column> columns = new ArrayList<>();
-        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
-        List<Column> baseSchema = olapTable.getBaseSchema();
-        if (baseIndexMeta.getSortKeyIdxes() != null) {
-            for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
-                columns.add(baseSchema.get(i));
+        return getRangeDistributionColumns(olapTable, olapTable.getBaseIndexMetaId());
+    }
+
+    /**
+     * Per-index variant: returns the sort-key columns of the materialized index identified by
+     * {@code indexMetaId}. Rollups and materialized views can have a sort-key arity that differs
+     * from the base index — the alignment math in
+     * {@link com.starrocks.planner.RangeColocateScanDispatch} must use the index's own arity, or
+     * range-colocate alignment iteration livelocks on the diverging MV (E1).
+     *
+     * <p>Callers operating on a {@link com.starrocks.catalog.MaterializedIndex} should pass
+     * {@code index.getMetaId()} — the physical {@code getId()} changes after reshard while
+     * {@code getMetaId()} is stable and matches the key in {@code OlapTable.indexMetaIdToMeta}.
+     *
+     * @throws IllegalArgumentException when {@code indexMetaId} has no corresponding
+     *         {@link MaterializedIndexMeta} on {@code olapTable} (e.g. a stale id from a dropped
+     *         rollup).
+     */
+    public static List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId) {
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
+        if (indexMeta == null) {
+            throw new IllegalArgumentException(String.format(
+                    "OlapTable %s has no MaterializedIndexMeta for indexMetaId %d",
+                    olapTable.getName(), indexMetaId));
+        }
+        List<Column> schema = indexMeta.getSchema();
+        List<Column> sortKeyColumns = new ArrayList<>();
+        if (indexMeta.getSortKeyIdxes() != null) {
+            for (Integer sortKeyColumnIndex : indexMeta.getSortKeyIdxes()) {
+                sortKeyColumns.add(schema.get(sortKeyColumnIndex));
             }
         } else {
-            for (Column column : baseSchema) {
+            for (Column column : schema) {
                 if (column.isKey()) {
-                    columns.add(column);
+                    sortKeyColumns.add(column);
                 }
             }
         }
-        return columns;
+        return sortKeyColumns;
     }
 
     /**

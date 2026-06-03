@@ -546,6 +546,63 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 描述：被拦截的黑名单 SQL 的次数。
 
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- 单位：计数
+- 类型：累计
+- 标签：`reason` — SkipReason 枚举值（小写形式），取值之一：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- 单位：计数
+- 类型：累计
+- 描述：由基于采样的 Tablet 预分裂触发的采样器调用总次数。每次资格门通过、生产采样管道开始采样时递增一次。
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- 单位：计数
+- 类型：累计
+- 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳）。
+- 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。meta-tier → data-tier 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=data_tier}` 跟踪。
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- 单位：计数
+- 类型：累计
+- 标签：`tier` — `meta_tier`（边界由 Parquet/ORC row-group 统计算出，不读取行数据）或 `data_tier`（边界由 FILES 子查询采样的实际行算出，包含直接 data-tier 调用与 meta-tier → data-tier 回退两种来源）。
+- 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的采样器层级细分。
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- 单位：计数
+- 类型：直方图
+- 描述：每次调用规划器产生的边界元组数量。等于 `effectiveTabletCount - 1`（K 个 tablet 的切分需要 K-1 个切点）。
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- 单位：毫秒
+- 类型：直方图
+- 描述：基于采样的 Tablet 预分裂在「提交前阶段」（采样 + 规划 + 构建 reshard 作业）耗费的墙钟时间。受 `tablet_pre_split_pre_submit_timeout_seconds` 上限约束。
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- 单位：毫秒
+- 类型：直方图
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。INSERT-from-FILES 生产路径上触发（hook 同步等待 FINISHED，使本次 INSERT 直接看到分裂后的 tablet 布局）；测试用的 `runPreSplit` 同步包装路径也触发。Broker Load 生产路径采用 fire-and-forget，不会更新此直方图。
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- 单位：计数
+- 类型：累计
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。INSERT-from-FILES 生产路径超时后会触发（INSERT 此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划 —— 守护线程还未推进则仍为原单 tablet 布局，若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂；**不**递增 `tablet_pre_split_load_abort`，因为 INSERT 本身未被中止）；测试用的 `runPreSplit` 同步包装路径也会触发。Broker Load 生产路径不等待，因此不会更新此计数器。
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- 单位：计数
+- 类型：累计
+- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。生产导入路径超时后不中止地继续执行（按当时可见的布局做计划）而非中止事务，因此该计数器在当前生产环境保持为零；仅在使用严格语义的 `runPreSplit` 包装路径（测试，或未来选择 "超时即中止" 的调用方）时触发。
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - 单位：计数
