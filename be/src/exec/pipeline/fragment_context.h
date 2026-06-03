@@ -53,7 +53,7 @@ using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
 class FragmentContext {
-    friend FragmentContextManager;
+    friend class FragmentContextManager;
 
 public:
     FragmentContext();
@@ -187,6 +187,7 @@ public:
     Status submit_all_timer();
 
 private:
+    void _set_default_workgroup();
     void _close_stream_load_contexts();
 
     bool _enable_group_execution = false;
@@ -249,37 +250,6 @@ private:
     RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
-};
-
-class FragmentContextManager {
-public:
-    FragmentContextManager() = default;
-    ~FragmentContextManager() = default;
-
-    FragmentContextManager(const FragmentContextManager&) = delete;
-    FragmentContextManager(FragmentContextManager&&) = delete;
-    FragmentContextManager& operator=(const FragmentContextManager&) = delete;
-    FragmentContextManager& operator=(FragmentContextManager&&) = delete;
-
-    FragmentContext* get_or_register(const TUniqueId& fragment_id);
-    FragmentContextPtr get(const TUniqueId& fragment_id);
-
-    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
-    void unregister(const TUniqueId& fragment_id);
-
-    void cancel(const Status& status);
-
-    template <class Caller>
-    void for_each_fragment(Caller&& caller) {
-        std::lock_guard guard(_lock);
-        for (auto& [_, fragment] : _fragment_contexts) {
-            caller(fragment);
-        }
-    }
-
-private:
-    std::mutex _lock;
-    std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
 };
 } // namespace pipeline
 } // namespace starrocks

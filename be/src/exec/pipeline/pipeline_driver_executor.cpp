@@ -23,7 +23,11 @@
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/pipeline/audit_statistics_reporter.h"
+#include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
@@ -54,6 +58,8 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
           _exec_state_reporter(new ExecStateReporter(cpuids, metrics->get_exec_state_reporter_metrics())),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
           _metrics(metrics->get_driver_executor_metrics()) {}
+
+GlobalDriverExecutor::~GlobalDriverExecutor() = default;
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();

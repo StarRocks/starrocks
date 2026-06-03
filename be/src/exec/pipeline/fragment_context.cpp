@@ -18,7 +18,6 @@
 #include <chrono>
 #include <future>
 #include <memory>
-#include <mutex>
 #include <thread>
 
 #include "base/time/time.h"
@@ -326,6 +325,10 @@ Status FragmentContext::prepare_all_pipelines() {
     return Status::OK();
 }
 
+void FragmentContext::_set_default_workgroup() {
+    set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
+}
+
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
     _stream_load_contexts = contexts;
 }
@@ -351,78 +354,6 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
     }
 }
 
-FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
-    std::lock_guard<std::mutex> lock(_lock);
-    auto it = _fragment_contexts.find(fragment_id);
-    if (it != _fragment_contexts.end()) {
-        return it->second.get();
-    } else {
-        auto&& ctx = std::make_unique<FragmentContext>();
-        auto* raw_ctx = ctx.get();
-        _fragment_contexts.emplace(fragment_id, std::move(ctx));
-        raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
-        return raw_ctx;
-    }
-}
-
-Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
-    std::lock_guard<std::mutex> lock(_lock);
-
-    if (_fragment_contexts.find(fragment_id) != _fragment_contexts.end()) {
-        std::stringstream msg;
-        msg << "Fragment " << fragment_id << " has been registered";
-        LOG(WARNING) << msg.str();
-        return Status::InternalError(msg.str());
-    }
-
-    // Only register profile report worker for broker load and insert into here,
-    // for stream load and routine load, currently we don't need BE to report their progress regularly.
-    const TQueryOptions& query_options = fragment_ctx->runtime_state()->query_options();
-    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
-                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
-                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(runtime_services(fragment_ctx->runtime_state())
-                                .profile_report_worker->register_pipeline_load(fragment_ctx->query_id(), fragment_id));
-    }
-    _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
-    return Status::OK();
-}
-
-FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
-    std::lock_guard<std::mutex> lock(_lock);
-    auto it = _fragment_contexts.find(fragment_id);
-    if (it != _fragment_contexts.end()) {
-        return it->second;
-    } else {
-        return nullptr;
-    }
-}
-
-void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
-    std::lock_guard<std::mutex> lock(_lock);
-    auto it = _fragment_contexts.find(fragment_id);
-    if (it != _fragment_contexts.end()) {
-        it->second->_finish_promise.set_value();
-
-        const TQueryOptions& query_options = it->second->runtime_state()->query_options();
-        if (query_options.query_type == TQueryType::LOAD &&
-            (query_options.load_job_type == TLoadJobType::BROKER ||
-             query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
-             query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
-            !it->second->runtime_state()->is_cancelled()) {
-            runtime_services(it->second->runtime_state())
-                    .profile_report_worker->unregister_pipeline_load(it->second->query_id(), fragment_id);
-        }
-        _fragment_contexts.erase(it);
-    }
-}
-
-void FragmentContextManager::cancel(const Status& status) {
-    std::lock_guard<std::mutex> lock(_lock);
-    for (auto& _fragment_context : _fragment_contexts) {
-        _fragment_context.second->cancel(status);
-    }
-}
 void FragmentContext::prepare_pass_through_chunk_buffer() {
     _pass_through_chunk_buffer_guard =
             std::make_unique<PassThroughChunkBufferGuard>(runtime_services(_runtime_state.get()).stream_mgr, _query_id);

@@ -14,26 +14,34 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
-#include <unordered_map>
+#include <queue>
+#include <string>
+#include <vector>
 
 #include "base/concurrency/limit_setter.h"
 #include "base/utility/factory_method.h"
+#include "common/statusor.h"
 #include "common/thread/threadpool.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
-#include "exec/pipeline/audit_statistics_reporter.h"
-#include "exec/pipeline/exec_state_reporter.h"
-#include "exec/pipeline/pipeline_driver.h"
-#include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state_fwd.h"
+
+namespace starrocks {
+class ObjectPool;
+class RuntimeProfile;
+} // namespace starrocks
 
 namespace starrocks::pipeline {
 
+class AuditStatisticsReporter;
+class DriverQueue;
+enum DriverState : uint32_t;
 struct DriverExecutorMetrics;
+class PipelineDriverPoller;
 class PipelineExecutorMetrics;
 
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
@@ -41,7 +49,7 @@ public:
     GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group,
                          const CpuUtil::CpuIds& cpuids, PipelineExecutorMetrics* metrics,
                          const workgroup::WorkGroupSchedulePolicy& schedule_policy);
-    ~GlobalDriverExecutor() override = default;
+    ~GlobalDriverExecutor() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
@@ -77,7 +85,7 @@ private:
     std::unique_ptr<DriverQueue> _driver_queue;
     // _thread_pool must be placed after _driver_queue, because worker threads in _thread_pool use _driver_queue.
     std::unique_ptr<ThreadPool> _thread_pool;
-    PipelineDriverPollerPtr _blocked_driver_poller;
+    std::unique_ptr<PipelineDriverPoller> _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
     std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
 

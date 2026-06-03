@@ -23,6 +23,7 @@
 #include "common/thread/thread.h"
 #include "common/util/thrift_client_cache.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/query_context.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"

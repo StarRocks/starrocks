@@ -29,6 +29,7 @@
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/runtime_filter_hub.h"
