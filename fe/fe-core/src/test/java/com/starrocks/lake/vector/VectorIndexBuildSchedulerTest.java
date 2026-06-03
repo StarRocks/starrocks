@@ -1018,11 +1018,11 @@ public class VectorIndexBuildSchedulerTest {
 
         scheduler.removeTablets(List.of(tabletId));
 
-        Assertions.assertFalse(scheduler.getPendingTabletsForTest().containsKey(tabletId),
+        Assertions.assertFalse(getPendingTablets().containsKey(tabletId),
                 "pendingTablets must no longer contain removed tabletId");
-        Assertions.assertFalse(scheduler.getPreferredNodesForTest().containsKey(tabletId),
+        Assertions.assertFalse(getMap("preferredNodes").containsKey(tabletId),
                 "preferredNodes must be cleared for removed tabletId");
-        Assertions.assertFalse(scheduler.getCooldownUntilForTest().containsKey(tabletId),
+        Assertions.assertFalse(getMap("cooldownUntil").containsKey(tabletId),
                 "cooldownUntil must be cleared for removed tabletId");
     }
 
@@ -1051,9 +1051,9 @@ public class VectorIndexBuildSchedulerTest {
 
         scheduler.removeTablets(List.of(2001L));
 
-        Assertions.assertFalse(scheduler.getPendingTabletsForTest().containsKey(2001L),
+        Assertions.assertFalse(getPendingTablets().containsKey(2001L),
                 "2001 must be removed");
-        Assertions.assertTrue(scheduler.getPendingTabletsForTest().containsKey(2002L),
+        Assertions.assertTrue(getPendingTablets().containsKey(2002L),
                 "2002 must remain");
     }
 }

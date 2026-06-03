@@ -50,6 +50,10 @@ public class LakeTableAddVectorIndexTest {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "db_lake_add_vector_index_test";
 
+    private static final String VECTOR_INDEX_PROPS =
+            "'index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
+            "'is_vector_normed'='false','M'='16','efconstruction'='40'";
+
     @BeforeAll
     public static void setUp() throws Exception {
         Config.enable_experimental_vector = true;
@@ -71,6 +75,8 @@ public class LakeTableAddVectorIndexTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
 
+    // ========== Static helpers ==========
+
     private static LakeTable createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -86,6 +92,56 @@ public class LakeTableAddVectorIndexTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
+    /** Create a standard vector table with the given name. */
+    private static LakeTable createVectorTable(String name) throws Exception {
+        return createTable(
+                "CREATE TABLE " + name + " (" +
+                        "  id BIGINT NOT NULL," +
+                        "  v  ARRAY<FLOAT> NOT NULL" +
+                        ") DUPLICATE KEY(id)" +
+                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
+                        " PROPERTIES('replication_num'='1')");
+    }
+
+    /** Issue a synchronous vector-index ALTER TABLE on the given table. */
+    private static void addVectorIndex(String tableName) throws Exception {
+        alterTable(
+                "ALTER TABLE " + tableName + " ADD INDEX idx_v (v) USING VECTOR (" +
+                        VECTOR_INDEX_PROPS + ")");
+    }
+
+    /**
+     * Retrieve the single pending {@link LakeTableSchemaChangeJob} for {@code table},
+     * asserting exactly one job exists and that it is a {@code LakeTableSchemaChangeJob}.
+     */
+    private static LakeTableSchemaChangeJob getSinglePendingJob(OlapTable table) {
+        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertEquals(1, jobs.size(), "Expected exactly one pending schema-change job");
+        AlterJobV2 job = jobs.get(0);
+        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job,
+                "Expected a LakeTableSchemaChangeJob for cloud-native table");
+        return (LakeTableSchemaChangeJob) job;
+    }
+
+    /**
+     * Return the {@code physicalPartitionIndexMap} from {@code job}, asserting it is non-null.
+     */
+    @SuppressWarnings("unchecked")
+    private static Table<Long, Long, MaterializedIndex> getPartitionIndexMap(LakeTableSchemaChangeJob job) {
+        Table<Long, Long, MaterializedIndex> map =
+                Deencapsulation.getField(job, "physicalPartitionIndexMap");
+        Assertions.assertNotNull(map, "physicalPartitionIndexMap must not be null");
+        return map;
+    }
+
+    /** Serialize {@code job} to JSON and back with {@link GsonUtils#GSON}. */
+    private static LakeTableSchemaChangeJob gsonRoundTrip(LakeTableSchemaChangeJob job) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job), LakeTableSchemaChangeJob.class);
+    }
+
+    // ========== Tests ==========
+
     /**
      * R3 fix: ALTER TABLE ... ADD INDEX ... USING VECTOR on a cloud-native (lake) table must
      * assign a valid index_id (>= 0). Before the fix, processAddIndex created the Index with
@@ -96,31 +152,16 @@ public class LakeTableAddVectorIndexTest {
      */
     @Test
     public void testAddVectorIndexAssignsIndexId() throws Exception {
-        OlapTable table = createTable(
-                "CREATE TABLE t_vec (" +
-                        "  id BIGINT NOT NULL," +
-                        "  v  ARRAY<FLOAT> NOT NULL" +
-                        ") DUPLICATE KEY(id)" +
-                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
-                        " PROPERTIES('replication_num'='1')");
+        OlapTable table = createVectorTable("t_vec");
 
         // Should not throw; before the fix this raised IllegalArgumentException from
         // Preconditions.checkArgument(newIndex.isValidIndex(), ...) because the cloud-native
         // VECTOR branch constructed Index with indexId=-1.
-        alterTable(
-                "ALTER TABLE t_vec ADD INDEX idx_v (v) USING VECTOR" +
-                        " ('index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
-                        "'is_vector_normed'='false','M'='16','efconstruction'='40')");
+        addVectorIndex("t_vec");
 
         // The ALTER creates a LakeTableSchemaChangeJob (async). Retrieve it and check that
         // the indexes it carries include the VECTOR index with a valid (>= 0) index_id.
-        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertEquals(1, jobs.size(), "Expected exactly one pending schema change job");
-
-        AlterJobV2 job = jobs.get(0);
-        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job,
-                "Expected a LakeTableSchemaChangeJob for cloud-native table");
+        LakeTableSchemaChangeJob job = getSinglePendingJob(table);
 
         // Access the private 'indexes' field stored in the job (set by withAlterIndexInfo).
         @SuppressWarnings("unchecked")
@@ -171,15 +212,10 @@ public class LakeTableAddVectorIndexTest {
         job.addPartitionShadowIndex(100L, 10L, shadowIndex);
 
         // GSON round-trip
-        String json = GsonUtils.GSON.toJson(job);
-        LakeTableSchemaChangeJob recovered =
-                GsonUtils.GSON.fromJson(json, LakeTableSchemaChangeJob.class);
+        LakeTableSchemaChangeJob recovered = gsonRoundTrip(job);
 
         // Extract the shadow tablet from the recovered job's partitionIndexMap.
-        @SuppressWarnings("unchecked")
-        Table<Long, Long, MaterializedIndex> partitionIndexMap =
-                Deencapsulation.getField(recovered, "physicalPartitionIndexMap");
-        Assertions.assertNotNull(partitionIndexMap, "partitionIndexMap must not be null after deserialisation");
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = getPartitionIndexMap(recovered);
 
         MaterializedIndex recoveredIndex = partitionIndexMap.get(100L, 10L);
         Assertions.assertNotNull(recoveredIndex, "shadow MaterializedIndex must survive round-trip");
@@ -205,39 +241,24 @@ public class LakeTableAddVectorIndexTest {
     @Test
     public void testShadowTabletVibvSetToVsnap() throws Exception {
         // Create a lake table with an ARRAY<FLOAT> column for the vector index.
-        LakeTable table = createTable(
-                "CREATE TABLE t_vibv (" +
-                        "  id BIGINT NOT NULL," +
-                        "  v  ARRAY<FLOAT> NOT NULL" +
-                        ") DUPLICATE KEY(id)" +
-                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
-                        " PROPERTIES('replication_num'='1')");
+        LakeTable table = createVectorTable("t_vibv");
 
         // Capture V_snap: the visible version of the (first) physical partition before ALTER.
         PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
         long vSnap = pp.getVisibleVersion();
 
         // Issue the vector-index ALTER.
-        alterTable(
-                "ALTER TABLE t_vibv ADD INDEX idx_v (v) USING VECTOR" +
-                        " ('index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
-                        "'is_vector_normed'='false','M'='16','efconstruction'='40')");
+        addVectorIndex("t_vibv");
 
         // Retrieve the pending LakeTableSchemaChangeJob.
-        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertEquals(1, jobs.size(), "expected exactly one pending schema-change job");
-        AlterJobV2 job = jobs.get(0);
-        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job);
+        LakeTableSchemaChangeJob job = getSinglePendingJob(table);
 
         // Access the physicalPartitionIndexMap (private field).
-        @SuppressWarnings("unchecked")
-        Table<Long, Long, MaterializedIndex> partitionIndexMap =
-                Deencapsulation.getField(job, "physicalPartitionIndexMap");
-        Assertions.assertNotNull(partitionIndexMap);
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = getPartitionIndexMap(job);
 
         // Find any shadow LakeTablet and assert vibv == vSnap.
-        boolean foundTablet = false;
+        Assertions.assertFalse(partitionIndexMap.cellSet().isEmpty(),
+                "physicalPartitionIndexMap must contain at least one shadow index");
         for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
             for (Tablet shadowTablet : cell.getValue().getTablets()) {
                 Assertions.assertInstanceOf(LakeTablet.class, shadowTablet);
@@ -245,21 +266,15 @@ public class LakeTableAddVectorIndexTest {
                 Assertions.assertEquals(vSnap, vibv,
                         "shadow tablet vibv must equal V_snap=" + vSnap +
                                 " (partition visible version at job creation), got " + vibv);
-                foundTablet = true;
             }
         }
-        Assertions.assertTrue(foundTablet, "expected at least one shadow tablet in the job");
 
         // Also verify GSON round-trip preserves the vibv value.
-        String json = GsonUtils.GSON.toJson(job);
-        LakeTableSchemaChangeJob recovered =
-                GsonUtils.GSON.fromJson(json, LakeTableSchemaChangeJob.class);
+        LakeTableSchemaChangeJob recovered = gsonRoundTrip(job);
+        Table<Long, Long, MaterializedIndex> recoveredMap = getPartitionIndexMap(recovered);
 
-        @SuppressWarnings("unchecked")
-        Table<Long, Long, MaterializedIndex> recoveredMap =
-                Deencapsulation.getField(recovered, "physicalPartitionIndexMap");
-        Assertions.assertNotNull(recoveredMap);
-
+        Assertions.assertFalse(recoveredMap.cellSet().isEmpty(),
+                "recovered physicalPartitionIndexMap must not be empty");
         for (Table.Cell<Long, Long, MaterializedIndex> cell : recoveredMap.cellSet()) {
             for (Tablet shadowTablet : cell.getValue().getTablets()) {
                 long vibv = ((LakeTablet) shadowTablet).getVectorIndexBuiltVersion();
@@ -284,30 +299,13 @@ public class LakeTableAddVectorIndexTest {
      */
     @Test
     public void testCancelJobEvictsShadowTabletsFromScheduler() throws Exception {
-        LakeTable table = createTable(
-                "CREATE TABLE t_cancel_vi (" +
-                        "  id BIGINT NOT NULL," +
-                        "  v  ARRAY<FLOAT> NOT NULL" +
-                        ") DUPLICATE KEY(id)" +
-                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
-                        " PROPERTIES('replication_num'='1')");
+        LakeTable table = createVectorTable("t_cancel_vi");
+        addVectorIndex("t_cancel_vi");
 
-        alterTable(
-                "ALTER TABLE t_cancel_vi ADD INDEX idx_v (v) USING VECTOR" +
-                        " ('index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
-                        "'is_vector_normed'='false','M'='16','efconstruction'='40')");
-
-        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertEquals(1, jobs.size(), "Expected exactly one pending schema change job");
-        AlterJobV2 job = jobs.get(0);
-        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job);
+        LakeTableSchemaChangeJob job = getSinglePendingJob(table);
 
         // Collect shadow tablet ids from physicalPartitionIndexMap.
-        @SuppressWarnings("unchecked")
-        Table<Long, Long, MaterializedIndex> partitionIndexMap =
-                Deencapsulation.getField(job, "physicalPartitionIndexMap");
-        Assertions.assertNotNull(partitionIndexMap);
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = getPartitionIndexMap(job);
 
         List<Long> shadowTabletIds = new ArrayList<>();
         for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
@@ -382,40 +380,22 @@ public class LakeTableAddVectorIndexTest {
     @Test
     public void testReplayRecoversShadowTabletVibvIntoLiveCatalog() throws Exception {
         // ---- Step 1: create table + issue vector-index ALTER ----
-        LakeTable table = createTable(
-                "CREATE TABLE t_replay_vibv (" +
-                        "  id BIGINT NOT NULL," +
-                        "  v  ARRAY<FLOAT> NOT NULL" +
-                        ") DUPLICATE KEY(id)" +
-                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
-                        " PROPERTIES('replication_num'='1')");
+        LakeTable table = createVectorTable("t_replay_vibv");
 
         // Capture V_snap before ALTER (visible version of the first physical partition).
         PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
         long vSnap = pp.getVisibleVersion();
 
-        alterTable(
-                "ALTER TABLE t_replay_vibv ADD INDEX idx_v (v) USING VECTOR" +
-                        " ('index_type'='HNSW','metric_type'='l2_distance','dim'='4'," +
-                        "'is_vector_normed'='false','M'='16','efconstruction'='40')");
+        addVectorIndex("t_replay_vibv");
 
         // Retrieve the in-memory PENDING job and sanity-check it has shadow tablets.
-        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertEquals(1, jobs.size(), "expected exactly one pending schema-change job");
-        AlterJobV2 pendingJob = jobs.get(0);
-        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, pendingJob);
+        LakeTableSchemaChangeJob pendingJob = getSinglePendingJob(table);
 
         // ---- Step 2: GSON round-trip to simulate edit-log persist + reload ----
-        String json = GsonUtils.GSON.toJson(pendingJob);
-        LakeTableSchemaChangeJob deserialisedJob =
-                GsonUtils.GSON.fromJson(json, LakeTableSchemaChangeJob.class);
+        LakeTableSchemaChangeJob deserialisedJob = gsonRoundTrip(pendingJob);
 
         // Confirm the deserialisedJob carries shadow tablets (inherited from GSON round-trip).
-        @SuppressWarnings("unchecked")
-        Table<Long, Long, MaterializedIndex> desMap =
-                Deencapsulation.getField(deserialisedJob, "physicalPartitionIndexMap");
-        Assertions.assertNotNull(desMap, "deserialisedJob must have physicalPartitionIndexMap");
+        Table<Long, Long, MaterializedIndex> desMap = getPartitionIndexMap(deserialisedJob);
         Assertions.assertFalse(desMap.isEmpty(),
                 "deserialisedJob physicalPartitionIndexMap must not be empty");
 
@@ -441,19 +421,18 @@ public class LakeTableAddVectorIndexTest {
         Assertions.assertFalse(shadowIndexes.isEmpty(),
                 "Physical partition must have at least one shadow index after replay");
 
-        boolean foundTablet = false;
         for (MaterializedIndex shadowIdx : shadowIndexes) {
-            for (Tablet tablet : shadowIdx.getTablets()) {
+            List<Tablet> tablets = shadowIdx.getTablets();
+            Assertions.assertFalse(tablets.isEmpty(),
+                    "Shadow index must contain at least one tablet after replay");
+            for (Tablet tablet : tablets) {
                 Assertions.assertInstanceOf(LakeTablet.class, tablet,
                         "shadow tablet must be a LakeTablet after replay");
                 long vibv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
                 Assertions.assertEquals(vSnap, vibv,
                         "shadow tablet vibv must equal V_snap=" + vSnap +
                                 " after replay (FE-failover recovery), got " + vibv);
-                foundTablet = true;
             }
         }
-        Assertions.assertTrue(foundTablet,
-                "expected at least one shadow tablet in the replay-recovered shadow index");
     }
 }

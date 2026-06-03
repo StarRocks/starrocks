@@ -1310,9 +1310,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     shadowTabletIds.add(t.getId());
                 }
             }
-            if (!shadowTabletIds.isEmpty()) {
-                viScheduler.removeTablets(shadowTabletIds);
-            }
+            viScheduler.removeTablets(shadowTabletIds);
         }
 
         this.errMsg = errMsg;
