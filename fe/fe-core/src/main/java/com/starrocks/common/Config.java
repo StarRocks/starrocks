@@ -3579,6 +3579,20 @@ public class Config extends ConfigBase {
     public static String profile_info_format = "default";
 
     /**
+     * When enabled, load profiles (stream load, routine load, broker load, merge commit, etc.) are
+     * additionally written to the profile log (fe.profile.log) when pushed to `ProfileManager`, as a
+     * single-line JSON record in the same format as the query profile log. This makes load profiles
+     * recoverable from the log even after they are evicted from `ProfileManager`
+     * due to `profile_info_reserved_num`. The profile log is used rather than fe.log because its JSON
+     * layout caps strings at `sys_log_json_profile_max_string_length` instead of the much smaller
+     * `sys_log_json_max_string_length`, so large profiles are not truncated. Only profiles with
+     * QUERY_TYPE = "Load" are printed; query profiles are not affected.
+     * Default value: false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_print_load_profile_to_log = false;
+
+    /**
      * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
      * the amount of time taken by a load exceeds the default_big_load_profile_threshold_second,
      * a profile is generated for that load.
