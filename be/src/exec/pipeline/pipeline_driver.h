@@ -452,13 +452,13 @@ public:
         }
 
         // OUTPUT_FULL
-        if (!sink_operator()->need_input()) {
+        if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
             set_driver_state(DriverState::OUTPUT_FULL);
             return false;
         }
 
         // INPUT_EMPTY
-        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+        if (!source_operator()->has_output() && !source_operator()->is_finished()) {
             set_driver_state(DriverState::INPUT_EMPTY);
             return false;
         }
@@ -492,13 +492,13 @@ public:
         }
 
         // OUTPUT_FULL
-        if (!sink_operator()->need_input()) {
+        if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
             set_driver_state(DriverState::OUTPUT_FULL);
             return false;
         }
 
         // INPUT_EMPTY
-        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+        if (!source_operator()->has_output() && !source_operator()->is_finished()) {
             set_driver_state(DriverState::INPUT_EMPTY);
             return false;
         }
