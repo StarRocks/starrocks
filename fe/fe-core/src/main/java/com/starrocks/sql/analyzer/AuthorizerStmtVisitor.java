@@ -2375,15 +2375,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 resolvedDbName = context.getDatabase();
             }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(resolvedDbName);
-            final String dbNameForRefs = resolvedDbName;
             tableRefs.forEach(tableRef -> {
-<<<<<<< HEAD
                 TableName tableName = tableRef.getName();
-=======
-                String tblName = tableRef.getTableName();
-                TableName tableName = new TableName(context.getCurrentCatalog(), dbNameForRefs, tblName);
-
->>>>>>> 01a157dd08 ([BugFix] Fix BACKUP ON (ALL FUNCTION) / (ALL EXTERNAL CATALOGS) failures (#73790))
                 try {
                     Authorizer.checkTableAction(context, tableName,
                             PrivilegeType.EXPORT);

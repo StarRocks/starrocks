@@ -42,6 +42,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -2497,7 +2498,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.backup_all_fn_udf");
         Function function = new ScalarFunction(fn,
-                Arrays.asList(StringType.STRING), StringType.STRING, false);
+                Arrays.asList(Type.STRING), Type.STRING, false);
         try {
             db1.addFunction(function);
         } catch (Throwable e) {
