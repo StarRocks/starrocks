@@ -18,6 +18,7 @@ import com.starrocks.common.StarRocksException;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 /**
  * Runtime collaborators the coordinator needs to actually run pre-split: a
@@ -50,11 +51,15 @@ public interface PreSplitPipeline {
 
     /**
      * Post-submit phase. Blocks until the submitted job reaches FINISHED.
+     * Polls {@code shouldAbort} between job-state polls — once it returns
+     * {@code true} the implementation should abandon the wait so the caller's
+     * pool slot is released (e.g. when the calling load has gone terminal
+     * while waiting). Pass {@code () -> false} to disable the abort check.
      *
      * @throws PreSplitPostSubmitTimeoutException when the job does not finish within {@code timeout};
      *         the load executor aborts the transaction.
      */
-    void awaitFinished(PreparedReshardJob preparedJob, Duration timeout)
+    void awaitFinished(PreparedReshardJob preparedJob, Duration timeout, BooleanSupplier shouldAbort)
             throws PreSplitPostSubmitTimeoutException, StarRocksException;
 
     /**

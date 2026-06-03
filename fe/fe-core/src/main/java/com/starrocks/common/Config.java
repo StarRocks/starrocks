@@ -4418,18 +4418,28 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
             + "On expiry the coordinator skips pre-split and the load proceeds against the "
-            + "original single tablet.")
-    public static long tablet_pre_split_pre_submit_timeout_seconds = 30L;
+            + "original single tablet. Default 300s: the data-tier sampler can take tens of "
+            + "seconds on large datasets / slow object storage (a ~40GB many-file Parquet "
+            + "load sampled in ~78s in testing), and this budget mainly bites large loads — "
+            + "exactly the ones pre-split benefits; small loads sample in well under a second "
+            + "regardless. The load stays PENDING for at most this long during sampling, so "
+            + "keep it below the load's own timeout.")
+    public static long tablet_pre_split_pre_submit_timeout_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Maximum time the coordinator will wait for an admitted "
-            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Semantics differ by "
-            + "load path: INSERT-from-FILES synchronously waits and on expiry proceeds without "
-            + "abort — the INSERT then plans against the currently visible tablet layout (still "
-            + "the original layout if the daemon has not yet transitioned, or partially / fully "
-            + "post-split if the daemon raced past the wait), and the hard-cap counter records "
-            + "the timeout; the strict runPreSplit wrapper used by tests aborts the calling load "
-            + "via PreSplitPostSubmitTimeoutException; Broker Load is fire-and-forget and does "
-            + "not wait at all.")
+            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Both INSERT-from-FILES "
+            + "and Broker Load synchronously wait and on expiry proceed without abort — the load "
+            + "then plans against the currently visible tablet layout (still the original layout "
+            + "if the daemon has not yet transitioned, or partially / fully post-split if the "
+            + "daemon raced past the wait), and the hard-cap counter records the timeout. The "
+            + "strict runPreSplit wrapper used by tests aborts the calling load via "
+            + "PreSplitPostSubmitTimeoutException. For Broker Load the wait runs after the broker "
+            + "pending task resolves file statuses but before beginTxn opens T_load — the wait "
+            + "occupies a pending_load_task_scheduler thread for at most this many seconds per "
+            + "table, so size max_broker_load_job_concurrency accordingly when many concurrent "
+            + "Broker Loads target a pre-splittable layout. Operator note: the Broker Load remains "
+            + "PENDING in SHOW LOAD during the wait and is still subject to its own timeoutSecond — "
+            + "set this well below the smallest Broker Load timeout in normal use.")
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "
