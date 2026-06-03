@@ -74,6 +74,8 @@ public:
         _function->serialize_to_column(ctx, state, to);
     }
 
+    bool support_nullable_immediate_input() const override { return _function->support_nullable_immediate_input(); }
+
     std::string get_name() const override { return "agg_state_union"; }
 
 private:
