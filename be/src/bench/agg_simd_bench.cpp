@@ -66,19 +66,37 @@ static void fill_byte_mask(uint8_t* data, size_t n, int zero_ratio_percent, uint
 }
 
 // =====================================================================
-//  count.h :: update_batch over nullable input
+//  count.h :: counting non-null rows over a nullable column
 // =====================================================================
 //
-// Pre-PR:
-//   for (size_t i = 0; i < chunk_size; ++i) count += !null_data[i];
-// Post-PR:
-//   count += SIMD::count_zero(null_data, chunk_size);
+// count.h sums non-null rows with `this->data(state).count += !null_data[i]`,
+// where the accumulator is an int64_t reached via a reinterpret_cast from an
+// AggDataPtr (uint8_t*) and `null_data` is also a uint8_t*. Three loop shapes
+// are compared against SIMD::count_zero to see what the compiler actually emits:
 //
-// The sweep covers all-non-null (0% nulls) and all-null (100% nulls) as the
-// hottest TPC-H-like workloads, plus midpoints to check the non-saturated
-// regime.
+//   * _Scalar            local int64_t accumulator -- no aliasing, register-promoted
+//   * _ScalarMem         accumulator in memory via a plain pointer; null_data is a
+//                        char type so its loads may alias the accumulator store,
+//                        which blocks vectorization of the reduction
+//   * _ScalarMemRestrict accumulator reached through a __restrict pointer, exactly
+//                        as count.h's data(state) does -- tests whether __restrict
+//                        survives the reinterpret_cast and re-enables vectorization
+//
+// noinline keeps each variant a standalone symbol for asm inspection. The sweep
+// covers all-non-null (0%) and all-null (100%) plus midpoints.
 
-static size_t count_nullable_scalar(const uint8_t* null_data, size_t n) {
+struct CountState {
+    int64_t count;
+};
+
+static inline CountState& count_state(uint8_t* __restrict place) {
+    return *reinterpret_cast<CountState*>(place);
+}
+static inline CountState& count_state_aliased(uint8_t* place) {
+    return *reinterpret_cast<CountState*>(place);
+}
+
+__attribute__((noinline)) static size_t count_nullable_scalar(const uint8_t* null_data, size_t n) {
     size_t count = 0;
     for (size_t i = 0; i < n; ++i) {
         count += !null_data[i];
@@ -86,7 +104,20 @@ static size_t count_nullable_scalar(const uint8_t* null_data, size_t n) {
     return count;
 }
 
-static size_t count_nullable_simd(const uint8_t* null_data, size_t n) {
+__attribute__((noinline)) static void count_nullable_scalar_mem(const uint8_t* null_data, size_t n, uint8_t* state) {
+    for (size_t i = 0; i < n; ++i) {
+        count_state_aliased(state).count += !null_data[i];
+    }
+}
+
+__attribute__((noinline)) static void count_nullable_scalar_mem_restrict(const uint8_t* null_data, size_t n,
+                                                                         uint8_t* __restrict state) {
+    for (size_t i = 0; i < n; ++i) {
+        count_state(state).count += !null_data[i];
+    }
+}
+
+__attribute__((noinline)) static size_t count_nullable_simd(const uint8_t* null_data, size_t n) {
     return SIMD::count_zero(null_data, n);
 }
 
@@ -96,6 +127,28 @@ static void BM_Count_Nullable_Scalar(benchmark::State& state) {
     for (auto _ : state) {
         size_t c = count_nullable_scalar(null_data.data(), null_data.size());
         benchmark::DoNotOptimize(c);
+    }
+}
+
+static void BM_Count_Nullable_ScalarMem(benchmark::State& state) {
+    std::vector<uint8_t> null_data(kChunkSize);
+    fill_byte_mask(null_data.data(), null_data.size(), static_cast<int>(state.range(0)), 0xC0FFEEull);
+    alignas(16) uint8_t st[sizeof(CountState)];
+    for (auto _ : state) {
+        count_state_aliased(st).count = 0;
+        count_nullable_scalar_mem(null_data.data(), null_data.size(), st);
+        benchmark::DoNotOptimize(count_state_aliased(st).count);
+    }
+}
+
+static void BM_Count_Nullable_ScalarMemRestrict(benchmark::State& state) {
+    std::vector<uint8_t> null_data(kChunkSize);
+    fill_byte_mask(null_data.data(), null_data.size(), static_cast<int>(state.range(0)), 0xC0FFEEull);
+    alignas(16) uint8_t st[sizeof(CountState)];
+    for (auto _ : state) {
+        count_state(st).count = 0;
+        count_nullable_scalar_mem_restrict(null_data.data(), null_data.size(), st);
+        benchmark::DoNotOptimize(count_state(st).count);
     }
 }
 
@@ -109,6 +162,8 @@ static void BM_Count_Nullable_SIMD(benchmark::State& state) {
 }
 
 BENCHMARK(BM_Count_Nullable_Scalar)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
+BENCHMARK(BM_Count_Nullable_ScalarMem)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
+BENCHMARK(BM_Count_Nullable_ScalarMemRestrict)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
 BENCHMARK(BM_Count_Nullable_SIMD)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
 
 // =====================================================================
