@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL ALTER TABLE は実行中の ALTER TABLE 操作（列の変更、テーブルスキーマの最適化、ロールアップインデックスの作成・削除）をキャンセルします。"
 ---
 
 # CANCEL ALTER TABLE
@@ -19,7 +20,7 @@ CANCEL ALTER TABLE は、実行中の ALTER TABLE 操作の実行をキャンセ
 ## 構文
 
 ```SQL
-CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name [ (rollup_job_id [, rollup_job_id]) ]
+CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name [ (rollup_job_id [, rollup_job_id]) ] [ FORCE ]
 ```
 
 ## パラメータ
@@ -33,6 +34,15 @@ CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name [ (r
 - `db_name`: オプション。テーブルが属するデータベースの名前。このパラメータが指定されていない場合、現在のデータベースがデフォルトで使用されます。
 - `table_name`: 必須。テーブル名。
 - `rollup_job_id`: オプション。ロールアップジョブの ID。ロールアップジョブの ID は[SHOW ALTER MATERIALIZED VIEW](../materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md) を使用して取得できます。
+- `FORCE`: オプション。**運用担当者専用の緊急手段**で、共有データ (lake) テーブル上で `publish_version` が `FINISHED_REWRITING` 状態のまま恒久的にスタックした `COLUMN` alter ジョブ (例: `txnlog` の欠落、segment / SST ファイルの消失、永続ストレージ障害など) を強制的にキャンセルします。通常の `CANCEL ALTER TABLE` は `FINISHED_REWRITING` のジョブのキャンセルを拒否しますが、`FORCE` はそのガードをバイパスします。内部的には no-op publish (alter の変更を適用せずにパーティションの可視バージョンだけを進める) を実行してからジョブをキャンセルし、そのテーブルへの後続のロードのブロックを解除します。
+
+  :::warning
+
+  - `FORCE` は FE 設定 `enable_admin_skip_committed_txn` (デフォルト `false`) によって制御されます。リカバリ中のみ有効化し、終了後は直ちに無効化してください。この共有設定とトランザクションレベルの同種の緊急手段については [ADMIN SKIP COMMITTED TRANSACTION](../cluster-management/tablet_replica/ADMIN_SKIP_COMMITTED_TRANSACTION.md) を参照してください。
+  - `FORCE` は共有データ (lake) テーブル上の `COLUMN` alter ジョブ (スキーマ変更および `enable_persistent_index` / `file_bundling` などのメタデータ alter) **のみ** をサポートします。`OPTIMIZE`、`ROLLUP`、マテリアライズドビューの alter には対応しておらず、これらに `FORCE` を使用すると拒否されます。
+  - 強制キャンセルされた alter は破棄され、変更は反映されません。
+
+  :::
 
 ## Examples
 
@@ -58,4 +68,16 @@ CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name [ (r
 
    ```SQL
    CANCEL ALTER TABLE ROLLUP FROM example_table (12345, 12346);
+   ```
+
+5. 共有データ (lake) テーブル上で publish がスタックした `COLUMN` alter を強制的にキャンセルします (運用担当者専用、`enable_admin_skip_committed_txn=true` が必要)。
+
+   ```SQL
+   -- リカバリ中のみ緊急スイッチを有効化します。
+   ADMIN SET FRONTEND CONFIG ("enable_admin_skip_committed_txn" = "true");
+
+   CANCEL ALTER TABLE COLUMN FROM example_db.example_table FORCE;
+
+   -- 終了後は直ちに無効化します。
+   ADMIN SET FRONTEND CONFIG ("enable_admin_skip_committed_txn" = "false");
    ```
