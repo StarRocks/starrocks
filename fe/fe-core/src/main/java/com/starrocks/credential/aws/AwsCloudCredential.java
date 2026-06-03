@@ -157,8 +157,8 @@ public class AwsCloudCredential implements CloudCredential {
 
     public AwsCredentialsProvider generateAWSCredentialsProvider() {
         AwsCredentialsProvider awsCredentialsProvider =
-                getBaseAWSCredentialsProvider(useAWSSDKDefaultBehavior, useInstanceProfile, accessKey, secretKey,
-                        sessionToken);
+                getBaseAWSCredentialsProvider(useAWSSDKDefaultBehavior, useInstanceProfile, useWebIdentityProfile,
+                        accessKey, secretKey, sessionToken);
         if (!iamRoleArn.isEmpty()) {
             awsCredentialsProvider =
                     getAssumeRoleCredentialsProvider(awsCredentialsProvider, iamRoleArn, externalId, stsRegion, stsEndpoint);
@@ -194,12 +194,17 @@ public class AwsCloudCredential implements CloudCredential {
 
     private AwsCredentialsProvider getBaseAWSCredentialsProvider(boolean useAWSSDKDefaultBehavior,
                                                                  boolean useInstanceProfile,
+                                                                 boolean useWebIdentityProfile,
                                                                  String accessKey, String secretKey,
                                                                  String sessionToken) {
         if (useAWSSDKDefaultBehavior) {
             return DefaultCredentialsProvider.builder().build();
         } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
+        } else if (useWebIdentityProfile) {
+            // Reads AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN from env vars via the default chain,
+            // mirroring BE's STSAssumeRoleWebIdentityCredentialsProvider behaviour.
+            return DefaultCredentialsProvider.builder().build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
                 return StaticCredentialsProvider.create(
@@ -247,6 +252,12 @@ public class AwsCloudCredential implements CloudCredential {
             } else {
                 configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, IAM_CREDENTIAL_PROVIDER);
             }
+        } else if (useWebIdentityProfile) {
+            if (!iamRoleArn.isEmpty()) {
+                applyAssumeRole(DEFAULT_CREDENTIAL_PROVIDER, configuration);
+            } else {
+                configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, DEFAULT_CREDENTIAL_PROVIDER);
+            }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             configuration.set(Constants.ACCESS_KEY, accessKey);
             configuration.set(Constants.SECRET_KEY, secretKey);
@@ -281,6 +292,10 @@ public class AwsCloudCredential implements CloudCredential {
             return true;
         }
 
+        if (useWebIdentityProfile) {
+            return true;
+        }
+
         if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             return true;
         }
@@ -293,6 +308,8 @@ public class AwsCloudCredential implements CloudCredential {
                 String.valueOf(useAWSSDKDefaultBehavior));
         properties.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
                 String.valueOf(useInstanceProfile));
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE,
+                String.valueOf(useWebIdentityProfile));
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
@@ -309,6 +326,7 @@ public class AwsCloudCredential implements CloudCredential {
         return "AWSCloudCredential{" +
                 "useAWSSDKDefaultBehavior=" + useAWSSDKDefaultBehavior +
                 ", useInstanceProfile=" + useInstanceProfile +
+                ", useWebIdentityProfile=" + useWebIdentityProfile +
                 ", accessKey='" + accessKey + '\'' +
                 ", secretKey='" + secretKey + '\'' +
                 ", sessionToken='" + sessionToken + '\'' +
@@ -341,6 +359,16 @@ public class AwsCloudCredential implements CloudCredential {
                 awsCredentialInfo.setAssumeRoleCredential(assumeIamRowCredentialInfo.build());
             } else {
                 awsCredentialInfo.setProfileCredential(AwsInstanceProfileCredentialInfo.newBuilder().build());
+            }
+        } else if (useWebIdentityProfile) {
+            if (!iamRoleArn.isEmpty()) {
+                AwsAssumeIamRoleCredentialInfo.Builder assumeIamRoleCredentialInfo =
+                        AwsAssumeIamRoleCredentialInfo.newBuilder();
+                assumeIamRoleCredentialInfo.setIamRoleArn(iamRoleArn);
+                assumeIamRoleCredentialInfo.setExternalId(externalId);
+                awsCredentialInfo.setAssumeRoleCredential(assumeIamRoleCredentialInfo.build());
+            } else {
+                awsCredentialInfo.setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build());
             }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             // TODO: Support assumeRole with AK/SK
