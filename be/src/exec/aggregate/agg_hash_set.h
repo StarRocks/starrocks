@@ -20,7 +20,7 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/config_exec_flow_fwd.h"
+#include "common/config.h"
 #include "common/system/cpu_info.h"
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
