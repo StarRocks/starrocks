@@ -970,6 +970,48 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testManualClusterSnapshotLimit() {
+        ClusterSnapshotMgrEPack localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        localClusterSnapshotMgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);
+
+        int originalLimit = Config.max_manual_cluster_snapshot_jobs;
+        try {
+            Config.max_manual_cluster_snapshot_jobs = 2;
+
+            // Fill the request queue up to the limit.
+            localClusterSnapshotMgr.createClusterSnapshot(
+                    new CreateClusterSnapshotStmt("snap1", false, "", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+            localClusterSnapshotMgr.createClusterSnapshot(
+                    new CreateClusterSnapshotStmt("snap2", false, "", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+            Assertions.assertEquals(2, localClusterSnapshotMgr.getManualClusterSnapshotRequestQueue().size());
+
+            // Reaching the limit rejects further creation.
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Cannot create manual cluster snapshot 'snap3': the number of existing manual snapshots (2) " +
+                            "has reached the limit (max_manual_cluster_snapshot_jobs=2). Please drop some snapshots first.",
+                    () -> localClusterSnapshotMgr.createClusterSnapshot(
+                            new CreateClusterSnapshotStmt("snap3", false, "", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME)));
+
+            // A job moved out of the queue still counts toward the limit.
+            localClusterSnapshotMgr.getNextCluterSnapshotJob();
+            Assertions.assertEquals(1, localClusterSnapshotMgr.getManualClusterSnapshotRequestQueue().size());
+            Assertions.assertEquals(1, localClusterSnapshotMgr.getManualClusterSnapshotJobs().size());
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "has reached the limit (max_manual_cluster_snapshot_jobs=2)",
+                    () -> localClusterSnapshotMgr.createClusterSnapshot(
+                            new CreateClusterSnapshotStmt("snap3", false, "", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME)));
+
+            // Raising the mutable limit at runtime allows creation again.
+            Config.max_manual_cluster_snapshot_jobs = 3;
+            localClusterSnapshotMgr.createClusterSnapshot(
+                    new CreateClusterSnapshotStmt("snap3", false, "", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+            Assertions.assertEquals(2, localClusterSnapshotMgr.getManualClusterSnapshotRequestQueue().size());
+        } finally {
+            Config.max_manual_cluster_snapshot_jobs = originalLimit;
+        }
+    }
+
+    @Test
     public void testRetainVersionsIncludesCommittedAfterVisible() {
         final ClusterSnapshotMgrEPack localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         localClusterSnapshotMgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);

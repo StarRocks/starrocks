@@ -1398,6 +1398,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum clock offset that is allowed between the leader FE and the follower or observer FEs in the StarRocks cluster.
 - Introduced in: -
 
+### `max_manual_cluster_snapshot_jobs`
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of manual cluster snapshots that can exist at the same time. Because each manual snapshot retains data and consumes metadata memory until it is dropped, `CREATE CLUSTER SNAPSHOT` is rejected once this limit is reached. Drop some existing snapshots before creating new ones, or increase this value.
+- Introduced in: v4.2, v4.1.2, v4.0.11
+
 ### `meta_delay_toleration_second`
 
 - Default: 300

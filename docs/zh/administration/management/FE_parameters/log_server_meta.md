@@ -1397,6 +1397,15 @@ import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Speci
 - 描述: StarRocks 集群中 Leader FE 与 Follower 或 Observer FE 之间允许的最大时钟偏移量。
 - 引入版本: -
 
+### `max_manual_cluster_snapshot_jobs`
+
+- 默认值: 50
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 系统中允许同时存在的手动集群快照的最大数量。由于每个手动快照在被删除之前都会保留数据并占用元数据内存，当达到该上限时，`CREATE CLUSTER SNAPSHOT` 将被拒绝。请先删除部分已有快照后再创建新快照，或调大该值。
+- 引入版本: v4.2, v4.1.2, v4.0.11
+
 ### `meta_delay_toleration_second`
 
 - 默认值: 300

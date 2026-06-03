@@ -16,6 +16,7 @@ package com.starrocks.lake.snapshot;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.ManualClusterSnapshotLog;
@@ -62,6 +63,16 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
             } else {
                 throw new SemanticException("Manual Cluster Snapshot Job has existed, snapshot name: %s", snapshotName);
             }
+        }
+
+        // Existing manual snapshots = pending requests not yet scheduled + jobs already created (in any state).
+        int existingManualSnapshotCount = manualClusterSnapshotRequestQueue.size() + manualClusterSnapshotJobs.size();
+        if (existingManualSnapshotCount >= Config.max_manual_cluster_snapshot_jobs) {
+            throw new SemanticException(
+                    "Cannot create manual cluster snapshot '%s': the number of existing manual snapshots (%d) " +
+                            "has reached the limit (max_manual_cluster_snapshot_jobs=%d). " +
+                            "Please drop some snapshots first.",
+                    snapshotName, existingManualSnapshotCount, Config.max_manual_cluster_snapshot_jobs);
         }
 
         ManualClusterSnapshotRequest request = new ManualClusterSnapshotRequest(snapshotName, storageVolumeName);

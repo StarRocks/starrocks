@@ -4323,6 +4323,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
 
+    @ConfField(mutable = true, comment = "Max number of manual cluster snapshots allowed to exist. " +
+            "CREATE CLUSTER SNAPSHOT is rejected once this is reached; drop some first.")
+    public static int max_manual_cluster_snapshot_jobs = 50;
+
     @ConfField(mutable = true)
     public static long automated_cluster_snapshot_timeout_seconds = 3600;
 
