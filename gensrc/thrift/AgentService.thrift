@@ -140,6 +140,10 @@ struct TCreateTabletReq {
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
     27: optional Types.TTabletRange range;
+
+    // New fields should be added above this comment.
+    // NOTE: If you add a new field here that ends up in tablet metadata,
+    // also update TCloudTabletMeta in FrontendService.thrift to keep the two paths in sync.
 }
 
 struct TDropTabletReq {
