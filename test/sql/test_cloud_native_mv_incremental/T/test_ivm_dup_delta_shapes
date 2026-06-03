@@ -1,0 +1,109 @@
+-- name: test_ivm_filter_empty_delta @cloud
+CREATE TABLE orders_fed (
+    order_id BIGINT, region VARCHAR(8), amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO orders_fed VALUES (1001,'CN',99.90),(1002,'US',75.00);
+CREATE MATERIALIZED VIEW mv_fed
+DISTRIBUTED BY HASH(order_id) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT order_id, region, amount FROM orders_fed WHERE amount > 50.00;
+REFRESH MATERIALIZED VIEW mv_fed WITH SYNC MODE;
+SELECT order_id, region, amount FROM mv_fed ORDER BY order_id;
+INSERT INTO orders_fed VALUES (1003,'CN',10.00),(1004,'US',20.00),(1005,'JP',5.00);
+REFRESH MATERIALIZED VIEW mv_fed WITH SYNC MODE;
+SELECT order_id, region, amount FROM mv_fed ORDER BY order_id;
+INSERT INTO orders_fed VALUES (1006,'CN',200.00),(1007,'US',30.00);
+REFRESH MATERIALIZED VIEW mv_fed WITH SYNC MODE;
+SELECT order_id, region, amount FROM mv_fed ORDER BY order_id;
+SELECT COUNT(*) AS mv_rows FROM mv_fed;
+SELECT COUNT(*) AS base_rows FROM orders_fed WHERE amount > 50.00;
+SELECT COUNT(*) AS diff FROM (
+    SELECT order_id, region, amount FROM mv_fed
+    EXCEPT
+    SELECT order_id, region, amount FROM orders_fed WHERE amount > 50.00
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT order_id, region, amount FROM orders_fed WHERE amount > 50.00
+    EXCEPT
+    SELECT order_id, region, amount FROM mv_fed
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_fed%' OR DEFINITION LIKE '%mv_fed%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_multi_insert_accumulate @cloud
+CREATE TABLE base_acc (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_acc VALUES (1, 10);
+CREATE MATERIALIZED VIEW mv_acc
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS s FROM base_acc GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_acc WITH SYNC MODE;
+SELECT k, s FROM mv_acc ORDER BY k;
+INSERT INTO base_acc VALUES (2, 20);
+INSERT INTO base_acc VALUES (1, 5), (3, 30);
+INSERT INTO base_acc VALUES (2, 7);
+INSERT INTO base_acc VALUES (4, 40), (1, 1);
+REFRESH MATERIALIZED VIEW mv_acc WITH SYNC MODE;
+SELECT k, s FROM mv_acc ORDER BY k;
+INSERT INTO base_acc VALUES (5, 50);
+INSERT INTO base_acc VALUES (3, 3), (5, 1);
+INSERT INTO base_acc VALUES (6, 60);
+REFRESH MATERIALIZED VIEW mv_acc WITH SYNC MODE;
+SELECT k, s FROM mv_acc ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_acc;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM base_acc GROUP BY k) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, s FROM mv_acc EXCEPT SELECT k, SUM(v) FROM base_acc GROUP BY k
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, SUM(v) FROM base_acc GROUP BY k EXCEPT SELECT k, s FROM mv_acc
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_acc%' OR DEFINITION LIKE '%mv_acc%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_passthrough_null @cloud
+CREATE TABLE base_pn (
+    k INT, v BIGINT, nullable_col VARCHAR(16)
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_pn VALUES (1, 10, 'a'), (2, 20, NULL), (3, 30, 'c');
+CREATE MATERIALIZED VIEW mv_pn
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v, nullable_col FROM base_pn;
+REFRESH MATERIALIZED VIEW mv_pn WITH SYNC MODE;
+SELECT k, v, nullable_col FROM mv_pn ORDER BY k;
+INSERT INTO base_pn VALUES (4, 40, NULL), (5, 50, 'e');
+REFRESH MATERIALIZED VIEW mv_pn WITH SYNC MODE;
+SELECT k, v, nullable_col FROM mv_pn ORDER BY k;
+INSERT INTO base_pn VALUES (6, 60, NULL), (7, 70, NULL);
+REFRESH MATERIALIZED VIEW mv_pn WITH SYNC MODE;
+SELECT k, v, nullable_col FROM mv_pn ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_pn;
+SELECT COUNT(*) AS base_rows FROM base_pn;
+SELECT COUNT(*) AS mv_null_rows FROM mv_pn WHERE nullable_col IS NULL;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, v, nullable_col FROM mv_pn
+    EXCEPT
+    SELECT k, v, nullable_col FROM base_pn
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, v, nullable_col FROM base_pn
+    EXCEPT
+    SELECT k, v, nullable_col FROM mv_pn
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_pn%' OR DEFINITION LIKE '%mv_pn%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

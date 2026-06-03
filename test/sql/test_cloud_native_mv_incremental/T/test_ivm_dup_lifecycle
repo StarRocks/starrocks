@@ -1,0 +1,128 @@
+-- name: test_ivm_repeated_refresh @cloud
+CREATE TABLE base_rr (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_rr VALUES (1, 10), (2, 20), (3, 30);
+CREATE MATERIALIZED VIEW mv_rr
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS s FROM base_rr GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_rr WITH SYNC MODE;
+SELECT k, s FROM mv_rr ORDER BY k;
+INSERT INTO base_rr VALUES (2, 5), (4, 40);
+REFRESH MATERIALIZED VIEW mv_rr WITH SYNC MODE;
+SELECT k, s FROM mv_rr ORDER BY k;
+INSERT INTO base_rr VALUES (1, 100), (5, 50);
+REFRESH MATERIALIZED VIEW mv_rr WITH SYNC MODE;
+SELECT k, s FROM mv_rr ORDER BY k;
+INSERT INTO base_rr VALUES (3, 7), (6, 60);
+REFRESH MATERIALIZED VIEW mv_rr WITH SYNC MODE;
+SELECT k, s FROM mv_rr ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_rr;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM base_rr GROUP BY k) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, s FROM mv_rr EXCEPT SELECT k, SUM(v) FROM base_rr GROUP BY k
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, SUM(v) FROM base_rr GROUP BY k EXCEPT SELECT k, s FROM mv_rr
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_rr%' OR DEFINITION LIKE '%mv_rr%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_empty_base @cloud
+CREATE TABLE base_empty (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_empty
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS s FROM base_empty GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_empty WITH SYNC MODE;
+SELECT k, s FROM mv_empty ORDER BY k;
+SELECT COUNT(*) AS mv_rows_empty FROM mv_empty;
+INSERT INTO base_empty VALUES (1, 10), (2, 20), (1, 5);
+REFRESH MATERIALIZED VIEW mv_empty WITH SYNC MODE;
+SELECT k, s FROM mv_empty ORDER BY k;
+INSERT INTO base_empty VALUES (2, 30), (3, 30);
+REFRESH MATERIALIZED VIEW mv_empty WITH SYNC MODE;
+SELECT k, s FROM mv_empty ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_empty;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM base_empty GROUP BY k) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, s FROM mv_empty EXCEPT SELECT k, SUM(v) FROM base_empty GROUP BY k
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, SUM(v) FROM base_empty GROUP BY k EXCEPT SELECT k, s FROM mv_empty
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_empty%' OR DEFINITION LIKE '%mv_empty%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_no_change_skipped @cloud
+CREATE TABLE base_noop (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_noop VALUES (1, 10), (2, 20), (3, 30);
+CREATE MATERIALIZED VIEW mv_noop
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS s FROM base_noop GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_noop WITH SYNC MODE;
+SELECT k, s FROM mv_noop ORDER BY k;
+REFRESH MATERIALIZED VIEW mv_noop WITH SYNC MODE;
+SELECT k, s FROM mv_noop ORDER BY k;
+REFRESH MATERIALIZED VIEW mv_noop WITH SYNC MODE;
+SELECT k, s FROM mv_noop ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_noop;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM base_noop GROUP BY k) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, s FROM mv_noop EXCEPT SELECT k, SUM(v) FROM base_noop GROUP BY k
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, SUM(v) FROM base_noop GROUP BY k EXCEPT SELECT k, s FROM mv_noop
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_noop%' OR DEFINITION LIKE '%mv_noop%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_count_star_regression @cloud
+CREATE TABLE base_cs (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_cs VALUES (1, 10), (1, 11), (2, 20), (3, 30);
+CREATE MATERIALIZED VIEW mv_cs
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, COUNT(*) AS c FROM base_cs GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_cs WITH SYNC MODE;
+SELECT k, c FROM mv_cs ORDER BY k;
+INSERT INTO base_cs VALUES (1, 12), (2, 21), (4, 40);
+REFRESH MATERIALIZED VIEW mv_cs WITH SYNC MODE;
+SELECT k, c FROM mv_cs ORDER BY k;
+INSERT INTO base_cs VALUES (3, 31), (3, 32), (5, 50);
+REFRESH MATERIALIZED VIEW mv_cs WITH SYNC MODE;
+SELECT k, c FROM mv_cs ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_cs;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM base_cs GROUP BY k) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, c FROM mv_cs EXCEPT SELECT k, COUNT(*) FROM base_cs GROUP BY k
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, COUNT(*) FROM base_cs GROUP BY k EXCEPT SELECT k, c FROM mv_cs
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_cs%' OR DEFINITION LIKE '%mv_cs%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

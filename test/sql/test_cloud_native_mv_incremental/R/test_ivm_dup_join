@@ -1,0 +1,588 @@
+-- name: test_ivm_cross_join @cloud
+CREATE TABLE small_cj (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE other_cj (
+    m INT, w BIGINT
+) DUPLICATE KEY(m) DISTRIBUTED BY HASH(m) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO small_cj VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+INSERT INTO other_cj VALUES (100, 1000), (200, 2000);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cj
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT s.k, s.v, o.m, o.w FROM small_cj s, other_cj o;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_cj WITH SYNC MODE;
+SELECT k, v, m, w FROM mv_cj ORDER BY k, m;
+-- result:
+1	10	100	1000
+1	10	200	2000
+2	20	100	1000
+2	20	200	2000
+-- !result
+INSERT INTO small_cj VALUES (3, 30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_cj WITH SYNC MODE;
+SELECT k, v, m, w FROM mv_cj ORDER BY k, m;
+-- result:
+1	10	100	1000
+1	10	200	2000
+2	20	100	1000
+2	20	200	2000
+3	30	100	1000
+3	30	200	2000
+-- !result
+INSERT INTO other_cj VALUES (300, 3000);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_cj WITH SYNC MODE;
+SELECT k, v, m, w FROM mv_cj ORDER BY k, m;
+-- result:
+1	10	100	1000
+1	10	200	2000
+1	10	300	3000
+2	20	100	1000
+2	20	200	2000
+2	20	300	3000
+3	30	100	1000
+3	30	200	2000
+3	30	300	3000
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_cj;
+-- result:
+9
+-- !result
+SELECT COUNT(*) AS base_rows FROM (SELECT s.k FROM small_cj s, other_cj o) t;
+-- result:
+9
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, v, m, w FROM mv_cj
+    EXCEPT
+    SELECT s.k, s.v, o.m, o.w FROM small_cj s, other_cj o
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT s.k, s.v, o.m, o.w FROM small_cj s, other_cj o
+    EXCEPT
+    SELECT k, v, m, w FROM mv_cj
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_cj%' OR DEFINITION LIKE '%mv_cj%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+
+-- name: test_ivm_self_join @cloud
+CREATE TABLE tree_sj (
+    id INT, parent_id INT, v BIGINT
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tree_sj VALUES (1, 0, 100), (2, 1, 200), (3, 1, 300);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sj
+DISTRIBUTED BY HASH(child_id) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS child_id, a.v AS child_v, b.v AS parent_v
+   FROM tree_sj a JOIN tree_sj b ON a.parent_id = b.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sj WITH SYNC MODE;
+SELECT child_id, child_v, parent_v FROM mv_sj ORDER BY child_id;
+-- result:
+2	200	100
+3	300	100
+-- !result
+INSERT INTO tree_sj VALUES (4, 2, 400), (5, 3, 500);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sj WITH SYNC MODE;
+SELECT child_id, child_v, parent_v FROM mv_sj ORDER BY child_id;
+-- result:
+2	200	100
+3	300	100
+4	400	200
+5	500	300
+-- !result
+INSERT INTO tree_sj VALUES (6, 1, 600);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sj WITH SYNC MODE;
+SELECT child_id, child_v, parent_v FROM mv_sj ORDER BY child_id;
+-- result:
+2	200	100
+3	300	100
+4	400	200
+5	500	300
+6	600	100
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_sj;
+-- result:
+5
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT a.id FROM tree_sj a JOIN tree_sj b ON a.parent_id = b.id
+) t;
+-- result:
+5
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT child_id, child_v, parent_v FROM mv_sj
+    EXCEPT
+    SELECT a.id, a.v, b.v FROM tree_sj a JOIN tree_sj b ON a.parent_id = b.id
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT a.id, a.v, b.v FROM tree_sj a JOIN tree_sj b ON a.parent_id = b.id
+    EXCEPT
+    SELECT child_id, child_v, parent_v FROM mv_sj
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_sj%' OR DEFINITION LIKE '%mv_sj%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+
+-- name: test_ivm_three_way_inner_join @cloud
+CREATE TABLE sales_3j (
+    order_id BIGINT, prod_id INT, cust_id INT, amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE products_3j (
+    prod_id INT, pname VARCHAR(16)
+) DUPLICATE KEY(prod_id) DISTRIBUTED BY HASH(prod_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE customers_3j (
+    cust_id INT, city VARCHAR(16)
+) DUPLICATE KEY(cust_id) DISTRIBUTED BY HASH(cust_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO products_3j VALUES (1,'widget'),(2,'gadget');
+-- result:
+-- !result
+INSERT INTO customers_3j VALUES (10,'NYC'),(20,'LA');
+-- result:
+-- !result
+INSERT INTO sales_3j VALUES (1001,1,10,5.00),(1002,2,20,7.00),(1003,1,20,9.00);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_3j
+DISTRIBUTED BY HASH(order_id) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT s.order_id, p.pname, c.city, s.amount
+   FROM sales_3j s
+   JOIN products_3j p ON s.prod_id = p.prod_id
+   JOIN customers_3j c ON s.cust_id = c.cust_id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_3j WITH SYNC MODE;
+SELECT order_id, pname, city, amount FROM mv_3j ORDER BY order_id;
+-- result:
+1001	widget	NYC	5.00
+1002	gadget	LA	7.00
+1003	widget	LA	9.00
+-- !result
+INSERT INTO sales_3j VALUES (1004,2,10,3.00),(1005,1,10,11.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_3j WITH SYNC MODE;
+SELECT order_id, pname, city, amount FROM mv_3j ORDER BY order_id;
+-- result:
+1001	widget	NYC	5.00
+1002	gadget	LA	7.00
+1003	widget	LA	9.00
+1004	gadget	NYC	3.00
+1005	widget	NYC	11.00
+-- !result
+INSERT INTO products_3j VALUES (3,'gizmo');
+-- result:
+-- !result
+INSERT INTO customers_3j VALUES (30,'SF');
+-- result:
+-- !result
+INSERT INTO sales_3j VALUES (1006,3,30,50.00),(1007,3,20,1.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_3j WITH SYNC MODE;
+SELECT order_id, pname, city, amount FROM mv_3j ORDER BY order_id;
+-- result:
+1001	widget	NYC	5.00
+1002	gadget	LA	7.00
+1003	widget	LA	9.00
+1004	gadget	NYC	3.00
+1005	widget	NYC	11.00
+1006	gizmo	SF	50.00
+1007	gizmo	LA	1.00
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_3j;
+-- result:
+7
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT s.order_id FROM sales_3j s
+    JOIN products_3j p ON s.prod_id = p.prod_id
+    JOIN customers_3j c ON s.cust_id = c.cust_id
+) t;
+-- result:
+7
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT order_id, pname, city, amount FROM mv_3j
+    EXCEPT
+    SELECT s.order_id, p.pname, c.city, s.amount FROM sales_3j s
+    JOIN products_3j p ON s.prod_id = p.prod_id
+    JOIN customers_3j c ON s.cust_id = c.cust_id
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT s.order_id, p.pname, c.city, s.amount FROM sales_3j s
+    JOIN products_3j p ON s.prod_id = p.prod_id
+    JOIN customers_3j c ON s.cust_id = c.cust_id
+    EXCEPT
+    SELECT order_id, pname, city, amount FROM mv_3j
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_3j%' OR DEFINITION LIKE '%mv_3j%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+
+-- name: test_ivm_inner_cross_mix @cloud
+CREATE TABLE events_icm (
+    eid BIGINT, dev_id INT, val BIGINT
+) DUPLICATE KEY(eid) DISTRIBUTED BY HASH(eid) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE devices_icm (
+    dev_id INT, dname VARCHAR(16)
+) DUPLICATE KEY(dev_id) DISTRIBUTED BY HASH(dev_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE scale_icm (
+    factor INT
+) DUPLICATE KEY(factor) DISTRIBUTED BY HASH(factor) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO devices_icm VALUES (1,'sensor'),(2,'meter');
+-- result:
+-- !result
+INSERT INTO scale_icm VALUES (10);
+-- result:
+-- !result
+INSERT INTO events_icm VALUES (101,1,5),(102,2,7);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_icm
+DISTRIBUTED BY HASH(eid) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT e.eid, d.dname, e.val, s.factor
+   FROM events_icm e JOIN devices_icm d ON e.dev_id = d.dev_id, scale_icm s;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_icm WITH SYNC MODE;
+SELECT eid, dname, val, factor FROM mv_icm ORDER BY eid;
+-- result:
+101	sensor	5	10
+102	meter	7	10
+-- !result
+INSERT INTO events_icm VALUES (103,1,9);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_icm WITH SYNC MODE;
+SELECT eid, dname, val, factor FROM mv_icm ORDER BY eid;
+-- result:
+101	sensor	5	10
+102	meter	7	10
+103	sensor	9	10
+-- !result
+INSERT INTO devices_icm VALUES (3,'gauge');
+-- result:
+-- !result
+INSERT INTO events_icm VALUES (104,3,2);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_icm WITH SYNC MODE;
+SELECT eid, dname, val, factor FROM mv_icm ORDER BY eid;
+-- result:
+101	sensor	5	10
+102	meter	7	10
+103	sensor	9	10
+104	gauge	2	10
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_icm;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT e.eid FROM events_icm e JOIN devices_icm d ON e.dev_id = d.dev_id, scale_icm s
+) t;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT eid, dname, val, factor FROM mv_icm
+    EXCEPT
+    SELECT e.eid, d.dname, e.val, s.factor
+    FROM events_icm e JOIN devices_icm d ON e.dev_id = d.dev_id, scale_icm s
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT e.eid, d.dname, e.val, s.factor
+    FROM events_icm e JOIN devices_icm d ON e.dev_id = d.dev_id, scale_icm s
+    EXCEPT
+    SELECT eid, dname, val, factor FROM mv_icm
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_icm%' OR DEFINITION LIKE '%mv_icm%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+
+-- name: test_ivm_join_aggregate @cloud
+CREATE TABLE orders_ja (
+    order_id BIGINT, uid BIGINT, amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE users_ja (
+    user_id BIGINT, country VARCHAR(8)
+) DUPLICATE KEY(user_id) DISTRIBUTED BY HASH(user_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO users_ja VALUES (1,'CN'),(2,'US');
+-- result:
+-- !result
+INSERT INTO orders_ja VALUES (1001,1,99.90),(1002,2,20.50),(1003,1,15.50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ja
+DISTRIBUTED BY HASH(country) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT u.country, SUM(o.amount) AS total, COUNT(*) AS cnt, MIN(o.amount) AS mn, MAX(o.amount) AS mx
+   FROM orders_ja o JOIN users_ja u ON o.uid = u.user_id
+   GROUP BY u.country;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ja WITH SYNC MODE;
+SELECT country, total, cnt, mn, mx FROM mv_ja ORDER BY country;
+-- result:
+CN	115.40	2	15.50	99.90
+US	20.50	1	20.50	20.50
+-- !result
+INSERT INTO orders_ja VALUES (1004,2,200.00),(1005,1,5.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ja WITH SYNC MODE;
+SELECT country, total, cnt, mn, mx FROM mv_ja ORDER BY country;
+-- result:
+CN	120.40	3	5.00	99.90
+US	220.50	2	20.50	200.00
+-- !result
+INSERT INTO users_ja VALUES (3,'JP');
+-- result:
+-- !result
+INSERT INTO orders_ja VALUES (1006,3,300.00),(1007,3,1.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ja WITH SYNC MODE;
+SELECT country, total, cnt, mn, mx FROM mv_ja ORDER BY country;
+-- result:
+CN	120.40	3	5.00	99.90
+JP	301.00	2	1.00	300.00
+US	220.50	2	20.50	200.00
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_ja;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT u.country FROM orders_ja o JOIN users_ja u ON o.uid = u.user_id GROUP BY u.country
+) t;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT country, total, cnt, mn, mx FROM mv_ja
+    EXCEPT
+    SELECT u.country, SUM(o.amount), COUNT(*), MIN(o.amount), MAX(o.amount)
+    FROM orders_ja o JOIN users_ja u ON o.uid = u.user_id GROUP BY u.country
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT u.country, SUM(o.amount), COUNT(*), MIN(o.amount), MAX(o.amount)
+    FROM orders_ja o JOIN users_ja u ON o.uid = u.user_id GROUP BY u.country
+    EXCEPT
+    SELECT country, total, cnt, mn, mx FROM mv_ja
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_ja%' OR DEFINITION LIKE '%mv_ja%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+
+-- name: test_ivm_join_filter_aggregate @cloud
+CREATE TABLE orders_jfa (
+    oid BIGINT, uid BIGINT, amt DECIMAL(10,2), status VARCHAR(8)
+) DUPLICATE KEY(oid) DISTRIBUTED BY HASH(oid) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE users_jfa (
+    uid BIGINT, country VARCHAR(8)
+) DUPLICATE KEY(uid) DISTRIBUTED BY HASH(uid) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO users_jfa VALUES (1,'CN'),(2,'US');
+-- result:
+-- !result
+INSERT INTO orders_jfa VALUES (101,1,99.90,'paid'),(102,2,20.50,'paid'),(103,1,15.50,'void');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_jfa
+DISTRIBUTED BY HASH(country) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT u.country, SUM(o.amt) AS total, COUNT(*) AS cnt, MIN(o.amt) AS mn, MAX(o.amt) AS mx
+   FROM orders_jfa o JOIN users_jfa u ON o.uid = u.uid
+   WHERE o.status = 'paid'
+   GROUP BY u.country;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_jfa WITH SYNC MODE;
+SELECT country, total, cnt, mn, mx FROM mv_jfa ORDER BY country;
+-- result:
+CN	99.90	1	99.90	99.90
+US	20.50	1	20.50	20.50
+-- !result
+INSERT INTO orders_jfa VALUES (104,2,200.00,'paid'),(105,1,5.00,'void'),(106,1,30.00,'paid');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_jfa WITH SYNC MODE;
+SELECT country, total, cnt, mn, mx FROM mv_jfa ORDER BY country;
+-- result:
+CN	129.90	2	30.00	99.90
+US	220.50	2	20.50	200.00
+-- !result
+INSERT INTO users_jfa VALUES (3,'JP');
+-- result:
+-- !result
+INSERT INTO orders_jfa VALUES (107,3,300.00,'paid'),(108,3,1.00,'void');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_jfa WITH SYNC MODE;
+SELECT country, total, cnt, mn, mx FROM mv_jfa ORDER BY country;
+-- result:
+CN	129.90	2	30.00	99.90
+JP	300.00	1	300.00	300.00
+US	220.50	2	20.50	200.00
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_jfa;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT u.country FROM orders_jfa o JOIN users_jfa u ON o.uid = u.uid
+    WHERE o.status = 'paid' GROUP BY u.country
+) t;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT country, total, cnt, mn, mx FROM mv_jfa
+    EXCEPT
+    SELECT u.country, SUM(o.amt), COUNT(*), MIN(o.amt), MAX(o.amt)
+    FROM orders_jfa o JOIN users_jfa u ON o.uid = u.uid
+    WHERE o.status = 'paid' GROUP BY u.country
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT u.country, SUM(o.amt), COUNT(*), MIN(o.amt), MAX(o.amt)
+    FROM orders_jfa o JOIN users_jfa u ON o.uid = u.uid
+    WHERE o.status = 'paid' GROUP BY u.country
+    EXCEPT
+    SELECT country, total, cnt, mn, mx FROM mv_jfa
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_jfa%' OR DEFINITION LIKE '%mv_jfa%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result

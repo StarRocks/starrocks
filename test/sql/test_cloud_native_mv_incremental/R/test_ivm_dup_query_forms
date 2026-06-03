@@ -1,0 +1,171 @@
+-- name: test_ivm_filter_projection @cloud
+CREATE TABLE orders_fp (
+    order_id BIGINT, region VARCHAR(8), amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO orders_fp VALUES (1001,'CN',99.90),(1002,'US',20.50),(1003,'CN',75.00);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fp
+DISTRIBUTED BY HASH(order_id) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT order_id, region, amount FROM orders_fp WHERE amount > 50.00;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fp WITH SYNC MODE;
+SELECT order_id, region, amount FROM mv_fp ORDER BY order_id;
+-- result:
+1001	CN	99.90
+1003	CN	75.00
+-- !result
+INSERT INTO orders_fp VALUES (1004,'US',49.99),(1005,'JP',200.00),(1006,'CN',50.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fp WITH SYNC MODE;
+SELECT order_id, region, amount FROM mv_fp ORDER BY order_id;
+-- result:
+1001	CN	99.90
+1003	CN	75.00
+1005	JP	200.00
+-- !result
+INSERT INTO orders_fp VALUES (1007,'CN',10.00),(1008,'US',60.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fp WITH SYNC MODE;
+SELECT order_id, region, amount FROM mv_fp ORDER BY order_id;
+-- result:
+1001	CN	99.90
+1003	CN	75.00
+1005	JP	200.00
+1008	US	60.00
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_fp;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS base_rows FROM orders_fp WHERE amount > 50.00;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT order_id, region, amount FROM mv_fp
+    EXCEPT
+    SELECT order_id, region, amount FROM orders_fp WHERE amount > 50.00
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT order_id, region, amount FROM orders_fp WHERE amount > 50.00
+    EXCEPT
+    SELECT order_id, region, amount FROM mv_fp
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_fp%' OR DEFINITION LIKE '%mv_fp%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+
+-- name: test_ivm_union_all @cloud
+CREATE TABLE ua_t1 (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE ua_t2 (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ua_t1 VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+INSERT INTO ua_t2 VALUES (3, 30), (4, 40);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ua
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM ua_t1 UNION ALL SELECT k, v FROM ua_t2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ua WITH SYNC MODE;
+SELECT k, v FROM mv_ua ORDER BY k, v;
+-- result:
+1	10
+2	20
+3	30
+4	40
+-- !result
+INSERT INTO ua_t1 VALUES (5, 50), (1, 11);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ua WITH SYNC MODE;
+SELECT k, v FROM mv_ua ORDER BY k, v;
+-- result:
+1	10
+1	11
+2	20
+3	30
+4	40
+5	50
+-- !result
+INSERT INTO ua_t2 VALUES (6, 60), (3, 33);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ua WITH SYNC MODE;
+SELECT k, v FROM mv_ua ORDER BY k, v;
+-- result:
+1	10
+1	11
+2	20
+3	30
+3	33
+4	40
+5	50
+6	60
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_ua;
+-- result:
+8
+-- !result
+SELECT COUNT(*) AS base_rows FROM (SELECT k, v FROM ua_t1 UNION ALL SELECT k, v FROM ua_t2) t;
+-- result:
+8
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, v FROM mv_ua
+    EXCEPT
+    SELECT k, v FROM (SELECT k, v FROM ua_t1 UNION ALL SELECT k, v FROM ua_t2) u
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, v FROM (SELECT k, v FROM ua_t1 UNION ALL SELECT k, v FROM ua_t2) u
+    EXCEPT
+    SELECT k, v FROM mv_ua
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_ua%' OR DEFINITION LIKE '%mv_ua%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result

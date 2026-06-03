@@ -1,0 +1,149 @@
+-- name: test_ivm_null_in_group_by @cloud
+CREATE TABLE base_ng (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_ng VALUES (1, 10), (NULL, 20), (2, 30), (NULL, 5);
+CREATE MATERIALIZED VIEW mv_ng
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS s, COUNT(*) AS c FROM base_ng GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_ng WITH SYNC MODE;
+SELECT k, s, c FROM mv_ng ORDER BY k IS NULL, k;
+INSERT INTO base_ng VALUES (NULL, 100), (1, 7), (3, 30);
+REFRESH MATERIALIZED VIEW mv_ng WITH SYNC MODE;
+SELECT k, s, c FROM mv_ng ORDER BY k IS NULL, k;
+INSERT INTO base_ng VALUES (NULL, 1), (2, 8);
+REFRESH MATERIALIZED VIEW mv_ng WITH SYNC MODE;
+SELECT k, s, c FROM mv_ng ORDER BY k IS NULL, k;
+SELECT COUNT(*) AS mv_rows FROM mv_ng;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM base_ng GROUP BY k) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, s, c FROM mv_ng EXCEPT SELECT k, SUM(v), COUNT(*) FROM base_ng GROUP BY k
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, SUM(v), COUNT(*) FROM base_ng GROUP BY k EXCEPT SELECT k, s, c FROM mv_ng
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_ng%' OR DEFINITION LIKE '%mv_ng%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_groupby_function_expr @cloud
+CREATE TABLE events_gfe (
+    id BIGINT, ts DATETIME, amt DECIMAL(10,2)
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO events_gfe VALUES
+    (1,'2026-01-15 10:00:00',10.00),(2,'2026-01-20 11:00:00',20.00),(3,'2026-02-05 09:00:00',30.00);
+CREATE MATERIALIZED VIEW mv_gfe
+DISTRIBUTED BY HASH(month) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT date_trunc('month', ts) AS month, SUM(amt) AS total, COUNT(*) AS cnt
+   FROM events_gfe GROUP BY date_trunc('month', ts);
+REFRESH MATERIALIZED VIEW mv_gfe WITH SYNC MODE;
+SELECT month, total, cnt FROM mv_gfe ORDER BY month;
+INSERT INTO events_gfe VALUES (4,'2026-01-25 12:00:00',5.00),(5,'2026-02-18 08:00:00',45.00);
+REFRESH MATERIALIZED VIEW mv_gfe WITH SYNC MODE;
+SELECT month, total, cnt FROM mv_gfe ORDER BY month;
+INSERT INTO events_gfe VALUES (6,'2026-03-01 00:00:00',100.00),(7,'2026-03-31 23:00:00',1.00);
+REFRESH MATERIALIZED VIEW mv_gfe WITH SYNC MODE;
+SELECT month, total, cnt FROM mv_gfe ORDER BY month;
+SELECT COUNT(*) AS mv_rows FROM mv_gfe;
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT date_trunc('month', ts) FROM events_gfe GROUP BY date_trunc('month', ts)
+) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT month, total, cnt FROM mv_gfe
+    EXCEPT
+    SELECT date_trunc('month', ts), SUM(amt), COUNT(*) FROM events_gfe GROUP BY date_trunc('month', ts)
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT date_trunc('month', ts), SUM(amt), COUNT(*) FROM events_gfe GROUP BY date_trunc('month', ts)
+    EXCEPT
+    SELECT month, total, cnt FROM mv_gfe
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_gfe%' OR DEFINITION LIKE '%mv_gfe%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_groupby_arithmetic_expr @cloud
+CREATE TABLE items_gae (
+    id BIGINT, v BIGINT
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO items_gae VALUES (1,10),(2,20),(3,30),(4,40),(5,50);
+CREATE MATERIALIZED VIEW mv_gae
+DISTRIBUTED BY HASH(bucket) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id % 4 AS bucket, SUM(v) AS s, COUNT(*) AS c
+   FROM items_gae GROUP BY id % 4;
+REFRESH MATERIALIZED VIEW mv_gae WITH SYNC MODE;
+SELECT bucket, s, c FROM mv_gae ORDER BY bucket;
+INSERT INTO items_gae VALUES (6,60),(7,70),(8,80);
+REFRESH MATERIALIZED VIEW mv_gae WITH SYNC MODE;
+SELECT bucket, s, c FROM mv_gae ORDER BY bucket;
+INSERT INTO items_gae VALUES (9,90),(10,100);
+REFRESH MATERIALIZED VIEW mv_gae WITH SYNC MODE;
+SELECT bucket, s, c FROM mv_gae ORDER BY bucket;
+SELECT COUNT(*) AS mv_rows FROM mv_gae;
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT id % 4 FROM items_gae GROUP BY id % 4
+) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT bucket, s, c FROM mv_gae
+    EXCEPT
+    SELECT id % 4, SUM(v), COUNT(*) FROM items_gae GROUP BY id % 4
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT id % 4, SUM(v), COUNT(*) FROM items_gae GROUP BY id % 4
+    EXCEPT
+    SELECT bucket, s, c FROM mv_gae
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_gae%' OR DEFINITION LIKE '%mv_gae%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_agg_float_double @cloud
+CREATE TABLE metrics_afd (
+    id BIGINT, grp VARCHAR(8), f FLOAT, d DOUBLE
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO metrics_afd VALUES (1,'A',1.5,2.25),(2,'A',0.5,0.75),(3,'B',2.5,4.0);
+CREATE MATERIALIZED VIEW mv_afd
+DISTRIBUTED BY HASH(grp) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT grp, SUM(f) AS sf, SUM(d) AS sd, MIN(f) AS mnf, MAX(f) AS mxf, MIN(d) AS mnd, MAX(d) AS mxd, COUNT(*) AS c
+   FROM metrics_afd GROUP BY grp;
+REFRESH MATERIALIZED VIEW mv_afd WITH SYNC MODE;
+SELECT grp, sf, sd, mnf, mxf, mnd, mxd, c FROM mv_afd ORDER BY grp;
+INSERT INTO metrics_afd VALUES (4,'A',4.0,1.0),(5,'B',1.0,8.0);
+REFRESH MATERIALIZED VIEW mv_afd WITH SYNC MODE;
+SELECT grp, sf, sd, mnf, mxf, mnd, mxd, c FROM mv_afd ORDER BY grp;
+INSERT INTO metrics_afd VALUES (6,'C',3.25,0.5),(7,'B',0.25,2.0);
+REFRESH MATERIALIZED VIEW mv_afd WITH SYNC MODE;
+SELECT grp, sf, sd, mnf, mxf, mnd, mxd, c FROM mv_afd ORDER BY grp;
+SELECT COUNT(*) AS mv_rows FROM mv_afd;
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT grp FROM metrics_afd GROUP BY grp
+) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT grp, sf, sd, mnf, mxf, mnd, mxd, c FROM mv_afd
+    EXCEPT
+    SELECT grp, SUM(f), SUM(d), MIN(f), MAX(f), MIN(d), MAX(d), COUNT(*) FROM metrics_afd GROUP BY grp
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT grp, SUM(f), SUM(d), MIN(f), MAX(f), MIN(d), MAX(d), COUNT(*) FROM metrics_afd GROUP BY grp
+    EXCEPT
+    SELECT grp, sf, sd, mnf, mxf, mnd, mxd, c FROM mv_afd
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_afd%' OR DEFINITION LIKE '%mv_afd%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
