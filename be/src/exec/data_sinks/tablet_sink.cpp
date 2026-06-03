@@ -1167,6 +1167,31 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     }
 }
 
+namespace {
+// Pad each CHAR value to a fixed `len`, writing into the pre-zeroed `new_bytes`.
+// When the null ratio is high enough to pay for the per-row branch, null rows skip
+// the memcpy entirely: their padding is already correct because the buffer is zeroed.
+void pad_char_values(const Offsets& offset, const Bytes& bytes, uint32_t len, size_t num_rows, const uint8_t* null_data,
+                     Bytes& new_bytes) {
+    uint32_t from = 0;
+    if (null_data != nullptr && SIMD::count_nonzero(null_data, num_rows) > num_rows / 8) {
+        for (size_t j = 0; j < num_rows; ++j) {
+            if (!null_data[j]) {
+                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+            }
+            from += len;
+        }
+    } else {
+        for (size_t j = 0; j < num_rows; ++j) {
+            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+            from += len;
+        }
+    }
+}
+} // namespace
+
 void OlapTableSink::_padding_char_column(Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto desc : _output_tuple_desc->slots()) {
@@ -1186,38 +1211,11 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
             new_offset.resize(num_rows + 1);
             new_bytes.assign(num_rows * len, 0); // padding 0
 
-            uint32_t from = 0;
-            // Optimization: skip memcpy for null rows when there are many nulls
-            // The buffer is pre-zeroed, so null rows already have valid padding
+            const uint8_t* null_data = nullptr;
             if (desc->is_nullable()) {
-                auto* nullable_column = down_cast<NullableColumn*>(column);
-                const uint8_t* null_data = nullable_column->null_column()->get_data().data();
-                size_t null_count = SIMD::count_nonzero(null_data, num_rows);
-                // Only use sparse iteration if more than 12.5% of rows are null
-                if (null_count > num_rows / 8) {
-                    for (size_t j = 0; j < num_rows; ++j) {
-                        if (!null_data[j]) {
-                            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                        }
-                        from += len;
-                    }
-                } else {
-                    // Low null ratio: original loop without branch
-                    for (size_t j = 0; j < num_rows; ++j) {
-                        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                        from += len;
-                    }
-                }
-            } else {
-                // Non-nullable: original loop
-                for (size_t j = 0; j < num_rows; ++j) {
-                    uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                    from += len;
-                }
+                null_data = down_cast<NullableColumn*>(column)->null_column()->get_data().data();
             }
+            pad_char_values(offset, bytes, len, num_rows, null_data, new_bytes);
 
             for (size_t j = 1; j <= num_rows; ++j) {
                 new_offset[j] = len * j;

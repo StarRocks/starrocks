@@ -15,19 +15,18 @@
 // Microbenchmarks for the execution-layer SIMD paths added by PR #73293
 // ([Enhancement] Add SIMD optimizations for execution layer).
 //
-// Covers two paths unique to this PR:
+// Covers the one hand-written SIMD path retained after review:
 //   * sorting/compare_column.cpp :: compare_integral_column_simd
-//       SIMD-packed cmp for an int8 column against a scalar pivot, updating
+//       SIMD-packed cmp for an int column against a scalar pivot, updating
 //       a cmp_vector that the next sort column will refine. Adaptive: when
 //       cmp_vector is mostly zeros (rows still equal at previous columns),
-//       SIMD-packed compare; otherwise scalar skip.
-//   * data_sinks/tablet_sink.cpp :: _validate_data selection normalize
-//       validate_selection[j] &= 0x1 (AND-with-1) packed into AVX2/NEON.
+//       SIMD-packed compare; otherwise scalar skip. Gated on !__AVX512F__,
+//       where the auto-vectorised scalar fallback already wins.
 //
-// Other paths in this PR (local_exchange XOR, padding_char_column adaptive
-// sparse-null, validate_selection bitwise) reuse the same byte-OR / byte-AND /
-// count_nonzero-+-N/8 patterns already covered by column_ops_simd_bench and
-// agg_simd_bench from earlier PRs in the stack.
+// The PR's other integral loops (local_exchange / bucket_aware_partition XOR,
+// chunk_predicate_evaluator and-not, tablet_sink validate_selection &= 0x1) are
+// plain scalar loops left to compiler auto-vectorisation, so there is no
+// hand-written variant to benchmark against.
 
 #ifdef __AVX2__
 #include <immintrin.h>
@@ -282,9 +281,6 @@ static void prepare_compare(std::vector<int8_t>& cmp, std::vector<T>& lhs, int z
 DEFINE_COMPARE_BENCH(int8_t, Int8)
 DEFINE_COMPARE_BENCH(int32_t, Int32)
 DEFINE_COMPARE_BENCH(int64_t, Int64)
-
-// Note: BM_NormalizeSelection_* (validate_selection &= 0x1) was removed --
-// scalar == SIMD in microbench, the loop is auto-vectorised by gcc/clang.
 
 } // namespace starrocks
 
