@@ -55,7 +55,7 @@ public class BrokerLoadJobPreSplitFiringTest {
         try (MockedStatic<BrokerLoadPreSplitHook> hookStatic =
                      Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
             BrokerLoadJob.firePreSplitHooks(
-                    context, db, brokerDesc, computeResource, List.of(), Map.of());
+                    context, db, brokerDesc, computeResource, List.of(), Map.of(), () -> false);
 
             hookStatic.verifyNoInteractions();
             verifyNoInteractions(context);
@@ -82,7 +82,7 @@ public class BrokerLoadJobPreSplitFiringTest {
         try (MockedStatic<BrokerLoadPreSplitHook> hookStatic =
                      Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
             BrokerLoadJob.firePreSplitHooks(
-                    context, db, brokerDesc, computeResource, List.of(input), Map.of());
+                    context, db, brokerDesc, computeResource, List.of(input), Map.of(), () -> false);
 
             // No persisted opt-out → session variable left untouched.
             verify(sessionVariable, never()).setEnableTabletPreSplit(Mockito.anyBoolean());
@@ -90,7 +90,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             verify(context, times(1)).bindScope();
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
                     eq(context), eq(db), eq(targetTable), eq(brokerDesc),
-                    eq(fileGroups), eq(fileStatuses), eq(computeResource)));
+                    eq(fileGroups), eq(fileStatuses), eq(computeResource), any()));
         }
     }
 
@@ -113,13 +113,13 @@ public class BrokerLoadJobPreSplitFiringTest {
             BrokerLoadJob.firePreSplitHooks(
                     context, db, brokerDesc, computeResource,
                     List.of(input),
-                    Map.of(SessionVariable.ENABLE_TABLET_PRE_SPLIT, "false"));
+                    Map.of(SessionVariable.ENABLE_TABLET_PRE_SPLIT, "false"), () -> false);
 
             // Persisted opt-out should be re-applied to the recreated context
             // so the load's submit-time SET survives FE failover.
             verify(sessionVariable).setEnableTabletPreSplit(false);
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any()));
+                    any(), any(), any(), any(), any(), any(), any(), any()));
         }
     }
 
@@ -143,10 +143,53 @@ public class BrokerLoadJobPreSplitFiringTest {
                      Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
             BrokerLoadJob.firePreSplitHooks(
                     context, db, brokerDesc, computeResource,
-                    List.of(firstInput, secondInput), Map.of());
+                    List.of(firstInput, secondInput), Map.of(), () -> false);
 
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any()), times(2));
+                    any(), any(), any(), any(), any(), any(), any(), any()), times(2));
+        }
+    }
+
+    @Test
+    public void testShouldAbortShortCircuitsOuterLoopBetweenTables() {
+        // Cancel-aware outer loop: shouldAbort starts false (first table fires)
+        // and flips true after table 1. firePreSplitHooks must NOT call the
+        // hook for table 2 — the outer-loop guard exits before the next
+        // iteration.
+        ConnectContext context = Mockito.mock(ConnectContext.class);
+        SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessionVariable);
+        ConnectContext.ScopeGuard scopeGuard = Mockito.mock(ConnectContext.ScopeGuard.class);
+        Mockito.when(context.bindScope()).thenReturn(scopeGuard);
+
+        Database db = Mockito.mock(Database.class);
+        BrokerDesc brokerDesc = Mockito.mock(BrokerDesc.class);
+        ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        BrokerLoadJob.PreSplitHookInput firstInput = new BrokerLoadJob.PreSplitHookInput(
+                Mockito.mock(OlapTable.class), List.of(), List.of());
+        BrokerLoadJob.PreSplitHookInput secondInput = new BrokerLoadJob.PreSplitHookInput(
+                Mockito.mock(OlapTable.class), List.of(), List.of());
+
+        java.util.concurrent.atomic.AtomicBoolean abort = new java.util.concurrent.atomic.AtomicBoolean(false);
+        try (MockedStatic<BrokerLoadPreSplitHook> hookStatic =
+                     Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
+            // After the first per-table hook fires, flip abort so the outer
+            // loop short-circuits before invoking the second table's hook.
+            hookStatic.when(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
+                    any(), any(), any(), any(), any(), any(), any(), any()))
+                    .thenAnswer(invocation -> {
+                        abort.set(true);
+                        return null;
+                    });
+
+            BrokerLoadJob.firePreSplitHooks(
+                    context, db, brokerDesc, computeResource,
+                    List.of(firstInput, secondInput), Map.of(), abort::get);
+
+            // Only the first table's hook fires; the outer-loop guard prevents
+            // the second table from invoking the hook at all.
+            hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
+                    any(), any(), any(), any(), any(), any(), any(), any()), times(1));
         }
     }
 }

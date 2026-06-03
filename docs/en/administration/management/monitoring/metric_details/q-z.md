@@ -606,7 +606,7 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Histogram
-- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on the INSERT-from-FILES production path (the hook synchronously awaits FINISHED so the triggering INSERT plans against the post-split layout) and on the optional `runPreSplit` synchronous-await wrapper used by tests. The Broker Load production path is fire-and-forget and does not update this histogram.
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on both production paths — the INSERT-from-FILES hook (called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and the Broker Load hook (called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`) — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
