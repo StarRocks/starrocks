@@ -79,12 +79,12 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info);
 
-// Convert |txn_log| so it can be applied to the target tablet identified by
+// Convert |txn_log| so it can be applied to the new tablet identified by
 // |publish_tablet_info|.
 //
 // For MERGING_TABLET, a compaction payload (op_compaction / op_parallel_compaction)
 // is dropped rather than re-projected: the payload's input/output rowset-id
-// references live in the source tablet's rowset-id space, which is not valid
+// references live in the old tablet's rowset-id space, which is not valid
 // against the merged tablet. After dropping, the log becomes a pure no-op at
 // apply time; background compaction on the merged tablet will re-run the
 // optimization in the merged rssid space. The compaction's already-written
