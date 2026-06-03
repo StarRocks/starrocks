@@ -49,8 +49,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
@@ -113,9 +111,6 @@ public class Database extends MetaObject implements Writable {
     // catalogName is set if the database comes from an external catalog
     private String catalogName;
 
-    private final QueryableReentrantReadWriteLock rwLock;
-    private SlowLockLogStats slowLockLogStats = new SlowLockLogStats();
-
     // This param is used to make sure db not dropped when leader node writes wal,
     // so this param does not need to be persisted,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
@@ -143,25 +138,11 @@ public class Database extends MetaObject implements Writable {
         if (this.fullQualifiedName == null) {
             this.fullQualifiedName = "";
         }
-        this.rwLock = new QueryableReentrantReadWriteLock(true);
         this.idToTable = new ConcurrentHashMap<>();
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
         this.location = location;
-    }
-
-    /**
-     * Database rwLock will be deleted later, please do not use this interface directly.
-     * Use Locker.lockDatabase to obtain db lock
-     */
-    @Deprecated
-    public QueryableReentrantReadWriteLock getRwLock() {
-        return rwLock;
-    }
-
-    public SlowLockLogStats getSlowLockLogStats() {
-        return slowLockLogStats;
     }
 
     public long getId() {
