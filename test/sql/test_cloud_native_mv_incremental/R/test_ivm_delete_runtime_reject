@@ -1,0 +1,44 @@
+-- name: test_ivm_delete_refresh_rejected @cloud
+CREATE TABLE del_base (k INT, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO del_base VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ivm_delete_reject
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM del_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ivm_delete_reject WITH SYNC MODE;
+SELECT k, v FROM mv_ivm_delete_reject ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+DELETE FROM del_base WHERE k = 1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ivm_delete_reject WITH SYNC MODE;
+SELECT k, v FROM del_base ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+SELECT k, v FROM mv_ivm_delete_reject ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_ivm_delete_reject%' OR DEFINITION LIKE '%mv_ivm_delete_reject%') AND STATE = 'FAILED'
+ORDER BY 1;
+-- result:
+FAILED	1
+-- !result

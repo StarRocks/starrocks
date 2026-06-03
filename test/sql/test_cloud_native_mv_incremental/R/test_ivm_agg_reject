@@ -1,0 +1,98 @@
+-- name: test_ivm_agg_no_group_by_rejected @cloud
+CREATE TABLE agg_ng (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_ng DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, s FROM agg_ng;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_ng' requires GROUP BY: the CDC delta stream emits raw pre-merge rowset rows, so a projection MV would store duplicates that the base table merges away on read.*
+-- !result
+-- name: test_ivm_agg_groupby_expr_rejected @cloud
+CREATE TABLE agg_ge (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_ge DISTRIBUTED BY HASH(g) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1 + k2 AS g, SUM(s) AS x FROM agg_ge GROUP BY k1 + k2;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_ge' only supports GROUP BY plain column references.*
+-- !result
+-- name: test_ivm_agg_groupby_nonkey_rejected @cloud
+CREATE TABLE agg_gn (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_gn DISTRIBUTED BY HASH(s) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT s, SUM(mx) AS x FROM agg_gn GROUP BY s;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_gn' requires GROUP BY columns to be a subset of the aggregate-key columns.*
+-- !result
+-- name: test_ivm_agg_where_value_col_rejected @cloud
+CREATE TABLE agg_wv (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_wv DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, SUM(s) AS x FROM agg_wv WHERE s > 10 GROUP BY k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_wv' does not support a WHERE predicate on value column 's': the predicate is evaluated on raw pre-merge delta rows, not the post-merge base value.*
+-- !result
+-- name: test_ivm_agg_unsupported_agg_rejected @cloud
+CREATE TABLE agg_uns (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_count DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, COUNT(*) AS c FROM agg_uns GROUP BY k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_uns' does not support aggregate 'count'; AGG_KEYS base only accepts delta-rollup-compatible aggregates.*
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_avg DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, AVG(s) AS a FROM agg_uns GROUP BY k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_uns' does not support aggregate 'avg'; AGG_KEYS base only accepts delta-rollup-compatible aggregates.*
+-- !result
+-- name: test_ivm_agg_on_key_col_rejected @cloud
+CREATE TABLE agg_ak (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_ak DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, SUM(k2) AS x FROM agg_ak GROUP BY k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_ak' does not support aggregate on aggregate-key column 'k2'.*
+-- !result
+-- name: test_ivm_agg_on_replace_col_rejected @cloud
+CREATE TABLE agg_rep (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_rep DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, MAX(rep) AS x FROM agg_rep GROUP BY k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_rep' does not support aggregate on REPLACE/REPLACE_IF_NOT_NULL column 'rep': replace semantics is order-dependent.*
+-- !result
+-- name: test_ivm_agg_type_mismatch_rejected @cloud
+CREATE TABLE agg_tm (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_tm DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, SUM(mx) AS x FROM agg_tm GROUP BY k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_tm' requires MV aggregate to match the base column's aggregation type: got sum.*
+-- !result
+-- name: test_ivm_agg_in_join_rejected @cloud
+CREATE TABLE agg_jb (k1 INT, k2 INT, s BIGINT SUM, mx BIGINT MAX, rep VARCHAR(16) REPLACE)
+AGGREGATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE dup_jb (k INT, w BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_join DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT a.k1, SUM(a.s) AS x FROM agg_jb a JOIN dup_jb d ON a.k1 = d.k GROUP BY a.k1;
+-- result:
+[REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_jb' is only supported when the base table is the sole FROM source.*
+-- !result
