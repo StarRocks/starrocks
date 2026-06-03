@@ -68,6 +68,11 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableProperty;
+>>>>>>> 971916516f ([Enhancement] Open all partitions for LIST tables in OlapTableSink (#74099))
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -154,6 +159,13 @@ public class OlapTableSink extends DataSink {
     private boolean enableDynamicOverwrite = false;
     private boolean isFromOverwrite = false;
     private boolean isMultiStatementTxn = false;
+    private boolean isStreamingLoad = false;
+
+    // Conservative default for RANGE-partitioned tables under stream / routine load.
+    // Both planner paths flag streaming ingest via setIsStreamingLoad(true): StreamLoadPlanner
+    // (legacy stream load and routine load) and LoadPlanner (transaction stream load and batch
+    // write), the latter gated on EtlJobType.STREAM_LOAD / ROUTINE_LOAD.
+    private static final int STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER = 32;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -262,6 +274,10 @@ public class OlapTableSink extends DataSink {
         this.isMultiStatementTxn = isMultiStatementTxn;
     }
 
+    public void setIsStreamingLoad(boolean isStreamingLoad) {
+        this.isStreamingLoad = isStreamingLoad;
+    }
+
     public void complete(String mergeCondition) throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -280,15 +296,53 @@ public class OlapTableSink extends DataSink {
             return new ArrayList<>(Collections.singletonList(
                     dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
         }
-        if (isFromOverwrite || !enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
-                || partitionIds.size() < Config.max_load_initial_open_partition_number) {
+        if (isFromOverwrite || !enableAutomaticPartition) {
             return partitionIds;
         }
-        // bigger partition id means newer partition
-        // open last max_load_initial_open_partition_number partitions
+
+        // Resolve the initial-open limit. Priority:
+        //   1. Table property `load_initial_open_partition_number` — highest; bypasses the
+        //      global Config.max_load_initial_open_partition_number ceiling.
+        //   2. LIST partition: open all, capped by max_load_initial_open_partition_number.
+        //   3. RANGE partition:
+        //        - Stream / routine load: keep the conservative 32 (id ordering correlates
+        //          well with write recency for time-based ranges, and large fan-out hurts
+        //          continuous-ingest paths).
+        //        - Other load types: open all, capped by max_load_initial_open_partition_number.
+        int tableLimit = dstTable.getLoadInitialOpenPartitionNumber();
+        // Keep the limit a long: Config.max_load_initial_open_partition_number is a long, so a
+        // narrowing (int) cast would wrap values above Integer.MAX_VALUE (e.g. 4294967297 -> 1).
+        long limit;
+        boolean capByGlobalMax;
+        if (tableLimit != TableProperty.INVALID) {
+            limit = tableLimit;
+            capByGlobalMax = false;
+        } else if (dstTable.getPartitionInfo().isListPartition()) {
+            limit = 0;
+            capByGlobalMax = true;
+        } else if (isStreamingLoad) {
+            limit = STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER;
+            capByGlobalMax = false;
+        } else {
+            limit = 0;
+            capByGlobalMax = true;
+        }
+
+        if (capByGlobalMax) {
+            long globalMax = Config.max_load_initial_open_partition_number;
+            if (globalMax > 0 && (limit <= 0 || limit > globalMax)) {
+                limit = globalMax;
+            }
+        }
+
+        if (limit <= 0 || partitionIds.size() < limit) {
+            return partitionIds;
+        }
+
+        // bigger partition id means newer partition; open the newest `limit` partitions
         Set<Long> openPartitionIds = partitionIds.stream().collect(
                 Collectors.toCollection(() -> new TreeSet<>(Collections.reverseOrder())))
-                .stream().limit(Config.max_load_initial_open_partition_number).collect(Collectors.toSet());;
+                .stream().limit(limit).collect(Collectors.toSet());
         if (!dstTable.getDoubleWritePartitions().isEmpty()) {
             openPartitionIds.addAll(dstTable.getDoubleWritePartitions().keySet());
         }

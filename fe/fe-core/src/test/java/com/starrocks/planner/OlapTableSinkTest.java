@@ -45,6 +45,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -91,6 +92,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -536,17 +538,224 @@ public class OlapTableSinkTest {
             }
         };
 
+        long savedMax = Config.max_load_initial_open_partition_number;
         Config.max_load_initial_open_partition_number = 1;
+        try {
+            OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, true);
+            sink.setAutomaticBucketSize(1);
+            sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sink.complete();
+            LOG.info("sink is {}", sink.toThrift());
+            LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        } finally {
+            Config.max_load_initial_open_partition_number = savedMax;
+        }
+    }
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+    @Test
+    public void testGetOpenPartitionsListOpensAllUnderLargeGlobalCap(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
                 TWriteQuorumType.MAJORITY, false, false, true);
-        sink.setAutomaticBucketSize(1);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
 
-        Config.max_load_initial_open_partition_number = 32;
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "LIST should open all partitions when count is below the global cap");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsListCappedByGlobalMax(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                    "LIST should be capped by max_load_initial_open_partition_number when partitions exceed it");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyCapsTheSet(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 2;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        List<Long> open = sink.getOpenPartitions();
+        Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                "Table property load_initial_open_partition_number should cap the open set to the newest N");
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyBypassesGlobalCap(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 5;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "Table property should bypass the global cap and open all 5 partitions");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeStreamingLoadKeeps32(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList();
+        for (long i = 1; i <= 40; i++) {
+            ids.add(i);
+        }
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setIsStreamingLoad(true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(32, open.size(),
+                    "RANGE + streaming load should keep the conservative latest-32 cap");
+            Set<Long> expected = Sets.newHashSet();
+            for (long i = 9; i <= 40; i++) {
+                expected.add(i);
+            }
+            Assertions.assertEquals(expected, Sets.newHashSet(open),
+                    "RANGE + streaming load should open the newest 32 partition ids");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeNonStreamingOpensAll(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "RANGE + non-streaming load should open all partitions when below the global cap");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeNonStreamingCappedByGlobalMax(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 3;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(30L, 40L, 50L), Sets.newHashSet(open),
+                    "RANGE + non-streaming load should respect the global cap when set lower");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
     }
 
     @Test

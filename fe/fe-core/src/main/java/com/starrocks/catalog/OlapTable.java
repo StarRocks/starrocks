@@ -2838,6 +2838,16 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public int getLoadInitialOpenPartitionNumber() {
+        return tableProperty == null ? TableProperty.INVALID : tableProperty.getLoadInitialOpenPartitionNumber();
+    }
+
+    public void setLoadInitialOpenPartitionNumber(int n) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(n));
+        tableProperty.buildLoadInitialOpenPartitionNumber();
+    }
+
     public void setEnableLoadProfile(boolean enableLoadProfile) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -3651,6 +3661,13 @@ public class OlapTable extends Table {
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // load initial open partition number
+        String loadInitialOpenPartitionNumber =
+                tableProperties.get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+        if (loadInitialOpenPartitionNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, loadInitialOpenPartitionNumber);
         }
 
         // partition ttl
