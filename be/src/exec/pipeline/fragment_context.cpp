@@ -39,6 +39,7 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "platform/thrift_rpc_helper.h"

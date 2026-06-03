@@ -55,6 +55,7 @@
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/constexpr.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"

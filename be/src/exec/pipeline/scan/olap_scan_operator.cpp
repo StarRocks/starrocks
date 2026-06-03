@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "fmt/format.h"

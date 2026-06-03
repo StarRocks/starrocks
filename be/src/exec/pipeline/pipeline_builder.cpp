@@ -33,6 +33,7 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/pipeline/wait_operator.h"
