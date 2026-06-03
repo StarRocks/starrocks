@@ -509,11 +509,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
                 buildTableQueryTimeout();
-<<<<<<< HEAD
-=======
-                buildDataCacheEnable();
                 buildLoadInitialOpenPartitionNumber();
->>>>>>> 971916516f ([Enhancement] Open all partitions for LIST tables in OlapTableSink (#74099))
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
