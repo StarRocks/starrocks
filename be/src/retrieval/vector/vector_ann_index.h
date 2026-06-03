@@ -19,15 +19,17 @@
 #include <memory>
 #include <roaring/roaring.hh>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "common/status.h"
+#include "retrieval/index.h"
+#include "retrieval/row_id_filter.h"
+#include "retrieval/scored_result.h"
 
 namespace starrocks {
 
 // ============================================================
-// Enums (shared with legacy vector_index_reader.h)
+// Vector-specific enums
 // ============================================================
 
 enum class VectorIndexType {
@@ -58,115 +60,18 @@ struct VectorQuery {
 };
 
 // ============================================================
-// VectorAnnResult — unified row-level search output
+// VectorAnnIndex — vector ANN search interface, one modality of
+// BaseIndex.
+//
+// Each implementation handles a single ANN algorithm and its own
+// index file I/O. The interface is stateless per one-shot search:
+// search() may be invoked multiple times. For lazy / iterative
+// retrieval, make_iterator() returns a stateful ScoredRowIterator.
+//
+// Lifecycle: create -> init(path, meta) -> search/filtered_search
+//            / make_iterator -> close
 // ============================================================
-
-struct VectorAnnResult {
-    std::vector<int64_t> row_ids;
-    std::vector<float> scores;
-    int32_t result_count = 0;
-
-    void reserve(int32_t n) {
-        row_ids.reserve(n);
-        scores.reserve(n);
-    }
-
-    void clear() {
-        row_ids.clear();
-        scores.clear();
-        result_count = 0;
-    }
-
-    void add(int64_t row_id, float score) {
-        row_ids.push_back(row_id);
-        scores.push_back(score);
-        ++result_count;
-    }
-};
-
-// ============================================================
-// RowIdFilter — abstract row filter (faiss IDSelector-inspired)
-//
-// Hot-path interface: a single virtual is_member(). ANN graph
-// traversal may invoke this hundreds of millions of times per
-// search, so the base interface is intentionally minimal — a
-// single vtable indirection per call, no variant tag check, no
-// std::function indirection.
-//
-// Open for extension: callers may add new subclasses; ANN
-// implementations may dynamic_cast to a known concrete subclass
-// to take a specialized fast path.
-// ============================================================
-class RowIdFilter {
-public:
-    virtual ~RowIdFilter() = default;
-    virtual bool is_member(int64_t row_id) const = 0;
-};
-
-// Roaring bitmap-backed filter. Owns the bitmap.
-//
-// Uses 32-bit roaring::Roaring: segment-local row ids fit in uint32,
-// matching the convention used by storage's DelIdFilter.
-class BitmapRowIdFilter final : public RowIdFilter {
-public:
-    explicit BitmapRowIdFilter(roaring::Roaring bitmap) : _bitmap(std::move(bitmap)) {}
-
-    bool is_member(int64_t row_id) const override {
-        return row_id >= 0 && row_id <= UINT32_MAX && _bitmap.contains(static_cast<uint32_t>(row_id));
-    }
-
-    uint64_t cardinality() const { return _bitmap.cardinality(); }
-
-    const roaring::Roaring& bitmap() const { return _bitmap; }
-
-private:
-    roaring::Roaring _bitmap;
-};
-
-// ============================================================
-// AnnIterator — stateful, lazy result stream
-//                (Milvus/Knowhere IndexIterator style)
-//
-// Each VectorAnnIndex implementation returns its own concrete
-// subclass, holding the algorithm-specific traversal state
-// (HNSW visited set + candidate heap, DiskANN beam, Paimon SDK
-// cursor, ...). Results are produced one at a time in best-first
-// (non-increasing relevance) order.
-//
-// When a row filter is supplied at creation time, the iterator
-// validates each candidate against it lazily and keeps advancing
-// the underlying traversal until a matching result is found — this
-// is the native "iterative filter" path.
-//
-// Lifetime: an iterator borrows the index it was created from and
-// must not outlive it.
-// ============================================================
-class AnnIterator {
-public:
-    virtual ~AnnIterator() = default;
-
-    // Whether at least one more result can be produced. May lazily
-    // advance the underlying traversal (expand ef_search / beam,
-    // fetch the next page), hence non-const.
-    virtual bool has_next() = 0;
-
-    // Produce the next (row_id, score) in best-first order.
-    // Precondition: has_next() == true.
-    virtual StatusOr<std::pair<int64_t, float>> next() = 0;
-};
-
-// ============================================================
-// VectorAnnIndex — pure ANN search interface (Layer 1)
-//
-// Each implementation handles a single ANN algorithm and its
-// own index file I/O. The interface is stateless per-search:
-// the caller may invoke search() multiple times (important for
-// iterative search strategies).
-//
-// Lifecycle: create -> init(path, meta) -> search/filtered_search -> close
-// ============================================================
-
-class VectorAnnIndex {
+class VectorAnnIndex : public BaseIndex {
 public:
     struct IndexMeta {
         int32_t dim = 0;
@@ -174,28 +79,29 @@ public:
         std::map<std::string, std::string> index_params;
     };
 
-    virtual ~VectorAnnIndex() = default;
+    ~VectorAnnIndex() override = default;
 
     virtual Status init(const std::string& path, const IndexMeta& meta) = 0;
 
-    virtual Status search(const VectorQuery& query, VectorAnnResult* result) = 0;
+    virtual Status search(const VectorQuery& query, ScoredResult* result) = 0;
 
     // Filtered search: the index skips rows not in `filter` during traversal.
     // Default implementation falls back to unfiltered search + post-filter.
-    virtual Status filtered_search(const VectorQuery& query, const RowIdFilter& filter, VectorAnnResult* result);
+    virtual Status filtered_search(const VectorQuery& query, const RowIdFilter& filter, ScoredResult* result);
 
     // Create a stateful, lazy result iterator. `filter` may be nullptr (no
     // filtering). The returned iterator borrows *this and must not outlive it.
     // In iterator semantics, query.top_k is an initial search-window hint
     // rather than a hard cap — the caller pulls as many results as it wants.
-    virtual StatusOr<std::unique_ptr<AnnIterator>> make_iterator(const VectorQuery& query,
-                                                                 const RowIdFilter* filter) = 0;
+    virtual StatusOr<std::unique_ptr<ScoredRowIterator>> make_iterator(const VectorQuery& query,
+                                                                       const RowIdFilter* filter) = 0;
 
-    virtual Status close() = 0;
+    // BaseIndex contract. All vector indexes are the VECTOR category;
+    // close()/mem_usage() stay pure and are implemented per algorithm.
+    IndexType type() const override { return IndexType::VECTOR; }
 
-    virtual int64_t mem_usage() const = 0;
-
-    virtual VectorIndexType type() const = 0;
+    // The concrete ANN algorithm backing this index (HNSW / DiskANN / IVFPQ).
+    virtual VectorIndexType algo_type() const = 0;
 
     // True if the index can efficiently skip filtered rows during traversal
     // (e.g., HNSW graph walk, DiskANN beam search). Callers may use this to
