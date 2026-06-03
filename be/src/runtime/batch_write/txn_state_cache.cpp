@@ -23,10 +23,10 @@
 #include "common/config_merge_commit_fwd.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_util.h"
-#include "runtime/client_cache.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

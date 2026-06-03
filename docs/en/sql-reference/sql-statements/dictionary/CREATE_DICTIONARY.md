@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Creates a dictionary object based on an original object."
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

@@ -272,6 +272,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は HDFS、Azure Blob (v3.1.1 以降でサポート)、Azure Data Lake Storage Gen2 (v3.4.1 以降でサポート)、Google Storage (ネイティブ SDK、v3.5.1 以降でサポート)、および S3 プロトコルと互換性のあるオブジェクトストレージシステム (AWS S3、MinIO など) にデータを格納することをサポートしています。有効な値: `S3` (デフォルト)、`HDFS`、`AZBLOB`、`ADLS2`、および `GS`。このパラメーターを `S3` に指定した場合、`aws_s3` で始まるパラメーターを追加する必要があります。`AZBLOB` に指定した場合、`azure_blob` で始まるパラメーターを追加する必要があります。`ADLS2` に指定した場合、`azure_adls2` で始まるパラメーターを追加する必要があります。`GS` に指定した場合、`gcp_gcs` で始まるパラメーターを追加する必要があります。`HDFS` に指定した場合、`cloud_native_hdfs_url` のみを指定する必要があります。
 - 導入時期：-
 
+### `enable_admin_skip_committed_txn`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`ADMIN SKIP COMMITTED TRANSACTION` 文を有効にするかどうかを制御します。`false` の場合、当該文はエラーで拒否されます。共有データ（lake）テーブル上で publish が永久にスタックした `COMMITTED` トランザクションを運用者が手動で解除するための非常用エスケープハッチです。スタックしたトランザクションのデータ寄与は破棄されますが、「no-op publish」（このトランザクションのデータ変更を含まない新しい tablet メタデータファイルを書き出す）によってパーティションの可視バージョンは前進します。対応するのは `file_bundling=true` の lake テーブル、かつインポートと lake-compaction 種別のトランザクションのみ（alter / schema-change は未対応）。誤操作を防ぐため、運用者がスタックしたトランザクションを解除する必要があるときだけ有効化し、復旧後は速やかに無効化してください。
+- 導入時期：-
+
 ### `enable_load_volume_from_conf`
 
 - デフォルト：false
@@ -486,6 +495,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
+
+### `slow_publish_partition_log_threshold_ms`
+
+- デフォルト：3000
+- タイプ：Long
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`PublishVersionDaemon` がパーティション公開の所要時間がこの値を超えた場合に、各フェーズの内訳（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）を WARN レベルで出力するしきい値です。稼働中のクラスターで公開レイテンシを調査する際は、この値を下げてサブ秒単位のジッターを捕捉できます。通常の許容範囲内の遅い公開を抑制するには、この値を上げます。デフォルト値では動作に変更はありません。
+- 導入時期：v4.2
 
 ### `meta_sync_force_delete_shard_meta`
 

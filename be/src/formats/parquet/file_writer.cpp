@@ -108,7 +108,7 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
-AsyncParquetOutputStream::AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {
+AsyncParquetOutputStream::AsyncParquetOutputStream(formats::AsyncFlushOutputStream* stream) : _stream(stream) {
     set_mode(arrow::io::FileMode::WRITE);
 }
 

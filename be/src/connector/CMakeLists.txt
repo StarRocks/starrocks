@@ -57,7 +57,8 @@ ADD_BE_LIB(Connector
         iceberg_row_delta_sink.cpp
 )
 
-target_link_libraries(Connector PUBLIC ConnectorPrimitive)
+target_link_libraries(Connector PUBLIC ConnectorPrimitive ComputeEnv Cache)
+target_link_libraries(Connector PRIVATE Platform)
 
 if (WITH_CONNECTOR_ELASTICSEARCH)
     ADD_BE_LIB(ConnectorElasticsearch

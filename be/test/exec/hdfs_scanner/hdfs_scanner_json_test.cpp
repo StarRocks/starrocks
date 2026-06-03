@@ -42,8 +42,8 @@ protected:
     RuntimeState _runtime_state;
     ObjectPool _pool;
 
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
-    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     std::unique_ptr<RandomAccessFile> _file;
 };
 

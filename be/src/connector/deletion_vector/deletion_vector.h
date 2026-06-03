@@ -47,8 +47,8 @@ public:
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
             const std::string& file_path, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
-            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<io::CacheInputStream>& cache_input_stream) const;
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     Status deserialized_deletion_vector(uint32_t magic_number, std::vector<char>& serialized_dv,
                                         int64_t serialized_bitmap_length, const SkipRowsContextPtr& skip_rows_ctx);
@@ -58,8 +58,8 @@ private:
 
     void update_dv_file_io_counter(RuntimeProfile* parent_profile, const HdfsScanStats& app_stats,
                                    const HdfsScanStats& fs_stats,
-                                   const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
-                                   const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
+                                   const std::shared_ptr<CacheInputStream>& cache_input_stream,
+                                   const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
 
     void update_dv_build_counter(RuntimeProfile* parent_profile, const DeletionVectorBuildStats& build_stats);
 

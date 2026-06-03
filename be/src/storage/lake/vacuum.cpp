@@ -14,6 +14,7 @@
 
 #include "storage/lake/vacuum.h"
 
+#include <butil/fast_rand.h>
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
@@ -35,6 +36,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -99,15 +101,37 @@ static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_d
                                                            get_num_delete_file_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
                                                            get_num_active_file_queued_tasks, nullptr);
+
+// Decorrelated jitter (AWS Architecture Blog "Exponential Backoff And Jitter"):
+//   next_delay = min(cap, rand([base, last_delay * 3]))
+// where cap = base * 2^max_retries.
+//
+// Pure helper: all knobs (base, max_retries) are passed in by the caller so the function has no
+// hidden dependencies on global config and is trivial to unit-test. Caller passes
+// last_delay (= base on the first attempt) and feeds the returned value back on the next call.
+//
+// Compared to deterministic backoff, retry timestamps of independent CNs grow decorrelated over
+// successive attempts even when they all start throttled at the same moment, keeping the
+// per-prefix request rate below the remote storage's limit. The returned value is always
+// in [base, cap], so the caller-configured minimum delay is preserved as a floor.
+int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries) {
+    int64_t cap = base * (1L << max_retries);
+    int64_t upper = std::min(cap, last_delay * 3);
+    if (upper <= base) {
+        return base;
+    }
+    int64_t range = upper - base + 1;
+    return base + static_cast<int64_t>(butil::fast_rand_less_than(range));
+}
+
 namespace {
 
 // Delete .vi files for segments in a rowset using segment_metas metadata.
 static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, const std::string& base_dir,
                                      const RowsetMetadataPB& rowset) {
-    for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
-        const auto& seg_meta = rowset.segment_metas(i);
-        for (int64_t vi_id : seg_meta.vector_index_ids()) {
-            auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        for (int64_t vi_id : segment_meta.vector_index_ids()) {
+            auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, vi_name)));
         }
     }
@@ -135,18 +159,16 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
 }
 
-int64_t calculate_retry_delay(int64_t attempted_retries) {
-    int64_t min_delay = config::lake_vacuum_retry_min_delay_ms;
-    return min_delay * (1 << attempted_retries);
-}
-
 Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
+    const int64_t base = config::lake_vacuum_retry_min_delay_ms;
+    const int64_t max_retries = config::lake_vacuum_retry_max_attempts;
+    int64_t last_delay = base;
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
-            int64_t delay = calculate_retry_delay(attempted_retries);
-            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
-            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            last_delay = calculate_retry_delay(last_delay, base, max_retries);
+            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << last_delay << "ms";
+            std::this_thread::sleep_for(std::chrono::milliseconds(last_delay));
         } else {
             return st;
         }
@@ -238,8 +260,11 @@ void run_clear_task_async(std::function<void()> task) {
 }
 
 static bool is_shared_segment(const RowsetMetadataPB& rowset, int index) {
-    return rowset.bundle_file_offsets_size() > 0 ||
-           (rowset.shared_segments_size() > index && rowset.shared_segments(index));
+    if (index >= rowset.segment_metas_size()) {
+        return false;
+    }
+    const auto& segment_meta = rowset.segment_metas(index);
+    return segment_meta.has_bundle_file_offset() || segment_meta.shared();
 }
 
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
@@ -250,12 +275,13 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             continue;
         }
 
-        for (int i = 0; i < rowset.segments_size(); ++i) {
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
             const bool shared_file = is_shared_segment(rowset, i);
             if (shared_file && shared_file_deleter != nullptr) {
-                RETURN_IF_ERROR(shared_file_deleter->delete_file(join_path(base_dir, rowset.segments(i))));
+                RETURN_IF_ERROR(
+                        shared_file_deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
             } else {
-                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segments(i))));
+                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
             }
         }
         // Delete associated .vi files using per-segment vector index metadata
@@ -301,9 +327,9 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
         } else {
             auto metadata = std::move(res).value();
             for (const auto& rowset : metadata->rowsets()) {
-                for (int i = 0; i < rowset.segments_size(); ++i) {
+                for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                     if (is_shared_segment(rowset, i)) {
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, rowset.segments(i))));
+                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, rowset.segment_metas(i).filename())));
                     }
                 }
                 for (const auto& del_file : rowset.del_files()) {
@@ -860,30 +886,31 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
     if (log.has_op_write()) {
         const auto& op = log.op_write();
         // Shared segments can be deleted only when we know all tablets in a combined log are being deleted.
-        for (int i = 0; i < op.rowset().segments_size(); ++i) {
+        for (int i = 0; i < op.rowset().segment_metas_size(); ++i) {
             if (!is_shared_segment(op.rowset(), i) || (is_combined_log && !contains_alive_tablets)) {
-                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, op.rowset().segments(i))));
+                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, op.rowset().segment_metas(i).filename())));
             }
         }
         // delete del files
-        for (const auto& f : op.dels()) {
-            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f)));
+        for (const auto& f : op.dels_meta()) {
+            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
         }
     }
     if (log.has_op_compaction()) {
         const auto& op = log.op_compaction();
-        for (int i = 0; i < op.output_rowset().segments_size(); ++i) {
+        for (int i = 0; i < op.output_rowset().segment_metas_size(); ++i) {
             if (!is_shared_segment(op.output_rowset(), i) || (is_combined_log && !contains_alive_tablets)) {
-                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, op.output_rowset().segments(i))));
+                RETURN_IF_ERROR(
+                        deleter.delete_file(join_path(data_dir, op.output_rowset().segment_metas(i).filename())));
             }
         }
     }
     if (log.has_op_schema_change()) {
         const auto& op = log.op_schema_change();
         for (const auto& rowset : op.rowsets()) {
-            for (int i = 0; i < rowset.segments_size(); ++i) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                 if (!is_shared_segment(rowset, i) || (is_combined_log && !contains_alive_tablets)) {
-                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segment_metas(i).filename())));
                 }
             }
         }
@@ -1059,9 +1086,10 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 const bool allow_delete_shared_files =
                         can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()]);
                 for (const auto& rowset : latest_metadata->rowsets()) {
-                    for (int i = 0; i < rowset.segments_size(); ++i) {
+                    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                         if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
-                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
+                            RETURN_IF_ERROR(
+                                    deleter.delete_file(join_path(data_dir, rowset.segment_metas(i).filename())));
                         }
                     }
                     for (const auto& del_file : rowset.del_files()) {
@@ -1226,6 +1254,9 @@ static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_lo
     auto metadata = std::make_shared<TabletMetadataPB>();
     ProtobufFile file(metadata_location);
     RETURN_IF_ERROR_WITH_WARN(file.load(metadata.get(), fill_cache), "Failed to load " + metadata_location);
+    // Back-fill segment_metas from the deprecated legacy arrays for pre-feature metadata, so the
+    // reference-file check below (which reads segment_metas) protects every live segment from GC.
+    normalize_tablet_metadata_after_load(metadata.get());
     return metadata;
 }
 
@@ -1308,15 +1339,15 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
     std::set<std::string> data_files_in_metadatas;
     auto check_reference_files = [&](const TabletMetadataPtr& check_meta) {
         for (const auto& rowset : check_meta->rowsets()) {
-            for (const auto& segment : rowset.segments()) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                const auto& segment = segment_meta.filename();
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
             }
             // Protect associated .vi files using per-segment vector index metadata
-            for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
-                const auto& seg_meta = rowset.segment_metas(i);
-                for (int64_t vi_id : seg_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }
@@ -1605,13 +1636,10 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
         }
         auto metadata = std::move(res).value();
         for (const auto& rowset : metadata->rowsets()) {
-            const auto& segment_cnt = rowset.segments_size();
-            bool has_segment_size = (segment_cnt == rowset.segment_size_size());
-            bool is_bundled_file = (segment_cnt == rowset.bundle_file_offsets_size());
-            for (size_t i = 0; i < segment_cnt; ++i) {
-                std::string segment_path = tablet_mgr->segment_location(tablet_id, rowset.segments().Get(i));
-                int64_t offset = is_bundled_file ? rowset.bundle_file_offsets().Get(i) : 0;
-                int64_t size = has_segment_size ? rowset.segment_size().Get(i) : -1;
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                std::string segment_path = tablet_mgr->segment_location(tablet_id, segment_meta.filename());
+                int64_t offset = segment_meta.has_bundle_file_offset() ? segment_meta.bundle_file_offset() : 0;
+                int64_t size = segment_meta.has_size() ? segment_meta.size() : -1;
                 drop_cache_func(segment_path, offset, size);
             }
         }

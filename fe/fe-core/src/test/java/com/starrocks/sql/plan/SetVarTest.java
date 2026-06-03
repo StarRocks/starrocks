@@ -179,6 +179,25 @@ public class SetVarTest extends PlanTestBase {
     }
 
     @Test
+    public void testQueryHintWithShorthandCastAppliesQueryTimeout() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        SessionVariable originalSessionVariable = ctx.getSessionVariable();
+        ctx.setSessionVariable(originalSessionVariable.clone());
+        try {
+            String sql = "select /*+ SET_VAR(query_timeout=10) */ x::int from t";
+            StatementBase stmt = SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+            assertTrue(stmt.isExistQueryScopeHint());
+            assertEquals("10", stmt.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
+
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            executor.processQueryScopeSetVarHint();
+            assertEquals(10, ctx.getSessionVariable().getQueryTimeoutS());
+        } finally {
+            ctx.setSessionVariable(originalSessionVariable);
+        }
+    }
+
+    @Test
     public void testSetAllSessionVariablesBySql() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         SessionVariable sessionVariable = new SessionVariable();

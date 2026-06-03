@@ -42,21 +42,13 @@
 
 #include "base/uid_util.h"
 #include "fs/fs.h"
+#include "platform/store_path.h"
 #include "storage/lake/location_provider.h"
-#include "storage/store_path.h"
 
 namespace starrocks {
 
 class MemTracker;
 class TableMetricsManager;
-
-// parse a single root path of storage_root_path
-Status parse_root_path(const std::string& root_path, StorePath* path);
-
-Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path,
-                              std::string_view configvar_name = "config::storage_root_path");
-
-Status parse_conf_datacache_paths(const std::string& config_path, std::vector<std::string>* paths);
 
 struct EngineOptions {
     // list paths that tablet will be put into.

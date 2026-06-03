@@ -85,7 +85,7 @@ ThreadPool* vacuum_thread_pool(ExecEnv* env) {
 }
 
 ThreadPool* vector_index_build_thread_pool(ExecEnv* env) {
-    return env ? env->lake_vector_index_build_thread_pool() : nullptr;
+    return env ? env->lake_services().lake_vector_index_build_thread_pool : nullptr;
 }
 
 int get_num_publish_queued_tasks(void*) {
@@ -415,8 +415,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             for (const auto& rowset : metadata->rowsets()) {
                                 int64_t rv = rowset.has_version() ? rowset.version() : 0;
                                 if (rv <= base_version) continue; // existing rowset, not from this publish
-                                for (int i = 0; i < rowset.segment_metas_size(); i++) {
-                                    if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
+                                for (const auto& segment_meta : rowset.segment_metas()) {
+                                    if (segment_meta.vector_index_ids_size() > 0) {
                                         new_rowset_has_vi = true;
                                         break;
                                     }
@@ -653,7 +653,7 @@ struct AggregatePublishContext {
 
     void put_aggregate_metadata(ExecEnv* env) {
         if (!has_failure) {
-            auto thread_pool = env->put_aggregate_metadata_thread_pool();
+            auto thread_pool = env->lake_services().put_aggregate_metadata_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
                 publish_status = Status::InternalError("can not find put_aggregate_metadata thread pool");
             } else {
@@ -1177,7 +1177,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    auto thread_pool = _env->lake_services().lake_metadata_fetch_thread_pool;
     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("lake metadata fetch thread pool is null");
@@ -1464,7 +1464,7 @@ struct AggregateCompactContext {
     void write_combined_txn_log(ExecEnv* env) {
         if (final_status.ok()) {
             VLOG(2) << "Write combined txn log. pb=" << combined_txn_log.ShortDebugString();
-            auto thread_pool = env->put_combined_txn_log_thread_pool();
+            auto thread_pool = env->execution_services().put_combined_txn_log_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
                 final_status = Status::InternalError("can not find put_combined_txn_log thread pool");
             } else {
@@ -1774,7 +1774,8 @@ static Status check_missing_files(const TabletMetadata& metadata, const lake::Ta
 
     // segment
     for (const auto& rowset : metadata.rowsets()) {
-        for (const auto& seg_name : rowset.segments()) {
+        for (const auto& segment_metadata : rowset.segment_metas()) {
+            const auto& seg_name = segment_metadata.filename();
             RETURN_IF_ERROR(check_file(tablet_mgr->segment_location(tablet_id, seg_name), seg_name));
         }
     }
@@ -1832,7 +1833,7 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         Status::InvalidArgument("max_version should be >= min_version").to_protobuf(response->mutable_status());
         return;
     }
-    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    auto thread_pool = _env->lake_services().lake_metadata_fetch_thread_pool;
     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_metadatas:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         Status::ServiceUnavailable("lake metadata fetch thread pool is null").to_protobuf(response->mutable_status());

@@ -16,11 +16,13 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
@@ -88,7 +90,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
-    _runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 

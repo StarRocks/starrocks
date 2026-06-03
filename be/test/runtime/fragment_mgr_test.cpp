@@ -46,6 +46,7 @@
 #include "common/util/thrift_util.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -143,7 +144,7 @@ protected:
 };
 
 TEST_F(FragmentMgrTest, Normal) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -154,7 +155,7 @@ TEST_F(FragmentMgrTest, Normal) {
 }
 
 TEST_F(FragmentMgrTest, AddNormal) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     for (int i = 0; i < 8; ++i) {
         TExecPlanFragmentParams params;
         params.params.fragment_instance_id = TUniqueId();
@@ -165,7 +166,7 @@ TEST_F(FragmentMgrTest, AddNormal) {
 }
 
 TEST_F(FragmentMgrTest, CancelNormal) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -176,7 +177,7 @@ TEST_F(FragmentMgrTest, CancelNormal) {
 }
 
 TEST_F(FragmentMgrTest, CloseNornaml) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -199,7 +200,7 @@ TEST_F(FragmentMgrTest, CloseNornaml) {
 }
 
 TEST_F(FragmentMgrTest, CancelWithoutAdd) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -208,7 +209,7 @@ TEST_F(FragmentMgrTest, CancelWithoutAdd) {
 }
 
 TEST_F(FragmentMgrTest, RejectLegacyStreamPipeline) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(101);
@@ -221,7 +222,7 @@ TEST_F(FragmentMgrTest, RejectLegacyStreamPipeline) {
 }
 
 TEST_F(FragmentMgrTest, ProfileReportWorkerUsesInjectedServices) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     pipeline::QueryContextManager query_context_manager(1);
     ASSERT_OK(query_context_manager.init());
 
@@ -303,7 +304,7 @@ TEST_F(FragmentMgrTest, ExecExternalPlanFragmentLooksUpSlotWithEmptyColName) {
     fragment_instance_id.__set_hi(3);
     fragment_instance_id.__set_lo(4);
 
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     std::vector<TScanColumnDesc> selected_columns;
     TUniqueId out_query_id;
     Status st = mgr.exec_external_plan_fragment(open_params, fragment_instance_id, &selected_columns, &out_query_id);

@@ -543,11 +543,14 @@ set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
     Connector
+    # Legacy connector registration pulls concrete connector objects that
+    # depend on Exec symbols, so keep it in the static library group.
+    ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    IO
+    FormatsIO
     Storage
     Rowset
     Runtime
@@ -556,9 +559,12 @@ set(STARROCKS_LINK_LIBS
     Script
     orc
     ${WL_END_GROUP}
+    ComputeEnv
+    ExecPrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     Serde
     $<TARGET_FILE:Cache>
+    RuntimeEnv
     RuntimeCore
     Platform
     $<TARGET_FILE:HttpCore>
@@ -566,7 +572,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
-    $<TARGET_FILE:IOCore>
+    $<TARGET_FILE:IO>
     StarOSIntegration
     Geo
     $<TARGET_FILE:Common>
@@ -971,6 +977,7 @@ add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/platform)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)

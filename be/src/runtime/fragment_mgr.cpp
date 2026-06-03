@@ -48,12 +48,14 @@
 #include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/config_runtime_fwd.h"
+#include "common/constexpr.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
+#include "common/util/thrift_client_cache.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -61,7 +63,7 @@
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -72,7 +74,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
@@ -353,10 +354,11 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     }
 }
 
-FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
+FragmentMgr::FragmentMgr(ExecEnv* exec_env, MetricRegistry* metrics)
+        : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
-    if (_exec_env->metrics() != nullptr) {
-        REGISTER_GAUGE_RUNTIME_METRIC(_exec_env->metrics(), plan_fragment_count, [this]() {
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, plan_fragment_count, [this]() {
             std::lock_guard<std::mutex> lock(_lock);
             return _fragment_map.size();
         });

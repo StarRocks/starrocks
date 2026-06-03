@@ -14,7 +14,7 @@
 
 #include "arrow_flight_batch_reader.h"
 
-#include "runtime/result_buffer_mgr.h"
+#include "compute_env/result/result_buffer_mgr.h"
 
 namespace starrocks {
 

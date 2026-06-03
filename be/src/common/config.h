@@ -221,6 +221,12 @@ CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
+// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
+// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
+// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
+// guard. The pool is built once at startup; CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "0");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -284,6 +290,8 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
+// Number of threads for internal JVM calls that must run on pthreads.
+CONF_Int32(jvm_call_thread_pool_size, "1");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -482,6 +490,22 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Maximum number of per-output-segment .lcrm reads kept in flight by
+// RowsMapperIterator during light COMPACTION publish. The unit is **sub-chunks**
+// (each lake_rows_mapper_sub_chunk_bytes in size, never crossing a segment
+// boundary): K controls how many sub-chunk reads stay in flight, decoupled from
+// segment count. Memory bound = K * lake_rows_mapper_sub_chunk_bytes. Each chunk
+// owns its own RandomAccessFile (no shared file-class state across tasks) and
+// is consumed in segment order via vector::swap (zero memcpy when a segment
+// fits one sub-chunk). Set to 1 to disable pipelining and fall back to the
+// sequential single-shot read path.
+CONF_mInt32(lake_rows_mapper_read_parallelism, "32");
+// Sub-chunk granularity for RowsMapperIterator pipelined reads. Each segment is
+// split into ceil(segment_bytes / sub_chunk_bytes) sub-chunks that the iterator
+// pipelines independently. Smaller values raise the achievable parallelism for
+// few-but-large output segments at the cost of more range-reads and an extra
+// memcpy on consume. Defaults to 4 MiB (starcache disk-tier block-friendly).
+CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
 // Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
 // mem tracker is already past this percent (0-100) of its limit. In that regime the function
 // falls back to a single-pass loop that holds only one decoded del-file column at a time,
@@ -538,16 +562,6 @@ CONF_Int32(be_http_port, "8040");
 CONF_Alias(be_http_port, webserver_port);
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
-// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
-// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
-// This config is static and requires a BE restart to take effect.
-CONF_Bool(enable_stop_be_action, "true");
-// Whether `/api/_stop_be` requires HTTP Basic Auth credentials that are then
-// validated against the FE (password + NODE privilege on SYSTEM). Default
-// `false` to preserve historical behavior of accepting unauthenticated shutdown
-// requests; set to `true` to require FE-validated authentication. This config
-// is static and requires a BE restart to take effect.
-CONF_Bool(enable_stop_be_action_fe_auth, "false");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 
@@ -865,8 +879,11 @@ CONF_Int32(thrift_rpc_max_body_size, "0");
 // The connection will be closed if it has existed in the connection pool for longer than this value.
 CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
 
-// txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
+// The Thrift RPC timeout (in milliseconds) used by BE stream-load plan (put) and
+// txn prepare/commit calls sent to the FE.
+// NOTE: renamed from `txn_commit_rpc_timeout_ms`, which is kept as a backward-compatible alias.
+CONF_mInt32(stream_load_thrift_rpc_timeout_ms, "60000");
+CONF_Alias(stream_load_thrift_rpc_timeout_ms, txn_commit_rpc_timeout_ms);
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -1675,8 +1692,9 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // ranges in [1,16], default value is 4.
 CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
-// Used by vector query cache, 500MB in default
-CONF_Int64(vector_query_cache_capacity, "536870912");
+// Vector index cache total capacity (HNSW whole-index + IVF-PQ blocks share
+// the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
+CONF_mString(vector_query_cache_capacity, "20%");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
@@ -1718,6 +1736,18 @@ CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+// Software prefetch distance (in rows) for the agg hash-map / hash-set
+// probe loop.  Default 16 is empirical for L3-resident tables; raise on
+// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
+// per chunk; changes take effect on the next chunk.
+CONF_mInt32(agg_hash_map_prefetch_dist, "16");
+// Software prefetch is gated on the bucket array spilling L2: it is only
+// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
+// Below that the table is L2-resident and prefetch is a net loss (measured by
+// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
+// contended many-driver-per-core deployments where the effective L2 share per
+// table is smaller than the nominal per-core size.
+CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
 

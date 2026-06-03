@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.3 release notes: sub-second DDL via Fast Schema Evolution in shared-data, StarRocks Data Migration Tool, CACHE SELECT for data lake warmup,..."
 ---
 
 # StarRocks version 3.3

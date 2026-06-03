@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Query and Loading"
+description: "BE configuration parameters for query execution and data loading."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -38,6 +39,24 @@ This topic introduces the following types of BE configurations:
 - [Loading and unloading](#loading-and-unloading)
 
 ## Query
+
+### agg_hash_map_prefetch_dist
+
+- Default: 16
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Software prefetch distance (in rows) for the aggregation hash-map / hash-set probe loop. While building the aggregation hash table, the loop prefetches the bucket for the row this many positions ahead of the one it is currently processing, hiding memory latency on large tables. Setting it to `0` disables software prefetch. The value is read once per chunk, so changes take effect on the next chunk. The default 16 is empirical for L3-resident tables; raise it for DRAM-resident workloads and lower it for cache-resident ones. Prefetch is additionally gated by `agg_prefetch_l2_ratio`: regardless of this distance, no prefetch is issued while the hash table still fits in L2.
+- Introduced in: -
+
+### agg_prefetch_l2_ratio
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
+- Introduced in: -
 
 ### clear_udf_cache_when_start
 
@@ -610,6 +629,15 @@ This topic introduces the following types of BE configurations:
 - Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
 - Introduced in: -
 
+### jvm_call_thread_pool_size
+
+- Default: 1
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Introduced in: -
+
 ### udf_thread_pool_size
 
 - Default: 1
@@ -636,6 +664,14 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Master switch for adaptive `ef_search` scaling on HNSW vector indexes. When enabled, BE scales the effective `ef_search` per segment based on its row count, so recall is preserved when compaction enlarges segments without forcing manual `ef_search` retuning. Set to `false` to disable scaling and use the user-supplied `ef_search` literally.
 - Introduced in: -
+### vector_query_cache_capacity
+
+- Default: `20%`
+- Type: String
+- Unit: Bytes, with unit suffix (`K`/`M`/`G`/`T`) or percentage of BE `mem_limit` (`%`)
+- Is mutable: Yes
+- Description: Total capacity of the SR-owned vector index cache, which holds HNSW whole-index entries and IVF-PQ per-list block entries (when `enable_vector_index_block_cache=true`) in a single LRU. Applied at BE startup and on every HTTP `/api/update_config` call. Accepts absolute bytes (e.g. `4294967296`), units (`4G`, `512M`), or a percentage of the BE process memory limit (`20%`). **Behavior change in v4.2.0:** prior versions accepted only an absolute byte count (default 512MB); upgrading without changing this config will resize the cache to 20% of BE memory.
+- Introduced in: v3.4.0
 
 ### vector_adaptive_ef_alpha
 

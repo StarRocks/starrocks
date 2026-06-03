@@ -20,7 +20,7 @@ Map the boundary between internal engineering knowledge in `handbook/` and publi
 
 - Product behavior, deployment, SQL semantics, and config docs belong in `docs/`, not `handbook/`.
 - Repo operations, architecture notes, policies, and execution plans belong in `handbook/`, not `docs/`.
-- User-facing config or metric changes should update both English and Chinese docs when applicable.
+- User-facing config or metric changes should update English, Japanese, and Chinese docs when applicable.
 
 ## Test and Validation
 

@@ -19,15 +19,57 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 
+ADD_BE_LIB(StoragePrimitive
+    primitive/aggregate_type.cpp
+    primitive/chunk_iterator.cpp
+    primitive/edit_version.cpp
+    primitive/empty_iterator.cpp
+    primitive/flat_json_config.cpp
+    primitive/key_coder.cpp
+    primitive/projection_iterator.cpp
+    primitive/range.cpp
+    primitive/storage_ids.cpp
+    primitive/union_iterator.cpp
+)
+
+target_link_libraries(StoragePrimitive PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+ADD_BE_LIB(StorageBase
+    base/merge_iterator.cpp
+    base/row_source_mask.cpp
+    base/short_key_index.cpp
+)
+
+target_link_libraries(StorageBase PUBLIC
+    ComputeEnv
+    StoragePrimitive
+    Serde
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(STORAGE_FILES
-    aggregate_type.cpp
     base_tablet.cpp
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
-    flat_json_config.cpp
     flat_json_metrics.cpp
-    key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
@@ -35,10 +77,8 @@ set(STORAGE_FILES
     kv_store.cpp
     local_tablet_reader.cpp
     publish_version_manager.cpp
-    olap_common.cpp
     olap_define.cpp
     olap_server.cpp
-    options.cpp
     persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
@@ -46,6 +86,7 @@ set(STORAGE_FILES
     replication_txn_manager.cpp
     replication_utils.cpp
     segment_stream_converter.cpp
+    del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -53,7 +94,6 @@ set(STORAGE_FILES
     storage_engine.cpp
     storage_metrics.cpp
     data_dir.cpp
-    short_key_index.cpp
     snapshot_manager.cpp
     snapshot_meta.cpp
     tablet.cpp
@@ -132,7 +172,6 @@ set(STORAGE_FILES
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
-    chunk_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
@@ -146,12 +185,8 @@ set(STORAGE_FILES
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp
-    empty_iterator.cpp
-    merge_iterator.cpp
     predicate_parser.cpp
-    projection_iterator.cpp
     push_handler.cpp
-    row_source_mask.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp
@@ -164,7 +199,6 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
-    union_iterator.cpp
     unique_iterator.cpp
     column_aggregate_func.cpp
     chunk_aggregator.cpp
@@ -214,6 +248,7 @@ set(STORAGE_FILES
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
+    lake/lake_proto_normalizer.cpp
     lake/rowset.cpp
     lake/segment_metadata_filter.cpp
     lake/schema_change.cpp
@@ -228,6 +263,7 @@ set(STORAGE_FILES
     lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
+    lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
@@ -296,9 +332,11 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
     index/vector/empty_index_reader.cpp
+    index/vector/vector_index_cache.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
+    index/vector/vector_index_file_reader.cpp
     index/vector/vector_index_reader_factory.cpp
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp
@@ -320,4 +358,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecPrimitive Serde)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)

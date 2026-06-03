@@ -28,6 +28,7 @@
 #include "common/util/thrift_util.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -195,10 +196,10 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
-                                                      ExecEnv::GetInstance()->diagnose_daemon(),
-                                                      ExecEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(),
-                                                      next_id(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(
+                _load_channel_mgr.get(), _tablet_manager.get(), ExecEnv::GetInstance()->diagnose_daemon(),
+                PlatformEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(), next_id(), string(), 1000,
+                std::move(load_mem_tracker));
     }
 
     void TearDown() override {
@@ -333,8 +334,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
     for (auto tablet_id : finished_tablets) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kChunkSizePerTablet, chunk1->num_rows());
     }
 }
@@ -407,8 +408,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
     for (auto tablet_id : std::vector<int64_t>{10086, 10087, 10088, 10089}) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kSegmentRows, chunk1->num_rows());
     }
 }

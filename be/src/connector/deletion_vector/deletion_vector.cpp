@@ -31,8 +31,8 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
     } else if (is_inline()) {
         return deserialized_inline_dv(_deletion_vector_descriptor->pathOrInlineDv, skip_rows_ctx);
     } else {
-        std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
-        std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
+        std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
+        std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
         HdfsScanStats app_scan_stats;
         HdfsScanStats fs_scan_stats;
 
@@ -79,8 +79,8 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
 
 StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_file(
         const std::string& file_path, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
-        std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
+        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _params.fs,
                                   .path = file_path,
                                   .fs_stats = &fs_scan_stats,
@@ -88,7 +88,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_f
                                   .datacache_options = _params.datacache_options};
     ASSIGN_OR_RETURN(auto file,
                      HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
-    std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+    std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     int64_t offset = _deletion_vector_descriptor->offset;
     int64_t length = _deletion_vector_descriptor->sizeInBytes + DV_SIZE_LENGTH;
     while (offset < length) {
@@ -173,8 +173,8 @@ std::string DeletionVector::assemble_deletion_vector_path(const string& table_lo
 
 void DeletionVector::update_dv_file_io_counter(
         RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
-        const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
-        const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream) {
+        const std::shared_ptr<CacheInputStream>& cache_input_stream,
+        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
     {
@@ -270,7 +270,7 @@ void DeletionVector::update_dv_file_io_counter(
         RuntimeProfile::Counter* datacache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(parent_profile, "DV_DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
 
-        const io::CacheInputStream::Stats& stats = cache_input_stream->stats();
+        const CacheInputStream::Stats& stats = cache_input_stream->stats();
         COUNTER_UPDATE(datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(datacache_read_mem_bytes, stats.read_mem_cache_bytes);

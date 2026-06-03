@@ -111,6 +111,56 @@ TEST_F(MetaFileTest, test_meta_rw) {
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, 10));
 }
 
+// Regression: when add_rowset accumulates multiple op_writes into ONE composite rowset
+// (a multi-statement / batch / cross-publish PK txn), it must SUM num_rows/data_size/num_dels,
+// not keep only the first op_write's counts. The bug left e.g. num_rows=1 on a rowset whose
+// segments hold 1 + 10000 = 10001 rows, corrupting reads until compaction rewrote the rowset.
+TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
+    const int64_t tablet_id = 10050;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    metadata->set_next_rowset_id(1);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    RowsetMetadataPB rs_tiny; // first op_write: 1 row, 1 segment
+    rs_tiny.set_num_rows(1);
+    rs_tiny.set_data_size(100);
+    rs_tiny.set_num_dels(2);
+    rs_tiny.set_overlapped(false);
+    {
+        auto* segment_meta = rs_tiny.add_segment_metas();
+        segment_meta->set_filename("seg_tiny.dat");
+        segment_meta->set_size(100);
+    }
+    builder.add_rowset(rs_tiny, {}, {}, {});
+
+    RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
+    rs_large.set_num_rows(10000);
+    rs_large.set_data_size(50000);
+    rs_large.set_num_dels(3);
+    rs_large.set_overlapped(false);
+    {
+        auto* segment_meta = rs_large.add_segment_metas();
+        segment_meta->set_filename("seg_large.dat");
+        segment_meta->set_size(50000);
+    }
+    builder.add_rowset(rs_large, {}, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rs = metadata->rowsets(0);
+    EXPECT_EQ(2, rs.segment_metas_size());
+    EXPECT_TRUE(rs.segment_metas(0).has_size());
+    EXPECT_TRUE(rs.segment_metas(1).has_size());
+    EXPECT_EQ(1 + 10000, rs.num_rows());    // before the fix: 1 (first op_write only)
+    EXPECT_EQ(100 + 50000, rs.data_size()); // before the fix: 100
+    EXPECT_EQ(2 + 3, rs.num_dels());        // before the fix: 2 (first op_write only)
+    EXPECT_TRUE(rs.overlapped());           // composite spanning >1 op_write
+}
+
 TEST_F(MetaFileTest, test_merge_delvec_files_empty) {
     std::vector<DelvecFileInfo> old_delvec_files;
     FileMetaPB new_delvec_file;
@@ -323,7 +373,7 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("aaa.dat");
+        rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
@@ -337,7 +387,7 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("bbb.dat");
+        rowset_metadata.add_segment_metas()->set_filename("bbb.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         std::vector<std::pair<std::string, std::string>> filenames;
@@ -346,7 +396,8 @@ TEST_F(MetaFileTest, test_dcg) {
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 4, 5});
         unique_column_id_list.push_back({6, 7, 8});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{111, 222};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -357,14 +408,15 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(13);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ccc.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ccc.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         std::vector<std::pair<std::string, std::string>> filenames;
         filenames.emplace_back("ccc.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({4, 7});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{333};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -376,14 +428,15 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(14);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ddd.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         std::vector<std::pair<std::string, std::string>> filenames;
         filenames.emplace_back("ddd.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 5});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{444};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -392,6 +445,16 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(dcg_ver_iter->second.versions_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.column_files_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.unique_column_ids_size() == 3);
+        // column_file_sizes stays 1:1 with column_files, and carries forward the size
+        // of each retained `.cols` file regardless of how entries are reordered.
+        EXPECT_TRUE(dcg_ver_iter->second.column_file_sizes_size() == 3);
+        std::map<std::string, int64_t> file_to_size;
+        for (int i = 0; i < dcg_ver_iter->second.column_files_size(); i++) {
+            file_to_size[dcg_ver_iter->second.column_files(i)] = dcg_ver_iter->second.column_file_sizes(i);
+        }
+        EXPECT_EQ(444, file_to_size["ddd.cols"]);
+        EXPECT_EQ(222, file_to_size["bbb.cols"]);
+        EXPECT_EQ(333, file_to_size["ccc.cols"]);
         // <3, 5> -> ddd.cols
         // <6, 8> -> bbb.cols
         // <4, 7> -> ccc.cols
@@ -430,7 +493,7 @@ TEST_F(MetaFileTest, test_dcg) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(110);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("eee.dat");
+        rowset_metadata.add_segment_metas()->set_filename("eee.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(13);
         EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
@@ -444,7 +507,7 @@ TEST_F(MetaFileTest, test_dcg) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(110);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("fff.dat");
+        rowset_metadata.add_segment_metas()->set_filename("fff.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(14);
         EXPECT_FALSE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
@@ -500,7 +563,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("aaa.dat");
+        rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
@@ -514,7 +577,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("bbb.dat");
+        rowset_metadata.add_segment_metas()->set_filename("bbb.dat");
         DelfileWithRowsetId delfile;
         delfile.set_name("bbb1.del");
         delfile.set_origin_rowset_id(metadata->next_rowset_id());
@@ -540,7 +603,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         op_compaction.add_input_rowsets(110);
         op_compaction.add_input_rowsets(111);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ccc.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ccc.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(13);
         builder.apply_opcompaction(op_compaction, 111, 0);
@@ -562,7 +625,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         metadata->set_version(14);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ddd.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
@@ -582,7 +645,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         op_compaction.add_input_rowsets(112);
         op_compaction.add_input_rowsets(113);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("eee.dat");
+        rowset_metadata.add_segment_metas()->set_filename("eee.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(15);
         builder.apply_opcompaction(op_compaction, 113, 0);
@@ -606,10 +669,14 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
 
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(110);
-    input_rowset->add_segments("a.dat");
-    input_rowset->add_segments("b.dat");
-    input_rowset->add_segment_metas()->set_segment_idx(0);
-    input_rowset->add_segment_metas()->set_segment_idx(5);
+    {
+        auto* sm0 = input_rowset->add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_segment_idx(0);
+        auto* sm1 = input_rowset->add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_segment_idx(5);
+    }
 
     DeltaColumnGroupVerPB dcg;
     dcg.add_versions(13);
@@ -619,7 +686,7 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(110);
     op_compaction.set_compact_version(12);
-    op_compaction.mutable_output_rowset()->add_segments("out.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
 
     EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
 }
@@ -633,37 +700,37 @@ TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     op_compaction.add_input_rowsets(1);
     op_compaction.add_input_rowsets(11);
     op_compaction.add_input_rowsets(22);
-    op_compaction.mutable_output_rowset()->add_segments("aaa.dat");
-    op_compaction.mutable_output_rowset()->add_segments("bbb.dat");
-    op_compaction.mutable_output_rowset()->add_segments("ccc.dat");
-    op_compaction.mutable_output_rowset()->add_segments("ddd.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("bbb.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("ccc.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("ddd.dat");
     RowsetMetadataPB last_input_rowset_metadata;
 
     last_input_rowset_metadata.set_id(33);
-    last_input_rowset_metadata.mutable_segments()->Clear();
-    last_input_rowset_metadata.add_segments("aaa.dat");
-    last_input_rowset_metadata.add_segments("eee.dat");
-    last_input_rowset_metadata.add_segments("fff.dat");
-    last_input_rowset_metadata.add_segments("ddd.dat");
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+    last_input_rowset_metadata.mutable_segment_metas()->Clear();
+    last_input_rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("eee.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("fff.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 4);
     // rowset id mismatch
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 4);
 
     last_input_rowset_metadata.set_id(22);
     // normal case, duplicate segments will be trimed
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
-    EXPECT_EQ(last_input_rowset_metadata.segments(0), "eee.dat");
-    EXPECT_EQ(last_input_rowset_metadata.segments(1), "fff.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 2);
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas(0).filename(), "eee.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas(1).filename(), "fff.dat");
 
     // no duplicate segments
-    last_input_rowset_metadata.mutable_segments()->Clear();
-    last_input_rowset_metadata.add_segments("xxx.dat");
-    last_input_rowset_metadata.add_segments("yyy.dat");
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    last_input_rowset_metadata.mutable_segment_metas()->Clear();
+    last_input_rowset_metadata.add_segment_metas()->set_filename("xxx.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("yyy.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 2);
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 2);
 }
 
 // Verify that trim_partial_compaction_last_input_rowset also trims segment_metas
@@ -676,39 +743,37 @@ TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset_with_vi) {
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(22);
     // Output rowset contains: aaa.dat (reused), new_seg.dat (new compacted), ddd.dat (reused)
-    op_compaction.mutable_output_rowset()->add_segments("aaa.dat");
-    op_compaction.mutable_output_rowset()->add_segments("new_seg.dat");
-    op_compaction.mutable_output_rowset()->add_segments("ddd.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("new_seg.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("ddd.dat");
 
     // Last input rowset has segments: [aaa.dat, bbb.dat, ccc.dat, ddd.dat]
     // where aaa.dat and ddd.dat are reused in output (uncompacted), bbb.dat and ccc.dat are consumed
     RowsetMetadataPB last_input_rowset;
     last_input_rowset.set_id(22);
-    last_input_rowset.add_segments("aaa.dat");
-    last_input_rowset.add_segments("bbb.dat");
-    last_input_rowset.add_segments("ccc.dat");
-    last_input_rowset.add_segments("ddd.dat");
 
     // All segments have vector index tracking via segment_metas
     auto* meta_aaa = last_input_rowset.add_segment_metas();
+    meta_aaa->set_filename("aaa.dat");
     meta_aaa->add_vector_index_ids(100);
     auto* meta_bbb = last_input_rowset.add_segment_metas();
+    meta_bbb->set_filename("bbb.dat");
     meta_bbb->add_vector_index_ids(100);
     meta_bbb->add_vector_index_ids(200);
     auto* meta_ccc = last_input_rowset.add_segment_metas();
+    meta_ccc->set_filename("ccc.dat");
     meta_ccc->add_vector_index_ids(100);
     auto* meta_ddd = last_input_rowset.add_segment_metas();
+    meta_ddd->set_filename("ddd.dat");
     meta_ddd->add_vector_index_ids(100);
 
-    EXPECT_EQ(last_input_rowset.segments_size(), 4);
     EXPECT_EQ(last_input_rowset.segment_metas_size(), 4);
 
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset);
 
     // After trim: only consumed segments (bbb.dat, ccc.dat) should remain
-    EXPECT_EQ(last_input_rowset.segments_size(), 2);
-    EXPECT_EQ(last_input_rowset.segments(0), "bbb.dat");
-    EXPECT_EQ(last_input_rowset.segments(1), "ccc.dat");
+    EXPECT_EQ(last_input_rowset.segment_metas(0).filename(), "bbb.dat");
+    EXPECT_EQ(last_input_rowset.segment_metas(1).filename(), "ccc.dat");
 
     // segment_metas should also be trimmed: aaa.dat and ddd.dat entries removed
     EXPECT_EQ(last_input_rowset.segment_metas_size(), 2);
@@ -730,8 +795,8 @@ TEST_F(MetaFileTest, test_error_state) {
     // add rowset with segment
     RowsetMetadataPB rowset_metadata;
     rowset_metadata.set_id(110);
-    rowset_metadata.add_segments("aaa.dat");
-    rowset_metadata.add_segments("bbb.dat");
+    rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
+    rowset_metadata.add_segment_metas()->set_filename("bbb.dat");
     metadata->add_rowsets()->CopyFrom(rowset_metadata);
     std::map<uint32_t, size_t> segment_id_to_add_dels;
     for (int i = 0; i < 10; i++) {
@@ -747,10 +812,14 @@ TEST_F(MetaFileTest, test_error_state) {
 TEST_F(MetaFileTest, test_segment_id_helper_fallback_and_override) {
     RowsetMetadataPB rowset;
     rowset.set_id(1000);
-    rowset.add_segments("a.dat");
-    rowset.add_segments("b.dat");
-    rowset.add_segment_metas()->set_num_rows(10);
-    rowset.add_segment_metas()->set_num_rows(20);
+    {
+        auto* sm0 = rowset.add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_num_rows(10);
+        auto* sm1 = rowset.add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_num_rows(20);
+    }
 
     // Backward compatibility: fallback to segment index when segment_id is absent.
     EXPECT_EQ(0, get_segment_idx(rowset, 0));
@@ -778,12 +847,16 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpWrite op_write;
     auto* rowset = op_write.mutable_rowset();
-    rowset->add_segments("a.dat");
-    rowset->add_segments("b.dat");
-    rowset->add_segment_metas()->set_segment_idx(2);
-    rowset->add_segment_metas()->set_segment_idx(7);
-    op_write.add_dels("d1.del");
-    op_write.add_dels("d2.del");
+    {
+        auto* sm0 = rowset->add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_segment_idx(2);
+        auto* sm1 = rowset->add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_segment_idx(7);
+    }
+    op_write.add_dels_meta()->set_name("d1.del");
+    op_write.add_dels_meta()->set_name("d2.del");
 
     builder.apply_opwrite(op_write, {}, {});
 
@@ -806,16 +879,23 @@ TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     // input rowset with sparse segment ids: rssids are 100 and 105.
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(100);
-    input_rowset->add_segments("a.dat");
-    input_rowset->add_segments("b.dat");
-    input_rowset->add_segment_metas()->set_segment_idx(0);
-    input_rowset->add_segment_metas()->set_segment_idx(5);
+    {
+        auto* sm0 = input_rowset->add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_segment_idx(0);
+        auto* sm1 = input_rowset->add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_segment_idx(5);
+    }
 
     // neighbor rowset with rssid 101 should not be deleted.
     auto* neighbor_rowset = metadata->add_rowsets();
     neighbor_rowset->set_id(101);
-    neighbor_rowset->add_segments("c.dat");
-    neighbor_rowset->add_segment_metas()->set_segment_idx(0);
+    {
+        auto* sm = neighbor_rowset->add_segment_metas();
+        sm->set_filename("c.dat");
+        sm->set_segment_idx(0);
+    }
 
     DelvecPagePB delvec_page;
     delvec_page.set_version(10);
@@ -834,8 +914,11 @@ TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(100);
-    op_compaction.mutable_output_rowset()->add_segments("out.dat");
-    op_compaction.mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
+    {
+        auto* sm = op_compaction.mutable_output_rowset()->add_segment_metas();
+        sm->set_filename("out.dat");
+        sm->set_segment_idx(0);
+    }
 
     ASSERT_OK(builder.apply_opcompaction(op_compaction, 101, 0));
 
@@ -860,17 +943,24 @@ TEST_F(MetaFileTest, test_apply_opcompaction_next_rowset_id_uses_max_segment_id)
 
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(100);
-    input_rowset->add_segments("in.dat");
-    input_rowset->add_segment_metas()->set_segment_idx(0);
+    {
+        auto* sm = input_rowset->add_segment_metas();
+        sm->set_filename("in.dat");
+        sm->set_segment_idx(0);
+    }
 
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(100);
     auto* output_rowset = op_compaction.mutable_output_rowset();
-    output_rowset->add_segments("out1.dat");
-    output_rowset->add_segments("out2.dat");
-    output_rowset->add_segment_metas()->set_segment_idx(1);
-    output_rowset->add_segment_metas()->set_segment_idx(5);
+    {
+        auto* sm0 = output_rowset->add_segment_metas();
+        sm0->set_filename("out1.dat");
+        sm0->set_segment_idx(1);
+        auto* sm1 = output_rowset->add_segment_metas();
+        sm1->set_filename("out2.dat");
+        sm1->set_segment_idx(5);
+    }
 
     ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
 
@@ -892,15 +982,15 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     // Batch 1: add two segments a.dat / b.dat
     TxnLogPB_OpWrite op_write1;
     RowsetMetadataPB rowset_meta1;
-    rowset_meta1.add_segments("a.dat");
-    rowset_meta1.add_segments("b.dat");
+    rowset_meta1.add_segment_metas()->set_filename("a.dat");
+    rowset_meta1.add_segment_metas()->set_filename("b.dat");
     op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
     builder.batch_apply_opwrite(op_write1, /*replace_segments*/ {}, /*orphan_files*/ {});
 
     // Batch 2: append one segment c.dat (no cross-batch replacement to avoid OOB)
     TxnLogPB_OpWrite op_write2;
     RowsetMetadataPB rowset_meta2;
-    rowset_meta2.add_segments("c.dat");
+    rowset_meta2.add_segment_metas()->set_filename("c.dat");
     op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
     builder.batch_apply_opwrite(op_write2, /*replace_segments*/ {}, /*orphan_files*/ {});
 
@@ -916,10 +1006,10 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(110, final_rowset.id());
-    ASSERT_EQ(3, final_rowset.segments_size());
-    EXPECT_EQ("a.dat", final_rowset.segments(0));
-    EXPECT_EQ("b.dat", final_rowset.segments(1));
-    EXPECT_EQ("c.dat", final_rowset.segments(2));
+    ASSERT_EQ(3, final_rowset.segment_metas_size());
+    EXPECT_EQ("a.dat", final_rowset.segment_metas(0).filename());
+    EXPECT_EQ("b.dat", final_rowset.segment_metas(1).filename());
+    EXPECT_EQ("c.dat", final_rowset.segment_metas(2).filename());
     EXPECT_EQ(10, final_rowset.num_dels()); // 5 + 3 + 2
     EXPECT_EQ(113, metadata->next_rowset_id());
 
@@ -929,7 +1019,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 11));
     ASSERT_EQ(1, persisted->rowsets_size());
     EXPECT_EQ(10, persisted->rowsets(0).num_dels());
-    EXPECT_EQ("b.dat", persisted->rowsets(0).segments(1));
+    EXPECT_EQ("b.dat", persisted->rowsets(0).segment_metas(1).filename());
 }
 
 TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
@@ -945,33 +1035,39 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     // batch 1: two segments + two del files
     TxnLogPB_OpWrite op_write1;
     RowsetMetadataPB rowset_meta1;
-    rowset_meta1.add_segments("s1.dat");
-    rowset_meta1.add_segments("s2.dat");
-    rowset_meta1.add_segment_metas()->set_segment_idx(3);
-    rowset_meta1.add_segment_metas()->set_segment_idx(9);
+    {
+        auto* sm0 = rowset_meta1.add_segment_metas();
+        sm0->set_filename("s1.dat");
+        sm0->set_segment_idx(3);
+        auto* sm1 = rowset_meta1.add_segment_metas();
+        sm1->set_filename("s2.dat");
+        sm1->set_segment_idx(9);
+    }
     op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
-    op_write1.add_dels("d1.del");
-    op_write1.add_dels("d2.del");
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_dels_meta()->set_name("d2.del");
     builder.batch_apply_opwrite(op_write1, {}, {});
 
     // batch 2: one segment + one del file
     TxnLogPB_OpWrite op_write2;
     RowsetMetadataPB rowset_meta2;
-    rowset_meta2.add_segments("s3.dat");
-    rowset_meta2.add_segment_metas()->set_segment_idx(4);
+    {
+        auto* sm = rowset_meta2.add_segment_metas();
+        sm->set_filename("s3.dat");
+        sm->set_segment_idx(4);
+    }
     op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
-    op_write2.add_dels("d3.del");
+    op_write2.add_dels_meta()->set_name("d3.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(500, final_rowset.id());
-    ASSERT_EQ(3, final_rowset.segments_size());
-    EXPECT_EQ("s1.dat", final_rowset.segments(0));
-    EXPECT_EQ("s2.dat", final_rowset.segments(1));
-    EXPECT_EQ("s3.dat", final_rowset.segments(2));
     ASSERT_EQ(3, final_rowset.segment_metas_size());
+    EXPECT_EQ("s1.dat", final_rowset.segment_metas(0).filename());
+    EXPECT_EQ("s2.dat", final_rowset.segment_metas(1).filename());
+    EXPECT_EQ("s3.dat", final_rowset.segment_metas(2).filename());
     EXPECT_EQ(3, final_rowset.segment_metas(0).segment_idx());
     EXPECT_EQ(9, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(14, final_rowset.segment_metas(2).segment_idx());
@@ -1004,24 +1100,26 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
 
     MetaFileBuilder builder(*tablet, metadata);
 
-    // First rowset does not contain segment_metas (backward compatible input).
+    // First op_write's segment_metas omit segment_idx, so the builder must assign it positionally.
     TxnLogPB_OpWrite op_write1;
-    op_write1.mutable_rowset()->add_segments("m1.dat");
-    op_write1.mutable_rowset()->add_segments("m2.dat");
-    op_write1.add_dels("d1.del");
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("m1.dat");
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("m2.dat");
+    op_write1.add_dels_meta()->set_name("d1.del");
     builder.batch_apply_opwrite(op_write1, {}, {});
 
-    // Second rowset contains segment_metas.
+    // Second op_write sets segment_idx explicitly; it must be remapped into the merged rowset's id space.
     TxnLogPB_OpWrite op_write2;
-    op_write2.mutable_rowset()->add_segments("m3.dat");
-    op_write2.mutable_rowset()->add_segment_metas()->set_segment_idx(0);
-    op_write2.add_dels("d2.del");
+    {
+        auto* sm = op_write2.mutable_rowset()->add_segment_metas();
+        sm->set_filename("m3.dat");
+        sm->set_segment_idx(0);
+    }
+    op_write2.add_dels_meta()->set_name("d2.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
-    ASSERT_EQ(3, final_rowset.segments_size());
     ASSERT_EQ(3, final_rowset.segment_metas_size());
     EXPECT_EQ(0, final_rowset.segment_metas(0).segment_idx());
     EXPECT_EQ(1, final_rowset.segment_metas(1).segment_idx());
@@ -1291,7 +1389,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("a.dat");
+        rs.add_segment_metas()->set_filename("a.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1301,7 +1399,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("b.dat");
+        rs.add_segment_metas()->set_filename("b.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1333,7 +1431,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(100);
         RowsetMetadataPB output_rs;
-        output_rs.add_segments("compacted.dat");
+        output_rs.add_segment_metas()->set_filename("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
         ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
 
@@ -1386,8 +1484,8 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("seg0.dat");
-        rs.add_segments("seg1.dat");
+        rs.add_segment_metas()->set_filename("seg0.dat");
+        rs.add_segment_metas()->set_filename("seg1.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1399,7 +1497,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("other.dat");
+        rs.add_segment_metas()->set_filename("other.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1435,7 +1533,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(200);
         RowsetMetadataPB output_rs;
-        output_rs.add_segments("compacted.dat");
+        output_rs.add_segment_metas()->set_filename("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
         ASSERT_OK(builder.apply_opcompaction(op_compaction, 200, 0));
 
@@ -1471,7 +1569,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("a.dat");
+        rs.add_segment_metas()->set_filename("a.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1481,7 +1579,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("b.dat");
+        rs.add_segment_metas()->set_filename("b.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1528,7 +1626,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(300);
         RowsetMetadataPB output_rs;
-        output_rs.add_segments("compacted.dat");
+        output_rs.add_segment_metas()->set_filename("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
         ASSERT_OK(builder.apply_opcompaction(op_compaction, 300, 0));
         ASSERT_OK(builder.finalize(next_id()));
@@ -1638,11 +1736,15 @@ TEST_F(MetaFileTest, test_apply_opwrite_preserves_shared_dels) {
     metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
 
     TxnLogPB_OpWrite op_write;
-    op_write.mutable_rowset()->add_segments("seg.dat");
-    op_write.add_dels("shared_d.del");
-    op_write.add_dels("private_d.del");
-    op_write.add_shared_dels(true);
-    op_write.add_shared_dels(false);
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("seg.dat");
+    {
+        auto* d0 = op_write.add_dels_meta();
+        d0->set_name("shared_d.del");
+        d0->set_shared(true);
+        auto* d1 = op_write.add_dels_meta();
+        d1->set_name("private_d.del");
+        d1->set_shared(false);
+    }
 
     MetaFileBuilder builder(*tablet, metadata);
     builder.apply_opwrite(op_write, {}, {});
@@ -1668,8 +1770,8 @@ TEST_F(MetaFileTest, test_apply_opwrite_empty_shared_dels_defaults_false) {
     metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
 
     TxnLogPB_OpWrite op_write;
-    op_write.mutable_rowset()->add_segments("seg.dat");
-    op_write.add_dels("d.del");
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("seg.dat");
+    op_write.add_dels_meta()->set_name("d.del");
     // shared_dels left empty — legacy/normal write
 
     MetaFileBuilder builder(*tablet, metadata);
@@ -1696,22 +1798,28 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_preserves_shared_dels) {
 
     // First opwrite: 1 shared del
     TxnLogPB_OpWrite op_write1;
-    op_write1.mutable_rowset()->add_segments("seg1.dat");
-    op_write1.add_dels("d1.del");
-    op_write1.add_shared_dels(true);
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("seg1.dat");
+    {
+        auto* d = op_write1.add_dels_meta();
+        d->set_name("d1.del");
+        d->set_shared(true);
+    }
     builder.batch_apply_opwrite(op_write1, {}, {});
 
     // Second opwrite: no shared_dels set (legacy / private)
     TxnLogPB_OpWrite op_write2;
-    op_write2.mutable_rowset()->add_segments("seg2.dat");
-    op_write2.add_dels("d2.del");
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("seg2.dat");
+    op_write2.add_dels_meta()->set_name("d2.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     // Third opwrite: 1 shared del
     TxnLogPB_OpWrite op_write3;
-    op_write3.mutable_rowset()->add_segments("seg3.dat");
-    op_write3.add_dels("d3.del");
-    op_write3.add_shared_dels(true);
+    op_write3.mutable_rowset()->add_segment_metas()->set_filename("seg3.dat");
+    {
+        auto* d = op_write3.add_dels_meta();
+        d->set_name("d3.del");
+        d->set_shared(true);
+    }
     builder.batch_apply_opwrite(op_write3, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
@@ -1742,12 +1850,16 @@ TEST_F(MetaFileTest, test_apply_opwrite_clears_shared_segments_for_rewrite) {
     // Build op_write with 2 segments, both marked shared (simulating post-cross-publish).
     TxnLogPB_OpWrite op_write;
     auto* src_rowset = op_write.mutable_rowset();
-    src_rowset->add_segments("orig0.dat");
-    src_rowset->add_segments("orig1.dat");
-    src_rowset->add_segment_size(1000);
-    src_rowset->add_segment_size(1000);
-    src_rowset->add_shared_segments(true);
-    src_rowset->add_shared_segments(true);
+    {
+        auto* sm0 = src_rowset->add_segment_metas();
+        sm0->set_filename("orig0.dat");
+        sm0->set_size(1000);
+        sm0->set_shared(true);
+        auto* sm1 = src_rowset->add_segment_metas();
+        sm1->set_filename("orig1.dat");
+        sm1->set_size(1000);
+        sm1->set_shared(true);
+    }
 
     // Partial update: segment 0 is rewritten into a new private file.
     std::map<int, FileInfo> replace_segments;
@@ -1761,14 +1873,13 @@ TEST_F(MetaFileTest, test_apply_opwrite_clears_shared_segments_for_rewrite) {
 
     ASSERT_EQ(metadata->rowsets_size(), 1);
     const auto& rowset = metadata->rowsets(0);
-    ASSERT_EQ(rowset.segments_size(), 2);
-    ASSERT_EQ(rowset.shared_segments_size(), 2);
+    ASSERT_EQ(rowset.segment_metas_size(), 2);
     // Segment 0 was rewritten: filename updated AND shared flag cleared.
-    EXPECT_EQ(rowset.segments(0), "rewrite0.dat");
-    EXPECT_FALSE(rowset.shared_segments(0));
+    EXPECT_EQ(rowset.segment_metas(0).filename(), "rewrite0.dat");
+    EXPECT_FALSE(rowset.segment_metas(0).shared());
     // Segment 1 was not touched: shared flag preserved.
-    EXPECT_EQ(rowset.segments(1), "orig1.dat");
-    EXPECT_TRUE(rowset.shared_segments(1));
+    EXPECT_EQ(rowset.segment_metas(1).filename(), "orig1.dat");
+    EXPECT_TRUE(rowset.segment_metas(1).shared());
 }
 
 // Verify the same behavior for the batched path (batch_apply_opwrite + set_final_rowset).
@@ -1783,12 +1894,16 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite
 
     TxnLogPB_OpWrite op_write;
     auto* src_rowset = op_write.mutable_rowset();
-    src_rowset->add_segments("orig0.dat");
-    src_rowset->add_segments("orig1.dat");
-    src_rowset->add_segment_size(1000);
-    src_rowset->add_segment_size(1000);
-    src_rowset->add_shared_segments(true);
-    src_rowset->add_shared_segments(true);
+    {
+        auto* sm0 = src_rowset->add_segment_metas();
+        sm0->set_filename("orig0.dat");
+        sm0->set_size(1000);
+        sm0->set_shared(true);
+        auto* sm1 = src_rowset->add_segment_metas();
+        sm1->set_filename("orig1.dat");
+        sm1->set_size(1000);
+        sm1->set_shared(true);
+    }
 
     std::map<int, FileInfo> replace_segments;
     FileInfo rewrite_info;
@@ -1802,12 +1917,11 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite
 
     ASSERT_EQ(metadata->rowsets_size(), 1);
     const auto& rowset = metadata->rowsets(0);
-    ASSERT_EQ(rowset.segments_size(), 2);
-    ASSERT_EQ(rowset.shared_segments_size(), 2);
-    EXPECT_EQ(rowset.segments(0), "rewrite0.dat");
-    EXPECT_FALSE(rowset.shared_segments(0));
-    EXPECT_EQ(rowset.segments(1), "orig1.dat");
-    EXPECT_TRUE(rowset.shared_segments(1));
+    ASSERT_EQ(rowset.segment_metas_size(), 2);
+    EXPECT_EQ(rowset.segment_metas(0).filename(), "rewrite0.dat");
+    EXPECT_FALSE(rowset.segment_metas(0).shared());
+    EXPECT_EQ(rowset.segment_metas(1).filename(), "orig1.dat");
+    EXPECT_TRUE(rowset.segment_metas(1).shared());
 }
 
 } // namespace starrocks::lake

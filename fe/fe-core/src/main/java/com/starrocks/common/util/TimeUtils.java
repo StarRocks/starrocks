@@ -167,6 +167,18 @@ public class TimeUtils {
         return time.atZone(getSystemTimeZone().toZoneId()).toInstant().getEpochSecond();
     }
 
+    // longToTimeString / timeStringToLong come in two public flavors:
+    //
+    //   - longToTimeString(long) / timeStringToLong(String): session-zone,
+    //     for user-facing SHOW / proc / load output and SQL literals.
+    //   - timeStringToLongInStorageZone(String): parses legacy wall-clock
+    //     strings produced by older BE versions in the fixed +08:00 cluster
+    //     zone; kept only for that RPC compatibility path.
+    //
+    // The (long, DateTimeFormatter) overload remains for the rare callers
+    // that need a non-standard pattern, e.g. backup paths that encode the
+    // timestamp into a filename.
+
     public static String longToTimeString(long timeStamp, DateTimeFormatter dateFormat) {
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;
@@ -184,7 +196,9 @@ public class TimeUtils {
      * connected with different {@code time_zone} session variables see their own
      * local wall-clock. Switching this to a fixed zone is what regressed in #66360;
      * keep it session-zoned. Callers that need a fixed zone should build their own
-     * formatter and use {@link #longToTimeString(long, DateTimeFormatter)} instead.
+     * formatter and use {@link #longToTimeString(long, DateTimeFormatter)} instead;
+     * callers that need a round-trip should carry the epoch-ms directly rather than
+     * going through a wall-clock string at all.
      */
     public static String longToTimeString(long timeStamp) {
         // Fast-path sentinel timestamps (unset / negative) before touching the session
@@ -253,14 +267,38 @@ public class TimeUtils {
         return dateTime;
     }
 
-    public static long timeStringToLong(String timeStr) {
+    // Parses a "yyyy-MM-dd HH:mm:ss" wall-clock string, interpreting it in the
+    // given zone; returns -1 on parse failure. Shared by timeStringToLong(String)
+    // and timeStringToLongInStorageZone(String). Not exposed publicly - callers
+    // pick a public entry point based on the wire/storage contract rather than
+    // by passing a zone.
+    private static long parseTimeStringIn(String timeStr, ZoneId zoneId) {
         LocalDateTime dateTime;
         try {
             dateTime = STRING_TO_DATETIME_FORMAT.parse(timeStr).query(LocalDateTime::from);
         } catch (RuntimeException e) {
             return -1;
         }
-        return dateTime.atZone(TIME_ZONE).toInstant().toEpochMilli();
+        return dateTime.atZone(zoneId).toInstant().toEpochMilli();
+    }
+
+    /**
+     * Parses a wall-clock string in the caller's session timezone. Returns {@code -1}
+     * on parse failure. Use for USER-supplied inputs (SQL literals, request
+     * parameters).
+     */
+    public static long timeStringToLong(String timeStr) {
+        return parseTimeStringIn(timeStr, getTimeZone().toZoneId());
+    }
+
+    /**
+     * Parses legacy wall-clock strings sent by older BE versions over RPC (e.g. the
+     * {@code load_*_time} fields in {@code LoadsSystemTable}), where the producer's
+     * zone was the cluster storage zone (fixed +08:00). Returns {@code -1} on parse
+     * failure. Do NOT use for new code; carry epoch-ms directly instead.
+     */
+    public static long timeStringToLongInStorageZone(String timeStr) {
+        return parseTimeStringIn(timeStr, DEFAULT_STORAGE_ZONE);
     }
 
     // Check if the time zone_value is valid

@@ -50,7 +50,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_tuple.h"
+#include "storage/primitive/olap_tuple.h"
 #include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/timestamp_value.h"

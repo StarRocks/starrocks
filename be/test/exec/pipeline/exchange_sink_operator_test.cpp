@@ -72,7 +72,7 @@ public:
         TQueryGlobals query_globals;
         _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
                                                         &_exec_env->query_execution_services(), _exec_env);
-        _runtime_state->set_query_ctx(_query_context.get());
+        _query_context->attach_to_runtime_state(_runtime_state.get());
         _runtime_state->init_instance_mem_tracker();
 
         _fragment_context = std::make_shared<FragmentContext>();

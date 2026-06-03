@@ -22,8 +22,8 @@
 #include "common/statusor.h"
 #include "fs/encryption.h"
 #include "fs/fs_options.h"
-#include "io/core/input_stream.h"
-#include "io/core/seekable_input_stream.h"
+#include "io/input_stream.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks {
 

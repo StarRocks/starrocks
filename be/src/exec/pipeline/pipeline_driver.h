@@ -23,18 +23,18 @@
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "compute_env/pipeline/pipeline_timer.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
+#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
@@ -56,7 +56,6 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
-using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -427,13 +426,13 @@ public:
         }
 
         // OUTPUT_FULL
-        if (!sink_operator()->need_input()) {
+        if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
             set_driver_state(DriverState::OUTPUT_FULL);
             return false;
         }
 
         // INPUT_EMPTY
-        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+        if (!source_operator()->has_output() && !source_operator()->is_finished()) {
             set_driver_state(DriverState::INPUT_EMPTY);
             return false;
         }
@@ -463,13 +462,13 @@ public:
         }
 
         // OUTPUT_FULL
-        if (!sink_operator()->need_input()) {
+        if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
             set_driver_state(DriverState::OUTPUT_FULL);
             return false;
         }
 
         // INPUT_EMPTY
-        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+        if (!source_operator()->has_output() && !source_operator()->is_finished()) {
             set_driver_state(DriverState::INPUT_EMPTY);
             return false;
         }
@@ -568,7 +567,7 @@ protected:
     std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
-    PipelineObserver _observer;
+    PipelineDriverObserver _observer;
     // Keep this before _operators so driver teardown destroys operators first, then their managers.
     std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;

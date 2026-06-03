@@ -20,56 +20,27 @@
 #include "base/concurrency/limit_setter.h"
 #include "base/utility/factory_method.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
-#include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 
-class DriverExecutor;
-using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
-
+struct DriverExecutorMetrics;
 class PipelineExecutorMetrics;
-
-class DriverExecutor {
-public:
-    DriverExecutor(std::string name) : _name(std::move(name)) {}
-    virtual ~DriverExecutor() = default;
-    virtual void initialize(int32_t num_threads) {}
-    virtual void change_num_threads(int32_t num_threads) {}
-    virtual void submit(DriverRawPtr driver) = 0;
-    virtual void cancel(DriverRawPtr driver) = 0;
-    virtual void close() = 0;
-
-    // When all the root drivers (the drivers have no successors in the same fragment) have finished,
-    // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
-    // the FragmentContext is not unregistered until all the drivers has finished, because some
-    // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
-    // to objects owned by FragmentContext.
-    virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
-                                   bool done) = 0;
-
-    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
-    virtual void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
-
-    virtual void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const = 0;
-
-    virtual void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) = 0;
-
-protected:
-    std::string _name;
-};
 
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
     GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group,
-                         const CpuUtil::CpuIds& cpuids, PipelineExecutorMetrics* metrics);
+                         const CpuUtil::CpuIds& cpuids, PipelineExecutorMetrics* metrics,
+                         const workgroup::WorkGroupSchedulePolicy& schedule_policy);
     ~GlobalDriverExecutor() override = default;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
@@ -84,6 +55,9 @@ public:
     void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override;
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override;
+
+    Status update_exec_state_report_max_threads(int max_threads) override;
+    Status update_priority_exec_state_report_max_threads(int max_threads) override;
 
     ExecStateReporter* exec_state_reporter() { return _exec_state_reporter.get(); }
 

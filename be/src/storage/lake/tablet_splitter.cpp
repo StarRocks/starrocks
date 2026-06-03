@@ -29,6 +29,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
+#include "storage/tablet_schema_map.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -541,8 +542,8 @@ std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetad
         if (rowset.has_data_size()) {
             a.data_size = rowset.data_size();
         } else {
-            for (int i = 0; i < rowset.segment_size_size(); ++i) {
-                a.data_size += rowset.segment_size(i);
+            for (const auto& sm : rowset.segment_metas()) {
+                a.data_size += sm.size();
             }
         }
         if (rowset.has_num_dels()) {
@@ -616,26 +617,20 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
     }
 }
 
-// Build SegmentSplitInfo[] from a tablet's rowsets. Rejects per-rowset segment
-// metadata that is internally inconsistent (segments / segment_size /
-// segment_metas array sizes diverge). Does NOT enforce "segments non-empty" —
-// the data-driven and external-boundaries callers have different semantics on empty (one
-// errors, the other treats it as a no-op fast path) and own that check.
+// Build SegmentSplitInfo[] from a tablet's rowsets. Does NOT enforce "segments
+// non-empty" — the data-driven and external-boundaries callers have different
+// semantics on empty (one errors, the other treats it as a no-op fast path) and
+// own that check.
 Status build_segments_from_rowsets(const RepeatedPtrField<RowsetMetadataPB>& rowsets,
                                    std::vector<SegmentSplitInfo>* segments) {
     for (const auto& rowset : rowsets) {
-        if (rowset.segments_size() != rowset.segment_size_size() ||
-            rowset.segments_size() != rowset.segment_metas_size()) {
-            return Status::InvalidArgument("Segment metadata is inconsistent with segment list");
-        }
-        for (int32_t i = 0; i < rowset.segments_size(); ++i) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
-            const auto& segment_meta = rowset.segment_metas(i);
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
             segment.num_rows = segment_meta.num_rows();
-            segment.data_size = rowset.segment_size(i);
+            segment.data_size = segment_meta.size();
             RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
             segments->push_back(std::move(segment));
         }
@@ -803,17 +798,20 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //     DecimalTypeInfo compares raw unscaled values, so a bound with the
     //     same LogicalType but different scale than the schema would
     //     mis-order against schema-derived segment bounds.
-    //     Reads schema metadata directly from TabletSchemaPB to avoid the
-    //     heavy TabletSchema::create allocation; only sort-key columns'
-    //     type / precision / scale are needed.
-    const TabletSchemaPB& schema_pb = old_tablet_metadata->schema();
-    const auto& sort_key_idxes = schema_pb.sort_key_idxes();
+    //     The materialized TabletSchema (fetched from the cached GlobalTabletSchemaMap, so
+    //     there is no per-call heavy allocation) resolves the sort key for us -- including
+    //     the "empty sort_key_idxes => sort key is the key columns" convention that a
+    //     range-distributed table created without an explicit ORDER BY relies on, and which
+    //     the FE mirrors in MetaUtils.getRangeDistributionColumns. Reading sort_key_idxes
+    //     straight off the raw TabletSchemaPB would instead see it empty and wrongly reject
+    //     every such split (silent identical-fallback, no actual pre-split).
+    auto tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(old_tablet_metadata->schema()).first;
+    const std::vector<ColumnId> sort_key_idxes = tablet_schema->sort_key_idxes();
     if (sort_key_idxes.empty()) {
         return Status::InvalidArgument("tablet has no sort key columns; external-boundaries path requires a sort key");
     }
     // Precompute sort-key column metadata once (constant per call); the per-tuple
-    // validation runs 2K times (K boundaries × {lower, upper}) and each call would
-    // otherwise rerun string_to_logical_type and re-read col_pb fields.
+    // validation runs 2K times (K boundaries × {lower, upper}).
     struct SortKeyColumnMeta {
         LogicalType type;
         int precision;
@@ -822,15 +820,14 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     };
     std::vector<SortKeyColumnMeta> sort_key_meta;
     sort_key_meta.reserve(sort_key_idxes.size());
-    for (int column_index : sort_key_idxes) {
-        // ColumnPB.frac is the scale field (legacy naming).
-        const auto& column_pb = schema_pb.column(column_index);
-        const LogicalType type = string_to_logical_type(column_pb.type());
+    for (ColumnId column_index : sort_key_idxes) {
+        const TabletColumn& column = tablet_schema->column(column_index);
+        const LogicalType type = column.type();
         const bool is_decimal = (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_field_type(type));
-        sort_key_meta.push_back({type, column_pb.precision(), column_pb.frac(), is_decimal});
+        sort_key_meta.push_back({type, column.precision(), column.scale(), is_decimal});
     }
     auto validate_tuple_against_schema = [&](const TuplePB& tuple, int range_index, std::string_view side) -> Status {
-        if (tuple.values_size() != sort_key_idxes.size()) {
+        if (tuple.values_size() != static_cast<int>(sort_key_idxes.size())) {
             return Status::InvalidArgument(fmt::format("new_tablet_ranges[{}].{}: tuple arity {} != sort_key arity {}",
                                                        range_index, side, tuple.values_size(), sort_key_idxes.size()));
         }

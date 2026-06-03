@@ -253,31 +253,22 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
 }
 
 void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender_id) {
-    std::lock_guard<SpinLock> l(_lock);
     QueryStatistics* query_statistics = nullptr;
-    auto iter = _query_statistics.find(sender_id);
-    if (iter == _query_statistics.end()) {
-        query_statistics = new QueryStatistics;
-        _query_statistics[sender_id] = query_statistics;
-    } else {
-        query_statistics = iter->second;
-    }
+    _query_statistics.lazy_emplace_l(
+            sender_id, [&](QueryStatistics* const& existing) { query_statistics = existing; },
+            [&](const auto& ctor) {
+                query_statistics = new QueryStatistics;
+                ctor(sender_id, query_statistics);
+            });
     query_statistics->merge_pb(statistics);
 }
 
 void QueryStatisticsRecvr::aggregate(QueryStatistics* statistics) {
-    std::lock_guard<SpinLock> l(_lock);
-    for (auto& pair : _query_statistics) {
-        statistics->merge(pair.first, *pair.second);
-    }
+    _query_statistics.for_each([&statistics](const auto& pair) { statistics->merge(pair.first, *pair.second); });
 }
 
 QueryStatisticsRecvr::~QueryStatisticsRecvr() {
-    // It is unnecessary to lock here, because the destructor will be
-    // called alter DataStreamRecvr's close in ExchangeNode.
-    for (auto& pair : _query_statistics) {
-        delete pair.second;
-    }
+    _query_statistics.for_each_m([](auto& pair) { delete pair.second; });
     _query_statistics.clear();
 }
 

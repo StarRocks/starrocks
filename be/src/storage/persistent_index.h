@@ -23,7 +23,7 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
-#include "storage/edit_version.h"
+#include "storage/primitive/edit_version.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 

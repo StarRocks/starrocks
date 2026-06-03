@@ -340,6 +340,14 @@ vectorized_functions = [
     [30191, 'rtrim', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
 
+    # MySQL TRIM(... FROM ...) substring semantics: remstr removed as a whole unit, repeatedly.
+    [30172, 'trim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30182, 'ltrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30192, 'rtrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+
     [30200, 'ascii', True, False, 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', True, False, 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -871,6 +879,7 @@ vectorized_functions = [
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
 
     # materialize: identity function that acts as an optimization barrier.
     # Returns the input unchanged but is opaque to the FE optimizer,

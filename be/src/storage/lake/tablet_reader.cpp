@@ -25,23 +25,25 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "gutil/stl_util.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
+#include "storage/base/merge_iterator.h"
+#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
-#include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
-#include "storage/row_source_mask.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -49,7 +51,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
 #include "util/json_flattener.h"
 
 namespace starrocks::lake {
@@ -419,7 +420,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = GlobalEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load rowset serially if sumbit_func failed
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

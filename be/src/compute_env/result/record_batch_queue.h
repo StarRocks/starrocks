@@ -1,0 +1,60 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/concurrency/spinlock.h"
+#include "common/status.h"
+
+namespace arrow {
+
+class RecordBatch;
+}
+
+namespace starrocks {
+
+// The RecordBatchQueue is created and managed by the ResultQueueMgr to
+// cache external query results, as well as query status. Where both
+// BlockingGet and BlockingPut operations block if the queue is empty or
+// full, respectively.
+class RecordBatchQueue {
+public:
+    RecordBatchQueue(u_int32_t max_elements) : _queue(max_elements) {}
+
+    Status status() {
+        std::lock_guard<SpinLock> l(_status_lock);
+        return _status;
+    }
+
+    void update_status(const Status& status);
+
+    bool blocking_get(std::shared_ptr<arrow::RecordBatch>* result) { return _queue.blocking_get(result); }
+
+    bool blocking_put(const std::shared_ptr<arrow::RecordBatch>& val) { return _queue.blocking_put(val); }
+
+    bool try_put(const std::shared_ptr<arrow::RecordBatch>& val) { return _queue.try_put(val); }
+
+    bool is_shutdown() const { return _queue.is_shutdown(); }
+
+    // Shut down the queue. Wakes up all threads waiting on blocking_get or blocking_put.
+    void shutdown();
+
+private:
+    BlockingQueue<std::shared_ptr<arrow::RecordBatch>> _queue;
+    SpinLock _status_lock;
+    Status _status;
+};
+
+} // namespace starrocks

@@ -33,6 +33,7 @@
 #include "exec/tablet_info.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gtest/gtest.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -205,7 +206,7 @@ TEST(FetchTaskTest, local_callback_safe_when_unit_expired) {
 
 TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
     ASSERT_NE(ExecEnv::GetInstance(), nullptr);
-    ASSERT_NE(ExecEnv::GetInstance()->brpc_stub_cache(), nullptr);
+    ASSERT_NE(PlatformEnv::GetInstance()->brpc_stub_cache(), nullptr);
 
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));
@@ -230,7 +231,7 @@ TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
 
 TEST(FetchTaskTest, submit_remote_rpc_failure_handles_expired_unit) {
     ASSERT_NE(ExecEnv::GetInstance(), nullptr);
-    ASSERT_NE(ExecEnv::GetInstance()->brpc_stub_cache(), nullptr);
+    ASSERT_NE(PlatformEnv::GetInstance()->brpc_stub_cache(), nullptr);
 
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));

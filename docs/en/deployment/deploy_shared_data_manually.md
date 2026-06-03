@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to manually deploy a shared-data StarRocks cluster with decoupled storage and computing."
 ---
 
 import Tabs from '@theme/Tabs';
