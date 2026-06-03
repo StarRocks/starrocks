@@ -18,6 +18,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
 
 namespace starrocks {
 namespace lake {
@@ -74,6 +75,9 @@ std::shared_ptr<TxnLogPB> make_op_write_log(int64_t tablet_id, int64_t txn_id, i
     auto* rowset = opw->mutable_rowset();
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
+    // Production op_writes mint a uid at delta_writer time; emulate that here so
+    // batch-apply's strict-uid invariant in apply_op_write_batch holds.
+    tablet_reshard_helper::ensure_rowset_uid(rowset);
     for (auto& s : segments) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(s);
@@ -134,6 +138,52 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
     EXPECT_EQ(4u, meta->next_rowset_id()); // 批量合并仍消耗3个额外rowset id
 }
 
+// Regression: a cross-published op_write whose num_rows scaled to 0 on this child (but still
+// carries a segment) must NOT be dropped, and the merged uid must be taken from it (the first
+// op_write carrying segments) so split children converge on one identity. Gating on num_rows
+// instead would skip seg_zero, set num_rows-driven uid to log1's, and diverge across children.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10020);
+    auto meta = build_non_pk_metadata(10020);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log0 = make_op_write_log(10020, 20, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
+    auto log1 = make_op_write_log(10020, 21, /*num_rows=*/10, /*data_size=*/200, {"seg_data"});
+    const PUniqueId first_uid = log0->op_write().rowset().uid();
+
+    TxnLogVector logs{log0, log1};
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    EXPECT_EQ(2, rs.segment_metas_size()) << "the num_rows==0 op_write's segment must be retained";
+    EXPECT_EQ(10, rs.num_rows()) << "num_rows still summed faithfully (0 + 10)";
+    ASSERT_TRUE(rs.has_uid());
+    EXPECT_EQ(first_uid.hi(), rs.uid().hi());
+    EXPECT_EQ(first_uid.lo(), rs.uid().lo());
+}
+
+// Regression for the early-exit: if EVERY contributing op_write scaled to num_rows==0 but
+// segments are present, the merged rowset must still be created (the early-exit keys on
+// segments, not total_num_rows) — otherwise the whole cross-published txn's data is dropped.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10021);
+    auto meta = build_non_pk_metadata(10021);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    logs.push_back(make_op_write_log(10021, 22, 0, 0, {"seg_x"}));
+    logs.push_back(make_op_write_log(10021, 23, 0, 0, {"seg_y"}));
+
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size()) << "rowset must be created even when total num_rows is 0";
+    EXPECT_EQ(2, meta->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, meta->rowsets(0).num_rows());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);
@@ -145,6 +195,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     auto* rowset = log->mutable_op_write()->mutable_rowset();
     rowset->set_num_rows(5);
     rowset->set_data_size(100);
+    tablet_reshard_helper::ensure_rowset_uid(rowset);
     {
         auto* sm0 = rowset->add_segment_metas();
         sm0->set_filename("seg_sparse_a");
@@ -176,6 +227,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     auto* rowset1 = log1->mutable_op_write()->mutable_rowset();
     rowset1->set_num_rows(3);
     rowset1->set_data_size(30);
+    tablet_reshard_helper::ensure_rowset_uid(rowset1);
     {
         auto* sm = rowset1->add_segment_metas();
         sm->set_filename("seg_a");
@@ -189,6 +241,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     auto* rowset2 = log2->mutable_op_write()->mutable_rowset();
     rowset2->set_num_rows(4);
     rowset2->set_data_size(40);
+    tablet_reshard_helper::ensure_rowset_uid(rowset2);
     {
         auto* sm = rowset2->add_segment_metas();
         sm->set_filename("seg_b");
@@ -504,6 +557,28 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchRetu
     Status st = applier->apply(logs);
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
     EXPECT_NE(std::string::npos, st.to_string().find("mismatch"));
+}
+
+// Legacy/upgrade path: a txn log written before the uid field existed carries no producer
+// uid. Batch-apply must NOT hard-fail on it (that would strand a pending multi-statement
+// txn across a rolling upgrade) — instead the merged rowset backfills a fresh uid so the
+// publish succeeds. Such a txn predates range distribution and is never cross-published, so
+// the backfilled (non-deterministic) uid is safe. We clear the uid that make_op_write_log
+// auto-stamps to simulate the legacy log.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10015);
+    auto meta = build_non_pk_metadata(10015);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    auto log = make_op_write_log(10015, 10, 5, 100, {"seg_a"});
+    log->mutable_op_write()->mutable_rowset()->clear_uid(); // simulate a legacy pre-uid txn log
+    logs.push_back(std::move(log));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_TRUE(meta->rowsets(0).has_uid()) << "merged rowset must backfill a uid for a legacy log";
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {

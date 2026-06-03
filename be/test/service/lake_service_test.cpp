@@ -39,6 +39,7 @@
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "storage/variant_tuple.h"
@@ -134,6 +135,9 @@ protected:
         rowset->set_overlapped(false);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
+        // Production rowset producers mint a uid; emulate that here so the
+        // strict-uid invariant in tablet_merger holds when MERGE later runs.
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename("seg_" + std::to_string(tablet_id) + "_0");
         segment_meta->set_size(100);
@@ -161,6 +165,9 @@ protected:
         rowset->set_overlapped(false);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
+        // Production rowset producers mint a uid; emulate that here so the
+        // strict-uid invariant in tablet_merger holds when MERGE later runs.
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename("seg_" + std::to_string(tablet_id) + "_0");
         segment_meta->set_size(100);
