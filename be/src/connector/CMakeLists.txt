@@ -44,6 +44,7 @@ target_link_libraries(ConnectorCommon PUBLIC
 )
 
 ADD_BE_LIB(ConnectorHive
+        hive/footer_prefetch_task.cpp
         hive/hive_connector.cpp
         hive/hive_chunk_sink.cpp
         hive/scanner/cache_select_scanner.cpp
