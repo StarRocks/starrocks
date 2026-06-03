@@ -85,11 +85,6 @@ public:
     virtual StatusOr<std::pair<int64_t, float>> next() = 0;
 };
 
-// Each implementation handles a single ANN algorithm and its own
-// index file I/O. The interface is stateless per one-shot search:
-// search() may be invoked multiple times. For lazy / iterative
-// retrieval, make_iterator() returns a stateful AnnIterator.
-//
 // Lifecycle: create -> init(path, meta) -> search/filtered_search
 //            / make_iterator -> close
 // ============================================================
@@ -111,22 +106,8 @@ public:
     // Default implementation falls back to unfiltered search + post-filter.
     virtual Status filtered_search(const VectorQuery& query, const RowIdFilter& filter, ScoredResult* result);
 
-    // Iterative search is an OPTIONAL capability. Indexes with a native lazy,
-    // best-first cursor (a future internal HNSW, ...) override this and return
-    // true from supports_iterative_search(). Indexes without one (e.g. the
-    // TenANN internal-table searcher exposes only one-shot AnnSearch) leave the
-    // default, which reports the capability as unavailable.
     virtual bool supports_iterative_search() const { return false; }
 
-    // Create a stateful, lazy result iterator. The iterator yields raw
-    // best-first results only; it does NOT apply any row filtering. Filtering
-    // is the caller's responsibility: the upper layer drives the iterator,
-    // validating each yielded row against its own predicate / RowIdFilter and
-    // pulling more until enough rows pass.
-    //
-    // The returned iterator borrows *this and must not outlive it. In iterator
-    // semantics, query.top_k is an initial search-window hint rather than a
-    // hard cap. Default: NotSupported (see supports_iterative_search()).
     virtual StatusOr<std::unique_ptr<AnnIterator>> make_iterator(const VectorQuery& query);
 
     // BaseIndex contract. All vector indexes are the VECTOR category;
