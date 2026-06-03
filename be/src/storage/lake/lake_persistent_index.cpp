@@ -1147,9 +1147,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // the batch stays valid after the scan column is reset/freed. `keys` are rebuilt to point
     // into `key_bytes` (binary: variable stride; non-encoded: fixed `_key_size` stride).
     struct InsertBatch {
-        std::vector<uint8_t> key_bytes;   // owned backing store for all keys in this batch
-        std::vector<Slice> keys;          // Slices into key_bytes
-        std::vector<IndexValue> values;   // (rssid<<32)+rowid
+        std::vector<uint8_t> key_bytes; // owned backing store for all keys in this batch
+        std::vector<Slice> keys;        // Slices into key_bytes
+        std::vector<IndexValue> values; // (rssid<<32)+rowid
     };
     // One flat parallel scan unit: exactly one segment of one rebuild rowset. `global_seq` ascends in
     // (rowset version order, segment order) so Phase C can insert in the correct order by walking
@@ -1157,8 +1157,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // the scan; the unit only borrows it.
     struct ScanUnit {
         size_t global_seq = 0;
-        int rowset_ord = 0;   // index into `rebuild_rowsets`
-        int seg_ord = 0;      // segment index within the rowset
+        int rowset_ord = 0; // index into `rebuild_rowsets`
+        int seg_ord = 0;    // segment index within the rowset
         int64_t rowset_version = 0;
         ChunkIterator* itr = nullptr;
         uint32_t rssid = 0;
@@ -1230,8 +1230,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
 
         const int rowset_ord = static_cast<int>(rebuild_rowsets.size());
-        rebuild_rowsets.push_back(
-                RebuildRowset{rowset, rowset_version, rowset->metadata().del_files_size() > 0});
+        rebuild_rowsets.push_back(RebuildRowset{rowset, rowset_version, rowset->metadata().del_files_size() > 0});
         // Append flat scan units for this rowset's eligible segments. Iterators are owned by
         // `rowset_iters` (moved in below); ScanUnit borrows the raw pointer.
         for (size_t i = 0; i < itrs.size(); i++) {
@@ -1322,8 +1321,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             if (local_pk_column) {
                 int64_t t2 = GetCurrentTimeMicros();
                 local_pk_column->reset_column();
-                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(),
-                                          local_pk_column.get(), pk_encoding_type);
+                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(), local_pk_column.get(),
+                                          pk_encoding_type);
                 local_pk_encode += GetCurrentTimeMicros() - t2;
                 pkc = local_pk_column.get();
             } else {
@@ -1359,16 +1358,15 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 size_t off = 0;
                 for (size_t k = 0; k < n; ++k) {
                     memcpy(batch.key_bytes.data() + off, src[k].data, src[k].size);
-                    batch.keys.emplace_back(
-                            reinterpret_cast<const char*>(batch.key_bytes.data()) + off, src[k].size);
+                    batch.keys.emplace_back(reinterpret_cast<const char*>(batch.key_bytes.data()) + off, src[k].size);
                     off += src[k].size;
                 }
             } else {
                 batch.key_bytes.resize(n * _key_size);
                 memcpy(batch.key_bytes.data(), pkc->continuous_data(), n * _key_size);
                 for (size_t k = 0; k < n; ++k) {
-                    batch.keys.emplace_back(
-                            reinterpret_cast<const char*>(batch.key_bytes.data()) + k * _key_size, _key_size);
+                    batch.keys.emplace_back(reinterpret_cast<const char*>(batch.key_bytes.data()) + k * _key_size,
+                                            _key_size);
                 }
             }
             result.batches.emplace_back(std::move(batch));
@@ -1417,24 +1415,21 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // caller thread only.
     size_t unit_cursor = 0;
     for (size_t ro = 0; ro < rebuild_rowsets.size(); ro++) {
-        while (unit_cursor < scan_units.size() &&
-               static_cast<size_t>(scan_units[unit_cursor].rowset_ord) == ro) {
+        while (unit_cursor < scan_units.size() && static_cast<size_t>(scan_units[unit_cursor].rowset_ord) == ro) {
             const auto& unit = scan_units[unit_cursor];
             TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
             auto& result = unit_results[unit.global_seq];
             TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
             TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
             for (auto& batch : result.batches) {
-                RETURN_IF_ERROR(insert(batch.keys.size(),
-                                       reinterpret_cast<const Slice*>(batch.keys.data()), batch.values.data(),
-                                       unit.rowset_version));
+                RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
+                                       batch.values.data(), unit.rowset_version));
             }
             unit_cursor++;
         }
         // Apply this rowset's del files after its segments, before the next rowset.
         if (rebuild_rowsets[ro].has_del_files) {
-            RETURN_IF_ERROR(
-                    load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
+            RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
         }
     }
     TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
