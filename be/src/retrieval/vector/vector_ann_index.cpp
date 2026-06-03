@@ -17,12 +17,12 @@
 namespace starrocks {
 
 // Default filtered_search: oversample + post-filter.
-Status VectorAnnIndex::filtered_search(const VectorQuery& query, const RowIdFilter& filter, VectorAnnResult* result) {
+Status VectorAnnIndex::filtered_search(const VectorQuery& query, const RowIdFilter& filter, ScoredResult* result) {
     constexpr int32_t kDefaultOversampleFactor = 3;
     VectorQuery oversampled = query;
     oversampled.top_k = query.top_k * kDefaultOversampleFactor;
 
-    VectorAnnResult raw;
+    ScoredResult raw;
     RETURN_IF_ERROR(search(oversampled, &raw));
 
     result->clear();
