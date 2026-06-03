@@ -513,13 +513,8 @@ private:
 
 AdaptivePartitionHashJoinBuilder::AdaptivePartitionHashJoinBuilder(HashJoiner& hash_joiner)
         : HashJoinBuilder(hash_joiner), _cache_miss_factor(_calculate_cache_miss_factor(hash_joiner)) {
-    static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
-    static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
-    const auto& cache_sizes = CpuInfo::get_cache_sizes();
-    _L2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
-    _L3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
-    _L2_cache_size = _L2_cache_size ? _L2_cache_size : DEFAULT_L2_CACHE_SIZE;
-    _L3_cache_size = _L3_cache_size ? _L3_cache_size : DEFAULT_L3_CACHE_SIZE;
+    _L2_cache_size = CpuInfo::get_l2_cache_size();
+    _L3_cache_size = CpuInfo::get_l3_cache_size();
 }
 
 double AdaptivePartitionHashJoinBuilder::_calculate_cache_miss_factor(const HashJoiner& hash_joiner) {
