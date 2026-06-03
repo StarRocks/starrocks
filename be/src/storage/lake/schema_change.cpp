@@ -213,10 +213,8 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // create writer
     ASSIGN_OR_RETURN(auto writer, _new_tablet.new_writer(kHorizontal, _txn_id));
-    // Force inline vector index (.vi) build during the conversion. The ADD INDEX ... USING VECTOR
-    // DDL has sync semantics: at FINISHED the existing data must already be ANN-queryable. The
-    // schema's declared index_build_mode (sync/async) governs only steady-state/concurrent writes,
-    // not this existing-data rewrite, so we override the deferral here regardless of mode.
+    // _new_tablet is the ALTER's shadow tablet. Force inline .vi build so an async-mode ADD
+    // still indexes the existing data during this rewrite (index_build_mode only governs live writes).
     writer->force_set_build_vector_index_inline();
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });

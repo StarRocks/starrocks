@@ -261,8 +261,8 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
 
     opts.global_dicts = _global_dicts;
 
-    // The schema-change conversion forces inline .vi build so async-mode ADD also builds the
-    // existing data's index during the rewrite; all other write paths honor the declared mode.
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
     opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     WritableFileOptions wopts;
@@ -577,8 +577,8 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
 
     RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
                                                  _fs.get(), opts));
-    // The schema-change conversion forces inline .vi build so async-mode ADD also builds the
-    // existing data's index during the rewrite; all other write paths honor the declared mode.
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
     opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);

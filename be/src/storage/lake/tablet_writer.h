@@ -176,11 +176,8 @@ public:
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
 
-    // Force the segment writer to build vector indexes (.vi) inline regardless of the
-    // schema's declared index_build_mode. Used by the lake schema-change conversion so the
-    // existing data's .vi is built during the rewrite for async-mode indexes too (so the
-    // ADD DDL's sync semantics hold: at FINISHED the existing data is queryable via ANN).
-    // Normal/concurrent write paths leave this false and honor their declared mode.
+    // Set only on the schema-change conversion writer for the ALTER's shadow tablet, so an
+    // async-mode ADD still builds existing data's .vi during the rewrite. Other writers: false.
     bool force_build_vector_index_inline() const { return _force_build_vector_index_inline; }
     void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
 
