@@ -440,6 +440,8 @@ SET(DW_TEST_FILES
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
+    ./storage/lake/index_delta_group_loader_test.cpp
+    ./storage/lake/index_file_writer_reader_test.cpp
     ./storage/lake/auto_increment_partial_update_test.cpp
     ./storage/lake/compaction_policy_test.cpp
     ./storage/lake/compaction_scheduler_test.cpp
@@ -470,6 +472,8 @@ SET(DW_TEST_FILES
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
+    ./storage/lake/segment_task_runner_test.cpp
+    ./storage/lake/add_index_schema_change_test.cpp
     ./storage/lake/schema_change_test.cpp
     ./storage/lake/lake_replication_txn_manager_test.cpp
     ./storage/lake/spill_mem_table_sink_test.cpp
@@ -486,6 +490,7 @@ SET(DW_TEST_FILES
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
+    ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp
     ./storage/lake/write_combined_txn_log_test.cpp
     ./storage/lake/lake_persistent_index_fileset_test.cpp

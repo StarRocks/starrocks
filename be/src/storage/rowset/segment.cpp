@@ -630,10 +630,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
 
 Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** res) {
     auto iter = _column_readers.find(id);
-    if (iter != _column_readers.end() && iter->second->has_bitmap_index()) {
-        return iter->second->new_bitmap_index_iterator(options, res);
+    if (iter == _column_readers.end()) {
+        return Status::OK();
     }
-    return Status::OK();
+    // Delegate to ColumnReader: it handles both the footer-embedded bitmap
+    // (legacy path) and the IDG-backed sidecar (.idx file, lake fast path).
+    // Do NOT gate on `has_bitmap_index()` here — that only checks the
+    // footer-loaded `_bitmap_index` pointer and would short-circuit before
+    // the IDG branch gets a chance. ColumnReader::new_bitmap_index_iterator
+    // returns OK with `*res == nullptr` when neither source has a bitmap.
+    return iter->second->new_bitmap_index_iterator(options, res);
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,

@@ -251,6 +251,11 @@ set(STORAGE_FILES
     lake/lake_proto_normalizer.cpp
     lake/rowset.cpp
     lake/segment_metadata_filter.cpp
+    lake/segment_task_runner.cpp
+    lake/index_delta_group_loader.cpp
+    lake/index_file_reader.cpp
+    lake/index_file_writer.cpp
+    lake/add_index_schema_change.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
