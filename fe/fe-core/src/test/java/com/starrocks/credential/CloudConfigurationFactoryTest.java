@@ -56,7 +56,7 @@ public class CloudConfigurationFactoryTest {
         Assertions.assertEquals(
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
-                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "useInstanceProfile=false, useWebIdentityProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
                         "region='region', endpoint=''}, enablePathStyleAccess=true, enableSSL=true}",
                 cloudConfiguration.toConfString());
@@ -71,7 +71,7 @@ public class CloudConfigurationFactoryTest {
         Assertions.assertEquals(
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
-                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "useInstanceProfile=false, useWebIdentityProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
                         "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
                 cloudConfiguration.toConfString());
@@ -128,7 +128,8 @@ public class CloudConfigurationFactoryTest {
         Assertions.assertEquals(cc.toConfString(),
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
-                        "accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "useWebIdentityProfile=false, accessKey='XX', secretKey='YY', sessionToken='', " +
+                        "iamRoleArn='', stsRegion='', " +
                         "stsEndpoint='', externalId='', region='ZZ', endpoint=''}, " +
                         "enablePathStyleAccess=false, enableSSL=true}");
     }
@@ -595,7 +596,8 @@ public class CloudConfigurationFactoryTest {
         AwsCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         Assertions.assertNotNull(cred);
         Assertions.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
-                        "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "useWebIdentityProfile=false, accessKey='', secretKey='', sessionToken='', " +
+                        "iamRoleArn='', stsRegion='', " +
                         "stsEndpoint='', externalId='', region='us-east-1', endpoint=''}", cred.toCredString());
     }
 }
