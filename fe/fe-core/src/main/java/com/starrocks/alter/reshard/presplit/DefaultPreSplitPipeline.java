@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 /**
  * Production {@link PreSplitPipeline} composing the FE-side sampler tiers,
@@ -50,10 +51,13 @@ import java.util.Optional;
  * sampler throw propagates as {@link StarRocksException} and the coordinator
  * maps it to {@link SkipReason#SAMPLE_FAILED}.
  *
- * <p>Pre-submit timeout is enforced as a soft deadline: the pipeline checks
- * the deadline at sampler-phase boundaries rather than preempting in-flight
- * RPCs. This keeps the abort surface narrow at the cost of allowing one
- * extra phase to complete past the deadline.
+ * <p>Pre-submit timeout is enforced at sampler-phase boundaries via
+ * {@link #checkDeadline}. The data tier additionally caps its BE-side sample
+ * sub-query at the remaining budget ({@link SampleRequest#withQueryTimeoutSeconds}),
+ * so an over-budget sample is cancelled by the BE instead of running the
+ * deadline over by a full sample phase. The meta tier (file-footer reads, no
+ * BE query) is still only boundary-checked, but its cost is bounded by the
+ * file count rather than a sub-query that could hang.
  *
  * <p>{@link #awaitFinished} polls {@link TabletReshardJobMgr} on a fixed
  * interval. No event surface exists today; polling is acceptable because the
@@ -209,15 +213,21 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     }
 
     @Override
-    public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout)
+    public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout,
+                              BooleanSupplier shouldAbort)
             throws PreSplitPostSubmitTimeoutException, StarRocksException {
         Objects.requireNonNull(preparedJob, "preparedJob");
         Objects.requireNonNull(timeout, "timeout");
+        Objects.requireNonNull(shouldAbort, "shouldAbort");
         TabletReshardJob submitted = (TabletReshardJob) preparedJob.payload();
         long jobId = submitted.getJobId();
         Instant deadline = clock.instant().plus(timeout);
 
         while (true) {
+            if (shouldAbort.getAsBoolean()) {
+                throw new StarRocksException("tablet reshard job " + jobId
+                        + " await abandoned: caller signalled abort");
+            }
             TabletReshardJob latest = tabletReshardJobManager.getTabletReshardJob(jobId);
             if (latest == null) {
                 throw new StarRocksException(
@@ -266,11 +276,25 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private TierOutcome runDataTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         checkDeadline(deadline);
-        SampleSet sampleSet = dataTierSampler.sample(request);
+        // Cap the sample at the remaining budget (see class doc); an over-budget
+        // sample is cancelled by the BE → SAMPLE_FAILED → the load proceeds.
+        SampleRequest budgetedRequest = request.withQueryTimeoutSeconds(remainingBudgetSeconds(deadline));
+        SampleSet sampleSet = dataTierSampler.sample(budgetedRequest);
         checkDeadline(deadline);
         BoundaryPlannerResult result =
                 BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, request.getSortKey());
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
+    }
+
+    /**
+     * Whole-second budget remaining until {@code deadline} (rounded up). Floored
+     * at 1 so we never hand the BE {@code query_timeout = 0}, which it reads as
+     * "no timeout"; the preceding {@link #checkDeadline} guarantees the
+     * remainder is positive.
+     */
+    private int remainingBudgetSeconds(Instant deadline) {
+        long remainingMillis = Duration.between(clock.instant(), deadline).toMillis();
+        return (int) Math.max(1L, (remainingMillis + 999L) / 1000L);
     }
 
     /** Cuts {@code c1 < c2 < ... < c_{K-1}} → tablet ranges

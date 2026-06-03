@@ -386,7 +386,8 @@ public class TabletPreSplitCoordinatorTest {
         }
 
         @Override
-        public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout) throws StarRocksException {
+        public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout,
+                                  java.util.function.BooleanSupplier shouldAbort) throws StarRocksException {
             awaitCalls++;
             if (awaitThrow != null) {
                 throw awaitThrow;

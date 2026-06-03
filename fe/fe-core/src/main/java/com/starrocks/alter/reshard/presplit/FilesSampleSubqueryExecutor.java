@@ -88,10 +88,16 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * executor unit-testable without bringing up the full FE planner/coordinator
      * stack — production wires this to {@link SimpleExecutor#executeDQL} via a
      * scoped {@link ConnectContext} carrying the load's compute resource.
+     *
+     * <p>{@code queryTimeoutSeconds} caps the sub-query's wall-clock runtime
+     * ({@code 0} = uncapped); the production runner applies it via
+     * {@code query_timeout} on the sample context so an over-budget sample is
+     * cancelled by the BE. Test stubs return canned batches and ignore it.
      */
     @FunctionalInterface
     interface SampleQueryRunner {
-        List<TResultBatch> run(String sampleSql, ComputeResource computeResource) throws StarRocksException;
+        List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
+                throws StarRocksException;
     }
 
     /** Subclass-supplied FILES sub-query inputs. */
@@ -139,7 +145,8 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         String sampleSql = buildSampleSql(
                 source.filesProperties(), sortKeyColumns, partitionSourceColumns,
                 samplingRate, rowLimit, request.getSeed());
-        List<TResultBatch> resultBatches = runSampleQuery(sampleSql, source.computeResource());
+        List<TResultBatch> resultBatches = runSampleQuery(
+                sampleSql, source.computeResource(), request.getQueryTimeoutSeconds());
         Iterator<SampleRow> rowIterator =
                 decodeRows(resultBatches, sortKeyColumns, partitionSourceColumns).iterator();
         return new SampleExecution(rowIterator, new Estimates(source.totalFileBytes(), 0L));
@@ -181,7 +188,8 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * inject SQL into the internal-context sub-query. The {@code ORDER BY
      * rand(seed XOR 0x5...)} before {@code LIMIT} re-shuffles the
      * {@code WHERE}-survivors so an over-rate truncation does not bias
-     * toward earlier files in scan order.
+     * toward earlier files in scan order. When {@code partitionSourceColumns}
+     * is empty the projection collapses to the sort key alone.
      */
     @VisibleForTesting
     static String buildSampleSql(
@@ -214,19 +222,6 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
     }
 
     /**
-     * Backwards-compatible overload for callers that have only a sort key
-     * (unpartitioned target). Delegates with an empty partition-source list so
-     * the synthesized SQL matches the pre-extension shape exactly.
-     */
-    @VisibleForTesting
-    static String buildSampleSql(
-            Map<String, String> filesProperties, List<Column> sortKeyColumns,
-            double samplingRate, int rowLimit, long seed) {
-        return buildSampleSql(filesProperties, sortKeyColumns, List.of(),
-                samplingRate, rowLimit, seed);
-    }
-
-    /**
      * Escapes both backslash and double-quote inside a double-quoted SQL
      * string literal. Backslash MUST be escaped first to avoid double-
      * escaping the slashes inserted by the quote escape. Short-circuits
@@ -240,10 +235,10 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private List<TResultBatch> runSampleQuery(String sampleSql, ComputeResource computeResource)
-            throws StarRocksException {
+    private List<TResultBatch> runSampleQuery(
+            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) throws StarRocksException {
         try {
-            return sampleQueryRunner.run(sampleSql, computeResource);
+            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds);
         } catch (RuntimeException runtimeFailure) {
             throw new StarRocksException(
                     errorPrefix + "sample sub-query failed: " + runtimeFailure.getMessage(), runtimeFailure);
@@ -258,9 +253,11 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * local context handling follows the same prior-context save/restore
      * pattern {@code SimpleExecutor.executeDQL(String)} uses internally.
      */
-    private static List<TResultBatch> runViaSimpleExecutor(String sampleSql, ComputeResource computeResource) {
+    private static List<TResultBatch> runViaSimpleExecutor(
+            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) {
         ConnectContext priorContext = ConnectContext.get();
-        ConnectContext sampleContext = configureSampleContext(StatisticUtils.buildConnectContext(), computeResource);
+        ConnectContext sampleContext = configureSampleContext(
+                StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds);
         sampleContext.setThreadLocalInfo();
         try {
             return PRODUCTION_SIMPLE_EXECUTOR.executeDQL(sampleSql, sampleContext);
@@ -280,9 +277,20 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * disagrees with the context's {@code currentWarehouseId}, so omitting
      * the warehouse-id alignment silently routes the sub-query to the
      * statistics-default warehouse instead of the load's.
+     *
+     * <p>{@code queryTimeoutSeconds > 0} sets {@code query_timeout} on the
+     * sample session so the BE cancels an over-budget sample (the data-tier
+     * pipeline derives this from the remaining pre-submit budget); {@code 0}
+     * leaves the built context's default timeout untouched. This is the seam
+     * that makes the pre-submit deadline hard — {@code executeDQL} reads the
+     * cap from {@code SessionVariable.toThrift()}, not from any SQL hint.
      */
     @VisibleForTesting
-    static ConnectContext configureSampleContext(ConnectContext context, ComputeResource computeResource) {
+    static ConnectContext configureSampleContext(
+            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds) {
+        if (queryTimeoutSeconds > 0) {
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+        }
         context.setCurrentWarehouseId(computeResource.getWarehouseId());
         context.setCurrentComputeResource(computeResource);
         context.setNeedQueued(false);
