@@ -3933,6 +3933,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    private void alterLoadInitialOpenPartitionNumber(OlapTable table,
+                                                     Map<String, String> properties,
+                                                     List<Runnable> appliers) {
+        int value = PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
+        TableProperty tableProperty = table.getTableProperty();
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(value));
+            tableProperty.buildLoadInitialOpenPartitionNumber();
+        });
+    }
+
     private void alterStorageMedium(OlapTable table,
                                     Map<String, String> properties,
                                     List<Runnable> appliers) throws DdlException {
@@ -4110,6 +4122,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         List<Runnable> appliers = new ArrayList<>();
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             alterPartitionLiveNumber(db, table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            alterLoadInitialOpenPartitionNumber(table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             alterStorageMedium(table, properties,  appliers);
