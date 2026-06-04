@@ -200,6 +200,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_vacuum_del_file_batch_size_minute`
+
+- Unit: Count (files per batch)
+- Type: Gauge
+- Description: Recent (60s) mean of files per `DeleteObjects` batch sent by Vacuum on shared-data clusters.
+
+## `lake_vacuum_del_file_retries_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of Vacuum delete retries triggered in the last 60s on shared-data clusters. Surfaces transient object-storage throttling (SlowDown / try-again).
+
 ## `load_bytes`
 
 - Unit: Bytes
