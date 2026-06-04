@@ -201,8 +201,8 @@ This topic introduces the following types of BE configurations:
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: Yes
-- Introduced in: -
+- Is mutable: No
+- Introduced in: v4.2.0
 - Description: When true, most external BE HTTP endpoints require HTTP Basic Auth. Credentials are verified by RPC to the FE leader using the `checkAuth` Thrift method, so the user/password store on the FE side (including LDAP / security-integration) is the source of truth. The following are exempt:
   - Public probes / observability: `/api/health`, `/metrics`, `/metrics/memory`.
   - Token-gated internal transport (used by FE/BE for tablet clone and load-error file fetch): `/api/_tablet/_download`, `/api/_download_load`. These remain protected by their own token check; setting `enable_http_auth=true` does **not** compensate for `enable_token_check=false`.

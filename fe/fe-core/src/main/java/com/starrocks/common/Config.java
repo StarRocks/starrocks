@@ -852,9 +852,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_port = 8030;
 
-    @ConfField(mutable = true, comment = "Whether to require Basic Auth for external HTTP endpoints. " +
+    @ConfField(comment = "Whether to require Basic Auth for external HTTP endpoints. " +
             "Internal endpoints (FE meta sync, health/metrics probes, OAuth2 callback) are always exempt. " +
-            "Default false for backward compatibility.")
+            "Default false for backward compatibility. Immutable; requires an FE restart to change.")
     public static boolean enable_http_auth = false;
 
     /**
