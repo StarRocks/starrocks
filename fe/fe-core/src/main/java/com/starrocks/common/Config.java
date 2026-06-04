@@ -162,6 +162,8 @@ public class Config extends ConfigBase {
     public static long qe_slow_log_ms = 5000;
     @ConfField(mutable = true)
     public static boolean enable_qe_slow_log = true;
+    @ConfField(mutable = true, comment = "Whether to emit BEFORE_QUERY audit events before statement execution.")
+    public static boolean audit_stmt_before_execute = false;
     @ConfField
     public static String audit_log_roll_interval = "DAY";
     @ConfField
