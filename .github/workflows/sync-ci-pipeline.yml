@@ -298,10 +298,125 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: ERROR
 
+      # Auto-clear the `conflict` label when a `synchronize` push has
+      # resolved the cherry-pick conflict. Without this, RD must run the
+      # ci-robot `conflict_resolved <PR>` command by hand (doc 004) even
+      # though their fix-push has already addressed everything.
+      #
+      # Two safety checks before removing the live label:
+      #   1. `gh pr diff` must not contain any conflict markers
+      #      (same regex as elastic-service ci_robot/api.py PR #1275)
+      #   2. `gh pr view --json mergeable` must report MERGEABLE
+      #      (poll 3x because GitHub computes asynchronously)
+      #
+      # Sets step output `conflict_cleared=true` so the downstream rescue
+      # trio (originally only for stale ERROR) can also fire for the
+      # stale-conflict case via a single OR clause.
+      - name: auto-clear conflict label (when synchronize resolves it)
+        id: clear-conflict
+        if: >
+          github.event.action == 'synchronize' &&
+          contains(github.event.pull_request.title, '(sync #') &&
+          contains(needs.pr-label.outputs.labels, 'sync') &&
+          contains(needs.pr-label.outputs.labels, 'conflict') &&
+          !contains(needs.pr-label.outputs.labels, 'pending') &&
+          (
+            needs.build.result == 'success' ||
+            (
+              needs.build.result == 'skipped' &&
+              needs.code-checker.result == 'success' &&
+              needs.code-checker.outputs.output1 != 'true' &&
+              needs.code-checker.outputs.output2 != 'true' &&
+              needs.code-checker.outputs.output3 != 'true'
+            )
+          )
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+          GH_TOKEN: ${{ secrets.PAT }}
+        shell: python3 {0}
+        run: |
+          # Inline Python for explicit subprocess error handling — keeps
+          # the failure paths (gh non-zero, timeout, markers present,
+          # mergeable not ready) all visible without shell traps like
+          # set -e / pipefail / SIGPIPE.
+          import os
+          import re
+          import subprocess
+          import sys
+          import time
+
+          PR = os.environ["PR_NUMBER"]
+          REPO = os.environ["REPO"]
+
+          def run_gh(args, timeout=30):
+              """Invoke gh CLI. Returns (rc, stdout, stderr). Never raises."""
+              try:
+                  r = subprocess.run(
+                      ["gh", *args],
+                      capture_output=True, text=True, timeout=timeout, check=False,
+                  )
+                  return r.returncode, r.stdout, r.stderr
+              except subprocess.TimeoutExpired:
+                  return -1, "", "timeout"
+
+          def keep_label(reason):
+              """Log + exit 0 — leave conflict label, let next synchronize retry."""
+              print(f"::notice::{reason} — keeping conflict label.")
+              sys.exit(0)
+
+          # 1. Marker guard: fetch diff, refuse if any markers present.
+          rc, diff, err = run_gh(["pr", "diff", PR, "-R", REPO], timeout=60)
+          if rc != 0:
+              keep_label(f"gh pr diff failed (rc={rc}): {err.strip()[:200]}")
+
+          marker_re = re.compile(r"^\+(<{7}|>{7}|={7})( |$)", re.MULTILINE)
+          hits = marker_re.findall(diff)
+          if hits:
+              keep_label(f"Conflict markers still present in head ref diff ({len(hits)} line(s))")
+
+          # 2. Mergeable poll: GitHub computes async, retry on UNKNOWN.
+          mergeable = "UNKNOWN"
+          for _ in range(3):
+              rc, out, err = run_gh(
+                  ["pr", "view", PR, "-R", REPO, "--json", "mergeable", "-q", ".mergeable"]
+              )
+              if rc != 0:
+                  keep_label(f"gh pr view failed (rc={rc}): {err.strip()[:200]}")
+              mergeable = out.strip()
+              if mergeable != "UNKNOWN":
+                  break
+              time.sleep(3)
+
+          if mergeable != "MERGEABLE":
+              keep_label(f"PR mergeable={mergeable}")
+
+          # 3. Remove the live conflict label.
+          rc, _, err = run_gh(
+              ["api", "--method", "DELETE",
+               f"/repos/{REPO}/issues/{PR}/labels/conflict"]
+          )
+          if rc != 0:
+              print(f"::warning::Failed to remove conflict label (rc={rc}, already gone? race?): {err.strip()[:200]}")
+              sys.exit(0)
+
+          # 4. Signal the rescue trio downstream.
+          out_path = os.environ.get("GITHUB_OUTPUT")
+          if out_path:
+              with open(out_path, "a") as f:
+                  f.write("conflict_cleared=true\n")
+          print("Successfully cleared stale conflict label.")
+
       # Rescue auto-merge when the sibling `auto-merge` job was skipped
-      # because the pr-label snapshot still contained ERROR (stale before
-      # this run cleared it). Mirrors `auto-merge` job's three actions.
-      - name: add automerge label (rescue after ERROR clear)
+      # because the pr-label snapshot still contained ERROR or conflict
+      # (stale before this run cleared it). Mirrors `auto-merge` job's
+      # three actions.
+      #
+      # Two trigger paths:
+      #   A. snapshot has ERROR (no conflict) — original doc 015 case
+      #   B. snapshot had conflict and this run's `clear-conflict` step
+      #      removed the live label (doc 004 case)
+      - name: add automerge label (rescue after stale label clear)
         if: >
           (
             needs.build.result == 'success' ||
@@ -315,15 +430,20 @@ jobs:
           ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
-          contains(needs.pr-label.outputs.labels, 'ERROR') &&
-          !contains(needs.pr-label.outputs.labels, 'conflict') &&
-          !contains(needs.pr-label.outputs.labels, 'pending')
+          !contains(needs.pr-label.outputs.labels, 'pending') &&
+          (
+            (
+              contains(needs.pr-label.outputs.labels, 'ERROR') &&
+              !contains(needs.pr-label.outputs.labels, 'conflict')
+            ) ||
+            steps.clear-conflict.outputs.conflict_cleared == 'true'
+          )
         uses: actions-ecosystem/action-add-labels@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: automerge
 
-      - name: auto-approve (rescue after ERROR clear)
+      - name: auto-approve (rescue after stale label clear)
         if: >
           (
             needs.build.result == 'success' ||
@@ -337,15 +457,20 @@ jobs:
           ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
-          contains(needs.pr-label.outputs.labels, 'ERROR') &&
-          !contains(needs.pr-label.outputs.labels, 'conflict') &&
-          !contains(needs.pr-label.outputs.labels, 'pending')
+          !contains(needs.pr-label.outputs.labels, 'pending') &&
+          (
+            (
+              contains(needs.pr-label.outputs.labels, 'ERROR') &&
+              !contains(needs.pr-label.outputs.labels, 'conflict')
+            ) ||
+            steps.clear-conflict.outputs.conflict_cleared == 'true'
+          )
         uses: hmarr/auto-approve-action@v3
         with:
           review-message: "Auto approved sync PR"
           github-token: ${{ secrets.APPROVE_PAT }}
 
-      - name: enable automerge (rescue after ERROR clear)
+      - name: enable automerge (rescue after stale label clear)
         if: >
           (
             needs.build.result == 'success' ||
@@ -359,9 +484,14 @@ jobs:
           ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
-          contains(needs.pr-label.outputs.labels, 'ERROR') &&
-          !contains(needs.pr-label.outputs.labels, 'conflict') &&
-          !contains(needs.pr-label.outputs.labels, 'pending')
+          !contains(needs.pr-label.outputs.labels, 'pending') &&
+          (
+            (
+              contains(needs.pr-label.outputs.labels, 'ERROR') &&
+              !contains(needs.pr-label.outputs.labels, 'conflict')
+            ) ||
+            steps.clear-conflict.outputs.conflict_cleared == 'true'
+          )
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           token: ${{ secrets.APPROVE_PAT }}
