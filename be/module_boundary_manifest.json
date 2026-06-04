@@ -478,6 +478,7 @@
       "additional_owned_globs": [
         "be/src/exec/runtime_filter/**",
         "be/src/exec/pipeline/primitives/driver_executor.h",
+        "be/src/exec/pipeline/primitives/driver_observer.h",
         "be/src/exec/pipeline/primitives/operator_exec_stats.h",
         "be/src/exec/pipeline/primitives/operator_runtime_access.h",
         "be/src/exec/pipeline/runtime_filter_hub.h",
