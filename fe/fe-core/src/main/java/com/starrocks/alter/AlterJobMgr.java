@@ -242,7 +242,15 @@ public class AlterJobMgr {
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-                taskRunManager.killTaskRun(currentTask.getId(), true);
+                if (!taskRunManager.tryTaskRunLock()) {
+                    throw new SemanticException("Failed to acquire task run lock when altering " +
+                            "mv status:" + materializedView.getName());
+                }
+                try {
+                    taskRunManager.killTaskRun(currentTask.getId(), true, "killed by ALTER MATERIALIZED VIEW");
+                } finally {
+                    taskRunManager.taskRunUnlock();
+                }
             }
         }
     }

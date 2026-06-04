@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.SessionVariable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,5 +71,50 @@ public class TaskRunTest {
         props.put(SessionVariable.QUERY_TIMEOUT, "-10");
         taskRun.setProperties(props);
         assertEquals(Config.task_runs_timeout_second, taskRun.getExecuteTimeoutS());
+    }
+
+    @Test
+    public void testSessionPrefixedInsertTimeoutProperty() {
+        int oldTtl = Config.task_ttl_second;
+        Config.task_ttl_second = 300000;
+        try {
+            Map<String, String> props = new HashMap<>();
+            // session variables are stored with a "session." prefix
+            props.put(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.INSERT_TIMEOUT, "259200");
+            taskRun.setProperties(props);
+            // Before the fix this returned task_runs_timeout_second (14400) because the
+            // prefixed key never matched; after the fix it honors 259200 (capped by ttls).
+            assertEquals(Math.min(259200, Config.task_runs_ttl_second), taskRun.getExecuteTimeoutS());
+        } finally {
+            Config.task_ttl_second = oldTtl;
+        }
+    }
+
+    @Test
+    public void testSessionPrefixedQueryTimeoutProperty() {
+        int oldTtl = Config.task_ttl_second;
+        Config.task_ttl_second = 300000;
+        try {
+            Map<String, String> props = new HashMap<>();
+            props.put(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.QUERY_TIMEOUT, "259200");
+            taskRun.setProperties(props);
+            assertEquals(Math.min(259200, Config.task_runs_ttl_second), taskRun.getExecuteTimeoutS());
+        } finally {
+            Config.task_ttl_second = oldTtl;
+        }
+    }
+
+    @Test
+    public void testBareInsertTimeoutStillWorks() {
+        int oldTtl = Config.task_ttl_second;
+        Config.task_ttl_second = 300000;
+        try {
+            Map<String, String> props = new HashMap<>();
+            props.put(SessionVariable.INSERT_TIMEOUT, "259200");
+            taskRun.setProperties(props);
+            assertEquals(Math.min(259200, Config.task_runs_ttl_second), taskRun.getExecuteTimeoutS());
+        } finally {
+            Config.task_ttl_second = oldTtl;
+        }
     }
 }
