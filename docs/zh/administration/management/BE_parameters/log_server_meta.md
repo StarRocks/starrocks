@@ -183,6 +183,20 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE HTTP Server 端口。
 - 引入版本：-
 
+### enable_http_auth
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 引入版本：-
+- 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。以下接口始终豁免：
+  - 公开探针 / 可观测性：`/api/health`、`/metrics`、`/metrics/memory`。
+  - Token 鉴权的内部传输（FE/BE 用于 tablet clone 和 load 错误文件拉取）：`/api/_tablet/_download`、`/api/_download_load`。这些接口仍由各自的 token 检查保护；开启 `enable_http_auth=true` **不**能弥补 `enable_token_check=false` 带来的安全损失。
+  - Stream Load 及 transaction 接口，由 handler 内基于 load label + 表级授权识别身份：`/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
+
+  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）——若已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;` 或将 `activate_all_roles_on_login` 设为 `true`。LDAP / security integration 的组 → 角色映射会自动激活。
+
 ### be_port
 
 - 默认值：9060

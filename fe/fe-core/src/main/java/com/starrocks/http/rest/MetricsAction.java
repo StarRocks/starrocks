@@ -123,8 +123,16 @@ public class MetricsAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, API_PATH, new MetricsAction(controller));
     }
 
+    // Prometheus-style metrics; intentionally unauthenticated by default. Per-table /
+    // per-MV / per-user-connection breakdowns do their own admin check inside
+    // parseRequestParams() and gracefully fall back when unauthenticated.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         // parse visitor type
         String type = request.getSingleParameter(TYPE_PARAM);
         MetricVisitor visitor = null;

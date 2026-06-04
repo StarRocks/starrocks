@@ -69,8 +69,16 @@ public class BootstrapFinishAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/bootstrap", new BootstrapFinishAction(controller));
     }
 
+    // FE bootstrap probe; intentionally unauthenticated. Caller can pass the cluster
+    // token to unlock additional fields (journal id / ports / version), but the endpoint
+    // itself accepts anonymous requests for readiness checks.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         boolean isReady = GlobalStateMgr.getCurrentState().isReady();
 
         // to json response

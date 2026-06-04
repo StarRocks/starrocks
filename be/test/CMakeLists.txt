@@ -242,6 +242,7 @@ set(EXEC_FILES
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/handler_required_privilege_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -545,6 +546,7 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+        ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
