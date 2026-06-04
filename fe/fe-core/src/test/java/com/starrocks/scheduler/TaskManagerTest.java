@@ -1010,15 +1010,19 @@ public class TaskManagerTest {
                 return ImmutableSet.of(taskRun);
             }
         };
+        final String[] capturedReason = {null};
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 assertEquals(status, taskRun.getStatus());
+                capturedReason[0] = errorMessage;
+                return true;
             }
         };
 
         TaskManager taskManager = new TaskManager();
         taskManager.removeExpiredTaskRuns(false);
+        assertEquals("killed by TaskCleaner due to timeout", capturedReason[0]);
     }
 
     @Test
@@ -1047,8 +1051,9 @@ public class TaskManagerTest {
         };
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 Assertions.fail("Task without timeout should not be canceled");
+                return true;
             }
         };
 
@@ -1081,8 +1086,9 @@ public class TaskManagerTest {
         };
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 Assertions.fail("Non-expired task should not be canceled");
+                return true;
             }
         };
 
