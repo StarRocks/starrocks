@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "存算一体集群和存算分离集群在功能支持和使用场景上的差异对比。"
 sidebar_label: "功能差异"
 ---
 

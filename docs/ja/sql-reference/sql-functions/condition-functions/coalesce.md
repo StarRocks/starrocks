@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力パラメータの中で最初に NULL でない式を返します。"
 ---
 
 # coalesce

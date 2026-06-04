@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将以秒为单位的值转换为 TIME 类型，返回格式为 HH:MM:SS。"
 ---
 
 # sec_to_time

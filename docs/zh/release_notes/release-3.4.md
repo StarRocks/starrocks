@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.4 版本发布说明：GROUP BY 下推、Iceberg Time Travel、Python UDF、向量索引近似最近邻搜索。"
 ---
 
 # StarRocks version 3.4

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Data Cache のパフォーマンス、使用状況、健全性を監視するための StarRocks 組み込みメトリクス。"
 ---
 
 # Data Cache の可観測性

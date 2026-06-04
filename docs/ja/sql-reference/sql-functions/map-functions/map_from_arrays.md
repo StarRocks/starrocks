@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたキーと値の配列からMAP値を作成します。"
 ---
 
 # map_from_arrays

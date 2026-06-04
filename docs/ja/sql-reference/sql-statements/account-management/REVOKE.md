@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "REVOKE removes specific privileges or roles from a user or role."
 ---
 
 # REVOKE

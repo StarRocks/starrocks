@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "绘制类似直方图的条形图以检查数据分布。"
 ---
 
 # bar

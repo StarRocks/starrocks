@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DISTINCT keyword removes duplicate rows from the result set."
 sidebar_label: "DISTINCT"
 ---
 

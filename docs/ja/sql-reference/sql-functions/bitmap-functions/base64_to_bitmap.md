@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Base64文字列をビットマップデータに変換します。"
 ---
 
 # base64_to_bitmap

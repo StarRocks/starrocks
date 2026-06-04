@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks でBlock Cache Warmup を使用して、クエリ前にリモートストレージデータをローカルキャッシュにプロアクティブにロード。"
 ---
 
 # Block Cache のウォームアップ

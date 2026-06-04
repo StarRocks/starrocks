@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use Skew Join V2 in StarRocks to optimize JOIN queries with data skew by broadcasting skew values, improving performance for heavily skewed data."
 ---
 
 # Skew Join V2

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたフィールド名と値を持つSTRUCTを作成します。"
 ---
 
 # named_struct

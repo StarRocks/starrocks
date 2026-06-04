@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DELETE SQLBLACKLIST は、SQL ブラックリストから SQL 正規表現を削除します。"
 ---
 
 # DELETE SQLBLACKLIST

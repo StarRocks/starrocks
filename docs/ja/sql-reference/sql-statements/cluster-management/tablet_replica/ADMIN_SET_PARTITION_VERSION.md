@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SET PARTITION VERSION は、パーティションを特定のデータバージョンに設定します。"
 ---
 
 # ADMIN SET PARTITION VERSION

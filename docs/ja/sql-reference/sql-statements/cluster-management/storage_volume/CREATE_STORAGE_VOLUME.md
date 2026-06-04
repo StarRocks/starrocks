@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE STORAGE VOLUME は、リモートストレージシステム用のストレージボリュームを作成します。"
 ---
 
 # CREATE STORAGE VOLUME

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "ALTER MATERIALIZED VIEW can:"
+description: "Alters the name, refresh strategy, status, or properties of an asynchronous materialized view, or atomically swaps two views."
 ---
 
 # ALTER MATERIALIZED VIEW

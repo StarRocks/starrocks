@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何使用 StarRocks 的异步物化视图优化数据湖（Iceberg、Hive、Hudi、Delta Lake）中的查询性能。"
 sidebar_position: 30
 ---
 

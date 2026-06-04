@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの日付式の月差を返します。"
 ---
 
 # months_diff

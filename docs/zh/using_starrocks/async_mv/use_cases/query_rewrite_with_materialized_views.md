@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 如何基于 SPJG 模式自动将查询改写为物化视图查询，加速查询执行和降低计算成本。"
 sidebar_position: 20
 ---
 

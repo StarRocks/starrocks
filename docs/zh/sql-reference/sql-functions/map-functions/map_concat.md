@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将多个 Map 合并成一个 Map，重复 Key 保留最后一个。"
 ---
 
 # map_concat

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：認証、クエリ実行、データロードに関連する設定項目。"
 sidebar_label: "認証、クエリ、およびロード"
 ---
 

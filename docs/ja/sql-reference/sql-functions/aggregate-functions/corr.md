@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2 つの式間のピアソン相関係数を返します。"
 ---
 
 # corr

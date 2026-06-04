@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks で新しいテーブルを作成します。"
 ---
 
 # CREATE TABLE

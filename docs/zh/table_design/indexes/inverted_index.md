@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and use full-text inverted indexes in StarRocks to accelerate text keyword searches by indexing individual words."
 toc_max_heading_level: 4
 sidebar_position: 50
 ---
@@ -157,7 +158,7 @@ ALTER TABLE t DROP index idx;
   
 **注意：**
 
-- 在查询过程中，`MATCH`可以使用 `%` 进行模糊匹配，格式为 `%keyword%`。但关键词必须包含单词的一部分。例如，如果关键词是 <code>starrocks&nbsp;</code>，则无法匹配单词 `starrocks`，因为它包含空格。
+- 在查询过程中，`MATCH`可以使用 `%` 进行模糊匹配，格式为 `%keyword%`。但关键词必须包含单词的一部分。例如，如果关键词是 `starrocks `，则无法匹配单词 `starrocks`，因为它包含空格。
 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "star%";

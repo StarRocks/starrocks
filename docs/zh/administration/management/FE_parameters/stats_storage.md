@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for statistics collection and storage settings."
 sidebar_label: "统计报告和存储"
 ---
 

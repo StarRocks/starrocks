@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Broker Load、INSERT、Spark Load で作成されたロードジョブの情報を表示します。"
 ---
 
 # SHOW LOAD

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "升级 StarRocks 后出现异常时，可通过降级恢复到之前版本。"
 ---
 
 # 降级 StarRocks

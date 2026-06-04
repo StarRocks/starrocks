@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたパーセンタイルに対応する値を返します。"
 ---
 
 # percentile_approx_raw

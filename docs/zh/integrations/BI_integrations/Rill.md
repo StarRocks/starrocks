@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Rill 支持连接到 StarRocks 作为 OLAP 连接器，为仪表板提供内部及外部数据查询能力。"
 ---
 
 # Rill

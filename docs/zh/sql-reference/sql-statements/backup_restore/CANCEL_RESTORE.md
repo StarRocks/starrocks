@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "取消指定数据库中一个正在进行的恢复任务。"
 keywords: ['beifen']
 ---
 

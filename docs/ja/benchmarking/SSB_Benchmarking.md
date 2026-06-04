@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SSB フラットテーブルベンチマーク 100GB データセットでの StarRocks パフォーマンス比較結果。"
 ---
 
 # SSB フラットテーブルベンチマーク

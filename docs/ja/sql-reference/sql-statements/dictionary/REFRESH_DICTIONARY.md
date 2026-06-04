@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "REFRESH DICTIONARY は、辞書オブジェクトを手動でリフレッシュします。"
 ---
 
 # REFRESH DICTIONARY

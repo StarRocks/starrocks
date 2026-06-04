@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建物化视图，支持同步和异步刷新方式。"
 ---
 
 # CREATE MATERIALIZED VIEW

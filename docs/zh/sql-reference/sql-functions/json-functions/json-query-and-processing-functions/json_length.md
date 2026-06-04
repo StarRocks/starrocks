@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回 JSON 文档的长度。"
 ---
 
 # json_length

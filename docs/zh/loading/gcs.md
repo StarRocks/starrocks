@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从 Google Cloud Storage (GCS) 导入数据到 StarRocks，支持多种导入方式。"
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---

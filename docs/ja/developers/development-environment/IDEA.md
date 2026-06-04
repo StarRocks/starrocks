@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "macOS Apple Silicon で IntelliJ IDEA を使用して StarRocks FE 開発環境をセットアップする方法。"
 ---
 
 # Setup StarRocks FE 開発環境を IDEA で設定する

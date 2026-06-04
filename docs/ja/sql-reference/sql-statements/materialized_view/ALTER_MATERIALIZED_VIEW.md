@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "非同期マテリアライズドビューの名前変更、リフレッシュ戦略、ステータス、プロパティを変更します。"
 ---
 
 # ALTER MATERIALIZED VIEW

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x を y で割ったアークタンジェント（x/y のアークタンジェント）を返します。"
 ---
 
 # atan2

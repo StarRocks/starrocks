@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PROFILELIST は、StarRocks クラスターにキャッシュされている query profile レコードを一覧表示します。"
 ---
 
 # SHOW PROFILELIST

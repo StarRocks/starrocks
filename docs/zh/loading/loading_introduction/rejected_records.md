@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "启用 max_filter_ratio 时 StarRocks 将被过滤的行持久化到 _statistics_.rejected_records，支持查询和回放。"
 sidebar_label: "拒绝行"
 keywords: ['rejected', 'records', 'max_filter_ratio', '回放']
 ---

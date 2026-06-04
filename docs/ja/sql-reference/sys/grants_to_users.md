@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "System view showing the privileges granted to each user in StarRocks."
 ---
 
 # grants_to_users

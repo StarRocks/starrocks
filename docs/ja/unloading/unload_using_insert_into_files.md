@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.2 以降は INSERT INTO FILES でテーブル関数 FILES() を使用してリモートストレージにデータをアンロードできます。"
 ---
 
 # INSERT INTO FILES を使用したデータのアンロード

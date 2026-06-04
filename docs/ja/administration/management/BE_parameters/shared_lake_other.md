@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
 ---
 

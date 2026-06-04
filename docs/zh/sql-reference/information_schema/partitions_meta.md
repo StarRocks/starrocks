@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "partitions_meta 提供表分区的信息。"
 ---
 
 # partitions_meta

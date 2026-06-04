@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN CANCEL REPAIR cancels prioritized repairing schedules for specified tables or partitions."
 ---
 
 # ADMIN CANCEL REPAIR

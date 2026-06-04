@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のリソース分離機能における CPU/メモリ制限設定とリソースグループの設定方法を説明します。"
 ---
 
 # リソース分離のトラブルシューティング

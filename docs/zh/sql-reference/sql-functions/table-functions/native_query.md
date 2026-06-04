@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 JDBC Catalog 在源数据库中执行原生 SELECT 语句并返回结果。"
 ---
 
 # native_query

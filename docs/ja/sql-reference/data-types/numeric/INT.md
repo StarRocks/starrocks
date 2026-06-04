@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "4 バイト符号付き整数型で値の範囲は -2147483648 から 2147483647。"
 ---
 
 # INT

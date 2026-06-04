@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力文字列の128ビットのxxhash3ハッシュ値を返します。"
 ---
 
 # xx_hash3_128

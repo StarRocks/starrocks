@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将字符串进行 Base64 编码。"
 ---
 
 # to_base64

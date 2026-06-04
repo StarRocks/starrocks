@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算 TINYINT、SMALLINT 和 INT 类型列中不同值的个数，返回值与 COUNT(DISTINCT expr) 相同。"
 ---
 
 # bitmap_union_int

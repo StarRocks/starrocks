@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "构造一个 PERCENTILE 类型的空值，用于 Stream Load 或 INSERT 时填充默认值。"
 ---
 
 # percentile_empty

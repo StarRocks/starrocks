@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビューは、すべてのユーザー定義ビューに関する情報を提供します。"
 ---
 
 # views

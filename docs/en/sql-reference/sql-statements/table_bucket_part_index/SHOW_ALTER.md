@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, including:"
+description: "Shows the execution status of ongoing ALTER TABLE operations including column changes, schema optimization, and rollup index changes."
 ---
 
 # SHOW ALTER TABLE

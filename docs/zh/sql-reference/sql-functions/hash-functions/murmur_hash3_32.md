@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回输入字符串的32位murmur3哈希值。"
 ---
 
 # murmur_hash3_32

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SHOW REPLICA DISTRIBUTION は、テーブルまたはパーティションのレプリカの分布状況を表示するために使用されます。"
 ---
 
 # ADMIN SHOW REPLICA DISTRIBUTION

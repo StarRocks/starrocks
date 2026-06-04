@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks の 5 つのビルトインロール（db_admin, cluster_admin, user_admin, security_admin, public）とその権限説明。"
 sidebar_position: 25
 sidebar_label: "ビルトインロール"
 ---

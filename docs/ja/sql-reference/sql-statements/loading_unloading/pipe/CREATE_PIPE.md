@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INSERT INTO SELECT FROM FILES ステートメントを定義する新しいパイプを作成します。"
 ---
 
 # CREATE PIPE

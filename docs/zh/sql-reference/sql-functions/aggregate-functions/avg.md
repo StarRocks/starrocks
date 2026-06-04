@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "avg 返回选中字段的平均值。"
 ---
 
 # avg

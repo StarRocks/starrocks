@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "向日期或日期时间加上指定的天数。"
 ---
 
 # days_add

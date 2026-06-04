@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW BACKEND/COMPUTE NODE BLACKLIST 显示在黑名单中的 BE/CN 节点。"
 ---
 
 # SHOW BACKEND/COMPUTE NODE BLACKLIST

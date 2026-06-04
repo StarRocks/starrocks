@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v3.4.0 以降、StarRocks は Python UDF の作成をサポートしています。"
 sidebar_position: 0.91
 ---
 

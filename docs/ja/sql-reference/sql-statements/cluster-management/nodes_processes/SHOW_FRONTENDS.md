@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW FRONTENDS は、クラスター内のすべての FE ノードの情報を表示します。"
 ---
 
 # SHOW FRONTENDS

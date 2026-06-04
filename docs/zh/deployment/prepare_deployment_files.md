@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "准备 StarRocks 部署文件，支持 x86 和 ARM 架构 CPU 部署。"
 ---
 
 # 准备部署文件

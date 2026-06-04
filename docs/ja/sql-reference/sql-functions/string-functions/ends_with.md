@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列が指定されたサフィックスで終わる場合にtrueを返します。"
 ---
 
 # ends_with

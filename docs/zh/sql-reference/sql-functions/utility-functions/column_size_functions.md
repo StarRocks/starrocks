@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回表列的大小信息，用于存储分析和优化。"
 ---
 
 # column_size & column_compressed_size

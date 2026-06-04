@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "curl コマンドを使用してローカルファイルシステムから CSV、JSON、Parquet、ORC 形式でデータをロードする Stream Load の方法。"
 keywords: ['Stream Load']
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付に対応する曜日を返します。"
 ---
 
 # dayname

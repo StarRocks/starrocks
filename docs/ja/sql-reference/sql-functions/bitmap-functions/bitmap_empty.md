@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "空のビットマップを返します。"
 ---
 
 # bitmap_empty

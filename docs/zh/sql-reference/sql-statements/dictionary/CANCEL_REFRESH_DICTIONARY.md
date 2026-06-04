@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL REFRESH DICTIONARY cancels the refresh operation of a dictionary object."
 ---
 
 # CANCEL REFRESH DICTIONARY

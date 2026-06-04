@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "五个内置StarRocks角色的参考：db_admin、cluster_admin、user_admin、security_admin和public。"
 sidebar_position: 25
 sidebar_label: "内置角色"
 ---

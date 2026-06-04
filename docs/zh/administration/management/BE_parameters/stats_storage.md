@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
 ---

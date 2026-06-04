@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建和管理 Routine Load 作业，从 Apache Kafka Topic 持续流式导入数据至 StarRocks 表。"
 keywords: ['Routine Load']
 ---
 

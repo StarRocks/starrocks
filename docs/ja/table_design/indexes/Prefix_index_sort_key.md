@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "プレフィックスインデックスは StarRocks で自動生成されるソートキーインデックスで、範囲クエリと等値フィルターを高速化します。"
 sidebar_position: 10
 ---
 

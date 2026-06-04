@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "升级 StarRocks 集群到新版本的方法和注意事项。"
 keywords: ['shengji']
 ---
 

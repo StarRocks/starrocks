@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算多个输入参数的 MD5 128-bit 校验和并返回十进制表示。"
 ---
 
 # md5sum_numeric

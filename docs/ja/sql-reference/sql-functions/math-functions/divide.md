@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x を y で割った商を返します（y が 0 の場合は null）。"
 ---
 
 # divide

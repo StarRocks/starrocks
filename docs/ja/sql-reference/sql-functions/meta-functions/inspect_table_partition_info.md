@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "テーブルのパーティション情報をJSON形式で返します。"
 ---
 
 # inspect_table_partition_info

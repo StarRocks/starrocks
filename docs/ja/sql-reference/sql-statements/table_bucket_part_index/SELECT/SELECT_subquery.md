@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocksで相関および非相関サブクエリを記述する方法。[NOT] IN、EXISTS、スカラ、lateral join形式を含みます。"
 sidebar_label: "Subquery"
 ---
 

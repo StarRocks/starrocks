@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "按升序对数组元素进行排序，v4.0开始支持Lambda比较器。"
 ---
 
 # array_sort

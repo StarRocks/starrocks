@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "From v3.5.1 onwards, StarRocks supports connections via Apache Arrow Flight SQL protocol for efficient bulk data reading."
 ---
 
 # 通过 Arrow Flight SQL 与 StarRocks 交互

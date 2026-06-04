@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Spark でテーブルデータを読み取り複雑な処理と機械学習を行えます。"
 ---
 
 # Spark コネクタを使用して StarRocks からデータを読み取る

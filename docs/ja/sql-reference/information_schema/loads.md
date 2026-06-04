@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "loadsはロードジョブの結果を提供します。"
 ---
 
 # ロード

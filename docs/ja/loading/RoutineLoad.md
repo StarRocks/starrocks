@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Kafka トピックからメッセージを継続的にストリーミングするための Routine Load ジョブの作成および管理方法。"
 keywords: ['Routine Load']
 ---
 

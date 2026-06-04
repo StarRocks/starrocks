@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "expr1 が NULL の場合、expr2 を返します。"
 ---
 
 # ifnull

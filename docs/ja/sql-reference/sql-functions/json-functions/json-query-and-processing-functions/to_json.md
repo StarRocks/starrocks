@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MapまたはStruct値をJSON文字列に変換します。"
 ---
 
 # to_json

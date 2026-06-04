@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノード、およびメタデータスナップショットを管理します。"
 ---
 
 # ALTER SYSTEM

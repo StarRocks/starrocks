@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在字符串左侧填充指定字符使其达到指定长度。"
 ---
 
 # lpad

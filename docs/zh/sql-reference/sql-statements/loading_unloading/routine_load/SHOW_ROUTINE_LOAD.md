@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "查看 Routine Load 导入作业的执行情况和运行状态。"
 ---
 
 # SHOW ROUTINE LOAD

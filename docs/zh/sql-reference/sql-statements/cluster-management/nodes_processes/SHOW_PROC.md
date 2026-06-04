@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PROC 查看当前集群中的特定指标，以树状层次结构展示。"
 ---
 
 # SHOW PROC

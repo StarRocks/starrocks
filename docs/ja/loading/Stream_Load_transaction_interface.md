@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Flink または Kafka からのデータロード用に Stream Load トランザクションインターフェース（2 フェーズコミット）で複数テーブルトランザクションを実装する方法。"
 keywords: ['Stream Load']
 ---
 

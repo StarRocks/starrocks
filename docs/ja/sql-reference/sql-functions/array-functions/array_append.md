@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_APPEND関数は配列の末尾に新しい要素を追加します。"
 ---
 
 # array_append

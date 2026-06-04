@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "External Catalog 的功能边界和支持版本，包括存储系统、认证和权限等。"
 sidebar_label: "能力边界"
 ---
 

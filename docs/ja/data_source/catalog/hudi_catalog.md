@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hudi catalog は Apache Hudi からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
 ---
 

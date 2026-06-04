@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの入力ビットマップの和集合を計算し、新しいビットマップを返します。"
 ---
 
 # bitmap_or

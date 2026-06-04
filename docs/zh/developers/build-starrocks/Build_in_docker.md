@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 Docker 开发环境镜像编译 StarRocks 源代码。"
 ---
 
 # 使用 Docker 编译 StarRocks

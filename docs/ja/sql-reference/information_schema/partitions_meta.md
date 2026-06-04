@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "partitions_metaはテーブルのパーティションに関する情報を提供します。"
 ---
 
 # partitions_meta

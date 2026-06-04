@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 MD5 加密算法将给定字符串加密为 128-bit 的校验和。"
 ---
 
 # md5
