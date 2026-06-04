@@ -1311,7 +1311,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
     // (get_delvec_ns/get_delta_column_group_ns are already written to this shared `stats` from worker
     // threads). All writes complete before the post-`wait()` trace read.
     std::vector<uint32_t> local_rowids;
-    local_rowids.reserve(4096);
+    local_rowids.reserve(config::vector_chunk_size);
     // The scan chunk is reused across iterations on the encoded path (keys live in a per-batch encoded
     // column there), but is moved into the batch on the non-encoded path (keys point straight into its
     // column); a moved-out chunk is reallocated at the top of the next iteration.
@@ -1319,7 +1319,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
 
     while (true) {
         if (local_chunk_sp == nullptr) {
-            local_chunk_sp = ChunkFactory::new_chunk(ctx.pkey_schema, 4096);
+            local_chunk_sp = ChunkFactory::new_chunk(ctx.pkey_schema, config::vector_chunk_size);
         } else {
             local_chunk_sp->reset();
         }
