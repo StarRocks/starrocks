@@ -182,6 +182,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
   特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていない場合は `SET DEFAULT ROLE <roles> TO <user>;` または `activate_all_roles_on_login=true` を利用してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
 
+### enable_stop_be_action
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 導入時期: -
+- 説明: BE プロセスをシャットダウンする BE `/api/_stop_be` HTTP エンドポイントを有効にするかどうか。`false` の場合、このエンドポイントへのリクエストは HTTP 403 で拒否され、BE プロセスは終了しません。このパラメータを反映するには BE の再起動が必要です。
+
 ### be_port
 
 - デフォルト: 9060

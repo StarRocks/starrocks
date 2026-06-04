@@ -197,6 +197,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
   特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）——若已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;` 或将 `activate_all_roles_on_login` 设为 `true`。LDAP / security integration 的组 → 角色映射会自动激活。
 
+### enable_stop_be_action
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 引入版本：-
+- 描述：是否启用 BE `/api/_stop_be` HTTP 接口（用于关闭 BE 进程）。设置为 `false` 时，对该接口的请求将返回 HTTP 403，且不会退出 BE 进程。该参数需重启 BE 才能生效。
+
 ### be_port
 
 - 默认值：9060
