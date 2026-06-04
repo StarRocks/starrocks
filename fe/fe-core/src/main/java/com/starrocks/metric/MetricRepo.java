@@ -1032,9 +1032,11 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
         // Centiscore (raw score * 100) of partitions at the moment a lake compaction job is created.
         // Multiplied by 100 to preserve two decimal places of precision in a long-valued histogram;
-        // dashboards should divide by 100 to recover the original score.
+        // dashboards should divide by 100 to recover the original score. Use NOUNIT so the JSON
+        // metrics endpoint does not mis-report these samples as milliseconds (the default unit
+        // for the latency histograms that this base class was originally written for).
         HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER =
-                new LeaderAwareHistogramMetric("lake_compaction_score_at_trigger");
+                new LeaderAwareHistogramMetric("lake_compaction_score_at_trigger", Metric.MetricUnit.NOUNIT);
         METRIC_REGISTER.register("lake_compaction_score_at_trigger", HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER);
 
         // init system metrics
