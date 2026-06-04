@@ -1,13 +1,14 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks の一般的なモニタリングメトリクス"
 sidebar_position: 10
 ---
 
 # 一般的なモニタリングメトリクス
 
-このトピックでは、StarRocks の重要な一般メトリクスを紹介します。
+:::note
 
-マテリアライズドビューや共有データクラスタに特化したメトリクスについては、該当するセクションを参照してください。
+マテリアライズドビューや共有データクラスタに特化したメトリクスについては、該当するセクションを参照してください：
 
 - [非同期マテリアライズドビューのメトリクス](./metrics-materialized_view.md)
 - [共有データダッシュボードメトリクス、および Starlet ダッシュボードメトリクス](./metrics-shared-data.md)
@@ -16,10 +17,11 @@ sidebar_position: 10
 
 StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./Monitor_and_Alert.md)を参照してください。
 
-## メトリック項目
+:::
 
-### be_broker_count
+モニタリングメトリクスはアルファベット順に以下のファイルに一覧表示されています：
 
+<<<<<<< HEAD
 - 単位: Count
 - タイプ: Average
 - 説明: ブローカーの数。
@@ -2337,3 +2339,11 @@ DataCache メトリクスは、データキャッシュのキャッシュ容量�
 - 単位: Bytes
 - タイプ: Counter
 - 説明: ブロックキャッシュミスの累積バイト数。現在、外部テーブルのキャッシュミスバイトのみがカウントされています。
+=======
+- [a - c](./metric_details/a-c.md)
+- [d - h](./metric_details/d-h.md)
+- [i - p](./metric_details/i-p.md)
+- [q - r](./metric_details/q-r.md)
+- [s](./metric_details/s.md)
+- [t - z](./metric_details/t-z.md)
+>>>>>>> 35b4a361a7f... [Doc] Split metrics q-z page and convert ja/zh metrics.md to intro pages (#74242)

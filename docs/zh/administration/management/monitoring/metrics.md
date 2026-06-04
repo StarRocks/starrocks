@@ -1,11 +1,12 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 通用监控指标"
 sidebar_position: 10
 ---
 
 # 通用监控指标
 
-本文介绍了监控 StarRocks 的重要通用指标。
+:::note
 
 有关物化视图和存算分离集群专属监控指标，请参考对应章节：
 
@@ -16,10 +17,11 @@ sidebar_position: 10
 
 关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./Monitor_and_Alert.md)。
 
-## 监控项说明
+:::
 
-### be_broker_count
+监控指标按字母顺序列于以下文件中：
 
+<<<<<<< HEAD
 - 单位：个
 - 类型：平均值
 - 描述：Broker的数量。
@@ -2385,3 +2387,11 @@ DataCache 指标提供了数据缓存的缓存容量、使用率和命中率的�
 - 单位：Byte
 - 类型：Counter
 - 描述：Block Cache累计未命中的字节数。目前仅统计外表的缓存未命中情况。
+=======
+- [a - c](./metric_details/a-c.md)
+- [d - h](./metric_details/d-h.md)
+- [i - p](./metric_details/i-p.md)
+- [q - r](./metric_details/q-r.md)
+- [s](./metric_details/s.md)
+- [t - z](./metric_details/t-z.md)
+>>>>>>> 35b4a361a7f... [Doc] Split metrics q-z page and convert ja/zh metrics.md to intro pages (#74242)
