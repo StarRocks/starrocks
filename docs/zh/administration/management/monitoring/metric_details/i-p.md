@@ -200,6 +200,13 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `starrocks_fe_journal_replay_lag`
+
+- 单位：个
+- 类型：瞬时值
+- 标签：`host`（上报该 lag 的存活非 Leader FE 节点的 IP 或主机名）
+- 描述：某个 FE 节点已回放的 journal id 落后于 Leader 最新 journal id 的差距，即 `leader_max_journal_id - replayed_journal_id`。该指标仅由 Leader FE 上报，因为只有 Leader 持有权威的最新 journal id，并通过心跳收集其他各 FE 节点已回放的 journal id。每个存活的非 Leader 节点输出一条 series，通过 `host` 标签区分；非 Leader 的 Follower/Observer 不会上报该指标的任何 series。该值若持续增大，说明对应的 Follower/Observer 在元数据回放上正在掉队。
+
 ## `load_bytes`
 
 - 单位：字节

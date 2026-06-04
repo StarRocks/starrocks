@@ -37,6 +37,7 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -87,6 +88,7 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
@@ -1307,6 +1309,9 @@ public final class MetricRepo {
         // ADD: Collect Kafka routine load lag time metrics
         RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor);
 
+        // collect journal replay lag of other frontends behind the leader (leader only)
+        collectJournalReplayLagMetrics(visitor);
+
         if (Config.memory_tracker_enable) {
             collectMemoryUsageMetrics(visitor);
         }
@@ -1482,6 +1487,47 @@ public final class MetricRepo {
         for (Metric<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
             visitor.visit(metric);
         }
+    }
+
+    // Report, for each other frontend, how far its replayed journal id lags behind the leader's
+    // latest journal id. This metric is only emitted by the leader, because only the leader holds
+    // the authoritative latest journal id and collects every follower/observer's replayed journal
+    // id via heartbeat. Followers/observers emit no series at all, so no is_leader label is needed.
+    private static void collectJournalReplayLagMetrics(MetricVisitor visitor) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        // Avoid touching the frontend list / journal id on non-leaders.
+        if (!globalStateMgr.isLeader()) {
+            return;
+        }
+        for (Metric<Long> metric : buildJournalReplayLagMetrics(true, globalStateMgr.getMaxJournalId(),
+                globalStateMgr.getNodeMgr().getOtherFrontends())) {
+            visitor.visit(metric);
+        }
+    }
+
+    @VisibleForTesting
+    static List<Metric<Long>> buildJournalReplayLagMetrics(boolean isLeader, long leaderJournalId,
+                                                           List<Frontend> otherFrontends) {
+        List<Metric<Long>> metrics = new ArrayList<>();
+        if (!isLeader) {
+            return metrics;
+        }
+        for (Frontend fe : otherFrontends) {
+            // A dead frontend's replayed journal id is a stale snapshot, which would produce a
+            // misleading lag value, so only report alive frontends. An alive frontend has, by
+            // definition, already reported its replayed journal id through a successful heartbeat.
+            if (!fe.isAlive()) {
+                continue;
+            }
+            // Clamp to 0: a follower may momentarily report a replayed id newer than the value we
+            // just read for the leader (the two reads are not atomic, e.g. around a leader switch).
+            long lag = Math.max(0, leaderJournalId - fe.getReplayedJournalId());
+            GaugeMetricImpl<Long> metric = new GaugeMetricImpl<>("journal_replay_lag", MetricUnit.NOUNIT,
+                    "journal replay lag of a follower or observer frontend behind the leader", lag);
+            metric.addLabel(new MetricLabel("host", fe.getHost()));
+            metrics.add(metric);
+        }
+        return metrics;
     }
 
     private static void collectMemoryUsageMetrics(MetricVisitor visitor) {

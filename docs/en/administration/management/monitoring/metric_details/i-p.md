@@ -200,6 +200,13 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `starrocks_fe_journal_replay_lag`
+
+- Unit: Count
+- Type: Instantaneous
+- Labels: `host` (the IP or hostname of the alive non-Leader frontend the lag is reported for)
+- Description: How far a frontend's replayed journal id lags behind the Leader's latest journal id, that is, `leader_max_journal_id - replayed_journal_id`. This metric is reported exclusively by the Leader FE, which holds the authoritative latest journal id and collects every other frontend's replayed journal id via heartbeat. One series is emitted per alive non-Leader frontend, identified by the `host` label; Followers and Observers emit no series for this metric when they are not the Leader. A persistently growing value indicates that the corresponding Follower/Observer is falling behind in replaying metadata.
+
 ## `load_bytes`
 
 - Unit: Bytes

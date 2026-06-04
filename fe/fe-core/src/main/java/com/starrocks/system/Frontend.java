@@ -66,7 +66,9 @@ public class Frontend extends JsonWriter {
     private int queryPort;
     private int rpcPort;
 
-    private long replayedJournalId;
+    // Written by the heartbeat thread (handleHbResponse) and read concurrently by metric collection
+    // and other readers, so it must be volatile to guarantee atomic reads and visibility.
+    private volatile long replayedJournalId;
     private long lastUpdateTime;
     private long startTime;
     private String heartbeatErrMsg = "";
@@ -161,6 +163,11 @@ public class Frontend extends JsonWriter {
     @VisibleForTesting
     public void setAlive(boolean isAlive) {
         this.isAlive = isAlive;
+    }
+
+    @VisibleForTesting
+    public void setReplayedJournalId(long replayedJournalId) {
+        this.replayedJournalId = replayedJournalId;
     }
 
     public int getFid() {
