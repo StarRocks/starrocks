@@ -903,6 +903,22 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     return Status::OK();
 }
 
+// Decide whether the parallel two-phase prefetch should run while rebuilding the PK index.
+// The parallel path reads all `num_files` files concurrently and holds their decoded columns
+// in memory at once, so it is gated on update-memtracker pressure: returns false (use the
+// single-pass fallback) when parallel execution is disabled, there is nothing to parallelise,
+// or the update tracker is already past `pk_index_parallel_rebuild_mem_ratio` of its limit.
+// Cold-start latency loss is acceptable in that regime; OOM is not. Shared by del-file loading
+// and segment-file parallel reads.
+static bool should_parallel_rebuild_prefetch(int num_files) {
+    if (!config::enable_pk_index_parallel_execution || num_files <= 1) {
+        return false;
+    }
+    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+    return update_tracker != nullptr &&
+           !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_rebuild_mem_ratio);
+}
+
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
@@ -984,14 +1000,10 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         return Status::OK();
     };
 
-    // Gate the two-phase parallel path on update-memtracker pressure: when the update tracker
-    // is already past `pk_index_parallel_load_dels_mem_ratio` percent of its limit, fall back
-    // to the legacy single-pass loop to avoid holding all decoded del-file columns in memory
-    // at once. Cold-start latency loss is acceptable in that regime; OOM is not.
-    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-    const bool use_two_phase = config::enable_pk_index_parallel_execution && num_del_files > 1 &&
-                               update_tracker != nullptr &&
-                               !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_load_dels_mem_ratio);
+    // Gate the two-phase parallel path on update-memtracker pressure (see
+    // should_parallel_rebuild_prefetch): under pressure, fall back to the legacy single-pass loop
+    // to avoid holding all decoded del-file columns in memory at once.
+    const bool use_two_phase = should_parallel_rebuild_prefetch(num_del_files);
 
     if (!use_two_phase) {
         // Legacy single-pass loop: read+decode+apply per file, only one decoded column held at a time.
