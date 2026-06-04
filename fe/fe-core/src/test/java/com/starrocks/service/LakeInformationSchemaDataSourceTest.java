@@ -15,7 +15,9 @@
 package com.starrocks.service;
 
 import com.google.gson.Gson;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -23,13 +25,19 @@ import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LakeInformationSchemaDataSourceTest {
 
@@ -100,5 +108,116 @@ public class LakeInformationSchemaDataSourceTest {
         Assertions.assertEquals("1", propsMap.get("replication_num"));
         Assertions.assertEquals("HDD", propsMap.get("storage_medium"));
         Assertions.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
+    }
+
+    @Test
+    public void testGetTablesConfigWithExactTableNameFilter() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_exact_filter").useDatabase("db_exact_filter");
+        starRocksAssert.withTable("CREATE TABLE db_exact_filter.target_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE db_exact_filter.other_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_exact_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name("target_table");
+
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+
+        Assertions.assertEquals(1, response.getTables_config_infos().size());
+        Assertions.assertEquals("target_table", response.getTables_config_infos().get(0).getTable_name());
+    }
+
+    @Test
+    public void testGetTablesConfigWithLikePatternFilter() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_like_filter").useDatabase("db_like_filter");
+        starRocksAssert.withTable("CREATE TABLE db_like_filter.order_table_a " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE db_like_filter.order_table_b " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE db_like_filter.user_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_like_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name("order%");
+
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+
+        List<String> names = response.getTables_config_infos().stream()
+                .map(TTableConfigInfo::getTable_name)
+                .collect(Collectors.toList());
+        Assertions.assertEquals(2, names.size());
+        Assertions.assertTrue(names.contains("order_table_a"));
+        Assertions.assertTrue(names.contains("order_table_b"));
+        Assertions.assertFalse(names.contains("user_table"));
+    }
+
+    @Test
+    public void testGetTablesConfigWithNonExistentTableNameReturnsEmpty() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_empty_filter").useDatabase("db_empty_filter");
+        starRocksAssert.withTable("CREATE TABLE db_empty_filter.some_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_empty_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name("does_not_exist");
+
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+
+        Assertions.assertTrue(response.getTables_config_infos().isEmpty());
+    }
+
+    @Test
+    public void testGetTablesConfigWithInvalidTableNamePattern() {
+        String invalidPattern = "invalid_table_pattern";
+        new MockUp<PatternMatcher>() {
+            @Mock
+            public PatternMatcher createMysqlPattern(Invocation invocation, String mysqlPattern, boolean caseSensitive) {
+                if (invalidPattern.equals(mysqlPattern)) {
+                    throw new SemanticException("bad table name pattern");
+                }
+                return invocation.proceed(mysqlPattern, caseSensitive);
+            }
+        };
+
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_empty_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name(invalidPattern);
+
+        TException exception = Assertions.assertThrows(TException.class,
+                () -> InformationSchemaDataSource.generateTablesConfigResponse(req));
+        Assertions.assertEquals("Pattern is in bad format: " + invalidPattern, exception.getMessage());
     }
 }

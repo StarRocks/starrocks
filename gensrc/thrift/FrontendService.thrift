@@ -1478,6 +1478,7 @@ struct TAuthInfo {
 
 struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
+    2: optional string table_name
 }
 
 struct TTableConfigInfo {
