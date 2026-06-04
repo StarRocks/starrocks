@@ -27,14 +27,20 @@ displayed_sidebar: docs
 | UNSELECTED_ROWS      | WHERE 句で指定された条件によりフィルタリングされたデータ行の数。 |
 | SINK_ROWS            | ロードされたデータ行の数。                     |
 | RUNTIME_DETAILS      | ロードの実行時メタデータ。詳細は [RUNTIME_DETAILS](#runtime_details) を参照。 |
-| CREATE_TIME          | ロードジョブが作成された時間。フォーマット: `yyyy-MM-dd HH:mm:ss`。例: `2023-07-24 14:58:58`。 |
-| LOAD_START_TIME      | ロードジョブの LOADING ステージの開始時間。フォーマット: `yyyy-MM-dd HH:mm:ss`。例: `2023-07-24 14:58:58`。 |
-| LOAD_COMMIT_TIME     | ロードトランザクションがコミットされた時間。フォーマット: `yyyy-MM-dd HH:mm:ss`。例: `2023-07-24 14:58:58`。 |
-| LOAD_FINISH_TIME     | ロードジョブの LOADING ステージの終了時間。フォーマット: `yyyy-MM-dd HH:mm:ss`。例: `2023-07-24 14:58:58`。 |
+| CREATE_TIME          | ロードジョブが作成された時間。フォーマット: `yyyy-MM-dd HH:mm:ss.SSSSSS`。例: `2023-07-24 14:58:58.123000`。 |
+| LOAD_START_TIME      | ロードジョブの LOADING ステージの開始時間。フォーマット: `yyyy-MM-dd HH:mm:ss.SSSSSS`。例: `2023-07-24 14:58:58.123000`。 |
+| LOAD_COMMIT_TIME     | ロードトランザクションがコミットされた時間。フォーマット: `yyyy-MM-dd HH:mm:ss.SSSSSS`。例: `2023-07-24 14:58:58.123000`。 |
+| LOAD_FINISH_TIME     | ロードジョブの LOADING ステージの終了時間。フォーマット: `yyyy-MM-dd HH:mm:ss.SSSSSS`。例: `2023-07-24 14:58:58.123000`。 |
 | PROPERTIES           | ロードジョブの静的プロパティ。詳細は [PROPERTIES](#properties) を参照。 |
 | ERROR_MSG            | ロードジョブのエラーメッセージ。エラーが発生しなかった場合、`NULL` が返されます。 |
 | TRACKING_SQL         | ロードジョブの追跡ログをクエリするために使用できる SQL ステートメント。ロードジョブが不適格なデータ行を含む場合にのみ SQL ステートメントが返されます。不適格なデータ行を含まない場合、`NULL` が返されます。 |
 | REJECTED_RECORD_PATH | ロードジョブでフィルタリングされたすべての不適格なデータ行にアクセスできるパス。ログに記録される不適格なデータ行の数は、ロードジョブで設定された `log_rejected_record_num` パラメータによって決まります。このパスにアクセスするには `wget` コマンドを使用できます。不適格なデータ行を含まない場合、`NULL` が返されます。 |
+
+:::note
+
+v4.2 以降、`CREATE_TIME`、`LOAD_START_TIME`、`LOAD_COMMIT_TIME`、`LOAD_FINISH_TIME` はミリ秒精度を持ちます。秒未満の部分は 6 桁の小数で表示され、そのうち末尾の 3 桁は常に `0` です（例: `2023-07-24 14:58:58.123000`）。これらのフィールドに対する述語（例: `LOAD_FINISH_TIME <= '2023-07-24 14:58:58'`）もミリ秒精度で評価されます。これより前のバージョンでは、これらのフィールドは秒精度（フォーマット `yyyy-MM-dd HH:mm:ss`）です。
+
+:::
 
 ## RUNTIME_DETAILS
 

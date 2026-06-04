@@ -11,6 +11,7 @@ displayed_sidebar: docs
 - カラムの変更。
 - テーブルスキーマの最適化 (v3.2 から)、バケット方式やバケット数の変更を含む。
 - ロールアップインデックスの作成と削除。
+- クラウドネイティブ（ストレージ・コンピュート分離）テーブルのメタデータのみのプロパティ変更（`file_bundling`、`enable_persistent_index`、`persistent_index_type`、`compaction_strategy` など）。これらは非同期で実行され、`COLUMN` で表示されます。
 
 ## 構文
 
@@ -30,7 +31,7 @@ displayed_sidebar: docs
 
 - `{COLUMN ｜ OPTIMIZE | ROLLUP}`:
 
-  - `COLUMN` が指定された場合、このステートメントはカラムの変更操作を表示します。
+  - `COLUMN` が指定された場合、このステートメントはカラムの変更操作を表示します。クラウドネイティブ（ストレージ・コンピュート分離）テーブルでは、`ALTER TABLE ... SET (...)` によってトリガーされる非同期のメタデータのみの変更（`file_bundling`、`enable_persistent_index`、`persistent_index_type`、`compaction_strategy` の変更など）も表示します。
   - `OPTIMIZE` が指定された場合、このステートメントはテーブル構造の最適化操作を表示します。
   - `ROLLUP` が指定された場合、このステートメントはロールアップインデックスの追加または削除操作を表示します。
 

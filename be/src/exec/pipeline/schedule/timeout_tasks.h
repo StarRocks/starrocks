@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
+#include "compute_env/pipeline/pipeline_timer.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {

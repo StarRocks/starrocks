@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+description: "How to use temporary partitions in StarRocks to atomically overwrite data, adjust partitioning strategies, or stage data without affecting production queries."
 ---
 
 # Temporary partition

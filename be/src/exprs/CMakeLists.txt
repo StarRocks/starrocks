@@ -22,6 +22,7 @@ set(EXPR_CORE_FILES
   function_context.cpp
   expr_context.cpp
   expr.cpp
+  sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
   base64.cpp
@@ -142,5 +143,5 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore RuntimeEnv)
+target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv RuntimeEnv)
 target_link_libraries(Exprs PRIVATE Platform)

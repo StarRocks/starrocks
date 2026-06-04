@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Alias"
+description: "When you write the names of tables, columns, or expressions that contain columns in a query, you can assign them an alias."
 ---
 
 # Alias

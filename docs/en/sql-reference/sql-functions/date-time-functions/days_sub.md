@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Subtracts specified days from a date or datetime to get a new datetime."
 ---
 
 # days_sub

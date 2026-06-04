@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
+description: "FE configuration parameters for logging, server settings, and metadata management."
 ---
 
 # FE Configuration - Logging, Server, and Metadata
@@ -247,12 +248,21 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the FE audit subsystem records the SQL text of statements into FE audit logs (`fe.audit.log`) processed by ConnectProcessor. The stored statement respects other controls: encrypted statements are redacted (`AuditEncryptionChecker`), sensitive credentials may be redacted or desensitized if `enable_sql_desensitize_in_log` is set, and digest recording is controlled by `enable_sql_digest`. When it is set to `false`, ConnectProcessor replaces the statement text with "?" in audit events — other audit fields (user, host, duration, status, slow-query detection via `qe_slow_log_ms`, and metrics) are still recorded. Enabling SQL audit increases forensic and troubleshooting visibility but may expose sensitive SQL content and increase log volume and I/O; disabling it improves privacy at the cost of losing full-statement visibility in audit logs.
 - Introduced in: -
 
+### `enable_print_load_profile_to_log`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, load profiles (such as Stream Load, Routine Load, Broker Load, and Merge Commit) are additionally written to the profile log (`fe.profile.log`) at INFO level when they are pushed to `ProfileManager`, as a single-line JSON record in the same format as the query profile log. This makes load profiles recoverable from the log even after they are evicted from `ProfileManager` due to the `profile_info_reserved_num` limit. The profile log is used (rather than `fe.log`) because its JSON layout caps strings at `sys_log_json_profile_max_string_length` instead of the much smaller `sys_log_json_max_string_length`, so large load profiles are not truncated; the file is rotated and retained by the `profile_log_*` parameters. Only profiles whose query type is `Load` are printed; query profiles are not affected. A load profile is printed only when it is actually collected (for example, when `enable_profile` is enabled or the load exceeds the big-load profile threshold).
+- Introduced in: -
+
 ### `enable_profile_log`
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
 - Introduced in: v3.2.5
 
@@ -766,6 +776,19 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The port on which the HTTP server in the FE node listens.
 - Introduced in: -
+
+### `enable_http_auth`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Introduced in: -
+- Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
+  - Public probes / observability: `/api/health`, `/api/bootstrap`, `/api/idle_status`, `/api/v2/feature`, `/metrics`, `/api/oauth2`.
+  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/dump`, `/dump_starmgr`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
+
+  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
 
 ### `http_web_page_display_hardware`
 

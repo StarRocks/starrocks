@@ -30,11 +30,17 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
 #include "replication_txn_manager.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
+#include "storage/tablet_schema.h"
+#include "types/logical_type.h"
 #include "util/dynamic_cache.h"
 #include "vacuum.h"
 
@@ -248,8 +254,16 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = lake::ReplicationTxnManager::build_file_converters(_tablet_manager, request, filename_map,
-                                                                              column_unique_id_map, files_to_delete);
+    // Compute PK encoding transcode context for .del files. prepare_del_transcode_context
+    // validates PK column count/type match and rejects V2→V1 on byte-incompatible PK shapes.
+    // For V1→V2, it returns the transcode context so build_file_converters can wire up
+    // DelFileStreamConverter for .del files.
+    ASSIGN_OR_RETURN(auto del_transcode_ctx,
+                     lake::ReplicationTxnManager::prepare_del_transcode_context(*target_tablet_meta, source_schema_pb));
+
+    auto file_converters = lake::ReplicationTxnManager::build_file_converters(
+            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
+            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
 
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;
@@ -294,6 +308,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             src_file_size = size_it->second;
         }
         bool is_seg = is_segment(src_file_name);
+        // Segments and .del files go through download_lake_file_with_converter + file_converters,
+        // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
+        bool use_converter = is_seg || is_del(src_file_name);
         const auto& target_file_name = pair.second.first;
         FileEncryptionInfo encryption_info;
         if (config::enable_transparent_data_encryption) {
@@ -301,7 +318,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
 
         tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
-                            is_seg, encryption_info]() -> Status {
+                            is_seg, use_converter, encryption_info]() -> Status {
             // Fast cancel: check right before each file copy starts.
             if (txn_id < get_master_info().min_active_txn_id) {
                 LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
@@ -317,15 +334,15 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
             size_t final_file_size = 0;
             auto start_ts = butil::gettimeofday_us();
-            if (is_seg) {
+            if (use_converter) {
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
-                    RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
+                    RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
                             src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
                             &final_file_size));
                 }
-                if (final_file_size > 0 && final_file_size != src_file_size) {
+                if (is_seg && final_file_size > 0 && final_file_size != src_file_size) {
                     if (shared_mutex != nullptr) {
                         std::lock_guard lock(*shared_mutex);
                         segment_size_changes[target_file_name] = final_file_size;
@@ -588,15 +605,11 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids) {
     // Collect UUIDs from rowsets (segments and del files)
     for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
-        // the condition is very strict, because currently encryption meta for each segment is not bind to the segment
-        // we can only find the encryption meta by index, so the precondition is that the size of segment files
-        // is strictly equal to the size of encryption metas
-        bool has_encryption_meta = rowset.segments_size() == rowset.segment_encryption_metas_size();
-        for (size_t i = 0; i < rowset.segments_size(); ++i) {
-            const auto& segment_name = rowset.segments(i);
-            if (has_encryption_meta) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            const auto& segment_name = segment_meta.filename();
+            if (segment_meta.has_encryption_meta()) {
                 existed_filename_uuids.emplace(extract_uuid_from(segment_name),
-                                               std::make_pair(segment_name, rowset.segment_encryption_metas(i)));
+                                               std::make_pair(segment_name, segment_meta.encryption_meta()));
             } else {
                 existed_filename_uuids.emplace(extract_uuid_from(segment_name), std::make_pair(segment_name, ""));
             }
@@ -677,51 +690,38 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     for (const auto& src_rowset_meta : src_tablet_meta->rowsets()) {
         auto new_rowset_meta = new_metadata->add_rowsets();
         new_rowset_meta->CopyFrom(src_rowset_meta);
-        new_rowset_meta->mutable_segments()->Clear();
-        new_rowset_meta->mutable_segment_encryption_metas()->Clear();
-        new_rowset_meta->mutable_segment_size()->Clear();
         new_rowset_meta->mutable_del_files()->Clear();
-        // check if segment size is valid
-        auto segment_size_size = src_rowset_meta.segment_size_size();
-        if (segment_size_size > 0) {
-            auto segment_file_size = src_rowset_meta.segments_size();
-            // `segment_size_size` and `segment_file_size` should always be equal
-            if (UNLIKELY(segment_size_size > 0 && segment_size_size != segment_file_size)) {
-                return Status::Corruption(
-                        fmt::format("found invalid segment_size, src_tablet_id: {}, "
-                                    "rowset_id: {}, segment_size_size: {}, segment_file_size: {}",
-                                    src_tablet_id, src_rowset_meta.id(), segment_size_size, segment_file_size));
-            }
-        }
+        // Replication produces a target-local rowset; any source-cluster uid carried by
+        // CopyFrom belongs to a different uid space, so mint a fresh target uid.
+        tablet_reshard_helper::set_rowset_uid(new_rowset_meta);
 
-        // Convert rowset metadata
-        for (int i = 0; i < src_rowset_meta.segments_size(); ++i) {
-            const auto& src_segment_filename = src_rowset_meta.segments(i);
+        // Convert rowset metadata. The copied segment_metas carry over per-segment attributes
+        // (size, sort keys, num_rows, vector_index_ids, ...); rewrite only filename/encryption_meta.
+        for (int i = 0; i < src_rowset_meta.segment_metas_size(); ++i) {
+            const auto& src_seg_meta = src_rowset_meta.segment_metas(i);
+            const auto& src_segment_filename = src_seg_meta.filename();
             std::string final_segment_filename;
             ASSIGN_OR_RETURN(auto is_existed,
                              determine_final_filename(src_segment_filename, txn_id, existed_filename_uuids,
                                                       final_segment_filename, target_tablet_id, src_data_dir,
                                                       file_locations, filename_map));
-            new_rowset_meta->add_segments(final_segment_filename);
-
-            // Copy segment_size from source rowset metadata as inital value for the target rowset metadata
-            if (segment_size_size > 0) {
-                new_rowset_meta->add_segment_size(src_rowset_meta.segment_size(i));
-            }
+            auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
+            new_seg_meta->set_filename(final_segment_filename);
+            new_seg_meta->clear_encryption_meta();
 
             // Add encryption metadata for files
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
                     // segment file doesn't exist, use the newly generated encryption metadata
                     std::pair<std::string, FileEncryptionPair> pair = filename_map[src_segment_filename];
-                    new_rowset_meta->add_segment_encryption_metas(pair.second.encryption_meta);
+                    new_seg_meta->set_encryption_meta(pair.second.encryption_meta);
                 } else {
                     // segment file already exists, use the existing encryption metadata from target tablet
                     auto uuid = extract_uuid_from(src_segment_filename);
                     auto it = existed_filename_uuids.find(uuid);
                     if (it != existed_filename_uuids.end()) {
                         const std::string& existing_encryption_meta = it->second.second;
-                        new_rowset_meta->add_segment_encryption_metas(existing_encryption_meta);
+                        new_seg_meta->set_encryption_meta(existing_encryption_meta);
                     } else {
                         // should never happend
                         return Status::Corruption(fmt::format("no existing encryption metadata found for file: {}",
@@ -731,17 +731,15 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             }
 
             // build segment_name_to_size_map, record the size of source segment file
-            if (segment_size_size > 0) {
-                auto segment_size = src_rowset_meta.segment_size(i);
-                segment_name_to_size_map.emplace(src_segment_filename, segment_size);
+            if (src_seg_meta.has_size()) {
+                segment_name_to_size_map.emplace(src_segment_filename, src_seg_meta.size());
             }
         }
         // update next_rowset_id
         new_metadata->set_next_rowset_id(src_tablet_meta->next_rowset_id());
 
         // Convert dels
-        for (int i = 0; i < src_rowset_meta.del_files_size(); ++i) {
-            const DelfileWithRowsetId& src_del = src_rowset_meta.del_files(i);
+        for (const DelfileWithRowsetId& src_del : src_rowset_meta.del_files()) {
             const auto& src_del_filename = src_del.name();
             std::string final_del_filename;
             ASSIGN_OR_RETURN(auto is_existed, determine_final_filename(src_del_filename, txn_id, existed_filename_uuids,
@@ -773,8 +771,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     if (src_tablet_meta->has_sstable_meta()) {
         PersistentIndexSstableMetaPB* dest_meta = new_metadata->mutable_sstable_meta();
         dest_meta->CopyFrom(src_tablet_meta->sstable_meta());
-        for (int i = 0; i < dest_meta->sstables_size(); ++i) {
-            PersistentIndexSstablePB* sst = dest_meta->mutable_sstables(i);
+        for (PersistentIndexSstablePB& sst_ref : *dest_meta->mutable_sstables()) {
+            PersistentIndexSstablePB* sst = &sst_ref;
             const auto& src_sst_filename = sst->filename();
             std::string final_sst_filename;
             ASSIGN_OR_RETURN(auto is_existed, determine_final_filename(src_sst_filename, txn_id, existed_filename_uuids,
@@ -924,33 +922,24 @@ Status LakeReplicationTxnManager::update_tablet_metadata_segment_sizes(
     int updated_count = 0;
 
     // Iterate through all rowsets in the tablet metadata
-    for (int rowset_idx = 0; rowset_idx < tablet_metadata->rowsets_size(); ++rowset_idx) {
-        auto* rowset = tablet_metadata->mutable_rowsets(rowset_idx);
-
-        // Check if this rowset has segment_size field
-        if (rowset->segment_size_size() == 0) {
-            // No segment_size recorded, skip
-            continue;
-        }
-
-        // Verify segment_size array matches segments array
-        if (rowset->segment_size_size() != rowset->segments_size()) {
-            LOG(WARNING) << "Rowset segment_size count mismatch, rowset_id: " << rowset->id()
-                         << ", segments: " << rowset->segments_size()
-                         << ", segment_sizes: " << rowset->segment_size_size();
-            continue;
-        }
+    for (auto& rowset_ref : *tablet_metadata->mutable_rowsets()) {
+        auto* rowset = &rowset_ref;
 
         // Update segment sizes if they changed
-        for (int seg_idx = 0; seg_idx < rowset->segments_size(); ++seg_idx) {
-            const auto& segment_name = rowset->segments(seg_idx);
+        for (auto& seg_meta_ref : *rowset->mutable_segment_metas()) {
+            auto* segment_meta = &seg_meta_ref;
+            // No segment size recorded, skip
+            if (!segment_meta->has_size()) {
+                continue;
+            }
+            const auto& segment_name = segment_meta->filename();
             auto it = segment_size_changes.find(segment_name);
             if (it != segment_size_changes.end()) {
-                uint64_t old_size = rowset->segment_size(seg_idx);
+                uint64_t old_size = segment_meta->size();
                 uint64_t new_size = it->second;
 
                 if (old_size != new_size) {
-                    rowset->set_segment_size(seg_idx, new_size);
+                    segment_meta->set_size(new_size);
                     updated_count++;
 
                     LOG(INFO) << "Updated segment size in tablet_metadata, rowset_id: " << rowset->id()

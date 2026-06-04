@@ -16,11 +16,9 @@
 
 #include <runtime/exec_env.h>
 #include <runtime/mem_tracker.h>
-#ifdef WITH_TENANN
-#include <tenann/index/index_cache.h>
-#endif
 
 #include "cache/datacache.h"
+#include "storage/index/vector/vector_index_cache.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -59,8 +57,8 @@ public:
     METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_dynamic_hit_ratio, MetricUnit::PERCENT);
 
 private:
-    int _previous_lookup_count;
-    int _previous_hit_count;
+    uint64_t _previous_lookup_count = 0;
+    uint64_t _previous_hit_count = 0;
 };
 
 class RuntimeFilterMetrics {
@@ -153,6 +151,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
+    registry->register_metric("vector_index_mem_bytes", &_memory_metrics->vector_index_mem_bytes);
 }
 
 void SystemMetrics::_update_datacache_mem_tracker() {
@@ -250,6 +249,7 @@ void SystemMetrics::update_memory_metrics() {
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
     SET_MEM_METRIC_VALUE(replication_mem_tracker, replication_mem_bytes)
+    SET_MEM_METRIC_VALUE(vector_index_mem_tracker, vector_index_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
 }
 
@@ -333,8 +333,7 @@ void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry
 }
 
 void SystemMetrics::_update_vector_index_cache_metrics() {
-#ifdef WITH_TENANN
-    auto* index_cache = tenann::IndexCache::GetGlobalInstance();
+    auto* index_cache = ExecEnv::GetInstance()->vector_index_cache();
     if (UNLIKELY(index_cache == nullptr)) {
         return;
     }
@@ -342,12 +341,6 @@ void SystemMetrics::_update_vector_index_cache_metrics() {
     auto usage = index_cache->memory_usage();
     auto lookup_count = index_cache->lookup_count();
     auto hit_count = index_cache->hit_count();
-#else
-    auto capacity = 0;
-    auto usage = 0;
-    auto lookup_count = 0;
-    auto hit_count = 0;
-#endif
     auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
     auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
     auto dynamic_lookup_count = lookup_count - _vector_index_cache_metrics->_previous_lookup_count;

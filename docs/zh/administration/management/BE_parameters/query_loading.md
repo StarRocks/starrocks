@@ -36,6 +36,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
+### agg_hash_map_prefetch_dist
+
+- 默认值：16
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：聚合哈希表/哈希集探测循环的软件预取距离（以行数为单位）。在构建聚合哈希表时，该循环会预取当前处理行前方指定行数范围内的桶，从而在处理大型表时隐藏内存延迟。将其设置为 `0` 将禁用软件预取。该值每处理一个 Chunk 读取一次，因此更改将在下一个 Chunk 生效。默认值 16 是针对驻留 L3 缓存的表的经验设定；对于驻留 DRAM 的工作负载应提高该值，对于驻留缓存的工作负载则应降低该值。预取还受 `agg_prefetch_l2_ratio` 控制：无论该距离如何，只要哈希表仍能驻留 L2 缓存中，就不会发出预取请求。
+- 引入版本：-
+
+### agg_prefetch_l2_ratio
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
+- 引入版本：-
+
 ### clear_udf_cache_when_start
 
 - 默认值：false
@@ -642,6 +660,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：HNSW 向量索引自适应 `ef_search` 缩放的总开关。开启时，BE 会根据 segment 行数为每个 segment 调整有效 `ef_search`，从而在 compaction 合并大 segment 后无需手动调参即可保持召回率。设置为 `false` 时关闭自适应缩放，按用户指定的 `ef_search` 原值执行。
 - 引入版本：-
+### vector_query_cache_capacity
+
+- 默认值：`20%`
+- 类型：String
+- 单位：字节，支持单位后缀（`K`/`M`/`G`/`T`）或 BE `mem_limit` 的百分比（`%`）
+- 是否动态：是
+- 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。**v4.2.0 行为变更：** 旧版本只接受绝对字节数（默认 512MB）；升级时如不显式覆盖该配置，cache 大小将变为 BE 内存的 20%。
+- 引入版本：v3.4.0
 
 ### vector_adaptive_ef_alpha
 

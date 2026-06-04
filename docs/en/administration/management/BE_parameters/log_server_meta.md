@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
+description: "BE configuration parameters for logging, server settings, and metadata management."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -194,6 +195,20 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Description: The BE HTTP server port.
 - Introduced in: -
+
+### enable_http_auth
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Introduced in: -
+- Description: When true, most external BE HTTP endpoints require HTTP Basic Auth. Credentials are verified by RPC to the FE leader using the `checkAuth` Thrift method, so the user/password store on the FE side (including LDAP / security-integration) is the source of truth. The following are exempt:
+  - Public probes / observability: `/api/health`, `/metrics`, `/metrics/memory`.
+  - Token-gated internal transport (used by FE/BE for tablet clone and load-error file fetch): `/api/_tablet/_download`, `/api/_download_load`. These remain protected by their own token check; setting `enable_http_auth=true` does **not** compensate for `enable_token_check=false`.
+  - Stream Load and transaction endpoints that authenticate inside the handler using the load label + table grants: `/api/{db}/{table}/_stream_load`, `/api/transaction/{txn_op}`, `/api/transaction/load`.
+
+  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the session — use `SET DEFAULT ROLE <roles> TO <user>;` or set `activate_all_roles_on_login=true` if the role is granted but not default. LDAP / security-integration group → role mappings activate automatically.
 
 ### be_port
 
@@ -633,13 +648,13 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum cumulative retry time (in seconds) allowed for applying a pending version before the apply process gives up and the tablet enters an error state. The apply logic accumulates exponential/backoff intervals based on `retry_apply_interval_second` and compares the total duration against `retry_apply_timeout_second`. If `enable_retry_apply` is true and the error is considered retryable, apply attempts will be rescheduled until the accumulated backoff exceeds `retry_apply_timeout_second`; then apply stops and the tablet transitions to error. Explicitly non-retryable errors (e.g., Corruption) are not retried regardless of this setting. Tune this value to control how long StarRocks will keep retrying apply operations (default 7200s = 2 hours).
 - Introduced in: v3.3.13, v3.4.3, v3.5.0
 
-### txn_commit_rpc_timeout_ms
+### stream_load_thrift_rpc_timeout_ms
 
 - Default: 60000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Maximum allowed lifetime (in milliseconds) for Thrift RPC connections used by BE stream-load and transaction commit calls. StarRocks sets this value as the `thrift_rpc_timeout_ms` on requests sent to FE (used in stream_load planning, loadTxnBegin/loadTxnPrepare/loadTxnCommit, and getLoadTxnStatus). If a connection has been pooled longer than this value it will be closed. When a per-request timeout (`ctx->timeout_second`) is provided, the BE computes the RPC timeout as rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, txn_commit_rpc_timeout_ms)), so the effective RPC timeout is bounded by the context and this configuration. Keep this consistent with FE's `thrift_client_timeout_ms` to avoid mismatched timeouts.
+- Description: Maximum allowed lifetime (in milliseconds) for Thrift RPC connections used by BE stream-load and transaction commit calls. StarRocks sets this value as the `thrift_rpc_timeout_ms` on requests sent to FE (used in stream_load planning, loadTxnBegin/loadTxnPrepare/loadTxnCommit, and getLoadTxnStatus). If a connection has been pooled longer than this value it will be closed. When a per-request timeout (`ctx->timeout_second`) is provided, the BE computes the RPC timeout as rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, stream_load_thrift_rpc_timeout_ms)), so the effective RPC timeout is bounded by the context and this configuration. Keep this consistent with FE's `thrift_client_timeout_ms` to avoid mismatched timeouts. The legacy name `txn_commit_rpc_timeout_ms` is still accepted as a backward-compatible alias.
 - Introduced in: v3.2.0
 
 ### txn_map_shard_size

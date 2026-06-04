@@ -14,20 +14,25 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <map>
 #include <memory>
+#include <memory_resource>
 #include <unordered_map>
+#include <vector>
 
 #include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
-#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/runtime_filter_hub.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -38,7 +43,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_tree_params.h"
+#include "storage/primitive/predicate_tree_params.h"
 
 namespace starrocks {
 
@@ -53,7 +58,7 @@ using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
 class FragmentContext {
-    friend FragmentContextManager;
+    friend class FragmentContextManager;
 
 public:
     FragmentContext();
@@ -111,14 +116,7 @@ public:
 
     Status prepare_all_pipelines();
 
-    template <class Func>
-    void iterate_drivers(Func&& call) {
-        iterate_pipeline([&](const Pipeline* pipeline) {
-            for (auto& driver : pipeline->drivers()) {
-                call(driver);
-            }
-        });
-    }
+    void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
     void clear_all_drivers();
     void close_all_execution_groups();
@@ -187,6 +185,7 @@ public:
     Status submit_all_timer();
 
 private:
+    void _set_default_workgroup();
     void _close_stream_load_contexts();
 
     bool _enable_group_execution = false;
@@ -249,37 +248,6 @@ private:
     RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
-};
-
-class FragmentContextManager {
-public:
-    FragmentContextManager() = default;
-    ~FragmentContextManager() = default;
-
-    FragmentContextManager(const FragmentContextManager&) = delete;
-    FragmentContextManager(FragmentContextManager&&) = delete;
-    FragmentContextManager& operator=(const FragmentContextManager&) = delete;
-    FragmentContextManager& operator=(FragmentContextManager&&) = delete;
-
-    FragmentContext* get_or_register(const TUniqueId& fragment_id);
-    FragmentContextPtr get(const TUniqueId& fragment_id);
-
-    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
-    void unregister(const TUniqueId& fragment_id);
-
-    void cancel(const Status& status);
-
-    template <class Caller>
-    void for_each_fragment(Caller&& caller) {
-        std::lock_guard guard(_lock);
-        for (auto& [_, fragment] : _fragment_contexts) {
-            caller(fragment);
-        }
-    }
-
-private:
-    std::mutex _lock;
-    std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
 };
 } // namespace pipeline
 } // namespace starrocks

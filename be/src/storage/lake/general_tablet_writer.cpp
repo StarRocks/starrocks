@@ -299,6 +299,28 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     return Status::OK();
 }
 
+void HorizontalGeneralTabletWriter::record_segment_vector_index_ids(SegmentFileInfo& segment_file_info,
+                                                                    SegmentWriter* seg_writer) const {
+    // Record which vector indexes need a .vi file for this segment. Shared by the duplicate-key
+    // flush path and the primary-key override (HorizontalPkTabletWriter) so the two cannot
+    // silently diverge: the PK override previously omitted this, dropping vector index builds
+    // for shared-data primary-key tables.
+    if (seg_writer->defer_vector_index_build()) {
+        // Async: skip bundle-file segments (.vi doesn't support the bundle format yet, so the
+        // index is rebuilt after compaction) and segments below the deferred-build threshold.
+        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
+        if (is_bundled || segment_file_info.num_rows < seg_writer->vector_index_build_threshold()) {
+            return;
+        }
+    } else if (!seg_writer->has_vector_index_written()) {
+        // Sync: record only when .vi files were actually produced inline.
+        return;
+    }
+    for (const auto& [index_id, _] : seg_writer->vector_index_file_paths()) {
+        segment_file_info.vector_index_ids.push_back(index_id);
+    }
+}
+
 Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
@@ -316,34 +338,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record which vector indexes need .vi files
-        // Skip bundled segments: .vi files don't support bundle format yet
-        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
-        if (_seg_writer->defer_vector_index_build()) {
-            if (is_bundled) {
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " SKIPPED (bundled segment)";
-            } else if (segment_file_info.num_rows >= _seg_writer->vector_index_build_threshold()) {
-                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                    segment_file_info.vector_index_ids.push_back(index_id);
-                }
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " num_rows=" << segment_file_info.num_rows
-                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " recorded "
-                        << segment_file_info.vector_index_ids.size() << " index_ids";
-            } else {
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " num_rows=" << segment_file_info.num_rows
-                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " SKIPPED (below threshold)";
-            }
-        } else {
-            // Sync mode: record vector index IDs only when .vi files were actually produced.
-            if (_seg_writer->has_vector_index_written()) {
-                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                    segment_file_info.vector_index_ids.push_back(index_id);
-                }
-            }
-        }
+        record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;

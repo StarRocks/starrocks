@@ -19,9 +19,9 @@
 #include <vector>
 
 #include "common/statusor.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
 class Segment;
@@ -43,5 +43,14 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,
                                                                           const LakeIOOptions& lake_io_opts);
+
+// Picks the raw embedding column for brute-force vector distance computation. The column may
+// live in the output `chunk` (FE kept it eager) or in `dict_chunk` (FE pruned v from the
+// output schema; the BE re-added it to its read schema in _setup_brute_force_fallback so the
+// column is read internally but never propagated up). Returns InternalError if it appears in
+// neither — without this guard, Chunk::get_column_by_id would default-insert into the cid
+// index and return _columns[0], which the brute-force kernel would then downcast to
+// ArrayColumn and corrupt memory.
+StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk, ColumnId vec_col_id);
 
 } // namespace starrocks

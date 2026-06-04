@@ -85,7 +85,8 @@ public class CatalogConnectorMetadataTest {
         List<String> tblNames = catalogConnectorMetadata.listTableNames(new ConnectContext(), InfoSchemaDb.DATABASE_NAME);
         List<String> expected = ImmutableList.of("tables", "table_privileges", "referential_constraints",
                 "key_column_usage", "routines", "schemata", "columns", "character_sets", "collations",
-                "table_constraints", "engines", "user_privileges", "schema_privileges", "statistics",
+                "table_constraints", "engines", "user_privileges", "collation_character_set_applicability",
+                "schema_privileges", "statistics",
                 "triggers", "events", "views", "partitions", "column_privileges"
         );
         assertEquals(expected, tblNames);

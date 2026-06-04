@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <fmt/printf.h>
+
 #include <algorithm>
 #include <memory>
 #include <random>
@@ -26,13 +28,17 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/pipeline/adaptive/event.h"
-#include "exec/pipeline/exchange/exchange_sink_operator.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/spill/common.h"
+#include "compute_env/spill/global_spill_manager.h"
+#include "compute_env/spill/operator_mem_resource_manager.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/primitives/driver_observer.h"
+#include "exec/pipeline/primitives/event.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
@@ -41,8 +47,6 @@
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
-#include "exec/spill/operator_mem_resource_manager.h"
-#include "exec/workgroup/work_group.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -82,16 +86,32 @@ void update_operator_exec_stats(QueryContext* query_ctx, const OperatorExecStats
     }
 }
 
+size_t spill_expected_reserved_bytes(QueryContext* query_ctx) {
+    spill::GlobalSpillManager* global_spill_manager = nullptr;
+    if (query_ctx != nullptr) {
+        if (auto* query_execution_services = query_ctx->query_execution_services();
+            query_execution_services != nullptr && query_execution_services->runtime != nullptr) {
+            global_spill_manager = query_execution_services->runtime->global_spill_manager;
+        }
+    }
+    if (global_spill_manager == nullptr) {
+        auto* compute_env = ExecEnv::GetInstance()->compute_env();
+        global_spill_manager = compute_env == nullptr ? nullptr : compute_env->global_spill_manager();
+    }
+    return global_spill_manager == nullptr ? 0 : global_spill_manager->spill_expected_reserved_bytes();
+}
+
 } // namespace
 
 PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                               Pipeline* pipeline, int32_t driver_id)
+                               Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id)
         : _observer(this),
           _operator_mem_resource_managers(operators.size()),
           _operators(operators),
           _query_ctx(query_ctx),
           _fragment_ctx(fragment_ctx),
           _pipeline(pipeline),
+          _driver_observer(driver_observer),
           _source_node_id(operators[0]->get_plan_node_id()),
           _driver_id(driver_id) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
@@ -104,7 +124,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
         : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
-                         driver._driver_id) {}
+                         driver._driver_observer, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
         : _observer(this),
@@ -113,6 +133,7 @@ PipelineDriver::PipelineDriver()
           _query_ctx(nullptr),
           _fragment_ctx(nullptr),
           _pipeline(nullptr),
+          _driver_observer(nullptr),
           _source_node_id(0),
           _driver_id(0) {}
 
@@ -530,11 +551,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             if (_workgroup != nullptr &&
                 (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT_NS ||
-                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS) &&
-                _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
-                should_yield = true;
-                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
-                break;
+                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS)) {
+                DCHECK(_in_queue != nullptr);
+                if (_in_queue->should_yield(this, time_spent)) {
+                    should_yield = true;
+                    COUNTER_UPDATE(_yield_by_preempt_counter, 1);
+                    break;
+                }
             }
         }
         // close finished operators and update _first_unfinished index
@@ -558,10 +581,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             if (is_precondition_block()) {
                 set_driver_state(DriverState::PRECONDITION_BLOCK);
                 COUNTER_UPDATE(_block_by_precondition_counter, 1);
-            } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
+            } else if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
                 set_driver_state(DriverState::OUTPUT_FULL);
                 COUNTER_UPDATE(_block_by_output_full_counter, 1);
-            } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            } else if (!source_operator()->has_output() && !source_operator()->is_finished()) {
                 if (source_operator()->is_mutable()) {
                     set_driver_state(DriverState::LOCAL_WAITING);
                     COUNTER_UPDATE(_yield_by_local_wait_counter, 1);
@@ -780,7 +803,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
             request_reserved = op->estimated_memory_reserved(chunk);
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
-        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        size_t shared_reserved = spill_expected_reserved_bytes(_query_ctx);
 
         bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved, shared_reserved)) {
@@ -812,7 +835,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, size_t operator
         auto query_mem_limit = query_mem_tracker->lowest_limit();
         DCHECK_GT(query_mem_limit, 0);
         auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
-        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        size_t shared_reserved = spill_expected_reserved_bytes(_query_ctx);
         auto& current_thread = CurrentThread::current();
 
         if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio ||
@@ -863,7 +886,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
     const std::string driver_name = _driver_name;
-    _pipeline->count_down_driver(runtime_state);
+    if (_driver_observer != nullptr) {
+        _driver_observer->on_driver_finished(runtime_state);
+    }
     QUERY_TRACE_END("finalize", driver_name);
 }
 

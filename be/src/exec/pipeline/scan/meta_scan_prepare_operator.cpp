@@ -20,7 +20,6 @@
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/olap_common.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

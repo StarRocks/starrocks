@@ -498,6 +498,12 @@ public class LoadPlanner {
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition, computeResource);
+            // Stream/routine loads planned through LoadPlanner (transaction stream load via
+            // StreamLoadTask, batch write via MergeCommitTask) must be flagged as streaming so
+            // OlapTableSink applies the conservative initial-open-partition default, matching the
+            // StreamLoadPlanner path. Broker load (EtlJobType.BROKER) is intentionally excluded.
+            ((OlapTableSink) dataSink).setIsStreamingLoad(
+                    this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

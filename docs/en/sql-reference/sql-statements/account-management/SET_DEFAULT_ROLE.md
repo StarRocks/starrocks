@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET DEFAULT ROLE sets the roles that are activated by default when the user connects to the server."
 ---
 
 # SET DEFAULT ROLE

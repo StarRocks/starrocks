@@ -14,6 +14,8 @@
 
 #include "mem_hook.h"
 
+#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
+
 #include <iostream>
 
 #include "base/failpoint/fail_point.h"
@@ -28,6 +30,21 @@
 #ifndef BE_TEST
 #include "runtime/exec_env.h"
 #endif
+
+#endif
+
+static int64_t g_large_memory_alloc_failure_threshold = 0;
+
+namespace starrocks {
+// thread-safety is not a concern here since this is a really rare op
+int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
+    int64_t old_val = g_large_memory_alloc_failure_threshold;
+    g_large_memory_alloc_failure_threshold = val;
+    return old_val;
+}
+} // namespace starrocks
+
+#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
@@ -101,17 +118,6 @@ std::atomic<int64_t> g_mem_usage(0);
 #define SET_EXCEED_MEM_TRACKER() (void)0
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
-
-static int64_t g_large_memory_alloc_failure_threshold = 0;
-
-namespace starrocks {
-// thread-safety is not a concern here since this is a really rare op
-int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
-    int64_t old_val = g_large_memory_alloc_failure_threshold;
-    g_large_memory_alloc_failure_threshold = val;
-    return old_val;
-}
-} // namespace starrocks
 
 const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
@@ -484,3 +490,5 @@ void* __libc_memalign(size_t alignment, size_t size) {
 }
 #endif
 }
+
+#endif // STARROCKS_ENABLE_JEMALLOC_MEM_HOOK

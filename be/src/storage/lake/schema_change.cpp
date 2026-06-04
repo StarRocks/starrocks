@@ -18,24 +18,29 @@
 
 #include <memory>
 
+#include "agent/agent_metrics.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/add_index_schema_change.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
 #include "storage/schema_change_utils.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
 
 namespace starrocks::lake {
@@ -170,6 +175,9 @@ private:
 
 Status LinkedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     new_rowset_metadata->CopyFrom(rowset->metadata());
+    // Linked SC reuses the source segments, so it inherits the source uid; mint one
+    // only if the source predates the uid feature (set-if-absent).
+    tablet_reshard_helper::ensure_rowset_uid(new_rowset_metadata);
     return Status::OK();
 }
 
@@ -245,20 +253,16 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = new_rowset_metadata->segments_size();
-        new_rowset_metadata->add_segments(f.path);
-        new_rowset_metadata->add_segment_size(f.size.value());
-        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = new_rowset_metadata->segment_metas_size();
+        f.to_proto(segment_idx, new_rowset_metadata->add_segment_metas());
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
+    // Fresh uid: a converted (rewritten) rowset is new data, distinct from its base.
+    tablet_reshard_helper::set_rowset_uid(new_rowset_metadata);
     _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
@@ -341,14 +345,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = new_rowset_metadata->segments_size();
-        new_rowset_metadata->add_segments(f.path);
-        new_rowset_metadata->add_segment_size(f.size.value());
-        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = new_rowset_metadata->segment_metas_size();
+        f.to_proto(segment_idx, new_rowset_metadata->add_segment_metas());
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -356,6 +354,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
+    // Fresh uid: a converted (rewritten) rowset is new data, distinct from its base.
+    tablet_reshard_helper::set_rowset_uid(new_rowset_metadata);
     _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
@@ -366,7 +366,29 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
 
     MonotonicStopWatch timer;
     timer.start();
-    Status status = do_process_alter_tablet(request);
+    // Fast-path dispatch for ADD/DROP INDEX (lake-only). FE classifies these
+    // ahead of time and sets only_add_index / only_drop_index in the request.
+    // BE-side validation failures here propagate as errors (NOT fallback to
+    // do_process_alter_tablet) — the fast-path request shape (same tablet
+    // for base/new, no schema diff) is incompatible with the legacy rewrite
+    // path and would silently double the row count.
+    //
+    // Guard against buggy callers setting both ADD and DROP flags on the
+    // same request. FE never does this, but silently preferring add over
+    // drop would hide the misuse; fail fast instead.
+    if (request.__isset.only_add_index && request.only_add_index && request.__isset.only_drop_index &&
+        request.only_drop_index) {
+        return Status::InvalidArgument(
+                "both only_add_index and only_drop_index are set on the same AlterTablet request");
+    }
+    Status status;
+    if (request.__isset.only_add_index && request.only_add_index) {
+        status = do_process_add_index_only(request);
+    } else if (request.__isset.only_drop_index && request.only_drop_index) {
+        status = do_process_drop_index_only(request);
+    } else {
+        status = do_process_alter_tablet(request);
+    }
     LOG(INFO) << "finish alter tablet. status: " << status.to_string()
               << ", duration: " << timer.elapsed_time() / 1000000 << " ms"
               << ", peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
@@ -596,6 +618,173 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
               << "base tablet: " << base_tablet.id() << ", new tablet: " << new_tablet.id()
               << ", version: " << base_tablet.version();
     return Status::OK();
+}
+
+// =============================================================================
+// ADD INDEX fast path (lake-only).
+//
+// Validates the request, translates indexes_to_add (column names, driven by
+// the FE catalog schema) into TabletIndexPB (column unique IDs, BE-side),
+// and delegates per-segment IDG construction to AddIndexSchemaChange.
+//
+// On any failure, the error is propagated back to FE rather than retried
+// via do_process_alter_tablet: the fast-path request carries
+// base_tablet_id == new_tablet_id and no schema diff, so the legacy
+// rewrite path would re-process the tablet against itself and double the
+// row count. FE's SchemaChangeIndexFastPathClassifier already filters out
+// ineligible alters before setting only_add_index=true, so genuine
+// failures here represent real BE-side errors that should cancel the
+// alter, not silently land in an unsupported fallback shape.
+Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
+    AgentMetrics::instance()->lake_add_index_requests_total.increment(1);
+    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
+        // The fast-path request shape (base_tablet_id == new_tablet_id, no
+        // tablet_schema diff) is incompatible with the legacy rewrite path:
+        // delegating here would self-targeted "rewrite" the tablet and
+        // append duplicate rowsets. FE's classifier guarantees this branch
+        // is unreachable in practice, so fail loudly instead of falling
+        // back.
+        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        return Status::InvalidArgument("ADD INDEX fast path called with empty indexes_to_add");
+    }
+    if (!request.__isset.txn_id) {
+        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        return Status::InvalidArgument("txn_id not set for ADD INDEX fast path");
+    }
+
+    const int64_t alter_version = request.alter_version;
+    ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
+    // Fast path: shadow tablet == origin tablet (FE sends tabletId for both
+    // base_tablet_id and new_tablet_id). Reuse base_tablet; do NOT read the
+    // initial metadata at version 1 — on a long-running partition that file
+    // has been vacuumed and lookups will 404 on object storage. The schema
+    // used below resolves column names → unique_ids; since ADD INDEX does
+    // not change the column set, base_tablet's schema is authoritative.
+    auto& new_tablet = base_tablet;
+
+    auto new_schema = new_tablet.get_schema();
+    if (new_schema == nullptr) {
+        return Status::InternalError("new tablet has null schema");
+    }
+
+    // Translate each TOlapTableIndex into TabletIndexPB. TOlapTableIndex
+    // carries column *names* (driven by FE catalog), and TabletIndexPB uses
+    // *unique IDs*. Resolve via new_schema since the new tablet already
+    // carries the post-alter schema.
+    std::vector<TabletIndexPB> indexes_to_build;
+    indexes_to_build.reserve(request.indexes_to_add.size());
+    for (const auto& tix : request.indexes_to_add) {
+        if (!tix.__isset.index_type) {
+            return Status::InvalidArgument("TOlapTableIndex has no index_type");
+        }
+        TabletIndexPB pb;
+        if (tix.__isset.index_id) pb.set_index_id(tix.index_id);
+        if (tix.__isset.index_name) pb.set_index_name(tix.index_name);
+        auto converted = TabletIndex::convert_index_type_from_thrift(tix.index_type);
+        if (!converted.ok()) return converted.status();
+        pb.set_index_type(*converted);
+        if (!tix.__isset.columns || tix.columns.empty()) {
+            return Status::InvalidArgument(strings::Substitute("index $0 has no columns", pb.index_name()));
+        }
+        for (const auto& col_name : tix.columns) {
+            auto ordinal = new_schema->field_index(col_name);
+            if (ordinal >= new_schema->num_columns()) {
+                // See note above: do not fall back to do_process_alter_tablet
+                // — the request shape would cause the legacy path to
+                // re-write the tablet against itself and duplicate rows.
+                AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+                return Status::InternalError(
+                        strings::Substitute("ADD INDEX fast path: column $0 not found in new schema. tablet=$1",
+                                            col_name, request.new_tablet_id));
+            }
+            pb.add_col_unique_id(new_schema->column(ordinal).unique_id());
+        }
+        indexes_to_build.push_back(std::move(pb));
+    }
+
+    // Build IDG per segment and assemble the OpAddIndex.
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(request.new_tablet_id);
+    txn_log->set_txn_id(request.txn_id);
+    auto* op_add_index = txn_log->mutable_op_add_index();
+
+    AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
+                            alter_version);
+    auto run_st = sc.run(op_add_index);
+    if (!run_st.ok()) {
+        // Do NOT fall back to do_process_alter_tablet here. The fast-path
+        // request has base_tablet_id == new_tablet_id and no schema diff;
+        // the legacy rewrite path would treat that as self-targeted alter
+        // and append duplicate rowsets, doubling the visible row count.
+        // Surface the error so FE cancels the alter; partially written
+        // .idx files have already been cleaned up by the run() failure
+        // branch (cleanup_written_idx_files()).
+        LOG(WARNING) << "ADD INDEX fast path failed: " << run_st << " tablet=" << request.new_tablet_id;
+        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        return run_st;
+    }
+
+    LOG(INFO) << "ADD INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
+              << " segment_entries=" << op_add_index->segment_entries_size()
+              << " new_indexes=" << op_add_index->new_indexes_size();
+    AgentMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
+    return _tablet_manager->put_txn_log(std::move(txn_log));
+}
+
+// =============================================================================
+// DROP INDEX fast path (lake-only).
+//
+// Metadata-only: builds one OpDropIndex TxnLog with a DroppedIndex entry per
+// request.drop_indexes and writes it. Publish merges the tombstones into
+// IDG entries via MetaFileBuilder::apply_drop_index and drops matching
+// TabletIndexPB from schema.table_indices. Physical .idx cleanup happens
+// when compaction later rebuilds the segment (keys absent from the inlined
+// footer, the .idx file becomes unreferenced and gets vacuumed).
+Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& request) {
+    AgentMetrics::instance()->lake_drop_index_requests_total.increment(1);
+    if (!request.__isset.drop_indexes || request.drop_indexes.empty()) {
+        LOG(WARNING) << "DROP INDEX fast path called with empty drop_indexes list; tablet=" << request.new_tablet_id;
+        return Status::InvalidArgument("drop_indexes is empty for DROP INDEX fast path");
+    }
+    if (!request.__isset.txn_id) {
+        return Status::InvalidArgument("txn_id not set for DROP INDEX fast path");
+    }
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(request.new_tablet_id);
+    txn_log->set_txn_id(request.txn_id);
+    auto* op = txn_log->mutable_op_drop_index();
+    if (request.__isset.alter_version) {
+        op->set_drop_version(request.alter_version);
+    }
+
+    for (const auto& di : request.drop_indexes) {
+        // All three fields identify the drop target and must be present.
+        // index_id selects the TabletIndexPB to tombstone; (col_unique_id,
+        // index_type) matches the IDG key or legacy footer-embedded payload.
+        // Missing any of them would either no-op silently or match the wrong
+        // entry (defaults: col_unique_id=0, index_type=INDEX_UNKNOWN), so we
+        // reject malformed requests up front.
+        if (!di.__isset.index_id || !di.__isset.col_unique_id || !di.__isset.index_type) {
+            return Status::InvalidArgument(
+                    "DROP INDEX fast path requires index_id, col_unique_id, and index_type on every drop entry");
+        }
+        auto* d = op->add_dropped();
+        d->set_index_id(di.index_id);
+        d->set_col_unique_id(di.col_unique_id);
+        // Convert Thrift TIndexType to proto IndexType via the shared
+        // conversion helper on TabletIndex to stay consistent with the
+        // rest of the schema code.
+        auto converted = TabletIndex::convert_index_type_from_thrift(di.index_type);
+        if (!converted.ok()) {
+            return converted.status();
+        }
+        d->set_index_type(*converted);
+    }
+
+    LOG(INFO) << "DROP INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
+              << " drop_count=" << op->dropped_size();
+    return _tablet_manager->put_txn_log(std::move(txn_log));
 }
 
 } // namespace starrocks::lake

@@ -30,7 +30,7 @@
 #include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exec/spill/spiller.h"
+#include "compute_env/spill/spiller.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks {

@@ -125,7 +125,7 @@ import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
 
-    public static final String PAIMON_PARTITION_NULL_VALUE = "null";
+    public static final List<String> PARTITION_NULL_VALUES = ImmutableList.of("__DEFAULT_PARTITION__", "null");
     private static final String VIEW_DIALECTS_KEY = "starrocks";
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
@@ -265,7 +265,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName) {
+            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName
+                    && !PARTITION_NULL_VALUES.contains(value)) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);

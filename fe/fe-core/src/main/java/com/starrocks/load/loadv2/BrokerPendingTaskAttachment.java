@@ -28,8 +28,6 @@ public class BrokerPendingTaskAttachment extends TaskAttachment {
 
     // FileGroupAggKey -> status of files group by FileGroup
     private Map<FileGroupAggKey, List<List<TBrokerFileStatus>>> fileStatusMap = Maps.newHashMap();
-    // FileGroupAggKey -> total file num
-    private Map<FileGroupAggKey, Integer> fileNumMap = Maps.newHashMap();
 
     public BrokerPendingTaskAttachment(long taskId) {
         super(taskId);
@@ -37,14 +35,9 @@ public class BrokerPendingTaskAttachment extends TaskAttachment {
 
     public void addFileStatus(FileGroupAggKey aggKey, List<List<TBrokerFileStatus>> fileStatusList) {
         fileStatusMap.put(aggKey, fileStatusList);
-        fileNumMap.put(aggKey, fileStatusList.stream().mapToInt(entity -> entity.size()).sum());
     }
 
     public List<List<TBrokerFileStatus>> getFileStatusByTable(FileGroupAggKey aggKey) {
         return fileStatusMap.get(aggKey);
-    }
-
-    public int getFileNumByTable(FileGroupAggKey aggKey) {
-        return fileNumMap.get(aggKey);
     }
 }

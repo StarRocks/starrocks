@@ -23,6 +23,7 @@
 
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
+#include "base/random/random.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "base/utility/scoped_cleanup.h"
@@ -47,17 +48,18 @@
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
-#include "storage/empty_iterator.h"
 #include "storage/local_primary_key_compaction_conflict_resolver.h"
 #include "storage/local_primary_key_recover.h"
-#include "storage/merge_iterator.h"
 #include "storage/persistent_index.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -76,21 +78,12 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
 
 const std::string kBreakpointMsg = "primary key apply stopped";
-
-std::string EditVersion::to_string() const {
-    if (minor_number() == 0) {
-        return strings::Substitute("$0", major_number());
-    } else {
-        return strings::Substitute("$0.$1", major_number(), minor_number());
-    }
-}
 
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
@@ -3083,7 +3076,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         }
     }
     // give 10s time gitter, so same table's compaction don't start at same time
-    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    _last_compaction_time_ms = UnixMillis() + ThreadLocalRandomUniform(10000);
     if (info->inputs.empty()) {
         VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
@@ -3263,7 +3256,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 _tablet.tablet_id(), version_count, _pending_commits.size());
     } else {
         // give 10s time gitter, so same table's compaction don't start at same time
-        _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+        _last_compaction_time_ms = UnixMillis() + ThreadLocalRandomUniform(10000);
     }
 
     int64_t del_rows = total_rows - stat.num_rows;
@@ -5839,7 +5832,7 @@ Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
                 LOG(WARNING) << msg;
             } else if (itr->second->compaction_score > 0) {
                 // 30% chance to pick this rowset
-                if (rand() % 100 < 30) {
+                if (ThreadLocalRandomUniform(100) < 30) {
                     info->inputs.push_back(rowsetid);
                     if (info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
                         break;
@@ -5850,7 +5843,7 @@ Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
     }
 
     // give 10s time gitter, so same table's compaction don't start at same time
-    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    _last_compaction_time_ms = UnixMillis() + ThreadLocalRandomUniform(10000);
     if (info->inputs.empty()) {
         VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;

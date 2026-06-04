@@ -23,6 +23,7 @@
 #include "common/config_vector_index_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/vector_index_reader.h"
@@ -32,6 +33,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment_file_info.h"
@@ -310,6 +312,15 @@ protected:
         return schema_pb;
     }
 
+    // Primary-key variant of create_vi_schema_pb_async: identical async vector index, but
+    // keys_type=PRIMARY_KEYS so the write is driven through HorizontalPkTabletWriter, whose
+    // flush_segment_writer override historically dropped vector_index_ids.
+    TabletSchemaPB create_vi_pk_schema_pb_async(uint32_t threshold) {
+        auto schema_pb = create_vi_schema_pb_async(threshold);
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        return schema_pb;
+    }
+
     ChunkUniquePtr build_chunk(const TabletSchemaCSPtr& tablet_schema, int num_rows) {
         auto schema = ChunkHelper::convert_schema(tablet_schema);
         auto chunk = ChunkFactory::new_chunk(schema, num_rows);
@@ -387,6 +398,40 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_vi_via_location_prov
     std::string vi_path = _lp->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
 
+    writer->close();
+}
+
+// Sync mode (default, no index_build_mode=async): HorizontalPkTabletWriter must record
+// vector_index_ids for a segment that produced a .vi inline, mirroring the duplicate-key
+// path (test_horizontal_writer_vi_via_tablet_mgr). Before the fix the PK override recorded
+// nothing, so the inline-built .vi could never be reclaimed by vacuum (which keys off
+// segment_metas.vector_index_ids). Both build flavors above the threshold record the id and
+// write a .vi next to the segment: a TenANN build writes a real index, a non-TenANN build
+// writes the empty-mark placeholder (IndexDescriptor::mark_word via EmptyVectorIndexBuilder).
+// So the recording and the .vi artifact are asserted unconditionally here, matching the
+// duplicate-key test above.
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_pk_writer_sync_records_index_ids) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
+
+    auto schema_pb = create_vi_schema_pb();
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4103;
+    auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                             /*flush_pool=*/nullptr, /*is_compaction=*/false);
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 5);
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(5, seg.num_rows);
+    ASSERT_EQ(1u, seg.vector_index_ids.size());
+    EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path));
     writer->close();
 }
 
@@ -742,6 +787,57 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_async_below_threshol
     const auto& seg = writer->segments().front();
     EXPECT_EQ(5, seg.num_rows);
     EXPECT_TRUE(seg.vector_index_ids.empty()) << "below-threshold async segment should not record vi ids";
+    writer->close();
+}
+
+// Regression for shared-data primary-key vector index loss: HorizontalPkTabletWriter
+// overrides flush_segment_writer and historically forgot to record vector_index_ids, so
+// async builds were never scheduled (and sync-built .vi files never vacuumed) for PK
+// tables. With the shared record_segment_vector_index_ids helper the PK path now matches
+// the duplicate-key path. Async + above-threshold => exactly one recorded index id.
+// (Before the fix this segment recorded zero index ids and the assert below fails.)
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_pk_writer_async_above_threshold_records_index_ids) {
+    auto schema_pb = create_vi_pk_schema_pb_async(/*threshold=*/3);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4101;
+    auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                             /*flush_pool=*/nullptr, /*is_compaction=*/false);
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 5); // >= threshold
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(5, seg.num_rows);
+    ASSERT_EQ(1u, seg.vector_index_ids.size());
+    EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
+
+    // Async: no .vi inline; the deferred build task produces it later.
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    EXPECT_FALSE(fs::path_exist(vi_path));
+    writer->close();
+}
+
+// Boundary: PK writer, async + below-threshold => no vector_index_ids recorded. Confirms
+// the shared helper's threshold gate is applied on the PK path too (not just duplicate-key).
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_pk_writer_async_below_threshold_skips_record) {
+    auto schema_pb = create_vi_pk_schema_pb_async(/*threshold=*/100);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4102;
+    auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                             /*flush_pool=*/nullptr, /*is_compaction=*/false);
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 5); // < threshold
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(5, seg.num_rows);
+    EXPECT_TRUE(seg.vector_index_ids.empty()) << "below-threshold async PK segment should not record vi ids";
     writer->close();
 }
 

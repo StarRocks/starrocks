@@ -1,0 +1,88 @@
+name: CI Doc Param Drift
+
+# Runs when a PR modifies any of the config source-of-truth files.
+# Posts a PR comment listing any new parameters that have no documentation entry.
+# Does NOT block merge — the comment is informational only.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+      - 'branch*'
+    paths:
+      - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
+      - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
+      - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
+      - 'be/src/common/config.h'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  param-drift-check:
+    runs-on: ubuntu-latest
+    name: Check new params for missing docs
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+
+    steps:
+      - name: Clean workspace
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Record base branch
+        id: branch
+        run: echo "branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+
+      # Check out the base branch only. This is intentional: pull_request_target
+      # runs with a write-scoped token, so we must not execute scripts from the
+      # PR head (which is untrusted). We run the checker from the trusted base
+      # checkout and separately fetch the PR diff to identify new params.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          fetch-depth: 0
+
+      # Fetch the PR head so git diff can compare against it
+      - name: Fetch PR head for diffing
+        run: |
+          git fetch origin pull/${{ env.PR_NUMBER }}/head:pr-head
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run param drift check
+        id: drift
+        run: |
+          set +e
+          python3 build-support/extract_and_diff_params.py \
+            --new-params-only \
+            --diff-base "origin/${{ steps.branch.outputs.branch }}" \
+            --output github-comment \
+            > drift_report.md 2>&1
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      - name: Post or update PR comment (gaps found)
+        if: steps.drift.outputs.exitcode == '1'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          filePath: drift_report.md
+          comment_tag: param-drift
+          mode: upsert
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clear PR comment (no gaps)
+        if: steps.drift.outputs.exitcode != '1'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            No new undocumented parameters detected by the param-drift check.
+          comment_tag: param-drift
+          mode: upsert
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -21,6 +21,9 @@ set(EXEC_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     exec_node_exec_primitive_test.cpp
     morsel_primitive_test.cpp
+    pipeline_event_exec_primitive_test.cpp
+    pipeline_metrics_exec_primitive_test.cpp
+    pipeline_observer_exec_primitive_test.cpp
     runtime_filter_exec_primitive_test.cpp
 )
 
@@ -138,37 +141,6 @@ set_target_properties(starrocks_exec_schema_scanners_test_objs PROPERTIES COMPIL
 add_executable(exec_schema_scanners_test $<TARGET_OBJECTS:starrocks_exec_schema_scanners_test_objs>)
 target_link_libraries(exec_schema_scanners_test ${EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS} gtest_main)
 
-set(SORTING_CORE_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    sorting/sorting_core_test.cpp
-)
-
-set(SORTING_CORE_TEST_LINK_LIBS
-    ExecSortingCore
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
-    ${WL_START_GROUP}
-    gmock
-    gtest
-    ${WL_END_GROUP}
-)
-
-add_library(starrocks_sorting_core_test_objs OBJECT ${SORTING_CORE_TEST_FILES})
-target_link_libraries(starrocks_sorting_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_sorting_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(exec_sorting_core_test $<TARGET_OBJECTS:starrocks_sorting_core_test_objs>)
-target_link_libraries(exec_sorting_core_test ${SORTING_CORE_TEST_LINK_LIBS} gtest_main)
-
 set(JOIN_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     join_hash_map_test.cpp
@@ -176,7 +148,7 @@ set(JOIN_CORE_TEST_FILES
 
 set(JOIN_CORE_TEST_LINK_LIBS
     ExecJoinCore
-    ExecSortingCore
+    ComputeEnv
     ExprCore
     Serde
     RuntimeCore

@@ -245,7 +245,7 @@ public class AuthorizationAnalyzer {
                         FunctionRef functionRef = functionRefs.get(i);
                         FunctionRefAnalyzer.analyzeFunctionRef(functionRef, session.getDatabase());
                         FunctionArgsDef argsDef = functionArgs.get(i);
-                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef, false);
                         FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                                 functionRef, argsDef, session.getDatabase());
 
@@ -266,7 +266,7 @@ public class AuthorizationAnalyzer {
                         FunctionRef functionRef = functionRefs.get(i);
                         FunctionRefAnalyzer.analyzeFunctionRef(functionRef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
                         FunctionArgsDef argsDef = functionArgs.get(i);
-                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef, false);
                         FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                                 functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
 

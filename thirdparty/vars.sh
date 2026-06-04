@@ -404,10 +404,10 @@ LIBDEFLATE_SOURCE="libdeflate-1.18"
 LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
 
 # llvm
-LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz"
-LLVM_NAME="llvm-project-16.0.6.src.tar.xz"
-LLVM_SOURCE="llvm-project-16.0.6.src"
-LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
+LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz"
+LLVM_NAME="llvm-project-18.1.8.src.tar.xz"
+LLVM_SOURCE="llvm-project-18.1.8.src"
+LLVM_MD5SUM="81cd0be5ae6f1ad8961746116d426a96"
 
 #clucene
 CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"

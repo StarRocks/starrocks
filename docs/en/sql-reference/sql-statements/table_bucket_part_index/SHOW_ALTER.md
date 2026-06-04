@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, including:"
 ---
 
 # SHOW ALTER TABLE
@@ -9,6 +10,7 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
 - Modify columns.
 - Optimize table schema (from v3.2), including modifying the bucketing method and the number of buckets.
 - Create and delete the rollup index.
+- Modify metadata-only properties of cloud-native (shared-data) tables, such as `file_bundling`, `enable_persistent_index`, `persistent_index_type`, and `compaction_strategy`. These changes run asynchronously and are shown under `COLUMN`.
 
 ## Syntax
 
@@ -28,7 +30,7 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
 
 - `{COLUMN ｜ OPTIMIZE | ROLLUP}`:
 
-  - If `COLUMN` is specified, this statement shows operations of modifying columns.
+  - If `COLUMN` is specified, this statement shows operations of modifying columns. For cloud-native (shared-data) tables, it also shows asynchronous metadata-only changes triggered by `ALTER TABLE ... SET (...)`, such as modifying `file_bundling`, `enable_persistent_index`, `persistent_index_type`, or `compaction_strategy`.
   - If `OPTIMIZE` is specified, this statement shows operations of optimizing table structure.
   - If `ROLLUP` is specified, this statement shows operations of adding or deleting the rollup index.
 

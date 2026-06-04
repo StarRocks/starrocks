@@ -29,19 +29,12 @@ CONF_mInt32(download_low_speed_limit_kbps, "50");
 // The download low speed time(seconds).
 CONF_mInt32(download_low_speed_time, "300");
 
-// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
-// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
-// This config is static and requires a BE restart to take effect.
-CONF_Bool(enable_stop_be_action, "true");
-
-// Whether `/api/_stop_be` requires HTTP Basic Auth credentials that are then
-// validated against the FE (password + NODE privilege on SYSTEM). Default
-// `false` to preserve historical behavior of accepting unauthenticated shutdown
-// requests; set to `true` to require FE-validated authentication. This config
-// is static and requires a BE restart to take effect.
-CONF_Bool(enable_stop_be_action_fe_auth, "false");
-
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
+
+// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
+// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
+// exempt. Default false for backward compatibility.
+CONF_mBool(enable_http_auth, "false");
 
 } // namespace starrocks::config

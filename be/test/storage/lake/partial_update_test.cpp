@@ -37,6 +37,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment.h"
@@ -803,7 +804,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
@@ -888,7 +889,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -1039,7 +1040,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -1747,7 +1748,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -1916,7 +1917,7 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
@@ -2402,6 +2403,159 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     EXPECT_GT(md_after->rowsets_size(), prev_rowsets);
     auto total = check(version, [](int c0, int c1, int c2) { return (c2 == c0 * 4) || (c2 == 10); });
     EXPECT_EQ(total, kChunkSize * 2);
+}
+
+// Locks down the CopyFrom contract in _handle_column_upsert_mode: the synthesized
+// new_rows_op rowset must inherit the source op_write's uid verbatim. The DCG path
+// (apply_column_mode_partial_update) orphans the original op_write segments, so
+// new_rows_op is the only top-level rowset this publish adds; reusing op_write.uid
+// gives split siblings replaying the same op_write an identical uid → MERGE dedup.
+//
+// If a future change accidentally re-introduces XOR-salt derivation or a fresh
+// mint here, this test fails (uid would differ from the captured op_write.uid).
+TEST_F(LakeColumnUpsertModeTest, new_rows_op_inherits_op_write_uid) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Phase 1: baseline INSERT to populate the table so subsequent COLUMN_UPSERT_MODE
+    // writes against new PK offsets hit the "new rows" synthesis path.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSIGN_OR_ABORT(auto md_before, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto prev_rowsets = md_before->rowsets_size();
+
+    // Phase 2: COLUMN_UPSERT_MODE write at PK offset 100 (disjoint from baseline 0..kChunkSize),
+    // so every row is "new" and goes through the new_rows_op synthesis path.
+    auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
+    PUniqueId captured_op_write_uid;
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_insert, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // Capture op_write.rowset.uid before publish consumes the txn_log.
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_TRUE(txn_log->has_op_write());
+        ASSERT_TRUE(tablet_reshard_helper::has_valid_uid(txn_log->op_write().rowset()))
+                << "delta_writer must mint a uid on the op_write rowset at write time";
+        captured_op_write_uid = txn_log->op_write().rowset().uid();
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Phase 3: verify the new top-level rowset (new_rows_op) inherits the op_write's uid.
+    // apply_opwrite appends via _tablet_meta->add_rowsets(), so new_rows_op is the last entry.
+    ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(md_after->rowsets_size(), prev_rowsets);
+    const auto& new_rows_rs = md_after->rowsets(md_after->rowsets_size() - 1);
+    EXPECT_TRUE(tablet_reshard_helper::has_valid_uid(new_rows_rs))
+            << "synthesized new_rows_op rowset must carry a valid uid";
+    EXPECT_EQ(captured_op_write_uid.hi(), new_rows_rs.uid().hi())
+            << "new_rows_op.uid.hi must CopyFrom op_write.rowset.uid.hi (no derivation)";
+    EXPECT_EQ(captured_op_write_uid.lo(), new_rows_rs.uid().lo())
+            << "new_rows_op.uid.lo must CopyFrom op_write.rowset.uid.lo (no derivation)";
+}
+
+// Column-mode legacy compatibility: a COLUMN_UPSERT_MODE op_write written before the
+// uid field existed (rolling upgrade / BE restart with pending txn logs) carries no
+// uid. _handle_column_upsert_mode must MINT a fresh uid for the synthesized new_rows_op
+// rather than hard-fail the in-flight transaction. Such a legacy write is never
+// range-distributed (a new, post-uid feature), hence never cross-published, so a fresh
+// per-publish uid is safe. delta_writer always mints in production; we rewrite the
+// persisted txn log (clear its uid) between write and publish to drive the legacy path.
+TEST_F(LakeColumnUpsertModeTest, new_rows_op_without_op_write_uid_mints_fresh) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Phase 1: baseline INSERT.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Phase 2: COLUMN_UPSERT_MODE write at a disjoint PK offset (all rows new), then
+    // rewrite the persisted txn log to drop the op_write uid before publish.
+    auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk_insert, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_write());
+    auto rewritten = std::make_shared<TxnLog>(*txn_log);
+    rewritten->mutable_op_write()->mutable_rowset()->clear_uid(); // producer-side regression
+    ASSERT_OK(_tablet_mgr->put_txn_log(rewritten));
+
+    // Publish must SUCCEED (mint-if-absent), not hard-fail on the missing uid.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // The synthesized new_rows_op (appended last by apply_opwrite) must carry a
+    // freshly-minted valid uid even though the source op_write had none.
+    ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(md_after->rowsets_size(), 0);
+    const auto& new_rows_rs = md_after->rowsets(md_after->rowsets_size() - 1);
+    EXPECT_TRUE(tablet_reshard_helper::has_valid_uid(new_rows_rs))
+            << "legacy uid-less column-mode op_write must yield a freshly-minted new_rows_op uid";
 }
 
 TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
@@ -3705,7 +3859,7 @@ TEST_F(LakeColumnUpsertModeTest, test_orphan_files_gc_in_column_upsert_mode) {
         const auto& op_write = txn_log->op_write();
 
         // The partial update should have generated segments (before GC)
-        int segment_count = op_write.rowset().segments_size();
+        int segment_count = op_write.rowset().segment_metas_size();
         LOG(INFO) << "Partial update generated " << segment_count << " segments before publish";
 
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -3834,7 +3988,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         ASSERT_TRUE(txn_log->has_op_write());
         const auto& op_write = txn_log->op_write();
-        int original_dels_count = op_write.dels_size();
+        int original_dels_count = op_write.dels_meta_size();
         LOG(INFO) << "Original del files count: " << original_dels_count;
 
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());

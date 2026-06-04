@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
 
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 
 namespace starrocks::pipeline {
 

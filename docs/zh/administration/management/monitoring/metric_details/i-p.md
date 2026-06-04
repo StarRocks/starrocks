@@ -97,6 +97,41 @@ description: "Alphabetical i - p"
 - 标签：`time_travel_type` (`branch`、`tag`、`snapshot` 或 `timestamp`) 用于分类系列。
 - 描述：Iceberg 时间旅行查询总数。未标记的系列对每个时间旅行查询计数一次。标记的系列对查询使用的每种不同时间旅行类型计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
 
+## `iceberg_update_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `UPDATE` 任务写入的总字节数，按文件类型拆分。`data` 表示包含更新后新行的数据文件大小；`position_delete` 表示标记被更新旧行的位置删除文件大小。
+
+## `iceberg_update_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积
+- 描述：Iceberg `UPDATE` 任务的总执行时间（毫秒）。每个任务的耗时在其结束后累加。
+
+## `iceberg_update_files`
+
+- 单位：计数
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `UPDATE` 任务写入的文件总数，按文件类型拆分。`data` 统计新数据文件个数，`position_delete` 统计位置删除文件个数。
+
+## `iceberg_update_rows`
+
+- 单位：行
+- 类型：累积
+- 描述：Iceberg `UPDATE` 任务影响的总行数。每行仅计一次，不会因为生成多个文件而重复计数。
+
+## `iceberg_update_total`
+
+- 单位：计数
+- 类型：累积
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+- 描述：目标表为 Iceberg 的 `UPDATE` 任务总数。无论任务成功还是失败，每当任务结束时该指标都会加 1。Iceberg UPDATE 采用 V2 Merge-On-Read 模型，在单个 snapshot 中原子写入数据文件和位置删除文件。
+
 ## `iceberg_write_bytes`
 
 - 单位：字节
@@ -199,6 +234,18 @@ description: "Alphabetical i - p"
 
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
+
+## `lake_vacuum_del_file_batch_size_minute`
+
+- 单位：文件数（每批次）
+- 类型：Gauge
+- 描述：存算分离集群下 Vacuum 在过去 60 秒内每次 `DeleteObjects` 批次的平均文件数。
+
+## `lake_vacuum_del_file_retries_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下 Vacuum 在过去 60 秒内触发的删除重试次数。反映对象存储瞬时限流压力（SlowDown / try-again）。
 
 ## `load_bytes`
 
@@ -452,6 +499,26 @@ description: "Alphabetical i - p"
 - 单位：计数
 - 描述：Scan Operators 启动的待处理异步 I/O 任务的当前数量。
 
+## `plan_advisor_guide_applied_total`
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 在查询优化阶段成功应用的 guide 总数。每当某个 guide 成功改写一个计划节点时，该指标加 1。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+## `plan_advisor_guide_generated_total`
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 成功生成并写入当前 FE 本地缓存的 guide 总数。只有分析结果非空且作为新的缓存项写入时才会累加。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+## `plan_advisor_optimization_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：Plan Advisor 累计节省的查询执行耗时（毫秒）。当一个使用了缓存 guide 的查询执行时间短于生成该 guide 的原始查询时，节省的时间会累加到该指标。
+
 ## `pk_index_compaction_queue_count`
 
 - 单位：计数
@@ -528,3 +595,4 @@ description: "Alphabetical i - p"
 
 - 单位: 计数
 - 描述: 成功和失败的Spark Load请求总数。
+  

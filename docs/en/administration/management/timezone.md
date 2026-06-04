@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to configure time zone settings in StarRocks and understand their effects on data storage and queries."
 ---
 
 # Configure a time zone

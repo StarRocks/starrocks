@@ -205,4 +205,12 @@ std::string DateValue::to_string() const {
     return date::to_string(_julian);
 }
 
+int DateValue::to_string(char* s, size_t n) const {
+    if (n < 10) return -1;
+    int year, month, day;
+    date::to_date_with_cache(_julian, &year, &month, &day);
+    date::to_string(year, month, day, s);
+    return 10;
+}
+
 } // namespace starrocks

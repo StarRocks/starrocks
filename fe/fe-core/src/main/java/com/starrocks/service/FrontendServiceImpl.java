@@ -213,8 +213,6 @@ import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
-import com.starrocks.thrift.TCheckAuthRequest;
-import com.starrocks.thrift.TCheckAuthResponse;
 import com.starrocks.thrift.TCloudTabletMeta;
 import com.starrocks.thrift.TClusterSnapshotJobsRequest;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
@@ -352,6 +350,7 @@ import com.starrocks.thrift.TOlapTableTablet;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
+import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
@@ -903,21 +902,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
-            Locker locker = new Locker();
+            Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+            if (table == null) {
+                return result;
+            }
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
-                Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
-                if (table == null) {
-                    return result;
-                }
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-                } catch (AccessDeniedException e) {
-                    return result;
-                }
+                Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
+            } catch (AccessDeniedException e) {
+                return result;
+            }
+            // Only the target table's schema is read, so an intensive
+            // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
+            // DDL/ALTER on other tables in the same db proceed.
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
         return result;
@@ -939,24 +941,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
             if (db != null) {
-                Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    if (table == null) {
+                        continue;
+                    }
+
                     try {
-                        locker.lockDatabase(db.getId(), LockType.READ);
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-                        if (table == null) {
-                            continue;
-                        }
+                        Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
 
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
-                        } catch (AccessDeniedException e) {
-                            continue;
-                        }
-
+                    // Per-table schema read: lock only this table (IS-on-db + READ-on-table)
+                    // instead of the whole db, so DDL/ALTER on other tables is not blocked.
+                    Locker locker = new Locker();
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    try {
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                     }
                     if (reachLimit) {
                         return;
@@ -1100,6 +1104,72 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 status.setStatus_code(NOT_IMPLEMENTED_ERROR);
                 break;
+        }
+        return result;
+    }
+
+    @Override
+    public TFeResult checkAuth(TAuthenticateParams request) throws TException {
+        TStatus status = new TStatus(TStatusCode.OK);
+        TFeResult result = new TFeResult(FrontendServiceVersion.V1, status);
+        if (request == null || !request.isSetUser() || !request.isSetPasswd()) {
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("missing authentication parameters");
+            return result;
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("checkAuth request user={} host={} requiredPriv={}",
+                    request.getUser(),
+                    request.isSetHost() ? request.getHost() : null,
+                    request.isSetRequired_privilege() ? request.getRequired_privilege() : null);
+        }
+
+        String host = request.isSetHost() ? request.getHost() : "";
+        try {
+            ConnectContext ctx = new ConnectContext();
+            // authenticate() populates ctx.currentUserIdentity + currentRoleIds (with group-derived roles),
+            // so we MUST NOT overwrite them afterward; doing so would drop LDAP/security-integration groups
+            // and the OPERATE/NODE checks below would falsely reject privileged callers.
+            AuthenticationHandler.authenticate(ctx, request.getUser(), host,
+                    request.getPasswd().getBytes(StandardCharsets.UTF_8));
+
+            // getRequired_privilege() can return null when a newer BE sends an enum value
+            // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
+            // before the switch so we reject cleanly instead of throwing NPE.
+            TPrivilegeRequirement requiredPriv = request.isSetRequired_privilege()
+                    ? request.getRequired_privilege() : TPrivilegeRequirement.NONE;
+            if (requiredPriv == null) {
+                LOG.warn("checkAuth received unknown required_privilege (enum int) from BE for user={}",
+                        request.getUser());
+                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                status.addToError_msgs("auth verification failed");
+                return result;
+            }
+            switch (requiredPriv) {
+                case NONE:
+                    break;
+                case OPERATE:
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.OPERATE);
+                    break;
+                case NODE:
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.NODE);
+                    break;
+                default:
+                    LOG.warn("checkAuth hit default switch arm for required_privilege={} (FE enum out of sync)",
+                            requiredPriv);
+                    status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    status.addToError_msgs("auth verification failed");
+                    return result;
+            }
+        } catch (AuthenticationException e) {
+            LOG.warn("checkAuth authentication failed for user={}: {}", request.getUser(), e.getMessage());
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("Access denied for " + request.getUser() + "@" + host);
+        } catch (AccessDeniedException e) {
+            LOG.warn("checkAuth privilege check failed for user={}: {}", request.getUser(), e.getMessage());
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("Access denied for " + request.getUser() + "@" + host);
         }
         return result;
     }
@@ -1898,46 +1968,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TCheckAuthResponse checkAuth(TCheckAuthRequest request) throws TException {
-        TCheckAuthResponse response = new TCheckAuthResponse();
-        String user = request.isSetUser() ? request.getUser() : "";
-        String host = request.isSetHost() ? request.getHost() : "";
-        String privName = request.isSetRequired_system_privilege() ? request.getRequired_system_privilege() : "";
-        LOG.info("checkAuth request user={} host={} required_system_privilege={}", user, host, privName);
-        try {
-            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
-                    user, request.isSetPasswd() ? request.getPasswd() : "", host);
-            UserIdentity userIdentity = BaseAction.checkPassword(authInfo);
-
-            PrivilegeType requiredPriv = PrivilegeType.NAME_TO_PRIVILEGE.get(privName);
-            if (requiredPriv == null) {
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList("unknown system privilege: " + privName));
-                response.setStatus(status);
-                return response;
-            }
-
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(userIdentity);
-            context.setCurrentRoleIds(userIdentity);
-            Authorizer.checkSystemAction(context, requiredPriv);
-
-            response.setStatus(new TStatus(TStatusCode.OK));
-        } catch (AccessDeniedException e) {
-            LOG.warn("checkAuth denied for user={} host={}: {}", user, host, e.getMessage());
-            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
-            status.setError_msgs(Lists.newArrayList(e.getMessage()));
-            response.setStatus(status);
-        } catch (Exception e) {
-            LOG.warn("checkAuth failed for user={} host={}", user, host, e);
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList(e.getMessage()));
-            response.setStatus(status);
-        }
-        return response;
-    }
-
-    @Override
     public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
         return leaderImpl.commitRemoteTxn(request);
     }
@@ -2104,13 +2134,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             p.setImmutable(true);
 
             List<PhysicalPartition> mutablePartitions;
+            // Reads sub-partitions of one known table; intensive table READ
+            // (IS-on-db + READ-on-table) is enough. Acquire before try so a
+            // failed acquire does not trigger an unlock of an unheld lock.
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
             if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -2127,8 +2160,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             long mutablePartitionNum = 0;
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2144,7 +2177,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
         }
         result.setPartitions(partitions);
