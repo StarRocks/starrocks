@@ -12,6 +12,7 @@ displayed_sidebar: docs
 - 修改列。
 - 优化表结构（自 3.2 版本起），包括修改分桶方式和分桶数量。
 - 创建和删除 rollup index。
+- 修改存算分离（cloud-native）表的元数据属性，例如 `file_bundling`、`enable_persistent_index`、`persistent_index_type` 和 `compaction_strategy`。此类操作以异步方式执行，并通过 `COLUMN` 查询。
 
 ## 语法
 
@@ -31,7 +32,7 @@ displayed_sidebar: docs
 ## 参数说明
 
 - `{COLUMN ｜ OPTIMIZE | ROLLUP}`：从 `COLUMN`、`OPTIMIZE` 和 `ROLLUP` 中必选其中一个。
-  - 如果指定了 `COLUMN`，该语句用于查询修改列的操作。
+  - 如果指定了 `COLUMN`，该语句用于查询修改列的操作。对于存算分离（cloud-native）表，该语句还会显示由 `ALTER TABLE ... SET (...)` 触发的异步元数据变更操作，例如修改 `file_bundling`、`enable_persistent_index`、`persistent_index_type` 或 `compaction_strategy`。
   - 如果指定了 `OPTIMIZE`，该语句用于查询优化表结构操作（修改分桶方式和分桶数量）。
   - 如果指定了 `ROLLUP`，该语句用于查询创建或删除 rollup index 的操作。
 - 当指定了 `COLUMN` 或者 `OPTIMIZE` 查询修改列或者优化表结构操作时，支持使用如下子句：
