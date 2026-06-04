@@ -838,6 +838,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 MySQL 服务器持有的 backlog 队列的长度。
 - 引入版本: -
 
+### `mysql_send_packet_timeout_ms`
+
+- 默认值: 60000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: MySQL 协议通道单次写包的超时时间。限制 FE worker 在发送结果行时等待慢客户端 TCP 接收缓冲区排空的时长。不限制的话 worker 可能在 `Selector.select()` 上无限阻塞，且查询无法被 `KILL QUERY` 终止。设置为 `0` 禁用（旧版无限等待行为）。
+- 引入版本: v4.1
+
 ### `mysql_server_version`
 
 - 默认值: 8.0.33
