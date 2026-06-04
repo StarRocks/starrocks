@@ -344,7 +344,7 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 - Iceberg テーブルの sink に対してホストレベルのソート機能を導入しました。システム変数 `connector_sink_sort_scope`（デフォルト：FILE）で制御し、データレイアウトを最適化して読み取り性能を向上させます。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
 - Iceberg のパーティション変換関数（例：`bucket`、`truncate`）において、引数の数が誤っている場合のエラーメッセージを改善しました。[#68349](https://github.com/StarRocks/starrocks/pull/68349)
 - テーブルプロパティ処理をリファクタリングし、Iceberg テーブルにおける異なるファイル形式（ORC/Parquet）および圧縮コーデックのサポートを強化しました。[#68588](https://github.com/StarRocks/starrocks/pull/68588)
-- よりきめ細かな制御を可能にするため、テーブルレベルのクエリタイムアウト設定 `table_query_timeout` を追加しました（優先順位：Session &gt; Table &gt; Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- よりきめ細かな制御を可能にするため、テーブルレベルのクエリタイムアウト設定 `table_query_timeout` を追加しました（優先順位：Session `>` Table `>` Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
 - `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` ステートメントにより、自動スナップショットの状態およびスケジュールを確認できるようになりました。[#68455](https://github.com/StarRocks/starrocks/pull/68455)
 - `SHOW CREATE VIEW` で、コメントを含む元のユーザー定義 SQL を表示できるようになりました。[#68040](https://github.com/StarRocks/starrocks/pull/68040)
 - `information_schema.loads` において、Merge Commit を有効にした Stream Load タスクを表示し、可観測性を向上させました。[#67879](https://github.com/StarRocks/starrocks/pull/67879)

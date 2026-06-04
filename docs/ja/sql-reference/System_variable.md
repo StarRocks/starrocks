@@ -191,7 +191,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session
-* **説明**: オプティマイザが array&lt;varchar&gt; カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array&lt;varchar&gt;` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array&lt;varchar&gt;` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
+* **説明**: オプティマイザが `array<varchar>` カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array<varchar>` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array<varchar>` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
 * **デフォルト**: `true`
 * **タイプ**: boolean
 * **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
