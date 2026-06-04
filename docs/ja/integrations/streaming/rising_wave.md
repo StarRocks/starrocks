@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "RisingWave は分散 SQL ストリーミングデータベースとして、ユーザーが直接 StarRocks にデータをシンクして Duplicate Key・主キー・ユニークキーテーブルに対応できます。"
 ---
 
 # RisingWave から StarRocks へのデータシンク

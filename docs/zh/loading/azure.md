@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从 Microsoft Azure Storage 导入数据到 StarRocks，支持多种认证方式和导入方法。"
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---

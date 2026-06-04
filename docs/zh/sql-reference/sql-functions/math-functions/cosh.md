@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算输入数值的双曲余弦值。"
 ---
 
 # cosh

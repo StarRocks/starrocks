@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DOUBLE 是 8 字节浮点数类型。"
 ---
 
 # DOUBLE

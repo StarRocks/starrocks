@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。"
 ---
 
 # hll_empty

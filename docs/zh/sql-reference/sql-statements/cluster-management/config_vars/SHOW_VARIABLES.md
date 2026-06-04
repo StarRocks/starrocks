@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW VARIABLES 查看当前集群的系统变量信息。"
 ---
 
 # SHOW VARIABLES

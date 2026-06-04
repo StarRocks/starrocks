@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将 Bitmap 转换为逗号分隔的字符串。"
 ---
 
 # bitmap_to_string

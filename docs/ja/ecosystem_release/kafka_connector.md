@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Kafka のリリースノート・変更履歴。"
 ---
 
 # Releases of StarRocks Connector for Kafka

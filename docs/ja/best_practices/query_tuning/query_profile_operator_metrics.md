@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks クエリプロファイルから出力される演算子別メトリクスの権威ある参照情報。"
+keywords: ['profile', 'query']
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 sidebar_position: 80
 keywords: ['profile', 'query']
 ---

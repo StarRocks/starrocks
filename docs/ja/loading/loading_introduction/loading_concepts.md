@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks データロードの主要概念：権限、ラベル、原子性、データ型変換、列マッピング、エラー許容度（max_filter_ratio）。"
 toc_max_heading_level: 4
 ---
 
