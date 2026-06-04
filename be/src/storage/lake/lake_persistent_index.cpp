@@ -1255,9 +1255,12 @@ StatusOr<RebuildScanPlan> build_rebuild_scan_units(TabletManager* tablet_mgr, co
             }
             uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
             if (rssid < rebuild_rss_id) {
-                // lower than rebuild point, skip
+                // lower than rebuild point, skip. Close it now: a skipped segment never becomes a
+                // ScanUnit, so the Phase B worker won't close it and ~ChunkIterator does not call
+                // close() -- matching the original loop's per-iterator DeferOp close.
                 // Notice: segment id that equal `rebuild_rss_id` can't be skip because
                 // there are maybe some rows need to rebuild.
+                itr->close();
                 continue;
             }
             RebuildScanUnit unit;
