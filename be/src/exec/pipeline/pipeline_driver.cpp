@@ -35,6 +35,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
@@ -103,13 +104,14 @@ size_t spill_expected_reserved_bytes(QueryContext* query_ctx) {
 } // namespace
 
 PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                               Pipeline* pipeline, int32_t driver_id)
+                               Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id)
         : _observer(this),
           _operator_mem_resource_managers(operators.size()),
           _operators(operators),
           _query_ctx(query_ctx),
           _fragment_ctx(fragment_ctx),
           _pipeline(pipeline),
+          _driver_observer(driver_observer),
           _source_node_id(operators[0]->get_plan_node_id()),
           _driver_id(driver_id) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
@@ -122,7 +124,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
         : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
-                         driver._driver_id) {}
+                         driver._driver_observer, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
         : _observer(this),
@@ -131,6 +133,7 @@ PipelineDriver::PipelineDriver()
           _query_ctx(nullptr),
           _fragment_ctx(nullptr),
           _pipeline(nullptr),
+          _driver_observer(nullptr),
           _source_node_id(0),
           _driver_id(0) {}
 
@@ -883,7 +886,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
     const std::string driver_name = _driver_name;
-    _pipeline->count_down_driver(runtime_state);
+    if (_driver_observer != nullptr) {
+        _driver_observer->on_driver_finished(runtime_state);
+    }
     QUERY_TRACE_END("finalize", driver_name);
 }
 

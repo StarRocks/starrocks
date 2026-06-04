@@ -669,7 +669,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
     SpillLifecycleOperatorFactory spillable_factory(2, 20, true, false);
     Operators operators{source_factory.create(1, 0), spillable_factory.create(1, 0)};
 
-    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline, -1);
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline,
+                              &harness.pipeline, -1);
 
     ASSERT_OK(driver.prepare(harness.state()));
     ASSERT_EQ(config::local_exchange_buffer_mem_limit_per_driver +
@@ -689,7 +690,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all
     SpillLifecycleOperatorFactory failing_factory(2, 20, true, false, Status::InternalError("prepare failed"));
     Operators operators{source_factory.create(1, 0), failing_factory.create(1, 0)};
 
-    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline, -1);
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline,
+                              &harness.pipeline, -1);
 
     auto st = driver.prepare(harness.state());
     ASSERT_FALSE(st.ok());

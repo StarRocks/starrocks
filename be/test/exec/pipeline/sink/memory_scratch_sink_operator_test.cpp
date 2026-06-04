@@ -23,6 +23,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
@@ -56,6 +57,17 @@ public:
     virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) {
         return std::make_shared<MockEmptyOperator>(this, _id, _plan_node_id, 1);
     }
+};
+
+class MockDriverObserver final : public DriverObserver {
+public:
+    void on_driver_finished(RuntimeState* state) override {
+        ++finished_count;
+        last_state = state;
+    }
+
+    int finished_count = 0;
+    RuntimeState* last_state = nullptr;
 };
 
 } // namespace
@@ -112,7 +124,8 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     Operators ops = {factory1.create(1, 1), factory2.create(1, 2)};
     auto exec_group = ExecutionGroupBuilder::create_normal_exec_group();
     auto pipeline = std::make_shared<Pipeline>(0, OpFactories(), exec_group.get());
-    auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, _fragment_ctx, pipeline.get(), 0);
+    MockDriverObserver observer;
+    auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, _fragment_ctx, pipeline.get(), &observer, 0);
 
     driver->prepare(_runtime_state);
     driver->prepare_local_state(_runtime_state);
@@ -131,6 +144,8 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     EXPECT_TRUE(eos);
     EXPECT_EQ(nullptr, record_batch);
     driver->finalize(_runtime_state, DriverState::INTERNAL_ERROR);
+    EXPECT_EQ(1, observer.finished_count);
+    EXPECT_EQ(_runtime_state, observer.last_state);
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
     _query_ctx->count_down_fragments();

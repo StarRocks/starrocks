@@ -146,10 +146,10 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
             // The pipeline without driver indicates it has not been instantiated.
             // So we just count down the driver num once to trigger finalization of the pipeline.
             if (pipeline->drivers().empty()) {
-                pipeline->count_down_driver(state);
+                pipeline->on_driver_finished(state);
             } else {
                 for (int i = 0; i < pipeline->drivers().size(); ++i) {
-                    pipeline->count_down_driver(state);
+                    pipeline->on_driver_finished(state);
                 }
             }
         }

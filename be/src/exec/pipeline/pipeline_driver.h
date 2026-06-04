@@ -97,7 +97,7 @@ public:
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   Pipeline* pipeline, int32_t driver_id);
+                   Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
 
@@ -467,6 +467,7 @@ protected:
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
     Pipeline* _pipeline;
+    DriverObserver* _driver_observer;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
