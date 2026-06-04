@@ -38,6 +38,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
@@ -47,9 +48,11 @@ import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -536,6 +539,30 @@ public class InformationSchemaDataSource {
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
+            // Async vector index builds per-tablet; surface the [min, max] built-version span
+            // across this partition's base-index tablets for observability. MAX < VISIBLE_VERSION
+            // means the index is still catching up; MIN < MAX means the build is uneven across
+            // tablets. Only meaningful for tables with an async vector index (sync builds happen
+            // inline and never set a built version).
+            if (VectorIndexBuildScheduler.hasAsyncVectorIndex(table)) {
+                long minBuilt = Long.MAX_VALUE;
+                long maxBuilt = 0;
+                MaterializedIndex baseIndex = physicalPartition.getIndex(table.getBaseIndexMetaId());
+                if (baseIndex != null) {
+                    for (Tablet tablet : baseIndex.getTablets()) {
+                        if (tablet instanceof LakeTablet) {
+                            long bv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
+                            minBuilt = Math.min(minBuilt, bv);
+                            maxBuilt = Math.max(maxBuilt, bv);
+                        }
+                    }
+                }
+                if (minBuilt != Long.MAX_VALUE) {
+                    partitionMetaInfo.setMin_vi_built_version(minBuilt);
+                    partitionMetaInfo.setMax_vi_built_version(maxBuilt);
+                }
+            }
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());

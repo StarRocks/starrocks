@@ -42,3 +42,5 @@ The following fields are provided in `partitions_meta`:
 | STORAGE_SIZE                  | Storage size of the partition.                               |
 | METADATA_SWITCH_VERSION       | Metadata switch version of the partition.                    |
 | TABLET_BALANCED               | Whether the tablet distribution is balanced in the partition. |
+| MIN_VI_BUILT_VERSION          | Minimum vector-index built version across the partition's base-index tablets. Only meaningful for tables with an async vector index (shared-data); `0` otherwise. A value lower than `VISIBLE_VERSION` means the async vector index is still being built. |
+| MAX_VI_BUILT_VERSION          | Maximum vector-index built version across the partition's base-index tablets. When it differs from `MIN_VI_BUILT_VERSION`, the build progress is uneven across tablets. |

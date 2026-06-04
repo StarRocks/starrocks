@@ -41,3 +41,5 @@ displayed_sidebar: docs
 | STORAGE_SIZE                  | 分区的存储大小。                                 |
 | METADATA_SWITCH_VERSION       | 分区的元数据切换版本。                           |
 | TABLET_BALANCED               | 分区的 Tablet 分布是否均衡。                     |
+| MIN_VI_BUILT_VERSION          | 分区 base index 各 Tablet 中向量索引已构建版本的最小值。仅对配置了异步向量索引的表（存算分离）有意义，否则为 `0`。该值小于 `VISIBLE_VERSION` 表示异步向量索引仍在构建中。 |
+| MAX_VI_BUILT_VERSION          | 分区 base index 各 Tablet 中向量索引已构建版本的最大值。当其与 `MIN_VI_BUILT_VERSION` 不同时，说明各 Tablet 的构建进度不均衡。 |
