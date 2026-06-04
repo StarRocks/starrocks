@@ -102,6 +102,23 @@ static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_d
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
                                                            get_num_active_file_queued_tasks, nullptr);
 
+// Recent (60s) mean of files-per-batch across DeleteObjects calls. The IntRecorder is wrapped
+// in a Window so the exposed value tracks current batch size after
+// lake_vacuum_min_batch_delete_size tuning instead of the lifetime average dominated by
+// historical samples. Recording happens once per logical batch (before retries) so that retried
+// batches do not contribute duplicate samples that would bias the mean during throttling -- the
+// very condition operators are trying to read.
+static bvar::IntRecorder g_del_file_batch_size;
+static bvar::Window<bvar::IntRecorder> g_del_file_batch_size_minute("lake_vacuum", "del_file_batch_size_minute",
+                                                                    &g_del_file_batch_size, 60);
+
+// Number of delete retries triggered in the last 60s. Surfaces transient throttling
+// pressure (S3 RequestRate / try-again responses) and validates that jitter / backoff
+// tuning actually reduces retry frequency.
+static bvar::Adder<uint64_t> g_del_file_retries;
+static bvar::Window<bvar::Adder<uint64_t>> g_del_file_retries_minute("lake_vacuum", "del_file_retries_minute",
+                                                                     &g_del_file_retries, 60);
+
 // Decorrelated jitter (AWS Architecture Blog "Exponential Backoff And Jitter"):
 //   next_delay = min(cap, rand([base, last_delay * 3]))
 // where cap = base * 2^max_retries.
@@ -166,6 +183,7 @@ Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> path
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
+            g_del_file_retries << 1;
             last_delay = calculate_retry_delay(last_delay, base, max_retries);
             LOG(WARNING) << "Fail to delete: " << st << " will retry after " << last_delay << "ms";
             std::this_thread::sleep_for(std::chrono::milliseconds(last_delay));
@@ -184,6 +202,7 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     }
 
     auto delete_single_batch = [fs](std::span<const std::string> batch) -> Status {
+        g_del_file_batch_size << batch.size();
         auto wait_duration = config::experimental_lake_wait_per_delete_ms;
         if (wait_duration > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
