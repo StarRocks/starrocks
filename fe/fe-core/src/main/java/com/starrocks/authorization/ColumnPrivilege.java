@@ -131,54 +131,34 @@ public class ColumnPrivilege {
             }
 
             if (tableUsedExternalAccessController.contains(tableName)) {
-                Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
-                for (String column : columns) {
+                if (table instanceof View view) {
+                    checkViewPrivilege(context, tableName, view);
+                } else if (table.isMaterializedView()) {
                     try {
-                        Authorizer.checkColumnAction(context,
-                                tableName, column, PrivilegeType.SELECT);
+                        Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
                                 tableName.getCatalog(),
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(), column);
+                                PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
+                    }
+                } else {
+                    Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
+                    for (String column : columns) {
+                        try {
+                            Authorizer.checkColumnAction(context,
+                                    tableName, column, PrivilegeType.SELECT);
+                        } catch (AccessDeniedException e) {
+                            AccessDeniedException.reportAccessDenied(
+                                    tableName.getCatalog(),
+                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(), column);
+                        }
                     }
                 }
             } else {
-                if (table instanceof View) {
-                    try {
-                        // for privilege checking, treat connector view as table
-                        if (table.isConnectorView()) {
-                            Authorizer.checkTableAction(context,
-                                    tableName, PrivilegeType.SELECT);
-                        } else {
-                            View view = (View) table;
-                            if (view.isSecurity()) {
-                                List<TableName> allTables = view.getTableRefs();
-                                for (TableName t : allTables) {
-                                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                                            .getBasicTable(context, t.getCatalog(), t.getDb(), t.getTbl());
-                                    if (basicTable.isOlapView()) {
-                                        View subView = (View) basicTable;
-                                        QueryStatement queryStatement = subView.getQueryStatement();
-                                        Analyzer.analyze(queryStatement, context);
-                                        Authorizer.check(queryStatement, context);
-                                    } else if (basicTable.isMaterializedView()) {
-                                        Authorizer.checkMaterializedViewAction(context, t, PrivilegeType.SELECT);
-                                    } else {
-                                        Authorizer.checkTableAction(context, t, PrivilegeType.SELECT);
-                                    }
-                                }
-                            }
-
-                            Authorizer.checkViewAction(context,
-                                    tableName, PrivilegeType.SELECT);
-                        }
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
-                    }
+                if (table instanceof View view) {
+                    checkViewPrivilege(context, tableName, view);
                 } else if (table.isMaterializedView()) {
                     try {
                         Authorizer.checkMaterializedViewAction(context,
@@ -201,6 +181,48 @@ public class ColumnPrivilege {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Check privilege for a view (including security view).
+     * For a security view, the user must have SELECT privilege on the view itself AND
+     * all the underlying tables/views referenced by the view. This rule applies to
+     * both internal access controllers and external access controllers (e.g. Ranger).
+     * Connector views are treated as tables for privilege checking.
+     */
+    public static void checkViewPrivilege(ConnectContext context, TableName tableName, View view) {
+        try {
+            // for privilege checking, treat connector view as table
+            if (view.isConnectorView()) {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.SELECT);
+                return;
+            }
+
+            if (view.isSecurity()) {
+                List<TableName> allTables = view.getTableRefs();
+                for (TableName t : allTables) {
+                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getBasicTable(context, t.getCatalog(), t.getDb(), t.getTbl());
+                    if (basicTable.isOlapView()) {
+                        View subView = (View) basicTable;
+                        QueryStatement queryStatement = subView.getQueryStatement();
+                        Analyzer.analyze(queryStatement, context);
+                        Authorizer.check(queryStatement, context);
+                    } else if (basicTable.isMaterializedView()) {
+                        Authorizer.checkMaterializedViewAction(context, t, PrivilegeType.SELECT);
+                    } else {
+                        Authorizer.checkTableAction(context, t, PrivilegeType.SELECT);
+                    }
+                }
+            }
+
+            Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
         }
     }
 
