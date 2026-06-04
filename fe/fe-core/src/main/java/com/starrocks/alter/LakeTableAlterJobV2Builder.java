@@ -63,8 +63,17 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
-        // True when this ALTER adds a VECTOR index; used below to stamp shadow tablets with vibv.
-        boolean isVectorIndexAlter = hasIndexChanged && indexes != null &&
+        // True when the post-alter table has a VECTOR index. Any shadow-tablet rewrite
+        // (DirectSchemaChange or SortedSchemaChange in be/src/storage/lake/schema_change.cpp)
+        // force-inline-builds the vector index over ALL existing data, so its shadow tablets are
+        // stamped with vibv=V_snap (below) to tell the async build scheduler that data is already
+        // built (no redundant rebuild). `indexes` is the post-alter index set: column/index changes
+        // supply it via withAlterIndexInfo, and the sort-key path now propagates it too
+        // (createJobForProcessModifySortKeyColumn), so it reliably reflects whether the table has a
+        // vector index. NOT gated on hasIndexChanged: a pure column/sort-key rewrite on a table that
+        // already has a vector index still inline-builds it during conversion — leaving vibv=0 there
+        // would make the scheduler redundantly rebuild the entire existing dataset after the ALTER.
+        boolean inlineBuildsVectorIndex = indexes != null &&
                 indexes.stream().anyMatch(i -> i.getIndexType() == IndexDef.IndexType.VECTOR);
         for (Map.Entry<Long, List<Column>> entry : newIndexMetaIdToSchema.entrySet()) {
             long originIndexMetaId = entry.getKey();
@@ -108,14 +117,14 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 // is persisted via logAlterJob — makes it durable through GSON round-trips
                 // (LakeTablet.vibv is @SerializedName("vibv"); the enclosing
                 // physicalPartitionIndexMap is @SerializedName("partitionIndexMap")).
-                long vSnap = isVectorIndexAlter ? physicalPartition.getVisibleVersion() : 0L;
+                long vSnap = inlineBuildsVectorIndex ? physicalPartition.getVisibleVersion() : 0L;
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     LakeTablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     if (table.isRangeDistribution()) {
                         shadowTablet.setRange(originTablet.getRange());
                     }
-                    if (isVectorIndexAlter) {
+                    if (inlineBuildsVectorIndex) {
                         shadowTablet.setVectorIndexBuiltVersion(vSnap);
                     }
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);

@@ -2033,7 +2033,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTimeoutSeconds(Config.alter_table_timeout_second)
                 .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
-                .withSortKeyUniqueIds(sortKeyUniqueIds);
+                .withSortKeyUniqueIds(sortKeyUniqueIds)
+                // Carry the table's current indexes through the rewrite (a sort-key change does not
+                // modify the index set), consistent with the column schema-change path.
+                .withAlterIndexInfo(false, olapTable.getCopiedIndexes());
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
