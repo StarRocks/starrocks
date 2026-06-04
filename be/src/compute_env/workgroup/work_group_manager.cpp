@@ -275,8 +275,10 @@ void WorkGroupManager::update_metrics_unlocked() {
 }
 
 void WorkGroupManager::update_metrics() {
-    std::unique_lock write_lock(_mutex);
-    update_metrics_unlocked();
+    std::unique_lock write_lock(_mutex, std::try_to_lock);
+    if (write_lock.owns_lock()) {
+        update_metrics_unlocked();
+    }
 }
 
 WorkGroupPtr WorkGroupManager::get_default_workgroup() {
