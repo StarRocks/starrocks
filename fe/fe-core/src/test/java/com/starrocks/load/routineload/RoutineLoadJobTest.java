@@ -40,11 +40,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -485,6 +487,439 @@ public class RoutineLoadJobTest {
         routineLoadJob.update();
 
         Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaPartitionsContainsAllShrink(@Mocked GlobalStateMgr globalStateMgr,
+                                                           @Injectable Database database,
+                                                           @Injectable Table table,
+                                                           @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) throws StarRocksException {
+                return Lists.newArrayList(1, 2);
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(111L, "test", 12L, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Lists.newArrayList(1, 2, 3));
+        routineLoadJob.update();
+
+        // shrink: currentKafkaPartitions = [1,2,3] containsAll [1,2] && size > 2 -> reschedule with [1,2]
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList(1, 2),
+                Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions"));
+    }
+
+    @Test
+    public void testUpdateKafkaFetchErrorPauses(@Mocked GlobalStateMgr globalStateMgr,
+                                                @Injectable Database database,
+                                                @Injectable Table table,
+                                                @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) throws StarRocksException {
+                throw new StarRocksException("kafka broker unreachable");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(112L, "test", 13L, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assertions.assertEquals(InternalErrorCode.PARTITIONS_ERR, reason.getCode());
+        Assertions.assertTrue(reason.getMsg().contains("kafka broker unreachable"), reason.getMsg());
+    }
+
+    @Test
+    public void testUpdateKafkaPausedAutoSchedule(@Mocked GlobalStateMgr globalStateMgr,
+                                                  @Injectable Database database,
+                                                  @Injectable Table table,
+                                                  @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<ScheduleRule>() {
+            @Mock
+            public boolean isNeedAutoSchedule(RoutineLoadJob job) {
+                return true;
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(113L, "test", 14L, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaPausedNoAutoSchedule(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 15L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<ScheduleRule>() {
+            @Mock
+            public boolean isNeedAutoSchedule(RoutineLoadJob job) {
+                return false;
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(114L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        // PAUSED with isNeedAutoSchedule=false -> state stays PAUSED
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaCustomPartitions(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 16L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(115L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        Deencapsulation.setField(routineLoadJob, "customKafkaPartitions", Lists.newArrayList(5, 6, 7));
+        routineLoadJob.update();
+
+        // customKafkaPartitions short-circuits the fetch; currentKafkaPartitions becomes customKafkaPartitions,
+        // state stays RUNNING (no reschedule triggered).
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList(5, 6, 7),
+                Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions"));
+    }
+
+    @Test
+    public void testUpdateKafkaStoppedSnapshotIsNull(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 17L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(116L, "test", dbId, 22L, "brokerList", "topic");
+        // STOPPED is a final state - takeFetchSnapshot returns null, refreshPartitionsIfNeeded returns early.
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.STOPPED);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdatePulsarPartitionsChanged(@Mocked GlobalStateMgr globalStateMgr,
+                                                  @Injectable Database database,
+                                                  @Injectable Table table,
+                                                  @Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      long warehouseId) throws StarRocksException {
+                return Lists.newArrayList("p1", "p2", "p3");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(211L, "test", 18L, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2", "p3"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
+    }
+
+    @Test
+    public void testUpdatePulsarFetchErrorPauses(@Mocked GlobalStateMgr globalStateMgr,
+                                                 @Injectable Database database,
+                                                 @Injectable Table table,
+                                                 @Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      long warehouseId) throws StarRocksException {
+                throw new StarRocksException("pulsar service unreachable");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(212L, "test", 19L, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assertions.assertEquals(InternalErrorCode.PARTITIONS_ERR, reason.getCode());
+        Assertions.assertTrue(reason.getMsg().contains("pulsar service unreachable"), reason.getMsg());
+    }
+
+    @Test
+    public void testUpdatePulsarPausedAutoSchedule(@Mocked GlobalStateMgr globalStateMgr,
+                                                   @Injectable Database database,
+                                                   @Injectable Table table,
+                                                   @Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<ScheduleRule>() {
+            @Mock
+            public boolean isNeedAutoSchedule(RoutineLoadJob job) {
+                return true;
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(213L, "test", 20L, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdatePulsarCustomPartitions(@Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        long dbId = 21L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(214L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        Deencapsulation.setField(routineLoadJob, "customPulsarPartitions", Lists.newArrayList("p5", "p6"));
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p5", "p6"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
+    }
+
+    @Test
+    public void testUpdateKafkaStaleFetchDiscarded(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 30L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        // Hold a reference the mock can mutate to simulate a concurrent ALTER that bumps
+        // dataSourceConfigVersion while the fetch is in flight.
+        final RoutineLoadJob[] jobRef = new RoutineLoadJob[1];
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) throws StarRocksException {
+                long v = (Long) Deencapsulation.getField(jobRef[0], "dataSourceConfigVersion");
+                Deencapsulation.setField(jobRef[0], "dataSourceConfigVersion", v + 1);
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(117L, "test", dbId, 22L, "brokerList", "topic");
+        jobRef[0] = routineLoadJob;
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        // Snapshot captured version 0; mock bumped to 1 mid-fetch; applyFetchResult sees
+        // version mismatch and discards. Job stays RUNNING with empty currentKafkaPartitions.
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        List<Integer> current = Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions");
+        Assertions.assertTrue(current.isEmpty(), "currentKafkaPartitions should not be updated when configVersion changes");
+    }
+
+    @Test
+    public void testUpdatePulsarStaleFetchDiscarded(@Injectable PulsarProgress pulsarProgress)
+            throws StarRocksException {
+        long dbId = 31L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        final RoutineLoadJob[] jobRef = new RoutineLoadJob[1];
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      long warehouseId) throws StarRocksException {
+                long v = (Long) Deencapsulation.getField(jobRef[0], "dataSourceConfigVersion");
+                Deencapsulation.setField(jobRef[0], "dataSourceConfigVersion", v + 1);
+                return Lists.newArrayList("p1", "p2", "p3");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(216L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        jobRef[0] = routineLoadJob;
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        List<String> current = Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions");
+        Assertions.assertTrue(current.isEmpty(),
+                "currentPulsarPartitions should not be updated when configVersion changes");
+    }
+
+    @Test
+    public void testUpdatePulsarPartitionsContainsAllShrink(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Injectable Database database,
+                                                            @Injectable Table table,
+                                                            @Injectable PulsarProgress pulsarProgress)
+            throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                minTimes = 0;
+                result = table;
+            }
+        };
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      long warehouseId) throws StarRocksException {
+                return Lists.newArrayList("p1", "p2");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(215L, "test", 22L, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        Deencapsulation.setField(routineLoadJob, "currentPulsarPartitions", Lists.newArrayList("p1", "p2", "p3"));
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
     }
 
     @Test
