@@ -481,6 +481,7 @@
         "be/src/exec/pipeline/primitives/driver_observer.h",
         "be/src/exec/pipeline/primitives/operator_exec_stats.h",
         "be/src/exec/pipeline/primitives/operator_runtime_access.h",
+        "be/src/exec/pipeline/primitives/query_runtime_state.h",
         "be/src/exec/pipeline/runtime_filter_hub.h",
         "be/src/exec/pipeline/runtime_filter_core_types.h",
         "be/src/exec/pipeline/scan/dynamic_morsel_queue_builder.h",

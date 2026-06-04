@@ -38,6 +38,7 @@
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
@@ -109,6 +110,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
           _operator_mem_resource_managers(operators.size()),
           _operators(operators),
           _query_ctx(query_ctx),
+          _query_runtime_state(query_ctx == nullptr ? nullptr : &query_ctx->query_runtime_state()),
           _fragment_ctx(fragment_ctx),
           _pipeline(pipeline),
           _driver_observer(driver_observer),
@@ -131,6 +133,7 @@ PipelineDriver::PipelineDriver()
           _operator_mem_resource_managers(),
           _operators(),
           _query_ctx(nullptr),
+          _query_runtime_state(nullptr),
           _fragment_ctx(nullptr),
           _pipeline(nullptr),
           _driver_observer(nullptr),
@@ -152,7 +155,8 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
             std::stringstream ss;
-            ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+            ss << "query_id="
+               << (this->_query_runtime_state == nullptr ? "None" : print_id(this->query_runtime_state()->query_id()))
                << " fragment_id="
                << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
             auto msg = fmt::format(
@@ -938,7 +942,8 @@ std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
     if (_state == PRECONDITION_BLOCK) {
         block_reasons = const_cast<PipelineDriver*>(this)->get_preconditions_block_reasons();
     }
-    ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+    ss << "query_id="
+       << (this->_query_runtime_state == nullptr ? "None" : print_id(this->query_runtime_state()->query_id()))
        << " fragment_id="
        << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
        << " driver=" << _driver_name << " addr=" << this << ", status=" << ds_to_string(this->driver_state())
