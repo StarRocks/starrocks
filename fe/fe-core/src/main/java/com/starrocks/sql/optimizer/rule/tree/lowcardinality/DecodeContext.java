@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
@@ -501,7 +502,6 @@ class DecodeContext {
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
             return supportColumns.contains(variable) ?
                     stringRefToDictRefMap.getOrDefault(variable, variable) : variable;
-<<<<<<< HEAD
         }
 
         AggregateFunction buildAggregateFunction(AggregateFunction fn, List<ScalarOperator> newChildren,
@@ -544,8 +544,6 @@ class DecodeContext {
             newFn.setIntermediateType(intermediateType);
             newFn.setRetType(returnType);
             return newFn;
-=======
->>>>>>> 986cb409b2 ([BugFix] Fix Aggregation use type-mismatch aggregate functions (backport #74159) (#74163))
         }
 
         @Override
