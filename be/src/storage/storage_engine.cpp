@@ -176,7 +176,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         });
 
         threads.emplace_back([data_dir] {
-            Thread::set_thread_name(pthread_self(), "compact_data_dir");
+            Thread::set_thread_name(pthread_self(), "cmpt_data_dir");
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
