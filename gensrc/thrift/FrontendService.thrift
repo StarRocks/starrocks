@@ -557,6 +557,8 @@ struct TTaskRunInfo {
 
     16: optional string job_id
     17: optional i64 process_time
+
+    18: optional string task_source
 }
 
 struct TGetTaskRunInfoResult {
