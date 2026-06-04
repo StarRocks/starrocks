@@ -274,7 +274,7 @@ public class AlterJobMgr {
                             "mv status:" + materializedView.getName());
                 }
                 try {
-                    taskRunManager.killTaskRun(currentTask.getId(), true);
+                    taskRunManager.killTaskRun(currentTask.getId(), true, "killed by ALTER MATERIALIZED VIEW");
                 } finally {
                     taskRunManager.taskRunUnlock();
                 }
