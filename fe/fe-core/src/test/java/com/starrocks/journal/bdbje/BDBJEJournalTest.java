@@ -28,6 +28,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.Util;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.staros.StarMgrServer;
@@ -66,6 +67,18 @@ public class BDBJEJournalTest {
 
     @BeforeEach
     public void init() throws Exception {
+        // Tests in this class start real BDB replicated environments whose RepNode
+        // threads may fire BDBStateChangeListener asynchronously, even after close().
+        // That path (stateChange -> notifyNewFETypeTransfer -> Util.stdoutWithTime
+        // -> TimeUtils -> GlobalStateMgr.getCurrentState()) would hit the JMockit-mocked
+        // GlobalStateMgr of tests like testOpenFirstTime, and if it lands inside an
+        // Expectations recording phase it registers phantom expectations that later
+        // fail with "Missing invocations". Cut the path off here.
+        new MockUp<Util>() {
+            @Mock
+            public void stdoutWithTime(String msg) {
+            }
+        };
         BDBJEJournal.RETRY_TIME = 3;
         BDBJEJournal.SLEEP_INTERVAL_SEC = 0;
         // avoid checkpoint
