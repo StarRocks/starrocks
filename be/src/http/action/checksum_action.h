@@ -47,6 +47,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     int64_t _do_checksum(int64_t tablet_id, int64_t version);
 };
