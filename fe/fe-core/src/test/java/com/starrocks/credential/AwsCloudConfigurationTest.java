@@ -121,6 +121,7 @@ public class AwsCloudConfigurationTest {
     public void testWebIdentityGenerateCredentialsProvider() {
         Map<String, String> properties = new HashMap<>();
         properties.put("aws.s3.use_web_identity_token_file", "true");
+        properties.put("aws.s3.region", "us-east-1");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         Assertions.assertNotNull(cloudConfiguration);
         AwsCredentialsProvider provider =

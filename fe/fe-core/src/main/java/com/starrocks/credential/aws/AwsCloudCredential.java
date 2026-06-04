@@ -203,19 +203,20 @@ public class AwsCloudCredential implements CloudCredential {
         } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (useWebIdentityProfile) {
-            StsWebIdentityTokenFileCredentialsProvider.Builder builder =
-                    StsWebIdentityTokenFileCredentialsProvider.builder().asyncCredentialUpdateEnabled(true);
-            if (!stsRegion.isEmpty() || !stsEndpoint.isEmpty()) {
-                StsClientBuilder stsClientBuilder = StsClient.builder();
-                if (!stsRegion.isEmpty()) {
-                    stsClientBuilder.region(Region.of(stsRegion));
-                }
-                if (!stsEndpoint.isEmpty()) {
-                    stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(stsEndpoint));
-                }
-                builder.stsClient(stsClientBuilder.build());
+            // stsRegion takes precedence; fall back to region so STS client has a region when
+            // aws.s3.sts.region is not set but aws.s3.region is — avoids eager DefaultAwsRegionProviderChain
+            String effectiveStsRegion = !stsRegion.isEmpty() ? stsRegion : region;
+            StsClientBuilder stsClientBuilder = StsClient.builder();
+            if (!effectiveStsRegion.isEmpty()) {
+                stsClientBuilder.region(Region.of(effectiveStsRegion));
             }
-            return builder.build();
+            if (!stsEndpoint.isEmpty()) {
+                stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(stsEndpoint));
+            }
+            return StsWebIdentityTokenFileCredentialsProvider.builder()
+                    .stsClient(stsClientBuilder.build())
+                    .asyncCredentialUpdateEnabled(true)
+                    .build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
                 return StaticCredentialsProvider.create(
