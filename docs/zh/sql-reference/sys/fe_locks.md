@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # fe_locks
 
-`fe_locks` 提供 StarRocks FE 中元数据锁的信息。
+`fe_locks` 提供 StarRocks FE 中元数据锁的信息。它是 [`sys`](./sys.md) 数据库中的系统视图之一。
 
 `fe_locks` 提供以下字段：
 
@@ -26,15 +26,10 @@ displayed_sidebar: docs
 
 ## 锁类型
 
-- **DATABASE**：数据库级别锁（当 `lock_manager_enabled` 为 false 时）。
-- **TABLE**：表级别锁（当 `lock_manager_enabled` 为 true 时）。
+- **DATABASE**：数据库级别锁。
+- **TABLE**：表级别锁。
 
-## 配置
-
-`fe_locks` 的行为取决于 `lock_manager_enabled` 配置参数：
-
-- 当 `lock_manager_enabled = true` 时：使用新的锁管理器进行集中式锁管理，具有表级别粒度。
-- 当 `lock_manager_enabled = false` 时：使用传统的数据库级别锁定。
+StarRocks 通过锁管理器（Lock Manager）管理元数据锁，进行集中式锁管理，并具有表级别粒度。
 
 ## 示例
 
