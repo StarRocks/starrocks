@@ -203,17 +203,19 @@ public class AwsCloudCredential implements CloudCredential {
         } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (useWebIdentityProfile) {
-            StsClientBuilder stsClientBuilder = StsClient.builder();
-            if (!stsRegion.isEmpty()) {
-                stsClientBuilder.region(Region.of(stsRegion));
+            StsWebIdentityTokenFileCredentialsProvider.Builder builder =
+                    StsWebIdentityTokenFileCredentialsProvider.builder().asyncCredentialUpdateEnabled(true);
+            if (!stsRegion.isEmpty() || !stsEndpoint.isEmpty()) {
+                StsClientBuilder stsClientBuilder = StsClient.builder();
+                if (!stsRegion.isEmpty()) {
+                    stsClientBuilder.region(Region.of(stsRegion));
+                }
+                if (!stsEndpoint.isEmpty()) {
+                    stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(stsEndpoint));
+                }
+                builder.stsClient(stsClientBuilder.build());
             }
-            if (!stsEndpoint.isEmpty()) {
-                stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(stsEndpoint));
-            }
-            return StsWebIdentityTokenFileCredentialsProvider.builder()
-                    .stsClient(stsClientBuilder.build())
-                    .asyncCredentialUpdateEnabled(true)
-                    .build();
+            return builder.build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
                 return StaticCredentialsProvider.create(
