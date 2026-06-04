@@ -1132,9 +1132,8 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
 
 namespace {
 
-// One decoded chunk-worth of keys+values, with the key bytes COPIED into an owned buffer so the
-// batch stays valid after the scan column is reset/freed. `keys` point into `key_bytes` (binary:
-// variable stride; non-encoded: fixed `key_size` stride).
+// One decoded chunk-worth of keys+values. The batch keeps the source key column alive (see fields)
+// so its `keys` Slices stay valid until they are inserted, without copying the key bytes.
 struct RebuildInsertBatch {
     // Exactly one of these owns the key bytes the `keys` Slices point into, kept alive until Phase C
     // inserts -- so no copy is needed. `chunk` holds the source chunk for the non-encoded single-column
@@ -1286,7 +1285,11 @@ StatusOr<RebuildScanPlan> build_rebuild_scan_units(TabletManager* tablet_mgr, co
 // thread-safe: uses worker-local chunk/rowids/pk-encoder column and never touches
 // _memtable/insert/load_dels. Closes the segment's iterator once its scan finishes (it stays alive
 // in RebuildScanPlan::rowset_iters until then). Runs either inline or on a worker thread.
-void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx, RebuildScanUnitResult* result) {
+// `emit` is invoked once per decoded chunk-batch: the parallel path buffers it (inserted later in
+// version order), the serial path inserts it immediately so only one chunk is held at a time. An emit
+// error stops the scan and is recorded like any scan error.
+void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx,
+                           const std::function<Status(RebuildInsertBatch&)>& emit) {
     auto* itr = unit.itr;
     DeferOp close_iter([&] { itr->close(); });
     const uint32_t rssid = unit.rssid;
@@ -1360,7 +1363,6 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
             // lower AND equal than rebuild point, skip
             continue;
         }
-        result->num_rows += pkc->size();
 
         // Build keys as Slices into the source column and keep that column alive in the batch, so
         // Phase C can insert after the scan without copying the key bytes. Same extraction as the
@@ -1388,7 +1390,10 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         } else {
             batch.chunk = std::move(local_chunk_sp); // hand the chunk's key column to the batch
         }
-        result->batches.emplace_back(std::move(batch));
+        if (auto es = emit(batch); !es.ok()) {
+            record_err(es);
+            break;
+        }
     }
     *ctx.get_next_cost_us += local_get_next;
     *ctx.pk_encode_cost_us += local_pk_encode;
@@ -1456,9 +1461,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const bool use_parallel = should_parallel_rebuild_prefetch(static_cast<int>(scan_units.size()));
 
     // Phase B (PARALLEL): submit one task per (rowset, segment) unit to pk_index_execution_thread_pool
-    // via ONE CONCURRENT token, each worker writing its own result slot. This is the only parallel
-    // layer; Phase A's get_each_segment_iterator stays serial (it has its own internal pool). Skipped
-    // entirely in the serial path, where each unit is scanned just-in-time in Phase C.
+    // via ONE CONCURRENT token; each worker buffers its decoded batches into its own result slot,
+    // inserted later in version order by Phase C. This is the only parallel layer; Phase A's
+    // get_each_segment_iterator stays serial (it has its own internal pool). Skipped entirely in the
+    // serial path, where each unit is scanned-and-inserted just-in-time in Phase C.
     std::vector<RebuildScanUnitResult> unit_results;
     if (use_parallel) {
         unit_results.resize(scan_units.size());
@@ -1467,10 +1473,16 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         for (const auto& unit : scan_units) {
             const auto* unit_ptr = &unit;
             auto* result = &unit_results[unit.global_seq];
-            auto st = token->submit_func([unit_ptr, &ctx, result]() { scan_one_rebuild_unit(*unit_ptr, ctx, result); });
+            auto buffer_emit = [result](RebuildInsertBatch& batch) -> Status {
+                result->num_rows += static_cast<int64_t>(batch.values.size());
+                result->batches.emplace_back(std::move(batch));
+                return Status::OK();
+            };
+            auto st = token->submit_func(
+                    [unit_ptr, &ctx, buffer_emit]() { scan_one_rebuild_unit(*unit_ptr, ctx, buffer_emit); });
             if (!st.ok()) {
                 // Fall back to inline scan for this unit on submit failure.
-                scan_one_rebuild_unit(unit, ctx, &unit_results[unit.global_seq]);
+                scan_one_rebuild_unit(unit, ctx, buffer_emit);
             }
         }
         token->wait();
@@ -1479,32 +1491,37 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     }
 
     // Phase C (SERIAL, caller thread): walk rebuild_rowsets in version order. For each rowset, insert
-    // its scan units' batches in segment order, then apply that rowset's del files — preserving the
+    // its scan units' rows in segment order, then apply that rowset's del files — preserving the
     // original "this rowset's segments, then this rowset's del files, then the next rowset" ordering,
     // including for rowsets whose segments were all skipped (no units). scan_units are appended in
-    // (rowset_ord, seg_ord) order, so each rowset's units form a contiguous run that we consume with a
-    // single advancing cursor. In the serial path each unit is scanned here, just before its insert, so
-    // at most one unit's batches are held. insert()/_memtable/load_dels are NOT thread-safe and MUST run
-    // on the caller thread only.
+    // (rowset_ord, seg_ord) order, so each rowset's units form a contiguous run consumed with a single
+    // advancing cursor. In the serial path each unit is scanned here and inserted one chunk at a time
+    // (at most one chunk held). insert()/_memtable/load_dels are NOT thread-safe and MUST run on the
+    // caller thread only.
     size_t unit_cursor = 0;
     for (size_t ro = 0; ro < rebuild_rowsets.size(); ro++) {
         while (unit_cursor < scan_units.size() && static_cast<size_t>(scan_units[unit_cursor].rowset_ord) == ro) {
             const auto& unit = scan_units[unit_cursor];
             TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            RebuildScanUnitResult serial_result;
-            RebuildScanUnitResult* result;
-            if (use_parallel) {
-                result = &unit_results[unit.global_seq];
-            } else {
-                scan_one_rebuild_unit(unit, ctx, &serial_result);
-                RETURN_IF_ERROR(scan_status);
-                result = &serial_result;
-            }
             TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
-            TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result->num_rows);
-            for (auto& batch : result->batches) {
-                RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
-                                       batch.values.data(), unit.rowset_version));
+            if (use_parallel) {
+                auto& result = unit_results[unit.global_seq];
+                TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
+                for (auto& batch : result.batches) {
+                    RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
+                                           batch.values.data(), unit.rowset_version));
+                }
+            } else {
+                // Stream this unit: scan and insert one chunk at a time, holding at most one chunk.
+                int64_t unit_rows = 0;
+                auto insert_emit = [&](RebuildInsertBatch& batch) -> Status {
+                    unit_rows += static_cast<int64_t>(batch.values.size());
+                    return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
+                                  batch.values.data(), unit.rowset_version);
+                };
+                scan_one_rebuild_unit(unit, ctx, insert_emit);
+                RETURN_IF_ERROR(scan_status);
+                TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
             unit_cursor++;
         }
