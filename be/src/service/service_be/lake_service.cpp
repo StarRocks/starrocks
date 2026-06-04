@@ -439,11 +439,18 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
                         }
-                        // Report tablet for async VI build only on async-mode tables
-                        // whose new rowset(s) have vector_index_ids. Sync-mode tables
-                        // build VI inline on write/compaction, so FE dispatch is unneeded.
+                        // Report tablet for async VI build-frontier tracking on async-mode
+                        // tables. We report whenever this publish advanced the tablet version,
+                        // even when the new rowset carries no vector_index_ids (bundle /
+                        // below-threshold segments skip the inline .vi). build_needed lets the
+                        // FE tell the two apart:
+                        //   true  -> a new segment needs a real .vi build; FE dispatches to CN.
+                        //   false -> nothing to build this version; FE advances built_version
+                        //            directly (no CN round-trip), so observability isn't stuck.
+                        // Sync-mode tables build VI inline, so no FE dispatch is needed.
+                        const bool async_vi = is_async_vector_index_table(*metadata);
                         bool new_rowset_has_vi = false;
-                        if (is_async_vector_index_table(*metadata)) {
+                        if (async_vi) {
                             for (const auto& rowset : metadata->rowsets()) {
                                 int64_t rv = rowset.has_version() ? rowset.version() : 0;
                                 if (rv <= base_version) continue; // existing rowset, not from this publish
@@ -456,11 +463,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 if (new_rowset_has_vi) break;
                             }
                         }
-                        if (new_rowset_has_vi) {
+                        if (async_vi && metadata->version() > base_version) {
                             std::lock_guard l(response_mtx);
                             auto* info = response->add_vector_index_build_infos();
                             info->set_tablet_id(metadata->id());
                             info->set_version(metadata->version());
+                            info->set_build_needed(new_rowset_has_vi);
                         }
                     } else {
                         if (res.status().is_resource_busy()) {

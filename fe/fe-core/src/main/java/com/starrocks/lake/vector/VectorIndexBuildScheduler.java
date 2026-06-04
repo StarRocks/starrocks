@@ -162,9 +162,14 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
     }
 
     /**
-     * Convenience entry point for publish callers: enqueue all build infos
-     * returned by BE in the publish response. No-op if scheduler is not initialized
-     * or input is empty.
+     * Convenience entry point for publish callers: process all build infos returned by BE
+     * in the publish response. No-op if scheduler is not initialized or input is empty.
+     * <p>
+     * Each info carries {@code buildNeeded}: {@code true} means a new segment needs a real
+     * .vi build (dispatch to CN); {@code false} means this version produced nothing to build
+     * (bundle / below-threshold segments skip the inline .vi), so we advance builtVersion
+     * directly when possible — no CN round-trip — instead of letting it lag and read as
+     * "not built". {@code buildNeeded==null} (older BE) is treated as {@code true} (enqueue).
      */
     public static void onPublishComplete(List<VectorIndexBuildInfoPB> infos, boolean fromCompaction) {
         if (infos == null || infos.isEmpty()) {
@@ -175,10 +180,54 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             return;
         }
         for (VectorIndexBuildInfoPB info : infos) {
-            if (info.tabletId != null && info.version != null) {
+            if (info.tabletId == null || info.version == null) {
+                continue;
+            }
+            boolean buildNeeded = info.buildNeeded == null || info.buildNeeded;
+            if (buildNeeded) {
                 scheduler.addPendingTablet(info.tabletId, info.version, fromCompaction);
+            } else {
+                scheduler.advanceBuiltVersionForNoBuild(info.tabletId, info.version, fromCompaction);
             }
         }
+    }
+
+    /**
+     * Handle a published version that needs no real vector index build (bundle /
+     * below-threshold segments). When the recovery scan has run for this leader term and the
+     * tablet has no pending/running build, advance builtVersion directly to this version with
+     * no CN dispatch — nothing needs building, so the frontier just moves forward (and no
+     * pending entry is created, so a stream of no-build loads stays on this zero-RPC path).
+     * Otherwise let the build path carry the frontier: it builds any real index and returns
+     * this version, covering the no-build tail without an extra round-trip.
+     * <p>
+     * Why {@code recoveryScanDone && !hasPending} is leapfrog-safe (never skips an un-built
+     * vi-version): a vi-version always enqueues a pending build (kept until the build
+     * completes, re-enqueued on failure), and publishes are processed in version order per
+     * tablet — so any earlier un-built vi-version is already in {@code pendingTablets} when
+     * this no-build version arrives, making {@code hasPending} true and routing it to the
+     * build path. The {@code recoveryScanDone} guard covers the post-leader-switch window
+     * where the in-memory pending set hasn't been rebuilt yet; until the scan runs we
+     * conservatively enqueue instead of direct-advancing.
+     */
+    void advanceBuiltVersionForNoBuild(long tabletId, long version, boolean fromCompaction) {
+        LakeTablet tablet = findLakeTablet(tabletId);
+        if (tablet == null) {
+            return; // tablet/partition/table deleted — nothing to track
+        }
+        long built = tablet.getVectorIndexBuiltVersion();
+        if (built >= version) {
+            return; // already caught up
+        }
+        boolean hasPending = pendingTablets.containsKey(tabletId) || runningTasks.containsKey(tabletId);
+        if (recoveryScanDone && !hasPending) {
+            // No un-built vi work for this tablet -> just move the frontier forward, no dispatch.
+            tablet.setVectorIndexBuiltVersion(version);
+            return;
+        }
+        // A real build is in flight, or recovery hasn't validated yet -> let the build path
+        // carry the frontier to this version.
+        addPendingTablet(tabletId, version, fromCompaction);
     }
 
     // ========== Recovery scan after leader switch ==========
@@ -552,7 +601,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
         return -1;
     }
 
-    static boolean hasAsyncVectorIndex(OlapTable table) {
+    public static boolean hasAsyncVectorIndex(OlapTable table) {
         if (table.getIndexes() == null) {
             return false;
         }
@@ -583,5 +632,9 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
 
     Map<Long, ComputeNode> getPreferredNodesForTest() {
         return preferredNodes;
+    }
+
+    void setRecoveryScanDoneForTest(boolean done) {
+        this.recoveryScanDone = done;
     }
 }
