@@ -1136,8 +1136,13 @@ namespace {
 // batch stays valid after the scan column is reset/freed. `keys` point into `key_bytes` (binary:
 // variable stride; non-encoded: fixed `key_size` stride).
 struct RebuildInsertBatch {
-    std::vector<uint8_t> key_bytes; // owned backing store for all keys in this batch
-    std::vector<Slice> keys;        // Slices into key_bytes
+    // Exactly one of these owns the key bytes the `keys` Slices point into, kept alive until Phase C
+    // inserts -- so no copy is needed. `chunk` holds the source chunk for the non-encoded single-column
+    // path (keys point into its key column); `encoded_keys` holds the freshly-encoded pk column for the
+    // multi-column / V2-encoding path.
+    ChunkUniquePtr chunk;
+    MutableColumnPtr encoded_keys;
+    Buffer<Slice> keys;             // Slices into chunk's key column or into encoded_keys
     std::vector<IndexValue> values; // (rssid<<32)+rowid
 };
 
@@ -1304,17 +1309,18 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
     // threads). All writes complete before the post-`wait()` trace read.
     std::vector<uint32_t> local_rowids;
     local_rowids.reserve(4096);
-    auto local_chunk_sp = ChunkFactory::new_chunk(ctx.pkey_schema, 4096);
-    auto* local_chunk = local_chunk_sp.get();
-    MutableColumnPtr local_pk_column;
-    if (ctx.need_encode) {
-        if (!PrimaryKeyEncoder::create_column(ctx.pkey_schema, &local_pk_column, ctx.pk_encoding_type).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
-    }
+    // The scan chunk is reused across iterations on the encoded path (keys live in a per-batch encoded
+    // column there), but is moved into the batch on the non-encoded path (keys point straight into its
+    // column); a moved-out chunk is reallocated at the top of the next iteration.
+    ChunkUniquePtr local_chunk_sp;
 
     while (true) {
-        local_chunk->reset();
+        if (local_chunk_sp == nullptr) {
+            local_chunk_sp = ChunkFactory::new_chunk(ctx.pkey_schema, 4096);
+        } else {
+            local_chunk_sp->reset();
+        }
+        auto* local_chunk = local_chunk_sp.get();
         local_rowids.clear();
         int64_t t1 = GetCurrentTimeMicros();
         auto st = itr->get_next(local_chunk, &local_rowids);
@@ -1325,14 +1331,19 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
             record_err(st);
             break;
         }
+        // On the encoded path, encode into a FRESH column per batch so the batch can own it; on the
+        // non-encoded path the keys come straight from the chunk's single key column.
         Column* pkc = nullptr;
-        if (local_pk_column) {
+        MutableColumnPtr encoded_keys;
+        if (ctx.need_encode) {
+            if (!PrimaryKeyEncoder::create_column(ctx.pkey_schema, &encoded_keys, ctx.pk_encoding_type).ok()) {
+                CHECK(false) << "create column for primary key encoder failed";
+            }
             int64_t t2 = GetCurrentTimeMicros();
-            local_pk_column->reset_column();
-            PrimaryKeyEncoder::encode(ctx.pkey_schema, *local_chunk, 0, local_chunk->num_rows(), local_pk_column.get(),
+            PrimaryKeyEncoder::encode(ctx.pkey_schema, *local_chunk, 0, local_chunk->num_rows(), encoded_keys.get(),
                                       ctx.pk_encoding_type);
             local_pk_encode += GetCurrentTimeMicros() - t2;
-            pkc = local_pk_column.get();
+            pkc = encoded_keys.get();
         } else {
             pkc = const_cast<Column*>(local_chunk->columns()[0].get());
         }
@@ -1351,29 +1362,14 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         }
         result->num_rows += pkc->size();
 
-        // Build keys into an owned buffer so the batch outlives `local_chunk`/`local_pk_column` and
-        // can be inserted serially in Phase C. Mirrors the serial path's key extraction
-        // (ColumnHelper::build_slices for (large) binary, RawBytesVisitor for fixed-size), but COPIES
-        // the bytes because the source column is reset on the next get_next.
+        // Build keys as Slices into the source column and keep that column alive in the batch, so
+        // Phase C can insert after the scan without copying the key bytes. Same extraction as the
+        // serial path (ColumnHelper::build_slices for (large) binary, RawBytesVisitor for fixed-size).
         RebuildInsertBatch batch;
         batch.values = std::move(values);
-        const size_t n = pkc->size();
-        batch.keys.reserve(n);
+        batch.keys.reserve(pkc->size());
         if (pkc->is_binary() || pkc->is_large_binary()) {
-            Buffer<Slice> src_keys;
-            src_keys.reserve(n);
-            ColumnHelper::build_slices(pkc, src_keys);
-            size_t total = 0;
-            for (size_t k = 0; k < n; ++k) {
-                total += src_keys[k].size;
-            }
-            batch.key_bytes.resize(total);
-            size_t off = 0;
-            for (size_t k = 0; k < n; ++k) {
-                memcpy(batch.key_bytes.data() + off, src_keys[k].data, src_keys[k].size);
-                batch.keys.emplace_back(reinterpret_cast<const char*>(batch.key_bytes.data()) + off, src_keys[k].size);
-                off += src_keys[k].size;
-            }
+            ColumnHelper::build_slices(pkc, batch.keys);
         } else {
             RawBytesVisitor visitor;
             auto vst = pkc->accept(&visitor);
@@ -1381,12 +1377,16 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
                 record_err(vst);
                 break;
             }
-            batch.key_bytes.resize(n * ctx.key_size);
-            memcpy(batch.key_bytes.data(), visitor.result(), n * ctx.key_size);
-            for (size_t k = 0; k < n; ++k) {
-                batch.keys.emplace_back(reinterpret_cast<const char*>(batch.key_bytes.data()) + k * ctx.key_size,
-                                        ctx.key_size);
+            const auto* fkeys = visitor.result();
+            for (size_t k = 0; k < pkc->size(); ++k) {
+                batch.keys.emplace_back(fkeys, ctx.key_size);
+                fkeys += ctx.key_size;
             }
+        }
+        if (ctx.need_encode) {
+            batch.encoded_keys = std::move(encoded_keys);
+        } else {
+            batch.chunk = std::move(local_chunk_sp); // hand the chunk's key column to the batch
         }
         result->batches.emplace_back(std::move(batch));
     }
