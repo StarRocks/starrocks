@@ -103,6 +103,88 @@ struct TabletSinkProfile {
 // map index_id to TabletBEMap(map tablet_id to backend id)
 using IndexIdToTabletBEMap = std::unordered_map<int64_t, std::unordered_map<int64_t, std::vector<int64_t>>>;
 
+// ---------------------------------------------------------------------------
+// AddChunks RPC request structure, separated into three layers:
+//   1. Channel-level immutable spec  (AddChunksChannelSpec)
+//   2. Per-batch mutable payload     (AddChunksBatchPayload, queued)
+//   3. Per-send mutable options      (AddChunksSendOptions, stack-only)
+// The builder owns layer 1 plus the in-progress accumulator for layer 2, and
+// builds a fresh PTabletWriterAddChunksRequest on each send.
+// ---------------------------------------------------------------------------
+
+// Per-index static fields that are fixed for the channel's lifetime.
+struct PerIndexSpec {
+    int64_t index_id = 0;
+    int64_t txn_id = 0;
+    int32_t sender_id = 0;
+    int64_t timeout_ms = 0;
+    int64_t sink_id = 0;
+};
+
+// Channel-wide immutable spec. Pointers are borrowed and must outlive the channel.
+struct AddChunksChannelSpec {
+    const PUniqueId* load_id = nullptr;
+    std::vector<PerIndexSpec> indexes; // order matches proto requests(i) order
+    bool enable_colocate_mv_index = false;
+    // Looked up at eos time only. Owned by OlapTableSink, borrowed here.
+    const std::unordered_map<int64_t, std::set<int64_t>>* index_id_to_partition_ids = nullptr;
+};
+
+// One batched send unit: a chunk plus the tablet_ids it routes to per index.
+struct AddChunksBatchPayload {
+    ChunkUniquePtr chunk;
+    std::vector<std::vector<int64_t>> tablet_ids; // [index_i][row]
+};
+
+// Per-RPC mutable options. Lives only on the send-path stack frame.
+struct AddChunksSendOptions {
+    int64_t packet_seq = 0;
+    bool eos = false;
+    bool finished = false; // -> set_wait_all_sender_close
+};
+
+// Owns the channel spec and produces a fresh proto request on each send.
+// Read-only after init(): the send path can safely call build()/index_count()/
+// index_id_at() without worrying about per-batch state mutation.
+class AddChunksRequestBuilder {
+public:
+    void init(AddChunksChannelSpec spec);
+
+    size_t index_count() const { return _spec.indexes.size(); }
+    int64_t index_id_at(size_t i) const { return _spec.indexes[i].index_id; }
+
+    // Build a fresh request proto from a batch + per-send options. tablet_ids is
+    // passed by const-ref on purpose: the proto's RepeatedField copies the ids
+    // (RepeatedField has no move-from-vector primitive anyway), and keeping the
+    // source vectors owned by the caller means their lifetime stays under the
+    // caller's mem-tracker scope, while the proto's buffers live entirely under
+    // whatever scope was active at build() time.
+    // The caller must serialize the chunk into requests(0)->mutable_chunk()
+    // afterwards when chunk->num_rows() > 0.
+    PTabletWriterAddChunksRequest build(const std::vector<std::vector<int64_t>>& tablet_ids,
+                                        const AddChunksSendOptions& opts) const;
+
+private:
+    AddChunksChannelSpec _spec;
+};
+
+// Owns the in-progress per-index tablet_ids for the current (un-enqueued) batch.
+// Decoupled from the builder so the send path never has to reach into accumulator
+// state — only the input path (add_chunk/add_chunks) and the flush helper touch it.
+class AddChunksBatchAccumulator {
+public:
+    void reset(size_t index_count) { _pending_tablet_ids.assign(index_count, {}); }
+
+    void append_tablet_id(size_t index_i, int64_t tablet_id) { _pending_tablet_ids[index_i].push_back(tablet_id); }
+
+    // Pair the accumulated tablet_ids with the given chunk into a BatchPayload and
+    // reset the accumulator so the next batch starts empty.
+    AddChunksBatchPayload take_batch(ChunkUniquePtr chunk);
+
+private:
+    std::vector<std::vector<int64_t>> _pending_tablet_ids;
+};
+
 class NodeChannel {
 public:
     NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause = nullptr);
@@ -184,6 +266,11 @@ private:
                std::vector<PTabletWithPartition>& tablets, bool incrmental_open);
     Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
     Status _send_request(bool eos, bool wait_all_sender_close = false);
+    // Push (_cur_chunk, accumulated tablet_ids) into _request_queue as one
+    // BatchPayload. Requires _cur_chunk to be non-null. _cur_chunk is moved-from
+    // (becomes null) after this call; the caller is responsible for any chunk
+    // reset that the surrounding flow needs.
+    void _enqueue_current_batch();
     void _cancel(int64_t index_id, const Status& err_st);
     Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
                                            std::vector<uint32_t>& filtered_indexes);
@@ -250,9 +337,15 @@ private:
     std::unique_ptr<Chunk> _cur_chunk;
     int64_t _cur_chunk_mem_usage = 0;
 
+<<<<<<< HEAD:be/src/exec/tablet_sink_index_channel.h
     PTabletWriterAddChunksRequest _rpc_request;
     using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
     std::deque<AddMultiChunkReq> _request_queue;
+=======
+    AddChunksRequestBuilder _builder;
+    AddChunksBatchAccumulator _accumulator;
+    std::deque<AddChunksBatchPayload> _request_queue;
+>>>>>>> b06bf5f2ba ([BugFix] Fix memory accounting in OlapTableSink (#73807)):be/src/exec/data_sinks/tablet_sink_index_channel.h
 
     size_t _current_request_index = 0;
     size_t _max_request_queue_size = 8;
