@@ -27,8 +27,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
-import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -464,13 +462,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         if (svType.equalsIgnoreCase(HDFS)) {
             return;
         }
-        // During restore, AZURE_PATH_KEY is injected by the recovery tooling but is absent from
-        // PARAM_NAMES. Skip it to avoid a spurious "Invalid properties" error that aborts the restore.
-        boolean isRestoring = RestoreClusterSnapshotMgr.isRestoring();
         for (String key : params.keySet()) {
-            if (key.equals(AzureCloudConfigurationProvider.AZURE_PATH_KEY) && isRestoring) {
-                continue;
-            }
             if (!PARAM_NAMES.contains(key)) {
                 throw new DdlException("Invalid properties " + key);
             }
