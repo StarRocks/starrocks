@@ -20,6 +20,7 @@ import com.starrocks.catalog.ColocateRangeMgr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
@@ -38,6 +39,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -189,6 +194,79 @@ public class ColocateCheckerTest {
                 new ColocateRange(Range.lt(boundaryPrefix), firstShardGroupId),
                 new ColocateRange(Range.ge(boundaryPrefix), secondShardGroupId)));
         colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+    }
+
+    // ---- F5 detection half: misplaced-PACK-group detection (pure, no cluster) ----
+    //
+    // These exercise the read-only detection logic that the (currently staros-release-blocked)
+    // reassignShardGroups call will consume. They build ColocateRange lists and per-tablet
+    // group-id lists directly, so they do not depend on the cluster spun up in beforeClass.
+
+    private static final long SPREAD = 900L;
+    private static final long PACK_G1 = 1001L;
+    private static final long PACK_G2 = 1002L;
+
+    private static Tuple intPrefix(int v) {
+        return new Tuple(Arrays.asList(Variant.of(IntegerType.INT, String.valueOf(v))));
+    }
+
+    /** Two colocate ranges split at prefix 100: [MIN, 100) -> G1, [100, MAX) -> G2. */
+    private static List<ColocateRange> twoRangesAt100() {
+        Tuple boundary = intPrefix(100);
+        return Arrays.asList(
+                new ColocateRange(Range.lt(boundary), PACK_G1),
+                new ColocateRange(Range.ge(boundary), PACK_G2));
+    }
+
+    @Test
+    public void testClassifyCorrectPlacementReturnsNull() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Tablet sits in its SPREAD group and the expected PACK group G2, nothing stale.
+        Assertions.assertNull(ColocateChecker.classifyTabletPlacement(
+                77L, List.of(SPREAD, PACK_G2), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testClassifyStalePackGroupIsMisplaced() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Originating-partition case: tablet stayed in old PACK group G1 but belongs in G2.
+        Assertions.assertEquals(new ColocateChecker.MisplacedTablet(77L, PACK_G1, PACK_G2),
+                ColocateChecker.classifyTabletPlacement(77L, List.of(SPREAD, PACK_G1), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testClassifyMissingPackGroupHasNoCurrent() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Tablet is in no PACK group at all -> needs an add, no remove.
+        Assertions.assertEquals(
+                new ColocateChecker.MisplacedTablet(77L, PhysicalPartition.INVALID_SHARD_GROUP_ID, PACK_G2),
+                ColocateChecker.classifyTabletPlacement(77L, List.of(SPREAD), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testClassifyDoubleMembershipIsMisplaced() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Transient double membership: in expected G2 but also still in stale G1 -> must shed G1.
+        Assertions.assertEquals(new ColocateChecker.MisplacedTablet(77L, PACK_G1, PACK_G2),
+                ColocateChecker.classifyTabletPlacement(
+                        77L, List.of(SPREAD, PACK_G1, PACK_G2), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testFindMisplacedTabletsComposesRangeAndMembership() {
+        List<ColocateRange> ranges = twoRangesAt100();
+        Map<Long, Range<Tuple>> tabletIdToRange = new HashMap<>();
+        tabletIdToRange.put(10L, Range.ge(intPrefix(50)));    // expected G1
+        tabletIdToRange.put(20L, Range.ge(intPrefix(150)));   // expected G2
+        Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
+        tabletIdToGroupIds.put(10L, List.of(SPREAD, PACK_G1)); // correctly placed
+        tabletIdToGroupIds.put(20L, List.of(SPREAD, PACK_G1)); // stuck in G1, belongs in G2
+
+        List<ColocateChecker.MisplacedTablet> result = ColocateChecker.findMisplacedTablets(
+                tabletIdToRange, tabletIdToGroupIds, ranges, 1);
+
+        Assertions.assertEquals(
+                List.of(new ColocateChecker.MisplacedTablet(20L, PACK_G1, PACK_G2)), result);
     }
 
     @Test

@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -26,6 +27,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -36,11 +39,14 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Colocate checker — drives every unstable range-colocate group toward range alignment
@@ -248,5 +254,87 @@ public class ColocateChecker {
         LOG.info("submitted SplitTabletJob {} for table {}.{} covering {} partitions",
                 job.getJobId(), db.getFullName(), table.getName(), alignmentMap.size());
         return false;
+    }
+
+    // ---- Misplaced-PACK-group detection (F5 backstop, detection half) ----
+    //
+    // Range alignment (the loop above) is sufficient for query correctness but not for
+    // host-local execution: the originating user-driven Level-1 split leaves one child in the
+    // OLD PACK shard group, so after post-publish reclassification a tablet can be range-aligned
+    // yet sit in the wrong PACK shard group. The methods below identify those tablets by comparing
+    // each tablet's actual StarOS shard-group membership against the PACK shard group expected from
+    // its range per ColocateRangeMgr. The resulting (remove currentPackGroupId, add
+    // expectedPackGroupId) delta is exactly what a StarOSAgent.reassignShardGroups call will consume
+    // to migrate the tablet — that call is gated on a staros release exposing the UpdateShardInfo
+    // group-membership delta (see colocate.md "F5"), so this detection is currently the reusable,
+    // side-effect-free half. The range->PACK-group mapping itself lives in
+    // ColocateRangeUtils.lookupPackShardGroupId, shared with SplitTabletJob's post-publish classifier.
+
+    /**
+     * A tablet whose actual PACK shard-group membership disagrees with the PACK shard group expected
+     * from its range. {@code currentPackGroupId} is a stale colocate PACK shard group the tablet is
+     * still a member of (or {@link PhysicalPartition#INVALID_SHARD_GROUP_ID} if it is in none), and
+     * {@code expectedPackGroupId} is where it belongs — together the move delta a future
+     * {@code reassignShardGroups} consumes.
+     */
+    public record MisplacedTablet(long tabletId, long currentPackGroupId, long expectedPackGroupId) {
+    }
+
+    /**
+     * Classifies one tablet's PACK-shard-group placement against expectation. Returns {@code null}
+     * when the tablet is correctly placed — a member of {@code expectedPackGroupId} and of no other
+     * PACK shard group in {@code packGroupIds}. Otherwise returns the {@link MisplacedTablet} move:
+     * {@code currentPackGroupId} is a stale colocate PACK shard group still present (or
+     * {@link PhysicalPartition#INVALID_SHARD_GROUP_ID} if none), and {@code expectedPackGroupId} is the
+     * target. SPREAD and unrelated shard groups are ignored because they are not in {@code packGroupIds}.
+     */
+    static MisplacedTablet classifyTabletPlacement(long tabletId, List<Long> actualGroupIds,
+                                                   long expectedPackGroupId, Set<Long> packGroupIds) {
+        boolean alreadyInExpectedGroup = actualGroupIds.contains(expectedPackGroupId);
+        long stalePackGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
+        for (long groupId : actualGroupIds) {
+            if (groupId != expectedPackGroupId && packGroupIds.contains(groupId)) {
+                stalePackGroupId = groupId;
+                break;
+            }
+        }
+        if (alreadyInExpectedGroup && stalePackGroupId == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+            return null;
+        }
+        return new MisplacedTablet(tabletId, stalePackGroupId, expectedPackGroupId);
+    }
+
+    /**
+     * Pure detection over a set of tablets: for each tablet whose colocate prefix maps to a known
+     * {@link ColocateRange} (via {@link ColocateRangeUtils#lookupPackShardGroupId}), compares its
+     * actual shard-group membership ({@code tabletIdToGroupIds}, as returned by
+     * {@code StarOSAgent.getShardInfo(...).getGroupIdsList()} — the StarOS shard id equals the tablet
+     * id in shared-data mode) against the expected PACK shard group and collects every
+     * {@link MisplacedTablet}. Tablets whose range is not covered by {@code expectedRanges} are
+     * skipped (defensive; cannot happen under the full-coverage invariant).
+     */
+    static List<MisplacedTablet> findMisplacedTablets(Map<Long, Range<Tuple>> tabletIdToRange,
+                                                      Map<Long, List<Long>> tabletIdToGroupIds,
+                                                      List<ColocateRange> expectedRanges,
+                                                      int colocateColumnCount) {
+        Set<Long> packGroupIds = expectedRanges.stream()
+                .map(ColocateRange::getShardGroupId)
+                .collect(Collectors.toSet());
+        List<MisplacedTablet> misplaced = new ArrayList<>();
+        for (Map.Entry<Long, Range<Tuple>> entry : tabletIdToRange.entrySet()) {
+            long tabletId = entry.getKey();
+            long expectedGroupId = ColocateRangeUtils.lookupPackShardGroupId(
+                    entry.getValue(), expectedRanges, colocateColumnCount);
+            if (expectedGroupId == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                continue;
+            }
+            List<Long> actualGroupIds = tabletIdToGroupIds.getOrDefault(tabletId, Collections.emptyList());
+            MisplacedTablet misplacedTablet =
+                    classifyTabletPlacement(tabletId, actualGroupIds, expectedGroupId, packGroupIds);
+            if (misplacedTablet != null) {
+                misplaced.add(misplacedTablet);
+            }
+        }
+        return misplaced;
     }
 }
