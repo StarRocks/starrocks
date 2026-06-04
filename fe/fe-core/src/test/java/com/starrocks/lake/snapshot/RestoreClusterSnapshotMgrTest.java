@@ -25,6 +25,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.StorageVolumeAccessChecker;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.SystemInfoService;
@@ -232,6 +233,118 @@ public class RestoreClusterSnapshotMgrTest {
                 "error must list the undeclared SV name; got: " + ex.getMessage());
         Assertions.assertTrue(ex.getMessage().contains("not declared"),
                 "error must mention undeclared volumes; got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testKeepAutomatedSnapshotOnAfterLocalRestore() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
+                    throws StarRocksException {
+                return;
+            }
+        };
+
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+
+        ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+        clusterSnapshotMgr.setAutomatedSnapshotOn("test_local_sv");
+        Assertions.assertTrue(clusterSnapshotMgr.isAutomatedSnapshotOn());
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true);
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isExternalSnapshot());
+
+        // Avoid touching real compute nodes / storage volumes during finishRestoring().
+        RestoreClusterSnapshotMgr.getConfig().getComputeNodes().get(0).setCNGroup(null);
+        RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().clear();
+
+        RestoreClusterSnapshotMgr.finishRestoring();
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+
+        // A local (non-external) snapshot restore must keep the automated snapshot running.
+        Assertions.assertTrue(clusterSnapshotMgr.isAutomatedSnapshotOn());
+
+        clusterSnapshotMgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
+    public void testDisableAutomatedSnapshotAfterExternalRestore() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
+                    throws StarRocksException {
+                return;
+            }
+
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) throws StarRocksException {
+                return true;
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                // no-op: simulate successful write for access check
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // no-op: simulate successful cleanup of temp access-check file
+            }
+        };
+
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+
+        // Stub the storage volume accessibility check so the test does not depend on
+        // reachability of, or global state of, an externally-owned S3 bucket.
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String svName, String svType, List<String> locations, Map<String, String> params) {
+            }
+        };
+
+        // Avoid touching real starmgr storage volumes during finishRestoring(): no undeclared
+        // image SV to reject, and skip the base storage volume reconciliation.
+        new MockUp<SharedDataStorageVolumeMgr>() {
+            @Mock
+            public List<String> listStorageVolumeNames() throws DdlException {
+                return new ArrayList<>();
+            }
+
+            @Mock
+            public void updateBaseStorageVolumeName(String svName) throws DdlException {
+                return;
+            }
+        };
+
+        ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+        clusterSnapshotMgr.setAutomatedSnapshotOn("test_external_sv");
+        Assertions.assertTrue(clusterSnapshotMgr.isAutomatedSnapshotOn());
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/external_cluster_snapshot.yaml", true);
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isExternalSnapshot());
+
+        // Avoid touching real compute nodes / per-volume replacement during finishRestoring().
+        RestoreClusterSnapshotMgr.getConfig().getComputeNodes().get(0).setCNGroup(null);
+        RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().clear();
+
+        RestoreClusterSnapshotMgr.finishRestoring();
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+
+        // An external (cross-region disaster recovery) snapshot restore must turn off the automated snapshot.
+        Assertions.assertFalse(clusterSnapshotMgr.isAutomatedSnapshotOn());
     }
 
     @Test
