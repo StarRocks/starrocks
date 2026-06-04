@@ -5,7 +5,7 @@ description: "`fe_locks` provides information about metadata locks in StarRocks 
 
 # fe_locks
 
-`fe_locks` provides information about metadata locks in StarRocks FE.
+`fe_locks` provides information about metadata locks in StarRocks FE. It is one of the system-defined views in the [`sys`](./sys.md) database.
 
 The following fields are provided in `fe_locks`:
 
@@ -27,15 +27,10 @@ The following fields are provided in `fe_locks`:
 
 ## Lock Types
 
-- **DATABASE**: Database-level locks (when `lock_manager_enabled` is false).
-- **TABLE**: Table-level locks (when `lock_manager_enabled` is true).
+- **DATABASE**: Database-level locks.
+- **TABLE**: Table-level locks.
 
-## Configuration
-
-The behavior of `fe_locks` depends on the `lock_manager_enabled` configuration parameter:
-
-- When `lock_manager_enabled = true`: Uses the new Lock Manager for centralized lock management with table-level granularity.
-- When `lock_manager_enabled = false`: Uses traditional database-level locking.
+StarRocks manages metadata locks through the Lock Manager, which provides centralized lock management with table-level granularity.
 
 ## Examples
 

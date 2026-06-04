@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockParams;
@@ -40,13 +39,11 @@ public class TestLockInterface {
     @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_enabled = true;
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
     @AfterEach
     public void tearDown() {
-        Config.lock_manager_enabled = false;
         Config.lock_manager_enable_resolve_deadlock = false;
     }
 
@@ -127,80 +124,6 @@ public class TestLockInterface {
         Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
         Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
         Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.WRITE));
-    }
-
-    @Test
-    public void testReentrantReadWriteLock() {
-        long rid = 1L;
-        Database database = new Database(rid, "db");
-        Locker locker = new Locker();
-        Config.lock_manager_enabled = false;
-
-        new MockUp<QueryableReentrantReadWriteLock>() {
-            @Mock
-            public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
-                return false;
-            }
-        };
-
-        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-
-        new MockUp<QueryableReentrantReadWriteLock>() {
-            @Mock
-            public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
-                return false;
-            }
-        };
-
-        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
-
-        new MockUp<QueryableReentrantReadWriteLock>() {
-            @Mock
-            public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
-                throw new InterruptedException();
-            }
-        };
-
-        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-
-        new MockUp<QueryableReentrantReadWriteLock>() {
-            @Mock
-            public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
-                throw new InterruptedException();
-            }
-        };
-
-        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
-
-        new MockUp<QueryableReentrantReadWriteLock>() {
-            @Mock
-            public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    // ignore
-                }
-                return true;
-            }
-        };
-
-        Assertions.assertTrue(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-
-        new MockUp<QueryableReentrantReadWriteLock>() {
-            @Mock
-            public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    // ignore
-                }
-                return true;
-            }
-        };
-
-        Assertions.assertTrue(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
-
-        Config.lock_manager_enabled = true;
     }
 
     @Test
