@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+keywords: ['alter table']
+description: "Modifies an existing StarRocks table: renaming, partitioning, bucketing, columns, rollup indexes, and table properties."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # ALTER TABLE

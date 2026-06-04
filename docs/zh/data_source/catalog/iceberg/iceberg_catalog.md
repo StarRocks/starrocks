@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Iceberg catalog 是外部 catalog，支持无导入查询 Iceberg 数据及数据转换导入。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
 ---
@@ -153,6 +154,7 @@ Iceberg catalog 的描述。此参数是可选的。
 关于 StarRocks 如何与数据源的元存储集成的一组参数。选择与您的元存储类型匹配的选项卡：
 
 <Tabs groupId="metastore">
+
 <TabItem value="HIVE" label="Hive metastore" default>
 
 ##### Hive metastore
@@ -183,6 +185,7 @@ Iceberg catalog 的描述。此参数是可选的。
 描述：Hive metastore 的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。<br />如果 Hive metastore 启用了高可用性（HA），您可以指定多个 metastore URI，并用逗号（`,`）分隔，例如 `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
 
 </TabItem>
+
 <TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
@@ -256,6 +259,7 @@ AWS Glue 的 `MetastoreParams`：
 有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 </TabItem>
+
 <TabItem value="REST" label="REST">
 
 ##### REST
@@ -501,6 +505,7 @@ PROPERTIES
 选择与您的存储类型匹配的选项卡：
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
@@ -832,6 +837,7 @@ Google GCS 的 `StorageCredentialParams`：
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg catalog，具体取决于您使用的元存储类型，以便从您的 Iceberg 集群中查询数据。选择与您的存储类型匹配的选项卡：
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
@@ -977,6 +983,7 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
 </TabItem>
 
 <TabItem value="AZURE" label="Microsoft Azure Blob Storage" >

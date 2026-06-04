@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "カンマ区切りリスト内の文字列の1から始まる位置を返します。"
 ---
 
 # find_in_set

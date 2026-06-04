@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hive catalog 是外部 catalog，无需数据导入即可查询 Hive 数据及执行数据转换。"
 toc_max_heading_level: 5
 ---
 

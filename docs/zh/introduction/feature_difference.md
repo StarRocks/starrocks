@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 sidebar_label: "Feature Differences"
+=======
+description: "存算一体集群和存算分离集群在功能支持和使用场景上的差异对比。"
+sidebar_label: "功能差异"
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'

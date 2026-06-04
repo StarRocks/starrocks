@@ -2,6 +2,10 @@
 displayed_sidebar: docs
 sidebar_position: 25
 sidebar_label: "Built-in Roles"
+<<<<<<< HEAD
+=======
+description: "Reference for the five built-in StarRocks roles: db_admin, cluster_admin, user_admin, security_admin, and public."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 import DBAdmin from '../../../_assets/commonMarkdown/role_db_admin.mdx'

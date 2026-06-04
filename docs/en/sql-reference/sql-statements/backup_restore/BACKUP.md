@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Backs up databases, tables, materialized views, logical views, and UDFs in StarRocks to a remote storage repository."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # BACKUP

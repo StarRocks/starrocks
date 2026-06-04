@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "パイプと関連するジョブおよびメタデータを削除します。"
 ---
 
 # DROP PIPE

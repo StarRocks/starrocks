@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Configure BE and CN blacklist in StarRocks to exclude problematic nodes from query execution."
 ---
 
 # 管理 BE 黑名单

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.3 起支持 Kudu catalog，无导入直接查询 Apache Kudu 数据及转换导入。"
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 

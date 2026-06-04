@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "既存テーブルの名前変更、コメント修正、パーティション・タブレット修正を行います。"
 ---
 
 # ALTER TABLE

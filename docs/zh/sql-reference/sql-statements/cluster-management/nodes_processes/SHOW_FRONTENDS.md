@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW FRONTENDS 查看集群中所有 FE 节点的信息，包括 IP 地址、端口、角色和状态。"
 ---
 
 # SHOW FRONTENDS

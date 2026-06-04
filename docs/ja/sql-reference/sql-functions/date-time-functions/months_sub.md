@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された月を日付から減算します。"
 ---
 
 # months_sub

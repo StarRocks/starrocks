@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CloudCanal 导入常见问题。"
 ---
 
 # CloudCanal 导入常见问题

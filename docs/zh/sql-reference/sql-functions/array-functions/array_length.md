@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回数组中的元素个数。"
 ---
 
 # array_length

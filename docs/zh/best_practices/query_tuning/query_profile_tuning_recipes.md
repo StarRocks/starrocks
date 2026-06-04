@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Symptom-to-fix playbook using StarRocks query profiles to diagnose and resolve slow operators, data skew, spill, and join issues."
 keywords: ['profile', 'query']
 sidebar_position: 40
 ---

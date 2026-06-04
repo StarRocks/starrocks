@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADD BACKEND/COMPUTE NODE BLACKLIST 将 BE 或 CN 节点添加到黑名单。"
 ---
 
 # ADD BACKEND BLACKLIST

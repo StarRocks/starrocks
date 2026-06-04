@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "ウィンドウ関数は組み込み関数の特殊なクラスで、特定のウィンドウ内のデータを処理します。"
+keywords: ['ウィンドウ関数', 'ウィンドウ']
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 sidebar_position: 0.9
 keywords: ['analytic']
 ---

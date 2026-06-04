@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 SQL 事务以原子方式在 StarRocks 中提交多个 INSERT、UPDATE、DELETE 语句，支持 ACID 特性。"
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks は次世代 MPP データベースとしてリアルタイム・多次元・高並行データ分析を実現し、データレイク統合と様々なデータソース対応が可能です。"
 ---
 
 # StarRocks

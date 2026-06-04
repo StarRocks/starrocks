@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Bitmap 集計関数の使用例を示します。"
 ---
 
 # bitmap

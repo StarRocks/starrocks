@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "大查询监控和管理方案：通过资源组、查询队列和实时监控防止资源耗尽。"
 ---
 
 # 监控管理大查询
