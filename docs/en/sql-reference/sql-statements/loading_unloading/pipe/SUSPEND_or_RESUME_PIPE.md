@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Suspends or resumes a pipe to pause or continue its in-progress data loading jobs."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # SUSPEND or RESUME PIPE

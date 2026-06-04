@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "System view listing which objects reference row access policies and column masking policies in a StarRocks cluster."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # policy_references

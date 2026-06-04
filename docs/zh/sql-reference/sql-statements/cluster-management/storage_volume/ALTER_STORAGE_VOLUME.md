@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "ALTER STORAGE VOLUME modifies credential properties, comments, or status of a storage volume."
 ---
 
 # ALTER STORAGE VOLUME

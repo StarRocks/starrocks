@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Alters the name, refresh strategy, status, or properties of an asynchronous materialized view, or atomically swaps two views."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # ALTER MATERIALIZED VIEW

@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Views the schema of a StarRocks table or external table, including its sort key and materialized view information."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # DESC

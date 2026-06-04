@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回子字符串在字符串中第一次出现的位置（从1开始计数）。"
 ---
 
 # instr

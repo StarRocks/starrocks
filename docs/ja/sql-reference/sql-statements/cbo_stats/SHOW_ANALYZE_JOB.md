@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "カスタムコレクションタスクの情報とステータスを表示します。"
 ---
 
 # SHOW ANALYZE JOB

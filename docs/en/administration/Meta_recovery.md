@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Recover StarRocks cluster metadata when FE nodes fail to restart, fail to serve requests, or need metadata restored from backup."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # Metadata Recovery

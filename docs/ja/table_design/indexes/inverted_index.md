@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.3 以降の全文転置インデックスはテキストを単語に分割してキーワード検索を加速します。"
 toc_max_heading_level: 4
 sidebar_position: 50
 ---
@@ -124,7 +125,129 @@ ALTER TABLE t DROP index idx;
 
 2. `MATCH` プレディケートを使用してクエリを行います。
 
+<<<<<<< HEAD
 - `value` 列にキーワード `starrocks` を含むデータ行をクエリします。
+=======
+   ```SQL
+   CREATE TABLE `t` (
+       `id1` bigint(20) NOT NULL COMMENT "",
+       `value` varchar(255) NOT NULL COMMENT "",
+       INDEX gin_english (`value`) USING GIN ("parser" = "english") COMMENT 'english index'
+   ) 
+   DUPLICATE KEY(`id1`)
+   DISTRIBUTED BY HASH(`id1`)
+   PROPERTIES (
+   "replicated_storage" = "false"
+   );
+
+
+   INSERT INTO t VALUES
+       (1, "starrocks is a database
+
+   1"),
+       (2, "starrocks is a data warehouse");
+   ```
+
+2. 述語を使用して`MATCH`クエリを実行します。
+
+- 列にキーワード`value`が含まれるデータ行をクエリします。`starrocks`。
+
+  ```SQL
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "starrocks";
+  ```
+
+- 列に`value`で始まるキーワードが含まれるデータ行を取得します。`data`。
+
+  ```SQL
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "data%";
+  ```
+
+3. 述語を使用して`MATCH_ANY`クエリを実行します。
+
+- 列にキーワード`value`または`database`が含まれるデータ行をクエリします。`data`。
+
+  ```SQL
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ANY "database data";
+  ```
+
+4. 「`MATCH_ALL`」述語を使用してクエリを実行します。
+
+- 「`value`」列にキーワード「`database`」と「`data`」の両方が含まれているデータ行をクエリします。
+
+  ```SQL
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ALL "database data";
+  ```
+
+**注記:**
+
+- クエリ中、キーワードは「`%`」を使用してあいまい一致させることができます。形式は「`%keyword%`」です。ただし、キーワードは単語の一部を含んでいる必要があります。例えば、キーワードが「`starrocks `」の場合、スペースが含まれているため、単語「`starrocks`」とは一致しません。
+
+  ```SQL
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "star%";
+  +------+-------------------------------+
+  | id1  | value                         |
+  +------+-------------------------------+
+  |    1 | starrocks is a database1      |
+  |    2 | starrocks is a data warehouse |
+  +------+-------------------------------+
+  2 rows in set (0.02 sec)
+
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "starrocks ";
+  Empty set (0.02 sec)
+  ```
+
+- 全文転置インデックスの構築に英語または多言語のトークン化が使用されている場合、全文転置インデックスが実際に保存される際には、大文字の英単語は小文字に変換されます。したがって、クエリ時には、全文転置インデックスを利用してデータ行を特定するために、キーワードは大文字ではなく小文字にする必要があります。
+
+  ```SQL
+  MySQL [example_db]> INSERT INTO t VALUES (3, "StarRocks is the BEST");
+
+  MySQL [example_db]> SELECT * FROM t;
+  +------+-------------------------------+
+  | id1  | value                         |
+  +------+-------------------------------+
+  |    1 | starrocks is a database       |
+  |    2 | starrocks is a data warehouse |
+  |    3 | StarRocks is the BEST         |
+  +------+-------------------------------+
+  3 rows in set (0.02 sec)
+
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "BEST"; -- Keyword is uppercase English
+  Empty set (0.02 sec) -- Returns an empty result set
+
+  MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "best"; -- Keyword is lowercase English
+  +------+-----------------------+
+  | id1  | value                 |
+  +------+-----------------------+
+  |    3 | StarRocks is the BEST | -- Can locate data rows that meet the condition
+  +------+-----------------------+
+  1 row in set (0.01 sec)
+  ```
+
+- クエリ条件の「`MATCH`」、「`MATCH_ANY`」、または「`MATCH_ALL`」述語はプッシュダウン述語として使用する必要があるため、WHERE句にあり、インデックス付き列に対して実行される必要があります。
+
+  以下のテーブルとテストデータを例にとります。
+
+  ```SQL
+  CREATE TABLE `t_match` (
+      `id1` bigint(20) NOT NULL COMMENT "",
+      `value` varchar(255) NOT NULL COMMENT "",
+      `value_test` varchar(255) NOT NULL COMMENT "",
+      INDEX gin_english (`value`) USING GIN("parser" = "english") COMMENT 'english index'
+  )
+  ENGINE=OLAP 
+  DUPLICATE KEY(`id1`)
+  DISTRIBUTED BY HASH (`id1`) BUCKETS 1 
+  PROPERTIES (
+  "replicated_storage" = "false"
+  );
+
+  INSERT INTO t_match VALUES (1, "test", "test");
+  ```
+
+  以下のクエリステートメントは要件を満たしていません。
+
+  - クエリステートメントの「`MATCH`」、「`MATCH_ANY`」、または「`MATCH_ALL`」述語がWHERE句にないため、プッシュダウンできず、クエリエラーが発生します。
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "starrocks";

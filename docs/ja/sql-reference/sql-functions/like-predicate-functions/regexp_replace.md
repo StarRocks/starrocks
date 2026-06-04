@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "正規表現パターンに一致する文字列の部分を置換文字列に置き換えます。"
 ---
 
 # regexp_replace

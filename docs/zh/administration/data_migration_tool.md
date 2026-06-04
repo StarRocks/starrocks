@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
 ---
 
 # 跨集群数据迁移工具

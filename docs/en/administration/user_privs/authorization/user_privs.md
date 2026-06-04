@@ -1,6 +1,10 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+<<<<<<< HEAD
+=======
+description: "Overview of StarRocks privilege system, covering role-based access control (RBAC) and identity-based access control (IBAC) models."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # Overview of privileges

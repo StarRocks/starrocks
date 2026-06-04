@@ -36,7 +36,7 @@ You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kub
 
 - Create a self-managed Kubernetes cluster
 
-  Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) to create a self-managed Kubernetes cluster. You can use [Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) and [Docker Desktop](https://docs.docker.com/desktop/) to create a single-node private Kubernetes cluster with minimum steps.
+  Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs) to create a self-managed Kubernetes cluster. You can use Minikube and Docker Desktop to create a single-node private Kubernetes cluster with minimum steps.
 
 ### Deploy StarRocks Kubernetes Operator
 

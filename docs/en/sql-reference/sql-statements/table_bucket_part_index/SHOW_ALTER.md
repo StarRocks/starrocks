@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Shows the execution status of ongoing ALTER TABLE operations including column changes, schema optimization, and rollup index changes."
+>>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # SHOW ALTER TABLE

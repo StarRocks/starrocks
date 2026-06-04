@@ -16,7 +16,7 @@ StarRocks automatically assigns an empty password to the `root` user when the cl
 
 1. Connect to StarRocks via your MySQL client with the username `root` and an empty password.
 
-   ```Bash
+   ```sh
    # Replace <fe_address> with the IP address (priority_networks) or FQDN 
    # of the FE node you connect to, and replace <query_port> 
    # with the query_port (Default: 9030) you specified in fe.conf.

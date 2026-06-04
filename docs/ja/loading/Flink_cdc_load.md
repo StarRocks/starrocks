@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Flink CDC を使用して MySQL の変更データをリアルタイムでキャプチャし、StarRocks Flink コネクタで StarRocks テーブルに同期する方法。"
 ---
 
 # MySQL からのリアルタイム同期

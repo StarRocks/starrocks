@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.1 版本发布说明：跨集群数据迁移工具、共享存储架构、异步物化视图和 Bug 修复。"
 ---
 
 # StarRocks version 3.1

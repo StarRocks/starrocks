@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TIME型の値を指定されたフォーマットでフォーマットします。"
 ---
 
 # time_format
