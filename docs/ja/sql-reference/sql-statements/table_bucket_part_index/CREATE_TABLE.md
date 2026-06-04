@@ -228,7 +228,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 列のデフォルト値。StarRocksにデータをロードする際、列にマッピングされたソースフィールドが空の場合、StarRocksは自動的に列にデフォルト値を入力します。デフォルト値は以下のいずれかの方法で指定できます。
 
 - **DEFAULT current_timestamp**: 現在時刻をデフォルト値として使用します。詳細については、以下を参照してください。[current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
-- **DEFAULT (<expr>)**: 指定された式または関数によって返される結果をデフォルト値として使用します。以下の式がサポートされています。
+- **DEFAULT (`<expr>`)**: 指定された式または関数によって返される結果をデフォルト値として使用します。以下の式がサポートされています。
   - [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): 一意の識別子を生成します。
   - ARRAYリテラル式 (例: `[1, 2, 3]`): ARRAY型列の場合。
   - MAP式 (例: `map{key: value}`): MAP型列の場合。

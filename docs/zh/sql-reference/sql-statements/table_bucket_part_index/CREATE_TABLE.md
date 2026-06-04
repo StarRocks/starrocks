@@ -228,7 +228,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 列的默认值。当您将数据加载到 StarRocks 中时，如果映射到该列的源字段为空，StarRocks 会自动在该列中填充默认值。您可以通过以下方式之一指定默认值：
 
 - **DEFAULT current_timestamp**：使用当前时间作为默认值。更多信息，请参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
-- **DEFAULT (<expr>)**：使用给定表达式或函数返回的结果作为默认值。支持以下表达式：
+- **DEFAULT (`<expr>`)**：使用给定表达式或函数返回的结果作为默认值。支持以下表达式：
   - [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：生成唯一标识符。
   - ARRAY 字面量表达式（例如，`[1, 2, 3]`）：适用于 ARRAY 类型列。
   - MAP 表达式（例如，`map{key: value}`）：适用于 MAP 类型列。

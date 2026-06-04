@@ -216,7 +216,7 @@ Whether the column is allowed to be `NULL`. By default, `NULL` is specified for 
 The default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT (\<expr\>)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
+- **DEFAULT (`<expr>`)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
   - [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): Generate unique identifiers.
   - ARRAY literal expressions (e.g., `[1, 2, 3]`): For ARRAY type columns.
   - MAP expressions (e.g., `map{key: value}`): For MAP type columns.
