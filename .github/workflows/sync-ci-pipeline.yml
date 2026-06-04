@@ -273,7 +273,7 @@ jobs:
 
   result:
     runs-on: [self-hosted, normal]
-    needs: [ pr-label, build ]
+    needs: [ pr-label, code-checker, build ]
     name: RESULT
     if: >
       always() && (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened')
@@ -303,8 +303,16 @@ jobs:
       # this run cleared it). Mirrors `auto-merge` job's three actions.
       - name: add automerge label (rescue after ERROR clear)
         if: >
-          needs.build.result != 'failure' &&
-          needs.build.result != 'cancelled' &&
+          (
+            needs.build.result == 'success' ||
+            (
+              needs.build.result == 'skipped' &&
+              needs.code-checker.result == 'success' &&
+              needs.code-checker.outputs.output1 != 'true' &&
+              needs.code-checker.outputs.output2 != 'true' &&
+              needs.code-checker.outputs.output3 != 'true'
+            )
+          ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
           contains(needs.pr-label.outputs.labels, 'ERROR') &&
@@ -317,8 +325,16 @@ jobs:
 
       - name: auto-approve (rescue after ERROR clear)
         if: >
-          needs.build.result != 'failure' &&
-          needs.build.result != 'cancelled' &&
+          (
+            needs.build.result == 'success' ||
+            (
+              needs.build.result == 'skipped' &&
+              needs.code-checker.result == 'success' &&
+              needs.code-checker.outputs.output1 != 'true' &&
+              needs.code-checker.outputs.output2 != 'true' &&
+              needs.code-checker.outputs.output3 != 'true'
+            )
+          ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
           contains(needs.pr-label.outputs.labels, 'ERROR') &&
@@ -331,8 +347,16 @@ jobs:
 
       - name: enable automerge (rescue after ERROR clear)
         if: >
-          needs.build.result != 'failure' &&
-          needs.build.result != 'cancelled' &&
+          (
+            needs.build.result == 'success' ||
+            (
+              needs.build.result == 'skipped' &&
+              needs.code-checker.result == 'success' &&
+              needs.code-checker.outputs.output1 != 'true' &&
+              needs.code-checker.outputs.output2 != 'true' &&
+              needs.code-checker.outputs.output3 != 'true'
+            )
+          ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
           contains(needs.pr-label.outputs.labels, 'ERROR') &&
@@ -356,7 +380,7 @@ jobs:
           python3 lib/send_pr_notification.py ${PR_NUMBER} ${REPO} ${BRANCH} ${ACTION_URL} ${build_res}
 
   auto-merge:
-    needs: [pr-label, build]
+    needs: [pr-label, code-checker, build]
     name: Auto Merge
     runs-on: [ self-hosted, sync-normal ]
     if: >
@@ -366,8 +390,16 @@ jobs:
       !contains(needs.pr-label.outputs.labels, 'conflict') &&
       !contains(needs.pr-label.outputs.labels, 'pending') &&
       !contains(needs.pr-label.outputs.labels, 'ERROR') &&
-      needs.build.result != 'failure' &&
-      needs.build.result != 'cancelled'
+      (
+        needs.build.result == 'success' ||
+        (
+          needs.build.result == 'skipped' &&
+          needs.code-checker.result == 'success' &&
+          needs.code-checker.outputs.output1 != 'true' &&
+          needs.code-checker.outputs.output2 != 'true' &&
+          needs.code-checker.outputs.output3 != 'true'
+        )
+      )
     steps:
       - name: clean
         run: |
