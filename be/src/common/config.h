@@ -520,8 +520,8 @@ CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
 // Memory-pressure gate for the parallel prefetch paths used while rebuilding the shared-data
 // primary key index. When the update mem tracker is already past this percent (0-100) of its
 // limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a
-// time, trading the cold-start latency win for bounded peak memory. Currently gates parallel
-// del-file loading; segment-file parallel reads will reuse the same gate.
+// time, trading the cold-start latency win for bounded peak memory. Gates parallel reads of
+// del, segment, and other files during the rebuild.
 CONF_mInt32(pk_index_parallel_rebuild_mem_ratio, "50");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");

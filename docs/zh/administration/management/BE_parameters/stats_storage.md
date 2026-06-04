@@ -914,7 +914,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：百分比（0-100）
 - 是否动态：是
-- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。当前用于门控 `LakePersistentIndex::load_dels` 中的并行 del 文件加载，后续 segment 文件并行读取也将复用该门控。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
+- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
 - 引入版本：-
 
 ### lake_partial_update_thread_pool_max_threads

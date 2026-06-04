@@ -925,7 +925,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: percent (0-100)
 - Is mutable: Yes
-- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It currently gates parallel delete-file loading in `LakePersistentIndex::load_dels`, and segment-file parallel reads will reuse the same gate. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true`).
+- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true`).
 - Introduced in: -
 
 ### lake_partial_update_thread_pool_max_threads
