@@ -16,12 +16,10 @@
 
 #include <unistd.h>
 
-#include <cerrno>
 #include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -32,7 +30,6 @@
 #include "cache/datacache_metrics.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
-#include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/disk_info.h"
 #include "compute_env/load/stream_load_metrics.h"
@@ -40,6 +37,8 @@
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
+#include "http/http_metrics.h"
 #include "io/io_profiler_metrics.h"
 #include "platform/http/http_metrics.h"
 #include "platform/key_cache.h"
@@ -65,84 +64,9 @@ namespace {
 
 const char* const kRuntimeMetricsHookName = "runtime_metrics";
 
-bool is_known_disk_device_name(const std::string& dev) {
-    for (int i = 0; i < DiskInfo::num_disks(); ++i) {
-        if (DiskInfo::device_name(i) == dev) {
-            return true;
-        }
-    }
-    return false;
-}
-
-Status get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices) {
-    std::vector<std::string> real_paths;
-    real_paths.reserve(paths.size());
-    for (const auto& path : paths) {
-        std::string real_path;
-        Status st = fs::canonicalize(path, &real_path);
-        if (!st.ok()) {
-            WARN_IF_ERROR(st, "canonicalize path " + path + " failed, skip disk monitoring of this path");
-            continue;
-        }
-        real_paths.emplace_back(std::move(real_path));
-    }
-
-    FILE* fp = fopen("/proc/mounts", "r");
-    if (fp == nullptr) {
-        std::stringstream ss;
-        char buf[64];
-        ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
-
-    Status status;
-    char* line_ptr = nullptr;
-    size_t line_buf_size = 0;
-    for (const auto& path : real_paths) {
-        size_t max_mount_size = 0;
-        std::string match_dev;
-        rewind(fp);
-        while (getline(&line_ptr, &line_buf_size, fp) > 0) {
-            char dev_path[4096];
-            char mount_path[4096];
-            int num = sscanf(line_ptr, "%4095s %4095s", dev_path, mount_path);
-            if (num < 2) {
-                continue;
-            }
-            size_t mount_size = strlen(mount_path);
-            if (mount_size < max_mount_size || path.size() < mount_size ||
-                strncmp(path.c_str(), mount_path, mount_size) != 0) {
-                continue;
-            }
-            std::string dev = std::filesystem::path(dev_path).filename().string();
-            if (is_known_disk_device_name(dev)) {
-                max_mount_size = mount_size;
-                match_dev = std::move(dev);
-            }
-        }
-        if (ferror(fp) != 0) {
-            std::stringstream ss;
-            char buf[64];
-            ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
-            LOG(WARNING) << ss.str();
-            status = Status::InternalError(ss.str());
-            break;
-        }
-        if (max_mount_size > 0) {
-            devices->emplace(match_dev);
-        }
-    }
-    if (line_ptr != nullptr) {
-        free(line_ptr);
-    }
-    fclose(fp);
-    return status;
-}
-
 bool prepare_system_metrics_inputs(const BackendMetricsInitOptions& options, std::set<std::string>* disk_devices,
                                    std::vector<std::string>* network_interfaces) {
-    auto st = get_disk_devices(options.storage_paths, disk_devices);
+    auto st = DiskInfo::get_disk_devices(options.storage_paths, disk_devices);
     if (!st.ok()) {
         LOG(WARNING) << "get disk devices failed, status=" << st.message();
         return false;
