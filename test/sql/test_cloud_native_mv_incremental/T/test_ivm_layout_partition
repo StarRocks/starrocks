@@ -1,0 +1,168 @@
+-- name: test_ivm_range_partition @cloud
+CREATE TABLE rp (id BIGINT, dt DATE, v BIGINT) DUPLICATE KEY(id, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO rp VALUES (1,'2026-01-10',10),(2,'2026-02-10',20),(3,'2026-03-10',30);
+CREATE MATERIALIZED VIEW mv_rp
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, dt, v FROM rp;
+REFRESH MATERIALIZED VIEW mv_rp WITH SYNC MODE;
+SELECT id, dt, v FROM mv_rp ORDER BY id;
+INSERT INTO rp VALUES (4,'2026-01-20',40),(5,'2026-03-20',50);
+REFRESH MATERIALIZED VIEW mv_rp WITH SYNC MODE;
+SELECT id, dt, v FROM mv_rp ORDER BY id;
+SELECT COUNT(*) AS mv_rows FROM mv_rp;
+SELECT COUNT(*) AS base_rows FROM rp;
+SELECT COUNT(*) AS diff FROM (SELECT id, dt, v FROM mv_rp EXCEPT SELECT id, dt, v FROM rp) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, dt, v FROM rp EXCEPT SELECT id, dt, v FROM mv_rp) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_rp%' OR DEFINITION LIKE '%mv_rp%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_list_partition @cloud
+CREATE TABLE lp (id BIGINT, region VARCHAR(8), v BIGINT) DUPLICATE KEY(id, region)
+PARTITION BY LIST(region) (
+    PARTITION pcn VALUES IN ('CN'),
+    PARTITION pus VALUES IN ('US'),
+    PARTITION pjp VALUES IN ('JP'))
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO lp VALUES (1,'CN',10),(2,'US',20);
+CREATE MATERIALIZED VIEW mv_lp
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, region, v FROM lp;
+REFRESH MATERIALIZED VIEW mv_lp WITH SYNC MODE;
+SELECT id, region, v FROM mv_lp ORDER BY id;
+INSERT INTO lp VALUES (3,'CN',30),(4,'JP',40);
+REFRESH MATERIALIZED VIEW mv_lp WITH SYNC MODE;
+SELECT id, region, v FROM mv_lp ORDER BY id;
+SELECT COUNT(*) AS mv_rows FROM mv_lp;
+SELECT COUNT(*) AS base_rows FROM lp;
+SELECT COUNT(*) AS diff FROM (SELECT id, region, v FROM mv_lp EXCEPT SELECT id, region, v FROM lp) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, region, v FROM lp EXCEPT SELECT id, region, v FROM mv_lp) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_lp%' OR DEFINITION LIKE '%mv_lp%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_expr_partition @cloud
+CREATE TABLE epb (id BIGINT, ts DATETIME, v BIGINT) DUPLICATE KEY(id)
+PARTITION BY date_trunc('day', ts)
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO epb VALUES (1,'2026-01-10 10:00:00',10),(2,'2026-01-11 11:00:00',20);
+CREATE MATERIALIZED VIEW mv_ep
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, ts, v FROM epb;
+REFRESH MATERIALIZED VIEW mv_ep WITH SYNC MODE;
+SELECT id, ts, v FROM mv_ep ORDER BY id;
+INSERT INTO epb VALUES (3,'2026-01-12 09:00:00',30),(4,'2026-01-10 18:00:00',40);
+REFRESH MATERIALIZED VIEW mv_ep WITH SYNC MODE;
+SELECT id, ts, v FROM mv_ep ORDER BY id;
+SELECT COUNT(*) AS mv_rows FROM mv_ep;
+SELECT COUNT(*) AS base_rows FROM epb;
+SELECT COUNT(*) AS diff FROM (SELECT id, ts, v FROM mv_ep EXCEPT SELECT id, ts, v FROM epb) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, ts, v FROM epb EXCEPT SELECT id, ts, v FROM mv_ep) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ep%' OR DEFINITION LIKE '%mv_ep%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_partitioned_mv @cloud
+CREATE TABLE pmb (id BIGINT, dt DATE, v BIGINT) DUPLICATE KEY(id, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pmb VALUES (1,'2026-01-10',10),(2,'2026-02-10',20);
+CREATE MATERIALIZED VIEW mv_pm
+PARTITION BY dt
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, dt, v FROM pmb;
+REFRESH MATERIALIZED VIEW mv_pm WITH SYNC MODE;
+SELECT id, dt, v FROM mv_pm ORDER BY id;
+INSERT INTO pmb VALUES (3,'2026-01-20',30),(4,'2026-03-10',40);
+REFRESH MATERIALIZED VIEW mv_pm WITH SYNC MODE;
+SELECT id, dt, v FROM mv_pm ORDER BY id;
+SELECT COUNT(*) AS mv_rows FROM mv_pm;
+SELECT COUNT(*) AS base_rows FROM pmb;
+SELECT COUNT(*) AS diff FROM (SELECT id, dt, v FROM mv_pm EXCEPT SELECT id, dt, v FROM pmb) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, dt, v FROM pmb EXCEPT SELECT id, dt, v FROM mv_pm) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_pm%' OR DEFINITION LIKE '%mv_pm%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_agg_on_partitioned @cloud
+CREATE TABLE aop (id BIGINT, dt DATE, region VARCHAR(8), amt BIGINT) DUPLICATE KEY(id, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'))
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO aop VALUES (1,'2026-01-10','CN',10),(2,'2026-02-10','CN',20),(3,'2026-01-15','US',5);
+CREATE MATERIALIZED VIEW mv_aop
+DISTRIBUTED BY HASH(region) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, SUM(amt) AS s, COUNT(*) AS c FROM aop GROUP BY region;
+REFRESH MATERIALIZED VIEW mv_aop WITH SYNC MODE;
+SELECT region, s, c FROM mv_aop ORDER BY region;
+INSERT INTO aop VALUES (4,'2026-02-20','US',7),(5,'2026-01-25','CN',3);
+REFRESH MATERIALIZED VIEW mv_aop WITH SYNC MODE;
+SELECT region, s, c FROM mv_aop ORDER BY region;
+SELECT COUNT(*) AS mv_rows FROM mv_aop;
+SELECT COUNT(*) AS base_rows FROM (SELECT region FROM aop GROUP BY region) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, s, c FROM mv_aop EXCEPT SELECT region, SUM(amt), COUNT(*) FROM aop GROUP BY region
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT region, SUM(amt), COUNT(*) FROM aop GROUP BY region EXCEPT SELECT region, s, c FROM mv_aop
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_aop%' OR DEFINITION LIKE '%mv_aop%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_add_partition @cloud
+CREATE TABLE apb (id BIGINT, dt DATE, v BIGINT) DUPLICATE KEY(id, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'))
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO apb VALUES (1,'2026-01-10',10),(2,'2026-02-10',20);
+CREATE MATERIALIZED VIEW mv_ap
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, dt, v FROM apb;
+REFRESH MATERIALIZED VIEW mv_ap WITH SYNC MODE;
+SELECT id, dt, v FROM mv_ap ORDER BY id;
+ALTER TABLE apb ADD PARTITION p3 VALUES LESS THAN ('2026-04-01');
+INSERT INTO apb VALUES (3,'2026-03-10',30),(4,'2026-01-20',40);
+REFRESH MATERIALIZED VIEW mv_ap WITH SYNC MODE;
+SELECT id, dt, v FROM mv_ap ORDER BY id;
+SELECT COUNT(*) AS mv_rows FROM mv_ap;
+SELECT COUNT(*) AS base_rows FROM apb;
+SELECT COUNT(*) AS diff FROM (SELECT id, dt, v FROM mv_ap EXCEPT SELECT id, dt, v FROM apb) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, dt, v FROM apb EXCEPT SELECT id, dt, v FROM mv_ap) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ap%' OR DEFINITION LIKE '%mv_ap%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

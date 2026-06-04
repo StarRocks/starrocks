@@ -1,0 +1,226 @@
+-- name: test_ivm_drop_partition_rejected @cloud
+CREATE TABLE tr_dp (k INT, dt DATE, v BIGINT) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tr_dp VALUES (1,'2026-01-10',10),(2,'2026-02-10',20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tr_dp
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, dt, v FROM tr_dp;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_tr_dp WITH SYNC MODE;
+SELECT k, dt, v FROM mv_tr_dp ORDER BY k;
+-- result:
+1	2026-01-10	10
+2	2026-02-10	20
+-- !result
+ALTER TABLE tr_dp DROP PARTITION p1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_tr_dp WITH SYNC MODE;
+SELECT k, dt, v FROM mv_tr_dp ORDER BY k;
+-- result:
+1	2026-01-10	10
+2	2026-02-10	20
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_tr_dp;
+-- result:
+2
+-- !result
+SELECT COUNT(*) AS base_rows FROM tr_dp;
+-- result:
+1
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%non-append-only change on base table%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_dp%' OR DEFINITION LIKE '%mv_tr_dp%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result
+-- name: test_ivm_truncate_partition_rejected @cloud
+CREATE TABLE tr_tp (k INT, dt DATE, v BIGINT) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tr_tp VALUES (1,'2026-01-10',10),(2,'2026-02-10',20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tr_tp
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, dt, v FROM tr_tp;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_tr_tp WITH SYNC MODE;
+SELECT k, dt, v FROM mv_tr_tp ORDER BY k;
+-- result:
+1	2026-01-10	10
+2	2026-02-10	20
+-- !result
+TRUNCATE TABLE tr_tp PARTITION p1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_tr_tp WITH SYNC MODE;
+SELECT k, dt, v FROM mv_tr_tp ORDER BY k;
+-- result:
+1	2026-01-10	10
+2	2026-02-10	20
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_tr_tp;
+-- result:
+2
+-- !result
+SELECT COUNT(*) AS base_rows FROM tr_tp;
+-- result:
+1
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%non-append-only change on base table%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_tp%' OR DEFINITION LIKE '%mv_tr_tp%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result
+-- name: test_ivm_truncate_table_rejected @cloud
+CREATE TABLE tr_tt (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tr_tt VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tr_tt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM tr_tt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_tr_tt WITH SYNC MODE;
+SELECT k, v FROM mv_tr_tt ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+TRUNCATE TABLE tr_tt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_tr_tt WITH SYNC MODE;
+SELECT k, v FROM mv_tr_tt ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_tr_tt;
+-- result:
+2
+-- !result
+SELECT COUNT(*) AS base_rows FROM tr_tt;
+-- result:
+0
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%non-append-only change on base table%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_tt%' OR DEFINITION LIKE '%mv_tr_tt%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result
+-- name: test_ivm_insert_overwrite_rejected @cloud
+CREATE TABLE tr_io (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tr_io VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tr_io
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM tr_io;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_tr_io WITH SYNC MODE;
+SELECT k, v FROM mv_tr_io ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+INSERT OVERWRITE tr_io VALUES (1,111),(9,99);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_tr_io WITH SYNC MODE;
+SELECT k, v FROM mv_tr_io ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%non-append-only change on base table%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_io%' OR DEFINITION LIKE '%mv_tr_io%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result
+-- name: test_ivm_bucket_reshard_rejected @cloud
+CREATE TABLE tr_rs (k INT, dt DATE, v BIGINT) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tr_rs VALUES (1,'2026-01-10',10),(2,'2026-02-10',20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tr_rs
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, dt, v FROM tr_rs;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_tr_rs WITH SYNC MODE;
+SELECT k, dt, v FROM mv_tr_rs ORDER BY k;
+-- result:
+1	2026-01-10	10
+2	2026-02-10	20
+-- !result
+ALTER TABLE tr_rs PARTITIONS (p2) DISTRIBUTED BY HASH(k) BUCKETS 8;
+-- result:
+-- !result
+INSERT INTO tr_rs VALUES (3,'2026-02-20',30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_tr_rs WITH SYNC MODE;
+SELECT k, dt, v FROM mv_tr_rs ORDER BY k;
+-- result:
+1	2026-01-10	10
+2	2026-02-10	20
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_tr_rs';
+-- result:
+false
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%not active due to base-table optimized%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_rs%' OR DEFINITION LIKE '%mv_tr_rs%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result

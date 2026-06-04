@@ -1,0 +1,163 @@
+-- name: test_ivm_add_column @cloud
+CREATE TABLE sc_add (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO sc_add VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sc_add
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM sc_add;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sc_add WITH SYNC MODE;
+SELECT k, v FROM mv_sc_add ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+ALTER TABLE sc_add ADD COLUMN w INT DEFAULT "0";
+-- result:
+-- !result
+INSERT INTO sc_add VALUES (3,30,300);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sc_add WITH SYNC MODE;
+SELECT k, v FROM mv_sc_add ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_sc_add;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM sc_add;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_sc_add EXCEPT SELECT k, v FROM sc_add) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM sc_add EXCEPT SELECT k, v FROM mv_sc_add) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_sc_add%' OR DEFINITION LIKE '%mv_sc_add%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_drop_column @cloud
+CREATE TABLE sc_drop (k INT, v BIGINT, w INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO sc_drop VALUES (1,10,100),(2,20,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sc_drop
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM sc_drop;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sc_drop WITH SYNC MODE;
+SELECT k, v FROM mv_sc_drop ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+ALTER TABLE sc_drop DROP COLUMN w;
+-- result:
+-- !result
+INSERT INTO sc_drop VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sc_drop WITH SYNC MODE;
+SELECT k, v FROM mv_sc_drop ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_sc_drop;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM sc_drop;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_sc_drop EXCEPT SELECT k, v FROM sc_drop) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM sc_drop EXCEPT SELECT k, v FROM mv_sc_drop) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_sc_drop%' OR DEFINITION LIKE '%mv_sc_drop%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_modify_column_rejected @cloud
+CREATE TABLE sc_mod (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO sc_mod VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sc_mod
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM sc_mod;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sc_mod WITH SYNC MODE;
+SELECT k, v FROM mv_sc_mod ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+ALTER TABLE sc_mod MODIFY COLUMN v BIGINT;
+-- result:
+-- !result
+INSERT INTO sc_mod VALUES (3,30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_sc_mod WITH SYNC MODE;
+SELECT k, v FROM mv_sc_mod ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_sc_mod';
+-- result:
+false
+-- !result
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%not active due to base table schema changed%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_sc_mod%' OR DEFINITION LIKE '%mv_sc_mod%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result
