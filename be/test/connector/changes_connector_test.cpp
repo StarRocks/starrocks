@@ -322,7 +322,7 @@ protected:
                     rmeta->set_max_compact_input_rowset_id(spec.id);
                 }
                 if (!spec.segment_path.empty()) {
-                    rmeta->mutable_segments()->Add()->assign(spec.segment_path);
+                    rmeta->add_segment_metas()->set_filename(spec.segment_path);
                 }
             }
         }

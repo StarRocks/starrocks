@@ -181,11 +181,9 @@ static void write_data_and_increase_visible_version(TabletContext& ctx, TabletMa
         auto* rowset = tablet_meta->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
-        for (const auto& file : writer->segments()) {
-            segs->Add(std::string(file.path));
-            segs_size->Add(file.size.value());
+        uint32_t segment_index = 0;
+        for (const auto& file : files) {
+            file.to_proto(segment_index++, rowset->add_segment_metas());
         }
         writer->close();
     }

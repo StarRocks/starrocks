@@ -60,7 +60,7 @@ public:
     // Requires:
     //  - segment_start >= 0
     //  - segment_end > segment_start
-    //  - segment_end <= metadata.segments_size()
+    //  - segment_end <= metadata.segment_metas_size()
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
                     int32_t segment_start, int32_t segment_end);
 

@@ -77,7 +77,7 @@ public:
             rowset->set_overlapped(true);
             rowset->set_num_rows(100);
             rowset->set_data_size(1024);
-            rowset->add_segments(segment);
+            rowset->add_segment_metas()->set_filename(segment);
         }
 
         // Add sstable files
@@ -441,8 +441,8 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_build_rowset_index_with_metadata) {
     ASSERT_EQ(index.size(), 2);
     ASSERT_TRUE(index.contains(1));
     ASSERT_TRUE(index.contains(2));
-    ASSERT_EQ(index[1]->segments_size(), 1);
-    ASSERT_EQ(index[2]->segments_size(), 1);
+    ASSERT_EQ(index[1]->segment_metas_size(), 1);
+    ASSERT_EQ(index[2]->segment_metas_size(), 1);
 }
 
 // Test build_rowset_index with null metadata
@@ -1144,9 +1144,9 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_bundle_files) {
 
     // Create pre-version metadata with bundle file
     auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {"segment1.dat"});
-    // Add bundle_file_offsets to make it a bundle file
+    // Set bundle_file_offset to make it a bundle file
     auto* rowset = pre_metadata->mutable_rowsets(0);
-    rowset->add_bundle_file_offsets(0);
+    rowset->mutable_segment_metas(0)->set_bundle_file_offset(0);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
 
     // Create new-version metadata without this rowset
