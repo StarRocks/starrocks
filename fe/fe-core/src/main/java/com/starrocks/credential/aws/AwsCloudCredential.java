@@ -48,6 +48,7 @@ import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
 import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.services.sts.auth.StsWebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
 import java.util.Map;
@@ -202,9 +203,17 @@ public class AwsCloudCredential implements CloudCredential {
         } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (useWebIdentityProfile) {
-            // Reads AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN from env vars via the default chain,
-            // mirroring BE's STSAssumeRoleWebIdentityCredentialsProvider behaviour.
-            return DefaultCredentialsProvider.builder().build();
+            StsClientBuilder stsClientBuilder = StsClient.builder();
+            if (!stsRegion.isEmpty()) {
+                stsClientBuilder.region(Region.of(stsRegion));
+            }
+            if (!stsEndpoint.isEmpty()) {
+                stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(stsEndpoint));
+            }
+            return StsWebIdentityTokenFileCredentialsProvider.builder()
+                    .stsClient(stsClientBuilder.build())
+                    .asyncCredentialUpdateEnabled(true)
+                    .build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
                 return StaticCredentialsProvider.create(
