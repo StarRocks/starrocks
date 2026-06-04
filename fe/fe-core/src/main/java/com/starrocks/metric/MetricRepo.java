@@ -978,6 +978,18 @@ public final class MetricRepo {
                 "total sampler invocations driven by Sample-Based Tablet Pre-Split");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS);
 
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED = new LongCounterMetric(
+                "tablet_pre_split_partitions_capped", MetricUnit.REQUESTS,
+                "total predicted partitions dropped by the Sample-Based Tablet Pre-Split per-load cap "
+                        + "(tablet_pre_split_max_partitions_per_load)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = new LongCounterMetric(
+                "tablet_pre_split_partitions_total", MetricUnit.REQUESTS,
+                "total target partitions counted by the Sample-Based Tablet Pre-Split "
+                        + "multi-partition coordinator (one increment per PartitionSamples entry)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL);
+
         // BCDR/External Snapshot Metrics
         COUNTER_EXTERNAL_SNAPSHOT_JOB_NUM = new LongCounterMetric("external_snapshot_job_num", MetricUnit.REQUESTS,
                 "total number of external snapshot jobs");
@@ -993,18 +1005,6 @@ public final class MetricRepo {
                 "timestamp of last successful external snapshot job when FE image was created");
         GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME);
-
-        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED = new LongCounterMetric(
-                "tablet_pre_split_partitions_capped", MetricUnit.REQUESTS,
-                "total predicted partitions dropped by the Sample-Based Tablet Pre-Split per-load cap "
-                        + "(tablet_pre_split_max_partitions_per_load)");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED);
-
-        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = new LongCounterMetric(
-                "tablet_pre_split_partitions_total", MetricUnit.REQUESTS,
-                "total target partitions counted by the Sample-Based Tablet Pre-Split "
-                        + "multi-partition coordinator (one increment per PartitionSamples entry)");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
