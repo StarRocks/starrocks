@@ -162,7 +162,7 @@ ALTER TABLE t DROP index idx;
 
 **注記:**
 
-- クエリ中、キーワードは「`%`」を使用してあいまい一致させることができます。形式は「`%keyword%`」です。ただし、キーワードは単語の一部を含んでいる必要があります。例えば、キーワードが「<code>starrocks </code>」の場合、スペースが含まれているため、単語「`starrocks`」とは一致しません。
+- クエリ中、キーワードは「`%`」を使用してあいまい一致させることができます。形式は「`%keyword%`」です。ただし、キーワードは単語の一部を含んでいる必要があります。例えば、キーワードが「`starrocks `」の場合、スペースが含まれているため、単語「`starrocks`」とは一致しません。
 
   ```SQL
   MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "star%";

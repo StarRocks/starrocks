@@ -96,11 +96,11 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 #### 管理查询并发数量
 
-当正在运行的查询数量 `num_running_queries` 超过全局粒度或资源组粒度的 `concurrency_limit`  时，新到来的查询会进行排队。在 &lt; v3.1.4  和 &ge; v3.1.4 版本中，获取 `num_running_queries` 的方式不同。
+当正在运行的查询数量 `num_running_queries` 超过全局粒度或资源组粒度的 `concurrency_limit`  时，新到来的查询会进行排队。在 `<` v3.1.4  和 `>=` v3.1.4 版本中，获取 `num_running_queries` 的方式不同。
 
-- &lt; v3.1.4 版本，`num_running_queries` 由 BE 周期性汇报得出正在运行的查询数量，汇报周期为 `report_resource_usage_interval_ms`。所以，系统对于 `num_running_queries` 的变化感知会有一定的延迟。例如，如果当下 BE 汇报的 `num_running_queries` 没有超过全局粒度和资源组粒度的 `concurrency_limit`，但是在下次汇报前如果发起了大量查询，超过了 `concurrency_limit` 的限制，那么这些新查询也都会执行，而不会进行排队。
+- `<` v3.1.4 版本，`num_running_queries` 由 BE 周期性汇报得出正在运行的查询数量，汇报周期为 `report_resource_usage_interval_ms`。所以，系统对于 `num_running_queries` 的变化感知会有一定的延迟。例如，如果当下 BE 汇报的 `num_running_queries` 没有超过全局粒度和资源组粒度的 `concurrency_limit`，但是在下次汇报前如果发起了大量查询，超过了 `concurrency_limit` 的限制，那么这些新查询也都会执行，而不会进行排队。
 
-- &ge; v3.1.4 版本，所有 FE 正在运行的查询数量 `num_running_queries` 由 Leader FE 集中管理。每个 Follower FE 在发起和结束一个查询时，会通知 Leader FE，从而可以应对短时间内查询激增超过了 `concurrency_limit` 的场景。
+- `>=` v3.1.4 版本，所有 FE 正在运行的查询数量 `num_running_queries` 由 Leader FE 集中管理。每个 Follower FE 在发起和结束一个查询时，会通知 Leader FE，从而可以应对短时间内查询激增超过了 `concurrency_limit` 的场景。
 
 ### 配置 Query Queue v1
 

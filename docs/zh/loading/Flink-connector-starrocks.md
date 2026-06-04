@@ -333,26 +333,26 @@ Flink connector JAR 文件的命名格式如下：
 
 ## 数据类型映射
 
-| Flink 数据类型                    | StarRocks 数据类型 |
-| --------------------------------- | ------------------ |
-| BOOLEAN                           | BOOLEAN            |
-| TINYINT                           | TINYINT            |
-| SMALLINT                          | SMALLINT           |
-| INTEGER                           | INTEGER            |
-| BIGINT                            | BIGINT             |
-| FLOAT                             | FLOAT              |
-| DOUBLE                            | DOUBLE             |
-| DECIMAL                           | DECIMAL            |
-| BINARY                            | INT                |
-| CHAR                              | STRING             |
-| VARCHAR                           | STRING             |
-| STRING                            | STRING             |
-| DATE                              | DATE               |
-| TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME           |
-| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME           |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;     |
-| MAP&lt;KT,VT&gt;                  | JSON STRING        |
-| ROW&lt;arg T...&gt;               | JSON STRING        |
+| Flink 数据类型                      | StarRocks 数据类型 |
+| ----------------------------------- | ------------------ |
+| `BOOLEAN`                           | `BOOLEAN`          |
+| `TINYINT`                           | `TINYINT`          |
+| `SMALLINT`                          | `SMALLINT`         |
+| `INTEGER`                           | `INTEGER`          |
+| `BIGINT`                            | `BIGINT`           |
+| `FLOAT`                             | `FLOAT`            |
+| `DOUBLE`                            | `DOUBLE`           |
+| `DECIMAL`                           | `DECIMAL`          |
+| `BINARY`                            | `INT`              |
+| `CHAR`                              | `STRING`           |
+| `VARCHAR`                           | `STRING`           |
+| `STRING`                            | `STRING`           |
+| `DATE`                              | `DATE`             |
+| `TIMESTAMP_WITHOUT_TIME_ZONE(N)`    | `DATETIME`         |
+| `TIMESTAMP_WITH_LOCAL_TIME_ZONE(N)` | `DATETIME`         |
+| `ARRAY<T>`                          | `ARRAY<T>`         |
+| `MAP<KT,VT>`                        | `JSON STRING`      |
+| `ROW<arg T...>                      | `JSON STRING`      |
 
 ## 使用说明
 
