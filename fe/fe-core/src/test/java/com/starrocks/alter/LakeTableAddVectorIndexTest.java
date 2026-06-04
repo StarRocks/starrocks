@@ -110,6 +110,34 @@ public class LakeTableAddVectorIndexTest {
                         VECTOR_INDEX_PROPS + ")");
     }
 
+    /** Create a vector table that already carries the VECTOR index at CREATE TABLE time. */
+    private static LakeTable createVectorTableWithIndex(String name) throws Exception {
+        return createTable(
+                "CREATE TABLE " + name + " (" +
+                        "  id BIGINT NOT NULL," +
+                        "  v  ARRAY<FLOAT> NOT NULL," +
+                        "  INDEX idx_v (v) USING VECTOR (" + VECTOR_INDEX_PROPS + ")" +
+                        ") DUPLICATE KEY(id)" +
+                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
+                        " PROPERTIES('replication_num'='1')");
+    }
+
+    /**
+     * Create a vector table with two scalar key columns so the sort key can be reordered
+     * (ALTER ... ORDER BY), which exercises the sort-key-only schema-change path.
+     */
+    private static LakeTable createVectorTableTwoKeys(String name) throws Exception {
+        return createTable(
+                "CREATE TABLE " + name + " (" +
+                        "  id BIGINT NOT NULL," +
+                        "  k  BIGINT NOT NULL," +
+                        "  v  ARRAY<FLOAT> NOT NULL," +
+                        "  INDEX idx_v (v) USING VECTOR (" + VECTOR_INDEX_PROPS + ")" +
+                        ") DUPLICATE KEY(id, k)" +
+                        " DISTRIBUTED BY HASH(id) BUCKETS 1" +
+                        " PROPERTIES('replication_num'='1')");
+    }
+
     /**
      * Retrieve the single pending {@link LakeTableSchemaChangeJob} for {@code table},
      * asserting exactly one job exists and that it is a {@code LakeTableSchemaChangeJob}.
@@ -280,6 +308,80 @@ public class LakeTableAddVectorIndexTest {
                 long vibv = ((LakeTablet) shadowTablet).getVectorIndexBuiltVersion();
                 Assertions.assertEquals(vSnap, vibv,
                         "shadow tablet vibv must survive GSON round-trip, expected " + vSnap + " got " + vibv);
+            }
+        }
+    }
+
+    /**
+     * Regression: a rewrite that does NOT change indexes (here, ADD a key column → non-fast
+     * schema change) on a table that already has a VECTOR index must still stamp the shadow
+     * tablets' vibv = V_snap.
+     *
+     * <p>The conversion writer force-inline-builds the vector index over all existing data
+     * regardless of whether this ALTER touches indexes (see DirectSchemaChange in
+     * be/src/storage/lake/schema_change.cpp). If vibv were left 0 for this case (the prior
+     * behavior, which gated stamping on {@code hasIndexChanged}), the async
+     * {@link VectorIndexBuildScheduler} would redundantly rebuild the entire existing dataset
+     * after the ALTER.
+     *
+     * <p>This test FAILS before the fix (vibv == 0) and PASSES after (vibv == V_snap).
+     */
+    @Test
+    public void testNonIndexChangeRewriteStampsVibvWhenTableHasVectorIndex() throws Exception {
+        // Table already carries the VECTOR index, so this ALTER does not change indexes.
+        LakeTable table = createVectorTableWithIndex("t_vibv_rewrite");
+
+        PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
+        long vSnap = pp.getVisibleVersion();
+
+        // Adding a KEY column forces a real (non-fast) lake schema change with shadow tablets,
+        // without altering the index set (hasIndexChanged == false).
+        alterTable("ALTER TABLE t_vibv_rewrite ADD COLUMN k2 BIGINT KEY DEFAULT \"0\" AFTER id");
+
+        LakeTableSchemaChangeJob job = getSinglePendingJob(table);
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = getPartitionIndexMap(job);
+
+        Assertions.assertFalse(partitionIndexMap.cellSet().isEmpty(),
+                "physicalPartitionIndexMap must contain at least one shadow index");
+        for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
+            for (Tablet shadowTablet : cell.getValue().getTablets()) {
+                Assertions.assertInstanceOf(LakeTablet.class, shadowTablet);
+                long vibv = ((LakeTablet) shadowTablet).getVectorIndexBuiltVersion();
+                Assertions.assertEquals(vSnap, vibv,
+                        "shadow tablet vibv must equal V_snap=" + vSnap +
+                                " even though this ALTER does not change indexes, got " + vibv);
+            }
+        }
+    }
+
+    /**
+     * A sort-key change (ALTER ... ORDER BY → SortedSchemaChange) on a table with a VECTOR index
+     * rewrites the existing data through the conversion writer with an inline vector-index build,
+     * so the shadow tablets are stamped with vibv = V_snap to let the async build scheduler skip
+     * the already-built data. Verifies the shadow tablets carry vibv = V_snap.
+     */
+    @Test
+    public void testSortKeyChangeStampsVibvWhenTableHasVectorIndex() throws Exception {
+        LakeTable table = createVectorTableTwoKeys("t_vibv_sortkey");
+
+        PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
+        long vSnap = pp.getVisibleVersion();
+
+        // Sort-key change routes through createJobForProcessModifySortKeyColumn (indexes == null).
+        alterTable("ALTER TABLE t_vibv_sortkey ORDER BY (k, id)");
+
+        LakeTableSchemaChangeJob job = getSinglePendingJob(table);
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = getPartitionIndexMap(job);
+
+        Assertions.assertFalse(partitionIndexMap.cellSet().isEmpty(),
+                "physicalPartitionIndexMap must contain at least one shadow index");
+        for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
+            for (Tablet shadowTablet : cell.getValue().getTablets()) {
+                Assertions.assertInstanceOf(LakeTablet.class, shadowTablet);
+                long vibv = ((LakeTablet) shadowTablet).getVectorIndexBuiltVersion();
+                Assertions.assertEquals(vSnap, vibv,
+                        "sort-key-change shadow tablet vibv must equal V_snap=" + vSnap +
+                                " (indexes==null → fallback to table.getIndexes()), got " + vibv);
             }
         }
     }
