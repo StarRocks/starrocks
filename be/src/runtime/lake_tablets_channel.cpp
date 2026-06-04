@@ -462,6 +462,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
+    // `watch` starts immediately before acquiring the shared lock, so the elapsed time at this
+    // point is the time spent waiting for `_rw_mtx` (e.g. blocked behind an open/incremental_open
+    // holding the exclusive lock). Report it back to the sender so lock contention is observable.
+    int64_t wait_lock_time_ns = watch.elapsed_time();
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -678,9 +682,27 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // we need to proactively perform a flush when memory resources are insufficient.
     _flush_stale_memtables();
 
-    response->set_execution_time_us(watch.elapsed_time() / 1000);
-    response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
-    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_ns / 1000);
+    // `add_chunks` (repeated-chunk RPC, enable_load_colocate_mv) reuses one response across all
+    // indexes, calling add_chunk() once per index. Accumulate every timing field so the reported
+    // value covers the whole RPC instead of only the last index. For the common single-chunk path
+    // the response starts empty, so this is equivalent to a plain set.
+    int64_t last_execution_time_us = 0;
+    int64_t last_wait_lock_time_us = 0;
+    int64_t last_wait_memtable_flush_time_us = 0;
+    int64_t last_wait_writer_time_us = 0;
+    if (response->has_execution_time_us()) {
+        last_execution_time_us = response->execution_time_us();
+        last_wait_lock_time_us = response->wait_lock_time_us();
+        last_wait_memtable_flush_time_us = response->wait_memtable_flush_time_us();
+        last_wait_writer_time_us = response->wait_writer_time_us();
+    }
+    response->set_execution_time_us(last_execution_time_us + watch.elapsed_time() / 1000);
+    response->set_wait_lock_time_us(last_wait_lock_time_us + wait_lock_time_ns / 1000);
+    response->set_wait_memtable_flush_time_us(last_wait_memtable_flush_time_us + wait_memtable_flush_time_ns / 1000);
+    // Time blocked in count_down_latch.wait() above, i.e. waiting for the async delta-writer
+    // write()/finish() callbacks. Lets the sender separate "waiting for the writer" from the
+    // lock wait and the memtable-flush back-pressure wait.
+    response->set_wait_writer_time_us(last_wait_writer_time_us + (finish_wait_writer_ts - start_wait_writer_ts) / 1000);
 
     if (!close_channel && request.wait_all_sender_close()) {
         _num_initial_senders.fetch_sub(1);
