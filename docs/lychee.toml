@@ -74,6 +74,7 @@ method = "get"
      "https://openjdk.org/*",
      "https://search.maven.org/*",
      "https://gist.github.com/*",
+     "https://cloud.tencent.com/*",
      "https://kubernetes.io/*",
      "https://github.com/*",
      "https://www.linkedin.com/*",
