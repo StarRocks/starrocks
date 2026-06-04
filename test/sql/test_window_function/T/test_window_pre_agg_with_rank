@@ -37,6 +37,43 @@ INSERT INTO t2 (c4, c5, c6) VALUES
 (5, 2, 22),
 (6, 2, 222);
 
+CREATE TABLE t_rank_count_call (
+    site_id INT NOT NULL,
+    caller VARCHAR(20) NOT NULL,
+    order_no VARCHAR(20) NOT NULL,
+    network_code VARCHAR(20) NOT NULL,
+    start_time DATETIME NOT NULL,
+    org_code VARCHAR(20) NULL
+)
+DUPLICATE KEY(site_id)
+DISTRIBUTED BY HASH(site_id) BUCKETS 4
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+CREATE TABLE t_rank_count_org (
+    org_code VARCHAR(20) NOT NULL,
+    org_name VARCHAR(20) NOT NULL
+)
+DUPLICATE KEY(org_code)
+DISTRIBUTED BY HASH(org_code) BUCKETS 4
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t_rank_count_call VALUES
+(1, '13181698468', 'o1', '370001', '2026-06-01 09:00:00', 'a'),
+(2, '13181698468', 'o1', '370001', '2026-06-01 09:01:00', 'b'),
+(3, '13181698468', 'o1', '370001', '2026-06-01 09:02:00', 'c'),
+(4, '13181698468', 'o2', '370001', '2026-06-01 09:03:00', 'd'),
+(5, '18800000000', 'o3', '370002', '2026-06-01 09:04:00', 'e'),
+(6, '18800000000', 'o3', '370002', '2026-06-01 09:05:00', 'f');
+
+INSERT INTO t_rank_count_org VALUES
+('a', 'org-a'),
+('b', 'org-b'),
+('e', 'org-e');
+
 -- case1: row number <= 1 without agg function
 SELECT *
 FROM (
@@ -78,7 +115,41 @@ FROM (
 ) t4
 WHERE _rowid <= 2 order by c4,c6;
 
--- case 4: count * + row number with same partition and predicate
+-- case 4: pre agg count participates in outer filter after row_number pushdown
+SET enable_push_down_pre_agg_with_rank = true;
+function: assert_explain_costs_contains("SELECT site_id, caller, order_no, network_code, org_name, aa, bb, cc, dd FROM (SELECT *, CASE WHEN aa >= 2 THEN 'Y' ELSE 'N' END AS cc, aa - 1 AS dd FROM (SELECT t.site_id, t.caller, t.order_no, t.network_code, o.org_name, t.start_time, COUNT(1) OVER (PARTITION BY t.caller, t.order_no, t.network_code) AS aa, ROW_NUMBER() OVER (PARTITION BY t.caller, t.order_no, t.network_code ORDER BY t.start_time) AS bb FROM t_rank_count_call t LEFT JOIN t_rank_count_org o ON t.org_code = o.org_code) pro_1) x WHERE caller = '13181698468' AND cc = 'Y' AND bb = 1 ORDER BY order_no, network_code", "PARTITION-TOP-N", "pre agg functions", "count[(1)")
+SELECT site_id, caller, order_no, network_code, org_name, aa, bb, cc, dd
+FROM (
+    SELECT *, CASE WHEN aa >= 2 THEN 'Y' ELSE 'N' END AS cc, aa - 1 AS dd
+    FROM (
+        SELECT t.site_id, t.caller, t.order_no, t.network_code, o.org_name, t.start_time,
+               COUNT(1) OVER (PARTITION BY t.caller, t.order_no, t.network_code) AS aa,
+               ROW_NUMBER() OVER (PARTITION BY t.caller, t.order_no, t.network_code ORDER BY t.start_time) AS bb
+        FROM t_rank_count_call t
+        LEFT JOIN t_rank_count_org o ON t.org_code = o.org_code
+    ) pro_1
+) x
+WHERE caller = '13181698468' AND cc = 'Y' AND bb = 1
+ORDER BY order_no, network_code;
+
+SET enable_push_down_pre_agg_with_rank = false;
+SELECT site_id, caller, order_no, network_code, org_name, aa, bb, cc, dd
+FROM (
+    SELECT *, CASE WHEN aa >= 2 THEN 'Y' ELSE 'N' END AS cc, aa - 1 AS dd
+    FROM (
+        SELECT t.site_id, t.caller, t.order_no, t.network_code, o.org_name, t.start_time,
+               COUNT(1) OVER (PARTITION BY t.caller, t.order_no, t.network_code) AS aa,
+               ROW_NUMBER() OVER (PARTITION BY t.caller, t.order_no, t.network_code ORDER BY t.start_time) AS bb
+        FROM t_rank_count_call t
+        LEFT JOIN t_rank_count_org o ON t.org_code = o.org_code
+    ) pro_1
+) x
+WHERE caller = '13181698468' AND cc = 'Y' AND bb = 1
+ORDER BY order_no, network_code;
+
+SET enable_push_down_pre_agg_with_rank = true;
+
+-- case 5: count * + row number with same partition and predicate
 SELECT 1
 FROM (
     SELECT
