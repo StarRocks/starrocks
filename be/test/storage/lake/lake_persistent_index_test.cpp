@@ -26,9 +26,12 @@
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "column/fixed_length_column.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
+#include "storage/lake/tablet_writer.h"
 #include "storage/primary_key_encoder.h"
 #include "test_util.h"
 #include "types/datum.h"
@@ -121,6 +124,81 @@ protected:
         var.mutable_type()->CopyFrom(type_desc.to_protobuf());
         var.set_variant_type(VariantTypePB::NULL_VALUE);
         return var;
+    }
+
+    // Build a tablet whose PK is a single VARCHAR column. A single non-encoded varchar key keeps the
+    // rebuild scan on the binary key path (ColumnHelper::build_slices) -- the branch reworked by the
+    // parallel-scan refactor -- and lets get() be issued with the raw string keys directly.
+    std::shared_ptr<TabletMetadata> make_varchar_pk_metadata() {
+        auto md = std::make_shared<TabletMetadata>();
+        md->set_id(next_id());
+        md->set_version(1);
+        md->set_enable_persistent_index(true);
+        md->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto schema = md->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("VARCHAR");
+        c0->set_length(128);
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        auto c1 = schema->add_column();
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        return md;
+    }
+
+    // Write rows with keys ["k%08d" % start .. start+n) as ONE rowset (one segment) and append it to
+    // `md` (no SSTs, so load_from_lake_tablet does a full cold rebuild). `rowset_id` becomes the rssid
+    // base; keep it >=1 so no row lands on value 0 (which the rebuild treats as <= rebuild point). The
+    // written keys are appended to `out_keys`.
+    void append_cold_rowset(TabletMetadata* md, int start, int n, uint32_t rowset_id,
+                            std::vector<std::string>* out_keys) {
+        auto tablet_schema = std::make_shared<TabletSchema>(md->schema());
+        auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(md->id()));
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        std::vector<std::string> keys;
+        keys.reserve(n);
+        for (int i = 0; i < n; i++) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "k%08d", start + i);
+            keys.emplace_back(buf);
+        }
+        auto kc = BinaryColumn::create();
+        auto vc = Int32Column::create();
+        for (int i = 0; i < n; i++) {
+            kc->append(Slice(keys[i]));
+            vc->append(start + i);
+        }
+        Chunk chunk({std::move(kc), std::move(vc)}, schema);
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+
+        auto* rs = md->add_rowsets();
+        rs->set_id(rowset_id);
+        rs->set_overlapped(false);
+        rs->set_num_rows(writer->num_rows());
+        rs->set_data_size(writer->data_size());
+        for (const auto& f : writer->segments()) {
+            rs->add_segment_metas()->set_filename(f.path);
+        }
+        writer->close();
+
+        for (auto& k : keys) {
+            out_keys->emplace_back(std::move(k));
+        }
     }
 };
 
@@ -1250,6 +1328,70 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_propagates_io_error) {
 
     auto st = index->load_dels(rowset, pkey_schema, /*rowset_version=*/1);
     EXPECT_FALSE(st.ok()) << "expected error from missing del files; got OK";
+}
+
+// Equivalence guard for the parallel cold rebuild scan in load_from_lake_tablet (see
+// be/src/storage/lake/lake_persistent_index.cpp). The refactor splits the scan into a parallel
+// Phase B (per-(rowset,segment) workers each owning their chunk/encoder/InsertBatch) and a serial
+// Phase C that inserts the batches in version+segment order. With multiple single-segment rowsets
+// and no SSTs, every rowset is rebuilt and scan_units > 1, so the parallel path engages. The index
+// it produces MUST be identical to the serial fallback; we assert that by rebuilding twice (flag on
+// vs off) over the SAME metadata and comparing get() results key-by-key.
+TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_serial) {
+    const int kRowsetCount = 6;
+    const int kRowsPerRowset = 50;
+    const int64_t kBaseVersion = 2;
+
+    auto build_metadata = [&](std::vector<std::string>* keys) {
+        auto md = make_varchar_pk_metadata();
+        md->set_version(kBaseVersion);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*md));
+        for (int r = 0; r < kRowsetCount; r++) {
+            // Disjoint key ranges across rowsets so each key maps to exactly one value (no overwrite),
+            // and rowset_id starts at 1 so no row lands on rssid 0 / value 0.
+            append_cold_rowset(md.get(), /*start=*/r * kRowsPerRowset, kRowsPerRowset,
+                               /*rowset_id=*/r + 1, keys);
+        }
+        return md;
+    };
+
+    // Run a cold rebuild with the given flag value and return the per-key values.
+    auto rebuild_and_dump = [&](bool parallel, const std::shared_ptr<TabletMetadata>& md,
+                                const std::vector<std::string>& keys) {
+        ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, parallel);
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+        CHECK_OK(index->init(md));
+        Tablet tablet(_tablet_mgr.get(), md->id());
+        auto md_copy = std::make_shared<TabletMetadata>();
+        md_copy->CopyFrom(*md);
+        MetaFileBuilder builder(tablet, md_copy);
+        CHECK_OK(index->load_from_lake_tablet(_tablet_mgr.get(), md, kBaseVersion, &builder));
+
+        std::vector<Slice> slices;
+        slices.reserve(keys.size());
+        for (const auto& k : keys) {
+            slices.emplace_back(k);
+        }
+        std::vector<IndexValue> values(keys.size());
+        CHECK_OK(index->get(keys.size(), slices.data(), values.data()));
+        return values;
+    };
+
+    std::vector<std::string> keys;
+    auto md = build_metadata(&keys);
+    ASSERT_EQ(kRowsetCount * kRowsPerRowset, static_cast<int>(keys.size()));
+
+    auto parallel_values = rebuild_and_dump(true, md, keys);
+    auto serial_values = rebuild_and_dump(false, md, keys);
+
+    ASSERT_EQ(keys.size(), parallel_values.size());
+    ASSERT_EQ(keys.size(), serial_values.size());
+    for (size_t i = 0; i < keys.size(); i++) {
+        EXPECT_NE(NullIndexValue, parallel_values[i].get_value())
+                << "key " << keys[i] << " missing after parallel rebuild";
+        EXPECT_EQ(serial_values[i].get_value(), parallel_values[i].get_value())
+                << "parallel vs serial mismatch for key " << keys[i];
+    }
 }
 
 } // namespace starrocks::lake
