@@ -235,6 +235,18 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `lake_vacuum_del_file_batch_size_minute`
+
+- 单位：文件数（每批次）
+- 类型：Gauge
+- 描述：存算分离集群下 Vacuum 在过去 60 秒内每次 `DeleteObjects` 批次的平均文件数。
+
+## `lake_vacuum_del_file_retries_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下 Vacuum 在过去 60 秒内触发的删除重试次数。反映对象存储瞬时限流压力（SlowDown / try-again）。
+
 ## `load_bytes`
 
 - 单位：字节
