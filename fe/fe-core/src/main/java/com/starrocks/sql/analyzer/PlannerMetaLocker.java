@@ -224,7 +224,13 @@ public class PlannerMetaLocker implements AutoCloseable {
 
     @Override
     public void close() {
-        unlock();
+        // AutoCloseable contract: release everything this instance still holds, regardless of
+        // how many lock()/tryLock() calls have not yet been matched by an explicit unlock().
+        // Drain the nested depth so try-with-resources cleanup is total even if the body did
+        // multiple lock()s. (No current caller does that, but the contract should hold.)
+        while (lockDepth > 0) {
+            unlock();
+        }
     }
     /**
      * Collect tables that need to be protected by the PlannerMetaLock

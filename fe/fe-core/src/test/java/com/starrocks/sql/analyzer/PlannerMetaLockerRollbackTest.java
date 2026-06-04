@@ -245,6 +245,41 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
         Assertions.assertNull(readHeldEntries(locker));
     }
 
+    /**
+     * AutoCloseable contract: close() must release every pending acquisition, not just one
+     * level. If a caller does multiple lock()s inside try-with-resources without matching
+     * unlock()s, the implicit close() at the end of the block must drain them all — otherwise
+     * the leftover acquisitions leak (LockManager keeps a non-zero refCount on every rid that
+     * was acquired). No current caller does this today, but the AutoCloseable contract should
+     * hold regardless.
+     */
+    @Test
+    public void closeDrainsAllNestedLocks() throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("select * from t0", connectContext);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
+
+        locker.lock();
+        locker.lock();
+        locker.lock();
+        Assertions.assertEquals(3, readLockDepth(locker));
+        Assertions.assertNotNull(readHeldEntries(locker));
+
+        locker.close();
+
+        Assertions.assertEquals(0, readLockDepth(locker),
+                "close() must drain all nested lock acquisitions, not just one level");
+        Assertions.assertNull(readHeldEntries(locker),
+                "close() must clear the snapshot once depth hits zero");
+
+        // After close() drains, the LockManager state must allow a fresh lock/unlock cycle.
+        // If close() left stale LockHolders behind, the next lock() would reenter at a higher
+        // refCount than expected; if it left depth/heldEntries inconsistent, the next
+        // unlock() would either no-op or crash.
+        Assertions.assertDoesNotThrow(locker::lock);
+        Assertions.assertDoesNotThrow(locker::unlock);
+        Assertions.assertEquals(0, readLockDepth(locker));
+    }
+
     private static int readLockDepth(PlannerMetaLocker locker) throws Exception {
         Field f = PlannerMetaLocker.class.getDeclaredField("lockDepth");
         f.setAccessible(true);
