@@ -114,9 +114,13 @@ public class RestoreClusterSnapshotMgr {
                 // dropping them would erase legitimate brokers and pending automated snapshot jobs.
                 self.dropImageBrokers();
                 self.dropImageSnapshotJobs();
+                // The restored cluster must not keep writing snapshots to the source cluster's
+                // external location, so turn off the automated snapshot for external restores only.
+                // For a local automated snapshot restore the configuration is still valid and is
+                // preserved so it keeps running after the restore.
+                self.disableAutomatedSnapshot();
             }
             self.updateStorageVolumes();
-            self.disableAutomatedSnapshot();
         } finally {
             self.rollbackConfig();
             instance = null;
