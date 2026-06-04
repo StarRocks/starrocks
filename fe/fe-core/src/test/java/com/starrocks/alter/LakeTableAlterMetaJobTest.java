@@ -29,6 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
@@ -769,5 +770,48 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+    }
+
+    @Test
+    public void testGetInfo() {
+        // The meta job is in PENDING right after setUp().
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+
+        // Exactly one row, matching the shared-data SHOW ALTER TABLE COLUMN schema (the 13 common
+        // columns plus the trailing Warehouse column present in shared-data mode).
+        Assertions.assertEquals(1, infos.size());
+        List<Comparable> row = infos.get(0);
+        Assertions.assertEquals(14, row.size());
+
+        // Key fields are populated (column order matches SchemaChangeProcDir.TITLE_NAMES).
+        Assertions.assertEquals(job.getJobId(), row.get(0));                        // JobId
+        Assertions.assertEquals(table.getName(), row.get(1));                       // TableName
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING.name(), row.get(9));    // State
+        Assertions.assertEquals(job.getTimeoutMs() / 1000, row.get(12));            // Timeout
+
+        // A meta-only change has no shadow index / schema version, so the numeric index columns
+        // use placeholders. They MUST stay numeric (Long), not NULL_STRING, otherwise the cross-job
+        // sort in SchemaChangeHandler.getAlterJobInfosByDb mixes String and Long comparables.
+        Assertions.assertTrue(row.get(0) instanceof Long);    // JobId
+        Assertions.assertTrue(row.get(5) instanceof Long);    // IndexId
+        Assertions.assertTrue(row.get(6) instanceof Long);    // OriginIndexId
+        Assertions.assertTrue(row.get(8) instanceof Long);    // TransactionId
+        Assertions.assertTrue(row.get(12) instanceof Long);   // Timeout
+        Assertions.assertEquals(-1L, row.get(5));
+        Assertions.assertEquals(-1L, row.get(6));
+
+        // Regression guard: the meta-job row must sort together with a regular schema-change row
+        // (which carries real Long IndexId / OriginIndexId and a String SchemaVersion) without
+        // throwing. Keep columns 0-4 equal so the comparator actually reaches the IndexId column.
+        List<Comparable> schemaChangeRow = new ArrayList<>(row);
+        schemaChangeRow.set(5, 10001L);   // real IndexId, like SchemaChangeJobV2
+        schemaChangeRow.set(6, 10001L);   // real OriginIndexId
+        schemaChangeRow.set(7, "1:0");    // real SchemaVersion
+        List<List<Comparable>> combined = new ArrayList<>();
+        combined.add(schemaChangeRow);
+        combined.add(row);
+        combined.sort(new ListComparator<>(0, 1, 2, 3, 4, 5));
+        Assertions.assertEquals(2, combined.size());
     }
 }
