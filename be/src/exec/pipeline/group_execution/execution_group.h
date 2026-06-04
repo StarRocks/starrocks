@@ -29,6 +29,8 @@
 
 namespace starrocks::pipeline {
 
+class FragmentDriverRegistry;
+
 // Synchronization context for parallel driver preparation
 // Use shared_ptr to manage lifecycle and avoid use-after-free
 // Use raw pointer with atomic to avoid std::atomic<std::shared_ptr<T>> compilation issue in Clang 14
@@ -84,6 +86,7 @@ public:
     virtual bool is_empty() const = 0;
     virtual std::string to_string() const = 0;
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
+    void attach_driver_registry(FragmentDriverRegistry* driver_registry);
 
     void count_down_pipeline(RuntimeState* state);
 
@@ -111,8 +114,8 @@ protected:
     std::atomic<size_t> _num_finished_pipelines{};
     size_t _num_pipelines{};
     DriverExecutor* _executor;
+    FragmentDriverRegistry* _driver_registry = nullptr;
     PipelineRawPtrs _pipelines;
-    void clear_all_drivers(Pipelines& pipelines);
 };
 
 class NormalExecutionGroup final : public ExecutionGroup {

@@ -17,6 +17,7 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_driver_registry.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -43,7 +44,7 @@ size_t Pipeline::degree_of_parallelism() const {
 }
 
 void Pipeline::on_driver_finished(RuntimeState* state) {
-    size_t num_drivers = _drivers.size();
+    size_t num_drivers = _driver_registry == nullptr ? 0 : _driver_registry->driver_count(_drivers);
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
         _pipeline_event->finish(state);
@@ -51,22 +52,21 @@ void Pipeline::on_driver_finished(RuntimeState* state) {
     }
 }
 
-void Pipeline::clear_drivers() {
-    _drivers.clear();
-}
-
-Drivers& Pipeline::drivers() {
-    return _drivers;
-}
-
-const Drivers& Pipeline::drivers() const {
-    return _drivers;
+void Pipeline::attach_driver_registry(FragmentDriverRegistry* driver_registry) {
+    DCHECK(driver_registry != nullptr);
+    if (_driver_registry == driver_registry && _drivers != nullptr) {
+        return;
+    }
+    DCHECK(_driver_registry == nullptr || _driver_registry == driver_registry);
+    _driver_registry = driver_registry;
+    _drivers = _driver_registry->register_pipeline(this);
 }
 
 void Pipeline::instantiate_drivers(RuntimeState* state) {
     auto* query_ctx = state->query_ctx();
     auto* fragment_ctx = state->fragment_ctx();
     auto workgroup = fragment_ctx->workgroup();
+    attach_driver_registry(&fragment_ctx->driver_registry());
 
     size_t dop = degree_of_parallelism();
 
@@ -74,7 +74,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
              << " fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
 
     setup_pipeline_profile(state);
-    _drivers.reserve(dop);
+    _driver_registry->reserve(_drivers, dop);
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
         DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this, this,
@@ -86,10 +86,11 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
 
         setup_drivers_profile(driver);
         driver->set_workgroup(workgroup);
-        _drivers.emplace_back(std::move(driver));
+        _driver_registry->register_driver(_drivers, std::move(driver));
     }
 
-    query_ctx->query_trace()->register_drivers(fragment_ctx->fragment_instance_id(), _drivers);
+    const auto& drivers = *_drivers;
+    query_ctx->query_trace()->register_drivers(fragment_ctx->fragment_instance_id(), drivers);
 
     if (!source_operator_factory()->with_morsels()) {
         return;
@@ -99,7 +100,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     DCHECK(morsel_queue_factory != nullptr);
     DCHECK(dop == 1 || dop == morsel_queue_factory->size());
     for (size_t i = 0; i < dop; ++i) {
-        auto& driver = _drivers[i];
+        const auto& driver = drivers[i];
         driver->set_morsel_queue(morsel_queue_factory->create(i));
         if (auto* scan_operator = driver->source_scan_operator()) {
             scan_operator->set_workgroup(workgroup);
@@ -158,16 +159,20 @@ size_t calculate_output_amplification(const Drivers& drivers) {
 }
 
 size_t Pipeline::output_amplification_factor() const {
-    if (_drivers.empty()) {
+    if (_driver_registry == nullptr) {
         return 1;
     }
 
-    auto* first_sink = _drivers[0]->sink_operator();
+    if (_drivers == nullptr || _drivers->empty()) {
+        return 1;
+    }
+
+    auto* first_sink = (*_drivers)[0]->sink_operator();
     switch (first_sink->intra_pipeline_amplification_type()) {
     case Operator::OutputAmplificationType::ADD:
-        return calculate_output_amplification<OutputAmplificationAddCalculator>(_drivers);
+        return calculate_output_amplification<OutputAmplificationAddCalculator>(*_drivers);
     case Operator::OutputAmplificationType::MAX:
-        return calculate_output_amplification<OutputAmplificationMaxCalculator>(_drivers);
+        return calculate_output_amplification<OutputAmplificationMaxCalculator>(*_drivers);
     }
 
     return 1;

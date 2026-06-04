@@ -47,10 +47,9 @@ public:
         return operators;
     }
     void instantiate_drivers(RuntimeState* state);
-    Drivers& drivers();
-    const Drivers& drivers() const;
     void on_driver_finished(RuntimeState* state) override;
-    void clear_drivers();
+    void attach_driver_registry(FragmentDriverRegistry* driver_registry);
+    const Drivers* drivers() const { return _drivers; }
 
     SourceOperatorFactory* source_operator_factory() {
         DCHECK(!_op_factories.empty());
@@ -109,7 +108,8 @@ private:
     uint32_t _id = 0;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     OpFactories _op_factories;
-    Drivers _drivers;
+    FragmentDriverRegistry* _driver_registry = nullptr;
+    const Drivers* _drivers = nullptr;
     std::atomic<size_t> _num_finished_drivers = 0;
 
     EventPtr _pipeline_event;

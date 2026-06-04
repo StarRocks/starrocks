@@ -226,22 +226,17 @@ void FragmentContext::report_exec_state_if_necessary() {
 
     // only report after prepare successfully
     bool allPrepared = true;
-    iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
-        if (!allPrepared) return;
-        for (const auto& driver : pipeline->drivers()) {
-            if (!driver->local_prepare_is_done()) {
-                allPrepared = false;
-                break;
-            }
+    iterate_drivers([&allPrepared](const DriverPtr& driver) {
+        if (!allPrepared) {
+            return;
+        }
+        if (!driver->local_prepare_is_done()) {
+            allPrepared = false;
         }
     });
 
     if (allPrepared && _last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
-        iterate_pipeline([](const Pipeline* pipeline) {
-            for (const auto& driver : pipeline->drivers()) {
-                driver->runtime_report_action();
-            }
-        });
+        iterate_drivers([](const DriverPtr& driver) { driver->runtime_report_action(); });
         _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
     }
 }
@@ -314,6 +309,7 @@ void FragmentContext::set_final_status(const Status& status) {
 void FragmentContext::set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines) {
     for (auto& group : exec_groups) {
         if (!group->is_empty()) {
+            group->attach_driver_registry(&_driver_registry);
             _execution_groups.emplace_back(std::move(group));
         }
     }
@@ -427,11 +423,11 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 }
 
 void FragmentContext::iterate_drivers(const std::function<void(const DriverPtr&)>& call) {
-    iterate_pipeline([&](const Pipeline* pipeline) {
-        for (const auto& driver : pipeline->drivers()) {
-            call(driver);
-        }
-    });
+    _driver_registry.for_each_driver(call);
+}
+
+void FragmentContext::clear_all_drivers() {
+    _driver_registry.clear();
 }
 
 Status FragmentContext::prepare_active_drivers() {

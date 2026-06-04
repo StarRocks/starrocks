@@ -102,7 +102,7 @@ QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(qu
 QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) {}
 #endif
 
-void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
+void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, const starrocks::pipeline::Drivers& drivers) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
     if (!_is_enable) {
         return;
@@ -113,7 +113,7 @@ void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, starroc
         _fragment_drivers.insert({fragment_instance_id, std::make_shared<std::unordered_set<std::uintptr_t>>()});
         iter = _fragment_drivers.find(fragment_instance_id);
     }
-    for (auto& driver : drivers) {
+    for (const auto& driver : drivers) {
         std::uintptr_t ptr = reinterpret_cast<std::uintptr_t>(driver.get());
         iter->second->insert(ptr);
         _buffers.insert({ptr, std::make_unique<EventBuffer>()});

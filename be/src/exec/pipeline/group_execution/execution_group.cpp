@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_driver_registry.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -35,12 +36,6 @@ concept DriverPtrCallable = std::invocable<T, const DriverPtr&> &&
          std::same_as<std::invoke_result_t<T, const DriverPtr&>, Status>);
 // clang-format on
 
-void ExecutionGroup::clear_all_drivers(Pipelines& pipelines) {
-    for (auto& pipeline : pipelines) {
-        pipeline->clear_drivers();
-    }
-}
-
 void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
     // Cache the member before performing the atomic increment.
     // This ensures we won't dereference `this` after another thread may
@@ -48,6 +43,14 @@ void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
     size_t num_pipelines = _num_pipelines;
     if (++_num_finished_pipelines == num_pipelines) {
         state->fragment_ctx()->count_down_execution_group();
+    }
+}
+
+void ExecutionGroup::attach_driver_registry(FragmentDriverRegistry* driver_registry) {
+    DCHECK(driver_registry != nullptr);
+    _driver_registry = driver_registry;
+    for (auto* pipeline : _pipelines) {
+        pipeline->attach_driver_registry(_driver_registry);
     }
 }
 
@@ -63,7 +66,9 @@ template <DriverPtrCallable Callable>
 auto for_each_active_driver(PipelineRawPtrs& pipelines, Callable call) {
     using ReturnType = std::invoke_result_t<Callable, const DriverPtr&>;
     for (auto& pipeline : pipelines) {
-        for (auto& driver : pipeline->drivers()) {
+        auto* drivers = pipeline->drivers();
+        DCHECK(drivers != nullptr);
+        for (auto& driver : *drivers) {
             auto* source_op = pipeline->source_operator_factory();
             if (!source_op->is_adaptive_group_initial_active()) {
                 continue;
@@ -81,6 +86,7 @@ auto for_each_active_driver(PipelineRawPtrs& pipelines, Callable call) {
 }
 
 size_t ExecutionGroup::total_active_driver_size() {
+    DCHECK(_driver_registry != nullptr);
     size_t total = 0;
     for_each_active_driver(_pipelines, [&total](const DriverPtr& driver) { total += 1; });
     return total;
@@ -91,6 +97,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
     auto* query_execution_services = state->query_execution_services();
     auto pipeline_prepare_pool = query_execution_services->execution->pipeline_prepare_pool;
 
+    DCHECK(_driver_registry != nullptr);
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         // since prepare is async, we must hold the runtime state ptr
         auto runtime_state_holder = driver->fragment_ctx()->runtime_state_ptr();
@@ -138,6 +145,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
 }
 
 Status ExecutionGroup::prepare_active_drivers_sequentially(RuntimeState* state) {
+    DCHECK(_driver_registry != nullptr);
     return for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         RETURN_IF_ERROR(driver->prepare_local_state(state));
         return Status::OK();
@@ -145,11 +153,13 @@ Status ExecutionGroup::prepare_active_drivers_sequentially(RuntimeState* state) 
 }
 
 Status NormalExecutionGroup::prepare_drivers(RuntimeState* state) {
+    DCHECK(_driver_registry != nullptr);
     return for_each_active_driver(_pipelines, [state](const DriverPtr& driver) { return driver->prepare(state); });
 }
 
 void NormalExecutionGroup::submit_active_drivers() {
     VLOG_QUERY << "submit_active_drivers:" << to_string();
+    DCHECK(_driver_registry != nullptr);
     return for_each_active_driver(_pipelines, [this](const DriverPtr& driver) { _executor->submit(driver.get()); });
 }
 
@@ -183,11 +193,13 @@ Status ColocateExecutionGroup::prepare_pipelines(RuntimeState* state) {
 }
 
 Status ColocateExecutionGroup::prepare_drivers(RuntimeState* state) {
+    DCHECK(_driver_registry != nullptr);
     return for_each_active_driver(_pipelines, [state](const DriverPtr& driver) { return driver->prepare(state); });
 }
 
 void ColocateExecutionGroup::submit_active_drivers() {
     VLOG_QUERY << "submit_active_drivers:" << to_string();
+    DCHECK(_driver_registry != nullptr);
     // record the number of drivers to be submitted for each pipeline
     // Two-phase process to avoid race with submit_next_driver():
     // 1) publish all _submit_drivers[i]
@@ -196,20 +208,22 @@ void ColocateExecutionGroup::submit_active_drivers() {
 
     for (size_t i = 0; i < _pipelines.size(); ++i) {
         const auto& pipeline = _pipelines[i];
-        DCHECK_EQ(pipeline->drivers().size(), pipeline->degree_of_parallelism());
-        const auto& drivers = pipeline->drivers();
-        size_t init_submit_drivers = std::min(_physical_dop, drivers.size());
+        const auto* drivers = pipeline->drivers();
+        DCHECK(drivers != nullptr);
+        DCHECK_EQ(drivers->size(), pipeline->degree_of_parallelism());
+        size_t init_submit_drivers = std::min(_physical_dop, drivers->size());
         _submit_drivers[i] = init_submit_drivers;
         pipeline_init_submit_drivers[i] = init_submit_drivers;
     }
 
     for (size_t i = 0; i < _pipelines.size(); ++i) {
         const auto& pipeline = _pipelines[i];
-        const auto& drivers = pipeline->drivers();
+        const auto* drivers = pipeline->drivers();
+        DCHECK(drivers != nullptr);
         size_t init_submit_drivers = pipeline_init_submit_drivers[i];
         for (size_t j = 0; j < init_submit_drivers; ++j) {
-            VLOG_QUERY << "submit_active_driver:" << j << ":" << drivers[j]->to_readable_string();
-            _executor->submit(drivers[j].get());
+            VLOG_QUERY << "submit_active_driver:" << j << ":" << (*drivers)[j]->to_readable_string();
+            _executor->submit((*drivers)[j].get());
         }
     }
 }
@@ -235,15 +249,17 @@ std::string ColocateExecutionGroup::to_string() const {
 }
 
 void ColocateExecutionGroup::submit_next_driver() {
+    DCHECK(_driver_registry != nullptr);
     for (size_t i = 0; i < _pipelines.size(); ++i) {
         auto next_driver_idx = _submit_drivers[i].fetch_add(1);
         if (next_driver_idx >= _pipelines[i]->degree_of_parallelism()) {
             continue;
         }
-        const auto& drivers = _pipelines[i]->drivers();
+        const auto* drivers = _pipelines[i]->drivers();
+        DCHECK(drivers != nullptr);
         VLOG_QUERY << "submit_next_drivers:" << next_driver_idx << ":"
-                   << drivers[next_driver_idx]->to_readable_string();
-        _executor->submit(drivers[next_driver_idx].get());
+                   << (*drivers)[next_driver_idx]->to_readable_string();
+        _executor->submit((*drivers)[next_driver_idx].get());
     }
 }
 

@@ -171,6 +171,7 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
+    pipeline/fragment_driver_registry.cpp
     pipeline/fragment_context.cpp
     pipeline/fragment_context_manager.cpp
     pipeline/query_context.cpp

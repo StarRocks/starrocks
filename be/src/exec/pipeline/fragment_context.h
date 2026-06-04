@@ -29,6 +29,7 @@
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
+#include "exec/pipeline/fragment_driver_registry.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_hub.h"
@@ -118,6 +119,9 @@ public:
 
     void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
+    FragmentDriverRegistry& driver_registry() { return _driver_registry; }
+    const FragmentDriverRegistry& driver_registry() const { return _driver_registry; }
+
     void clear_all_drivers();
     void close_all_execution_groups();
 
@@ -203,13 +207,14 @@ private:
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;
 
-    // never adjust the order of _runtime_state, _plan, _pipelines and _drivers, since
-    // _plan depends on _runtime_state and _drivers depends on _runtime_state.
+    // never adjust the order of _runtime_state, _plan, _pipelines and _driver_registry, since
+    // _plan depends on _runtime_state and _driver_registry depends on _runtime_state and _pipelines.
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
     Pipelines _pipelines;
+    FragmentDriverRegistry _driver_registry;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
 

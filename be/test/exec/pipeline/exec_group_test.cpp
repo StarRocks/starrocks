@@ -20,6 +20,7 @@
 #include "common/thread/threadpool.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/fragment_driver_registry.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
@@ -75,16 +76,20 @@ TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
     factories.emplace_back(source);
     factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 0));
     Pipeline pipeline(0, factories, &group);
+    group.add_pipeline(&pipeline);
+
+    FragmentDriverRegistry driver_registry;
+    group.attach_driver_registry(&driver_registry);
 
     for (size_t i = 0; i < 100; ++i) {
         Operators ops_with_sink;
         ops_with_sink.emplace_back(factories[0]->create(100, i));
         ops_with_sink.emplace_back(factories[1]->create(100, i));
-        pipeline.drivers().emplace_back(
+        driver_registry.register_driver(
+                pipeline.drivers(),
                 std::make_shared<PipelineDriver>(ops_with_sink, nullptr, nullptr, &pipeline, &pipeline, -1));
     }
 
-    group.add_pipeline(&pipeline);
     // skip prepare step
     group._submit_drivers = std::make_unique<std::atomic<int>[]>(1);
 
