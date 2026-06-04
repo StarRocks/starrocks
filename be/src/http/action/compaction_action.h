@@ -59,8 +59,12 @@ public:
 
     void handle(HttpRequest* req) override;
 
+<<<<<<< HEAD
     static Status do_compaction(uint64_t tablet_id, const std::string& compaction_type,
                                 const std::string& rowset_ids_string);
+=======
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+>>>>>>> d7e360a ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (#73822))
 
 private:
     Status _handle_show_compaction(HttpRequest* req, std::string* json_result);

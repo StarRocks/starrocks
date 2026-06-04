@@ -30,8 +30,17 @@ protected:
         return Status::OK();
     }
 
+<<<<<<< HEAD:be/src/formats/csv/output_stream_string.h
 private:
     std::string _str;
 };
 
 } // namespace starrocks::csv
+=======
+// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
+// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
+// exempt. Default false for backward compatibility.
+CONF_mBool(enable_http_auth, "false");
+
+} // namespace starrocks::config
+>>>>>>> d7e360a ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (#73822)):be/src/common/config_http_fwd.h

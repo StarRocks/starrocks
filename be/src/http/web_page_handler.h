@@ -44,6 +44,11 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    // BE Web UI pages (/, /varz, /memz, /mem_tracker, /logs, /proc_profile) plus
+    // the static-file fallback (/static/*). Operator-debug surface: callers need
+    // SYSTEM OPERATE privilege, matching the pprof and ioprofile policy.
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
     // Register a route 'path' to be rendered via template.
     // The appropriate template to use is determined by 'path'.
     // If 'is_on_nav_bar' is true, a link to the page will be placed on the navbar

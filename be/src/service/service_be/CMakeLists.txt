@@ -19,6 +19,11 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service_be")
 
 add_library(ServiceBE
     backend_service.cpp
+<<<<<<< HEAD
+=======
+    config_update_hooks.cpp
+    http_auth_response.cpp
+>>>>>>> d7e360a ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (#73822))
     http_service.cpp
     internal_service.cpp
     lake_service.cpp

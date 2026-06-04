@@ -53,6 +53,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    bool need_auth() const override { return false; }
+
 private:
     void getMemoryMetricTree(MemTracker* memTracker, std::stringstream& result, int64_t total_size);
 };

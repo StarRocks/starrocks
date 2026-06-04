@@ -51,6 +51,7 @@ public:
 
     void handle(HttpRequest* req) override;
 
+<<<<<<< HEAD
     Status update_config(const std::string& name, const std::string& value);
 
     // hack to share update_config method with be_configs schema table sink
@@ -61,6 +62,9 @@ private:
     ExecEnv* _exec_env;
     std::once_flag _once_flag;
     std::unordered_map<std::string, std::function<Status()>> _config_callback;
+=======
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+>>>>>>> d7e360a ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (#73822))
 };
 
 } // namespace starrocks
