@@ -1,0 +1,5 @@
+extends: script
+message: "Enclose '%s' in backticks — bare angle-bracket tags are parsed as JSX by MDX and cause Docusaurus build failures (e.g. use `ARRAY<VARCHAR>` not ARRAY<VARCHAR>)."
+level: error
+scope: raw
+script: BareAngleBrackets.tengo
