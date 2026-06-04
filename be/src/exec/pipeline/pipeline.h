@@ -21,6 +21,7 @@
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
 
@@ -30,7 +31,7 @@ class RuntimeState;
 
 namespace pipeline {
 
-class Pipeline {
+class Pipeline : public DriverObserver {
 public:
     Pipeline() = delete;
     Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group);
@@ -48,7 +49,7 @@ public:
     void instantiate_drivers(RuntimeState* state);
     Drivers& drivers();
     const Drivers& drivers() const;
-    void count_down_driver(RuntimeState* state);
+    void on_driver_finished(RuntimeState* state) override;
     void clear_drivers();
 
     SourceOperatorFactory* source_operator_factory() {

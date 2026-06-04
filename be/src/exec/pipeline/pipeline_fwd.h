@@ -41,6 +41,7 @@ using DriverRawPtr = PipelineDriver*;
 using DriverConstRawPtr = const PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
 using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+class DriverObserver;
 class OperatorFactory;
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
 using OpFactories = std::vector<OpFactoryPtr>;
