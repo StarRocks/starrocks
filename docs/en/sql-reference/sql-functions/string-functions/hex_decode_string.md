@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function performs the opposite operation of [hex()](hex.md)."
 ---
 
 # hex_decode_string

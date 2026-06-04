@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic introduces StarRocks' Time Travel feature for Iceberg catalogs."
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

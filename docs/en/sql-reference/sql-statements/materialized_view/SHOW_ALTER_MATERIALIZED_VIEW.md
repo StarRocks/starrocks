@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ALTER MATERIALIZED VIEW shows the building status of synchronous materialized views."
 ---
 
 # SHOW ALTER MATERIALIZED VIEW

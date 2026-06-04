@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function compares two strings."
 ---
 
 # strcmp

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "In scenarios where multiple nodes collaboratively access the same data lake, the core challenge is **how to achieve secure, unified, and auditable permission management**."
 ---
 
 # Security Setup for Iceberg REST Catalog

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.2.0 introduces the HTTP SQL API for users to perform various types of queries using HTTP."
 ---
 
 # HTTP SQL API

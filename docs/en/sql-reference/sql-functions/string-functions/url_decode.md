@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Translates a string back from the [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) format."
 ---
 
 # url_decode

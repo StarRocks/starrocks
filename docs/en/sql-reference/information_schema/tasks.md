@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`tasks` provides information about asynchronous tasks."
 ---
 
 # tasks

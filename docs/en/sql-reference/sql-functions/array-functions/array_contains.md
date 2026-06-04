@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Checks whether the array contains a certain element."
 ---
 
 # array_contains

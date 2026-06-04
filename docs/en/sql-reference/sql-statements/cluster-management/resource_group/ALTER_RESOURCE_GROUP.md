@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ALTER RESOURCE GROUP alters the configuration of a resource group."
 ---
 
 # ALTER RESOURCE GROUP

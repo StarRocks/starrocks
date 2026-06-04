@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculate the ngram similarity of the two strings."
 ---
 
 # ngram_search

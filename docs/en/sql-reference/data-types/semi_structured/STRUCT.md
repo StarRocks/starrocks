@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "STRUCT is widely used to express complex data types."
 ---
 
 # STRUCT

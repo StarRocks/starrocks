@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`warehouse_metrics` provides information about the metrics of each warehouse."
 ---
 
 # warehouse_metrics

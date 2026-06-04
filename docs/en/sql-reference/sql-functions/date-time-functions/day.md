@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Extracts the day part of a date or datetime expression and returns a value that ranges from 1 to 31."
 ---
 
 # day

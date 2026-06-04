@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aggregates PERCENTILE data."
 ---
 
 # percentile_union

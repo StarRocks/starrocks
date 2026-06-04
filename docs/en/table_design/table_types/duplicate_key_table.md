@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+description: "How to create and use Duplicate Key tables (the default StarRocks table type) for storing raw event logs and time-series data with a configurable sort key."
 ---
 
 # Duplicate Key table

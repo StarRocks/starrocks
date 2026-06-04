@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the user retention rate within a specified period of time."
 ---
 
 # retention

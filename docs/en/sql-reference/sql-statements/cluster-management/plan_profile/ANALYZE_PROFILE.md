@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ANALYZE PROFILE analyzes a specific query profile on a per-fragment basis, and displays it in a tree structure."
 ---
 
 # ANALYZE PROFILE

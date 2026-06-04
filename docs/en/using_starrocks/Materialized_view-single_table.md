@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+description: "How to create, use, and manage synchronous materialized views (Rollups) in StarRocks for transparent acceleration of single-table aggregate queries with automatic refresh."
 ---
 
 # Synchronous materialized view

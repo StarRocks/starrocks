@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the value of Pi."
 ---
 
 # pi

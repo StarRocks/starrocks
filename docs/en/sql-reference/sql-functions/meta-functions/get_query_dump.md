@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a debug dump of a SQL query including table schemas, statistics, and session variables for reproducing query planning."
 ---
 
 # get_query_dump

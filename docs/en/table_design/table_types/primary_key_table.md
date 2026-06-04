@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+description: "How to create and use Primary Key tables in StarRocks for real-time upsert and delete with strong consistency, supporting efficient ad-hoc queries on the latest data."
 ---
 # Primary Key table
 

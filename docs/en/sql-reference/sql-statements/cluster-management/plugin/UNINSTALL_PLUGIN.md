@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UNINSTALL PLUGIN is used to uninstall a plugin."
 ---
 
 # UNINSTALL PLUGIN

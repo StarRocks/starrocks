@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aggregates values (including `NULL`) in a column into an array (multiple rows to one row), and optionally order the elements by specific columns."
 ---
 
 # array_agg

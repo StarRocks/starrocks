@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "[Apache Superset](https://superset.apache.org) is a modern data exploration and visualization platform."
 ---
 
 # Superset Support

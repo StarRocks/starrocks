@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Computes the arc tangent of the argument."
 ---
 
 # atan

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Concatenates non-null values from a group into a single string, with a `sep` argument, which is `,` by default if not specified."
 ---
 
 # group_concat

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
+description: "StarRocks Iceberg Catalog supports a variety of Data Manipulation Language (DML) operations, including inserting data into Iceberg tables."
 ---
 
 # Iceberg DML operations

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the top `k` most frequently occurring item values in an `expr` along with their approximate counts."
 ---
 
 # approx_top_k

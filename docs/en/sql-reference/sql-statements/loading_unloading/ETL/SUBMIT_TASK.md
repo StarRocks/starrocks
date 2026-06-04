@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SUBMIT TASK submits an ETL statement as an asynchronous task."
 ---
 
 import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'

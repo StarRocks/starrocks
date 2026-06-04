@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "For details about how to connect to StarRocks on FineBI, see [StarRocks data connection](https://help.fanruan.com/finebi-en/doc-view-5857.html)."
 ---
 
 # FineBI

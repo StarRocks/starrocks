@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.5 release notes: Delta Lake catalog, Data Cache for external storage, Query Cache, query queues, resource groups for data loading, STRUCT/MAP support in Hive/Hudi/Iceberg catalogs, lambda expressions, and higher-order array functions."
 ---
 
 # StarRocks version 2.5

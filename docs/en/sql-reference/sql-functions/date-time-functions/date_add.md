@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds a specified time interval to a date."
 ---
 
 # date_add,adddate

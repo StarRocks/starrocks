@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MAP is a complex data type that stores a set of key-value pairs, for example, `{a:1, b:2, c:3}`."
 ---
 
 # MAP

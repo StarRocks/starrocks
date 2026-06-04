@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Generates an empty HLL column to supplement the default values when inserting or loading data."
 ---
 
 # hll_empty

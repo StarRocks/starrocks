@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic guides you through querying data from external data sources by using external catalogs."
 ---
 
 # Query external data

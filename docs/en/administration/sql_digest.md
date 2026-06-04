@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic introduces the SQL Digest feature of StarRocks."
 ---
 
 # SQL Digest

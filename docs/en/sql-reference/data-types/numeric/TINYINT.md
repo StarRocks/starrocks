@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TINYINT is a 1-byte signed integer."
 ---
 
 # TINYINT

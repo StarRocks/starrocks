@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE USER creates a StarRocks user."
 ---
 
 # CREATE USER

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+description: "How to use HyperLogLog (HLL) in StarRocks for approximate COUNT(DISTINCT) with ~1-10% error rate, significantly reducing memory usage for large-scale deduplication."
 ---
 
 # Use HLL for approximate count distinct

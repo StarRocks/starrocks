@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "Returns approximate distinct count using DataSketches Theta sketch. Faster than COUNT(DISTINCT) with lower memory usage for high-cardinality columns."
+---
+
 # ds_theta_count_distinct
 
 Returns the approximate value of aggregate function similar to the result of `COUNT(DISTINCT col)`. `ds_theta_count_distinct` is faster than `COUNT(DISTINCT col)` and uses less memory for columns of high cardinality.

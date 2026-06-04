@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Related References"
+description: "Reference index for asynchronous materialized view SQL statements (CREATE, ALTER, REFRESH, DROP) and system views for monitoring in StarRocks."
 ---
 
 # Asynchronous Materialized View References

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 keywords: ['Broker Load']
+description: "How to load data from Microsoft Azure Storage into StarRocks using INSERT+FILES(), Broker Load, or Spark Load, with Shared Key and SAS token authentication."
 ---
 
 # Load data from Microsoft Azure Storage

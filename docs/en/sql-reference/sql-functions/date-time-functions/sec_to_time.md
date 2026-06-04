@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The SEC_TO_TIME function converts a value in seconds into a TIME type, returning the result in the format HH:MM:SS."
 ---
 
 # sec_to_time

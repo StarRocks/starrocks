@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SET CONFIG is used to set configuration items for the cluster (Currently, only FE dynamic configuration items can be set using this command)."
 ---
 
 # ADMIN SET CONFIG

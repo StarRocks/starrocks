@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the Pearson correlation coefficient between two expressions."
 ---
 
 # corr

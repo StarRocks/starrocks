@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic provides answers to some frequently asked questions about shared-data clusters."
 ---
 
 # Shared-data

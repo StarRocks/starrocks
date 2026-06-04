@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "CTE"
+description: "You can use a common table expression (CTE) to define a temporary result set that you can reference possibly multiple times within the scope of a SQL statement."
 ---
 
 # Common Table Expression

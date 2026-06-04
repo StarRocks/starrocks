@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Draw a bar graph like histogram to inspect the data distribution."
 ---
 
 # bar

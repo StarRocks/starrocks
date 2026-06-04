@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Create a new table in StarRocks."
 ---
 
 # CREATE TABLE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ANALYZE JOB views the information and status of custom collection tasks."
 ---
 
 # SHOW ANALYZE JOB

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Spark Load for bulk data import into StarRocks using external Spark resources for pre-processing, suited for TB-scale initial data migration."
 ---
 
 # Load data in bulk using Spark Load
@@ -156,7 +157,9 @@ PROPERTIES
       - one ResourceManager on a single node
         `spark.hadoop.yarn.resourcemanager.address`: Address of the single point resource manager.
       - ResourceManager HA
-        >  You can choose to specify ResourceManager's hostname or address.
+
+        > You can choose to specify ResourceManager's hostname or address.
+
         - `spark.hadoop.yarn.resourcemanager.ha.enabled`: Enable the resource manager HA, set to `true`.
         - `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: list of resource manager logical ids.
         - `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: For each rm-id, specify the hostname corresponding to the resource manager.

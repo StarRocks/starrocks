@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Checks whether `arr1` contains all the elements of `arr2`, that is, whether `arr2` is a subset of `arr1`."
 ---
 
 # array_contains_all

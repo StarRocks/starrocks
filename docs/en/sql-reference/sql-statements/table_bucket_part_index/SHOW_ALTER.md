@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, including:"
 ---
 
 # SHOW ALTER TABLE

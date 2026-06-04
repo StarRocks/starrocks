@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic introduces how to obtain and analyze query trace profiles."
 ---
 
 # Query Trace Profile

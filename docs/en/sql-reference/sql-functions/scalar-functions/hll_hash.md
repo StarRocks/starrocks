@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a value to an hll type."
 ---
 
 # hll_hash

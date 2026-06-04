@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CHAR(M)"
 ---
 
 # CHAR

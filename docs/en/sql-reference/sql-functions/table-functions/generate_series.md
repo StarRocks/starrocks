@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Generates a series of values within the interval specified by `start` and `end`, and with an optional `step`."
 ---
 
 # generate_series

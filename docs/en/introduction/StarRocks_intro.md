@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks is a next-gen, high-performance analytical data warehouse that enables real-time, multi-dimensional, and highly concurrent data analysis."
 ---
 
 # StarRocks

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns the position where str first appeared in substr (start counting from 1 and measured in characters)."
 ---
 
 # instr

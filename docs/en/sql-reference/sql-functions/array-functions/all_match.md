@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns whether all elements of an array match the given predicate."
 ---
 
 # all_match

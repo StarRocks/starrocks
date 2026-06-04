@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts the angle in radians `x` to degrees."
 ---
 
 # degrees
