@@ -614,7 +614,7 @@ public class SplitTabletJob extends TabletReshardJob {
         }
         long grpId = groupId.grpId;
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRangeMgr().getColocateRanges(grpId);
+        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRanges(grpId);
 
         Set<Tuple> canonicalLowers = new LinkedHashSet<>();
         boolean oldStradlesBoundary = false;
@@ -840,7 +840,7 @@ public class SplitTabletJob extends TabletReshardJob {
         // Snapshot colocate ranges once: the createShard RPCs in the inner loop only ever
         // read the same grpId, and the ranges list is stable for the duration of this DDL.
         List<ColocateRange> colocateRanges = rangeColocateGroupId == null ? null
-                : colocateTableIndex.getColocateRangeMgr().getColocateRanges(rangeColocateGroupId.grpId);
+                : colocateTableIndex.getColocateRanges(rangeColocateGroupId.grpId);
         int colocateColumnCount = rangeColocateGroupId == null ? 0
                 : colocateTableIndex.getGroupSchema(rangeColocateGroupId).getColocateColumnCount();
 

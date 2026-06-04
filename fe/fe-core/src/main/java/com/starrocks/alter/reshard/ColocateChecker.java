@@ -116,8 +116,7 @@ public class ColocateChecker {
      * every peer GroupId stable in lock-step.
      */
     private void processGroup(ColocateTableIndex colocateTableIndex, long colocateGroupId) {
-        List<ColocateRange> expectedRanges =
-                colocateTableIndex.getColocateRangeMgr().getColocateRanges(colocateGroupId);
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(colocateGroupId);
         if (expectedRanges.isEmpty()) {
             return;
         }
