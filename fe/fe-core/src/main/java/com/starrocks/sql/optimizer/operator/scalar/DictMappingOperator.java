@@ -110,7 +110,8 @@ public class DictMappingOperator extends ScalarOperator {
         }
 
         DictMappingOperator that = (DictMappingOperator) o;
-        return Objects.equals(dictColumn, that.dictColumn) &&
+        return Objects.equals(getType(), that.getType()) &&
+                Objects.equals(dictColumn, that.dictColumn) &&
                 Objects.equals(originScalaOperator, that.originScalaOperator) &&
                 Objects.equals(stringProvideOperator, that.stringProvideOperator);
     }
