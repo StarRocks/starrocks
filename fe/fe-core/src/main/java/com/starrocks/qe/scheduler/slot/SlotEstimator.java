@@ -19,7 +19,24 @@ import com.starrocks.qe.DefaultCoordinator;
 
 public interface SlotEstimator {
     /**
-     * Estimate the number of slots needed for the given query.
+     * Estimate both the raw (un-clamped) and clamped slot counts for the given query.
+     * <p>The clamped value is bounded by {@code totalSlots} and is suitable for the admission decision;
+     * the raw value preserves the pre-clamp demand and is intended for signals such as "this query wanted
+     * N slots but the warehouse only has M".
      */
-    int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord);
+    SlotEstimate estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord);
+
+    /**
+     * The pre-clamp ({@code rawSlots}) and post-clamp ({@code clampedSlots}) slot counts for a query.
+     * <p>{@code rawSlots} must be greater than or equal to {@code clampedSlots}; the constructor enforces
+     * this invariant.
+     */
+    record SlotEstimate(int rawSlots, int clampedSlots) {
+        public SlotEstimate {
+            if (rawSlots < clampedSlots) {
+                throw new IllegalArgumentException(
+                        "rawSlots (" + rawSlots + ") must be >= clampedSlots (" + clampedSlots + ")");
+            }
+        }
+    }
 }

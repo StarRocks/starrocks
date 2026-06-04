@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.extension.Inject;
 import com.starrocks.metric.MetricVisitor;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
@@ -60,7 +61,25 @@ public class SlotManager extends BaseSlotManager {
 
     @Override
     public void collectWarehouseMetrics(MetricVisitor visitor) {
-        // do nothing
+        WarehouseInFlightTracker tracker = WarehouseInFlightTracker.getInstance();
+        for (Long whId : tracker.getTrackedWarehouseIds()) {
+            QueryQueueOptions opts;
+            try {
+                opts = QueryQueueOptions.createFromEnv(whId);
+            } catch (Exception e) {
+                LOG.debug("[Slot] skip warehouse {} during metric scrape: {}", whId, e.getMessage());
+                continue;
+            }
+            if (!opts.isEnableQueryQueueV2()) {
+                continue;
+            }
+
+            WarehouseMetricMgr.getPendingSumRawSlotsGauge(whId).setValue(tracker.getSumRawSlots(whId));
+
+            visitor.visit(WarehouseMetricMgr.getPendingSumRawSlotsGauge(whId));
+            visitor.visit(WarehouseMetricMgr.getPreScaleWaitCounter(whId));
+            visitor.visitHistogram(WarehouseMetricMgr.getPreScaleWaitHistogram(whId));
+        }
     }
 
     @Override

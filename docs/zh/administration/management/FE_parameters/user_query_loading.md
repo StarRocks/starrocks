@@ -642,6 +642,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 发布验证任务发出的时间间隔。
 - 引入版本: -
 
+### `query_queue_pre_scale_max_wait_ms`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `QueryQueueManager` 等待计算节点扩容增加容量的最大毫秒数。仅当查询通过 `GlobalSlotProvider` 入队（QQv2 启用）且原始 slot 需求超过阈值时生效。默认值 `0` 表示禁用 pre-scale 等待——查询立即被准入，行为与改造前一致。
+- 引入版本: -
+
+### `query_queue_pre_scale_slot_threshold_ratio`
+
+- 默认值: 1.0
+- 类型: Double
+- 单位: 比例
+- 是否可变: Yes
+- 描述: 触发 pre-scale 等待的原始 slot 阈值比例。当查询的 `rawSlots > totalSlots × 此比例` 时进入等待。
+- 引入版本: -
+
 ### `query_queue_slots_estimator_strategy`
 
 - 默认值: MAX

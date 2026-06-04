@@ -39,7 +39,7 @@ public class SlotEstimatorTest extends SchedulerTestBase {
     @Test
     public void testDefaultSlotEstimator() {
         SlotEstimatorFactory.DefaultSlotEstimator estimator = new SlotEstimatorFactory.DefaultSlotEstimator();
-        assertThat(estimator.estimateSlots(null, null, null)).isOne();
+        assertThat(estimator.estimateSlots(null, null, null).clampedSlots()).isOne();
     }
 
     @Test
@@ -53,19 +53,23 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(3);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(3);
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots())
+                .isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers - 10);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots())
+                .isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers + 10);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots())
+                .isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers * 100);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots())
+                .isEqualTo(opts.v2().getTotalSlots());
     }
 
     @Test
@@ -81,7 +85,7 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         {
             DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(20 / 3 * 3);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(20 / 3 * 3);
         }
 
         String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
@@ -107,32 +111,33 @@ public class SlotEstimatorTest extends SchedulerTestBase {
             setNodeCardinality(coordinator, 1, 10);
             setNodeCardinality(coordinator, 3, 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(20 / 3 * 3);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(20 / 3 * 3);
         }
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(dop * numWorkers);
         }
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(dop * numWorkers);
         }
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * 7);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(7 * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(7 * numWorkers);
         }
         {
             DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=100)*/ " +
                     "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey");
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * 100);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots())
+                    .isEqualTo(opts.v2().getTotalSlots());
         }
 
         {
@@ -141,26 +146,27 @@ public class SlotEstimatorTest extends SchedulerTestBase {
             // The exchange source node of the sink node only on one BE.
             setNodeCardinality(coordinator, 7, numRowsPerWorker * 19);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(19);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(19);
         }
 
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 1 / 4);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop / 2 * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(dop / 2 * numWorkers);
         }
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 3 / 4);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * 3 / 4 * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots())
+                    .isEqualTo(dop * 3 / 4 * numWorkers);
         }
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 5 / 4);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(dop * numWorkers);
         }
     }
 
@@ -181,35 +187,35 @@ public class SlotEstimatorTest extends SchedulerTestBase {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(dop * numWorkers);
         }
         {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator).clampedSlots()).isEqualTo(dop * numWorkers);
         }
     }
 
     @Test
     public void testMaxSlotsEstimator() {
-        SlotEstimator estimator1 = (opts, context, coord) -> 1;
-        SlotEstimator estimator2 = (opts, context, coord) -> 2;
-        SlotEstimator estimator3 = (opts, context, coord) -> 3;
+        SlotEstimator estimator1 = (opts, context, coord) -> new SlotEstimator.SlotEstimate(1, 1);
+        SlotEstimator estimator2 = (opts, context, coord) -> new SlotEstimator.SlotEstimate(2, 2);
+        SlotEstimator estimator3 = (opts, context, coord) -> new SlotEstimator.SlotEstimate(3, 3);
 
         {
             SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(estimator1, estimator2);
-            assertThat(estimator.estimateSlots(null, null, null)).isEqualTo(2);
+            assertThat(estimator.estimateSlots(null, null, null).clampedSlots()).isEqualTo(2);
         }
 
         {
             SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(estimator1, estimator3);
-            assertThat(estimator.estimateSlots(null, null, null)).isEqualTo(3);
+            assertThat(estimator.estimateSlots(null, null, null).clampedSlots()).isEqualTo(3);
         }
 
         {
             SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(estimator2, estimator3);
-            assertThat(estimator.estimateSlots(null, null, null)).isEqualTo(3);
+            assertThat(estimator.estimateSlots(null, null, null).clampedSlots()).isEqualTo(3);
         }
     }
 
@@ -390,5 +396,117 @@ public class SlotEstimatorTest extends SchedulerTestBase {
             Statistics statistics = Statistics.builder().setOutputRowCount(cardinality).build();
             node.computeStatistics(statistics);
         }
+    }
+
+    @Test
+    public void testParallelismBasedReturnsRawAboveTotalSlots() throws Exception {
+        // totalSlots = numCoresPerWorker * concurrencyLevel * numWorkers = 8 * 1 * 1 = 8.
+        // numRowsPerSlot = 1 so per-source-node raw count is dominated by cardinality.
+        // pipeline_dop=100 lets per-fragment raw (before clamp) reach 100 > totalSlots.
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(1, 1, 8, 1L << 30, 1, 1));
+        assertThat(opts.v2().getTotalSlots()).isEqualTo(8);
+
+        DefaultCoordinator coord = getScheduler("SELECT /*+SET_VAR(pipeline_dop=100)*/ " +
+                "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey");
+        // Push cardinality way above totalSlots so raw >> 8.
+        setNodeCardinality(coord, 1, 1_000_000);
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
+
+        SlotEstimator.SlotEstimate est = new SlotEstimatorFactory.ParallelismBasedSlotsEstimator()
+                .estimateSlots(opts, connectContext, coord);
+        assertThat(est.rawSlots())
+                .as("raw should exceed totalSlots for big query")
+                .isGreaterThan(8);
+        assertThat(est.clampedSlots())
+                .as("clamped should equal totalSlots")
+                .isEqualTo(8);
+    }
+
+    @Test
+    public void testMemoryBasedReturnsRawAboveTotalSlots() throws Exception {
+        final int numWorkers = 3;
+        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
+        QueryQueueOptions opts =
+                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
+
+        DefaultCoordinator coord = getScheduler("SELECT * FROM lineitem");
+        // Mem cost far exceeds capacity: raw should exceed totalSlots, clamped == totalSlots.
+        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers * 100);
+
+        SlotEstimator.SlotEstimate est = new SlotEstimatorFactory.MemoryBasedSlotsEstimator()
+                .estimateSlots(opts, connectContext, coord);
+        assertThat(est.rawSlots()).isGreaterThan(opts.v2().getTotalSlots());
+        assertThat(est.clampedSlots()).isEqualTo(opts.v2().getTotalSlots());
+    }
+
+    @Test
+    public void testSlotEstimateRejectsRawLessThanClamped() {
+        try {
+            new SlotEstimator.SlotEstimate(1, 5);
+            org.junit.jupiter.api.Assertions.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testMaxEstimatorAggregatesComponentwise() {
+        SlotEstimator a = (opts, ctx, coord) -> new SlotEstimator.SlotEstimate(100, 3);
+        SlotEstimator b = (opts, ctx, coord) -> new SlotEstimator.SlotEstimate(10, 7);
+
+        SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(a, b);
+        SlotEstimator.SlotEstimate est = estimator.estimateSlots(null, null, null);
+        // max(100, 10) = 100 for raw; max(3, 7) = 7 for clamped.
+        assertThat(est.rawSlots()).isEqualTo(100);
+        assertThat(est.clampedSlots()).isEqualTo(7);
+    }
+
+    @Test
+    public void testMinEstimatorAggregatesComponentwise() {
+        SlotEstimator a = (opts, ctx, coord) -> new SlotEstimator.SlotEstimate(100, 3);
+        SlotEstimator b = (opts, ctx, coord) -> new SlotEstimator.SlotEstimate(10, 7);
+
+        SlotEstimatorFactory.MinSlotsEstimator estimator = new SlotEstimatorFactory.MinSlotsEstimator(a, b);
+        SlotEstimator.SlotEstimate est = estimator.estimateSlots(null, null, null);
+        // min(100, 10) = 10 for raw; min(3, 7) = 3 for clamped. Invariant 10 >= 3 holds.
+        assertThat(est.rawSlots()).isEqualTo(10);
+        assertThat(est.clampedSlots()).isEqualTo(3);
+    }
+
+    @Test
+    public void testMinEstimatorEmptyDefaultsToOne() {
+        SlotEstimatorFactory.MinSlotsEstimator estimator = new SlotEstimatorFactory.MinSlotsEstimator();
+        SlotEstimator.SlotEstimate est = estimator.estimateSlots(null, null, null);
+        assertThat(est.rawSlots()).isOne();
+        assertThat(est.clampedSlots()).isOne();
+    }
+
+    @Test
+    public void testMaxEstimatorReturnsRawAboveTotalSlots() throws Exception {
+        // Default policy is MAX, wrapping MemoryBasedSlotsEstimator + ParallelismBasedSlotsEstimator.
+        // The parallelism-based child should produce raw > totalSlots; the wrapper must surface that
+        // raw value (rather than the trivially-equal default fallback).
+        Config.query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.MAX.name();
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(1, 1, 8, 1L << 30, 1, 1));
+        assertThat(opts.v2().getTotalSlots()).isEqualTo(8);
+
+        SlotEstimator estimator = SlotEstimatorFactory.create(opts);
+        assertThat(estimator).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+
+        DefaultCoordinator coord = getScheduler("SELECT /*+SET_VAR(pipeline_dop=100)*/ " +
+                "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey");
+        setNodeCardinality(coord, 1, 1_000_000);
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
+        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
+
+        SlotEstimator.SlotEstimate est = estimator.estimateSlots(opts, connectContext, coord);
+        assertThat(est.rawSlots())
+                .as("wrapper must propagate child raw beyond totalSlots")
+                .isGreaterThan(est.clampedSlots());
+        assertThat(est.clampedSlots())
+                .as("clamped is bounded by totalSlots")
+                .isLessThanOrEqualTo(opts.v2().getTotalSlots());
     }
 }

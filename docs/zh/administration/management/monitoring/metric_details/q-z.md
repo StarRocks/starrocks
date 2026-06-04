@@ -51,6 +51,27 @@ description: "Alphabetical q - z"
 - 单位：字节
 - 描述：查询使用的内存。
 
+## `query_queue_pending_sum_raw_slots`
+
+- 单位：计数
+- 类型：Gauge
+- 标签：`warehouse_id`、`warehouse_name`
+- 描述：按仓库聚合的、待入队查询原始（未钳制）预估 slot 数之和。用于在多条中等规模查询同时排队时检测整体需求压力。
+
+## `query_queue_pre_scale_wait_ms`
+
+- 单位：毫秒
+- 类型：Histogram
+- 标签：`warehouse_id`、`warehouse_name`
+- 描述：每个仓库内 pre-scale 等待门控触发的实际等待时长（毫秒）分布。每次门控触发记录一次，无论是否最终满足容量条件，但被中断（InterruptedException）的等待除外。
+
+## `query_queue_pre_scale_wait_total`
+
+- 单位：次
+- 类型：Counter
+- 标签：`warehouse_id`、`warehouse_name`
+- 描述：每个仓库内 pre-scale 等待门控触发的累计次数。用于监控大查询被自动扩容友好的准入延迟所阻塞的频次，但被中断（InterruptedException）的等待除外。
+
 ## `query_scan_bytes`
 
 - 单位：字节

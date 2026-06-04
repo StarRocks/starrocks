@@ -643,6 +643,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which release validation tasks are issued.
 - Introduced in: -
 
+### `query_queue_pre_scale_max_wait_ms`
+
+- Default: 0
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum time `QueryQueueManager` will hold a pending query waiting for compute-node scale-up to add capacity. Only applies when the query is admitted via `GlobalSlotProvider` (QQv2 enabled) and its raw demand exceeds the threshold ratio. `0` (default) disables pre-scale wait — queries are admitted immediately as before.
+- Introduced in: -
+
+### `query_queue_pre_scale_slot_threshold_ratio`
+
+- Default: 1.0
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Threshold ratio for triggering pre-scale wait. A query waits if `rawSlots > totalSlots × this ratio`.
+- Introduced in: -
+
 ### `query_queue_slots_estimator_strategy`
 
 - Default: MAX

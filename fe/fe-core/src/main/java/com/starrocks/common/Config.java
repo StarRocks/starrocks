@@ -899,6 +899,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Schedule strategy of pending queries: SWRR/SJF")
     public static String query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.createDefault().name();
 
+    @ConfField(mutable = true,
+            comment = "Max milliseconds QueryQueueManager will wait for compute-node scale-up to add " +
+                    "capacity before admitting a query whose raw demand exceeds capacity. Applies only " +
+                    "when query goes through GlobalSlotProvider (QQv2 enabled). 0 (default) disables pre-scale wait.")
+    public static long query_queue_pre_scale_max_wait_ms = 0L;
+
+    @ConfField(mutable = true,
+            comment = "Raw-slot threshold ratio for triggering pre-scale wait. A query waits if " +
+                    "rawSlots > totalSlots * this ratio.")
+    public static double query_queue_pre_scale_slot_threshold_ratio = 1.0;
+
     @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: MBE/PBE/MAX/MIN")
     public static String query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
 

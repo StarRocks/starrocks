@@ -14,20 +14,24 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
+import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotEstimator;
 import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.qe.scheduler.slot.WarehouseInFlightTracker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TWorkGroup;
@@ -60,15 +64,63 @@ public class QueryQueueManager {
         }
         final JobSpec jobSpec = coord.getJobSpec();
         final SlotProvider slotProvider = jobSpec.getSlotProvider();
+        final QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coord);
+        final SlotEstimator.SlotEstimate estimate = SlotEstimatorFactory.create(opts).estimateSlots(opts, context, coord);
+        final int totalSlots = opts.isEnableQueryQueueV2() ? opts.v2().getTotalSlots() : 0;
+        // Only register tracker entries on the GlobalSlotProvider path; LocalSlotProvider paths
+        // (LOAD, STATISTICS, schema-only queries, queue disabled) must NOT enter the tracker.
+        final boolean trackedInFlight = (slotProvider instanceof GlobalSlotProvider) && opts.isEnableQueryQueueV2();
+        final long warehouseId = context.getCurrentWarehouseId();
+
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
+        LogicalSlot slotRequirement = null;
         try {
-            LogicalSlot slotRequirement = createSlot(context, coord);
+            slotRequirement = createSlot(context, coord, estimate.clampedSlots());
             coord.setSlot(slotRequirement);
+
+            // Write numSlots to the audit log if query queue v2 is enabled, since numSlots is always 1 for query queue v1
+            // and may be different for query queue v2.
+            if (opts.isEnableQueryQueueV2()) {
+                context.auditEventBuilder.setNumSlots(estimate.clampedSlots());
+                context.auditEventBuilder.setNumSlotsRaw(estimate.rawSlots());
+            }
 
             // register listeners
             if (jobSpec.isQueryType())  {
                 context.registerListener(new LogicalSlot.ConnectContextListener(slotRequirement));
+            }
+
+            if (trackedInFlight) {
+                WarehouseInFlightTracker.getInstance().onEnterPending(
+                        warehouseId, slotRequirement.getSlotId(),
+                        estimate.rawSlots(), estimate.clampedSlots(),
+                        totalSlots);
+
+                // Pre-scale wait: hold queries whose raw demand exceeds capacity briefly to give
+                // external auto-scalers a chance to add CN capacity before admission.
+                if (Config.query_queue_pre_scale_max_wait_ms > 0L) {
+                    double gateRatio = Config.query_queue_pre_scale_slot_threshold_ratio;
+                    if (estimate.rawSlots() > (long) Math.ceil(totalSlots * gateRatio)) {
+                        // Reserve 1s headroom before pending deadline so the slot provider has time to admit after wait.
+                        long capWaitMs = Math.min(
+                                Config.query_queue_pre_scale_max_wait_ms,
+                                Math.max(0L, slotRequirement.getExpiredPendingTimeMs() - System.currentTimeMillis() - 1000L));
+                        long preScaleStartMs = System.currentTimeMillis();
+                        boolean satisfied = WarehouseInFlightTracker.getInstance().awaitCapacity(
+                                estimate.rawSlots(),
+                                () -> QueryQueueOptions.createFromEnv(warehouseId).v2().getTotalSlots(),
+                                gateRatio,
+                                capWaitMs);
+                        long waitedMs = System.currentTimeMillis() - preScaleStartMs;
+                        WarehouseMetricMgr.getPreScaleWaitCounter(warehouseId).increase(1L);
+                        WarehouseMetricMgr.getPreScaleWaitHistogram(warehouseId).update(waitedMs);
+                        LOG.info("Pre-scale wait for queryId={}, raw={}, totalSlotsAtStart={}, capWaitMs={}, "
+                                        + "waited={}ms, satisfied={}",
+                                UUIDUtil.fromTUniqueid(coord.getQueryId()), estimate.rawSlots(),
+                                totalSlots, capWaitMs, waitedMs, satisfied);
+                    }
+                }
             }
 
             // LocalSlotProvider does not need to queue, just return directly. Currently, it is only used to adjust DOP
@@ -86,7 +138,6 @@ public class QueryQueueManager {
 
             long deadlineEpochMs = slotRequirement.getExpiredPendingTimeMs();
             LogicalSlot allocatedSlot = null;
-            final long warehouseId = context.getCurrentWarehouseId();
             final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
             // first update pending time in context to avoid query timeout when the query in the query queue
             int queryQueuePendingTimeout = slotManager.getQueryQueuePendingTimeoutSecond(warehouseId);
@@ -129,6 +180,9 @@ public class QueryQueueManager {
                 }
             }
         } finally {
+            if (slotRequirement != null && trackedInFlight) {
+                WarehouseInFlightTracker.getInstance().onExitPending(warehouseId, slotRequirement.getSlotId());
+            }
             if (isPending) {
                 long pendingTimeMs = System.currentTimeMillis() - startMs;
                 // then update the real pending time in context that the time should bec calculated in query's timeout.
@@ -142,7 +196,7 @@ public class QueryQueueManager {
         }
     }
 
-    private LogicalSlot createSlot(ConnectContext context, DefaultCoordinator coord) throws StarRocksException {
+    private LogicalSlot createSlot(ConnectContext context, DefaultCoordinator coord, int numSlots) throws StarRocksException {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(selfIpAndPort.first);
         if (frontend == null) {
@@ -167,26 +221,11 @@ public class QueryQueueManager {
             pipelineDop = 0;
         }
 
-        int numSlots = estimateNumSlots(context, coord);
         long warehouseId = context.getCurrentWarehouseId();
 
         return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), warehouseId,
                 groupId, numSlots, expiredPendingTimeMs, expiredAllocatedTimeMs,
                 frontend.getStartTime(), numFragments, pipelineDop, context.getSessionVariable().getExecMode());
-    }
-
-    private int estimateNumSlots(ConnectContext context, DefaultCoordinator coord) {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coord);
-
-        SlotEstimator estimator = SlotEstimatorFactory.create(opts);
-        final int numSlots = estimator.estimateSlots(opts, context, coord);
-        // Write numSlots to the audit log if query queue v2 is enabled, since numSlots is always 1 for query queue v1 and
-        // may be different for query queue v2.
-        if (opts.isEnableQueryQueueV2()) {
-            context.auditEventBuilder.setNumSlots(numSlots);
-        }
-
-        return numSlots;
     }
 
 }
