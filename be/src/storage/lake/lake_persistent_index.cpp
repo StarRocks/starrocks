@@ -1429,8 +1429,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto& scan_units = plan.scan_units;
     auto& rebuild_rowsets = plan.rebuild_rowsets;
 
-    std::vector<RebuildScanUnitResult> unit_results(scan_units.size());
-
     // Per-cost atomics + a mutex-guarded status sink so workers accumulate/report without serializing.
     std::atomic<int64_t> get_next_cost_us{0};
     std::atomic<int64_t> pk_encode_cost_us{0};
@@ -1449,13 +1447,21 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                                  .err_mutex = &scan_err_mutex,
                                  .scan_status = &scan_status};
 
-    // Phase B (PARALLEL, single layer): submit one task per ScanUnit — i.e. per (rowset, segment) — to
-    // pk_index_execution_thread_pool() via ONE CONCURRENT token. This is the only parallel layer; Phase
-    // A's get_each_segment_iterator stays serial (it has its own internal pool), so no task on this pool
-    // submits to it. Both "many rowsets × 1 segment" and "1 rowset × many segments" now parallelise.
-    // Gated on the config flag and >1 scan unit; else inline.
-    const bool parallel_scan = config::enable_pk_index_parallel_execution && scan_units.size() > 1;
-    if (parallel_scan) {
+    // Gate the parallel scan with the same helper load_dels uses for its parallel del-apply
+    // (enabled, >1 unit, and the update tracker not already past pk_index_parallel_rebuild_mem_ratio).
+    // The parallel path buffers every unit's decoded keys+values until Phase C consumes them, so under
+    // memory pressure (or with a single unit) we fall back to a serial scan that holds at most one
+    // unit's batches at a time and runs on the caller thread (no thread pool) — the segment-scan analog
+    // of load_dels reading one del file at a time.
+    const bool use_parallel = should_parallel_rebuild_prefetch(static_cast<int>(scan_units.size()));
+
+    // Phase B (PARALLEL): submit one task per (rowset, segment) unit to pk_index_execution_thread_pool
+    // via ONE CONCURRENT token, each worker writing its own result slot. This is the only parallel
+    // layer; Phase A's get_each_segment_iterator stays serial (it has its own internal pool). Skipped
+    // entirely in the serial path, where each unit is scanned just-in-time in Phase C.
+    std::vector<RebuildScanUnitResult> unit_results;
+    if (use_parallel) {
+        unit_results.resize(scan_units.size());
         auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
         for (const auto& unit : scan_units) {
@@ -1468,30 +1474,35 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
         }
         token->wait();
-    } else {
-        for (const auto& unit : scan_units) {
-            scan_one_rebuild_unit(unit, ctx, &unit_results[unit.global_seq]);
-        }
+        // Propagate the first scan error before mutating the shared index.
+        RETURN_IF_ERROR(scan_status);
     }
-    // Propagate the first scan error before mutating the shared index.
-    RETURN_IF_ERROR(scan_status);
 
     // Phase C (SERIAL, caller thread): walk rebuild_rowsets in version order. For each rowset, insert
     // its scan units' batches in segment order, then apply that rowset's del files — preserving the
     // original "this rowset's segments, then this rowset's del files, then the next rowset" ordering,
     // including for rowsets whose segments were all skipped (no units). scan_units are appended in
     // (rowset_ord, seg_ord) order, so each rowset's units form a contiguous run that we consume with a
-    // single advancing cursor. insert()/_memtable/load_dels are NOT thread-safe and MUST run on the
-    // caller thread only.
+    // single advancing cursor. In the serial path each unit is scanned here, just before its insert, so
+    // at most one unit's batches are held. insert()/_memtable/load_dels are NOT thread-safe and MUST run
+    // on the caller thread only.
     size_t unit_cursor = 0;
     for (size_t ro = 0; ro < rebuild_rowsets.size(); ro++) {
         while (unit_cursor < scan_units.size() && static_cast<size_t>(scan_units[unit_cursor].rowset_ord) == ro) {
             const auto& unit = scan_units[unit_cursor];
             TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            auto& result = unit_results[unit.global_seq];
+            RebuildScanUnitResult serial_result;
+            RebuildScanUnitResult* result;
+            if (use_parallel) {
+                result = &unit_results[unit.global_seq];
+            } else {
+                scan_one_rebuild_unit(unit, ctx, &serial_result);
+                RETURN_IF_ERROR(scan_status);
+                result = &serial_result;
+            }
             TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
-            TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
-            for (auto& batch : result.batches) {
+            TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result->num_rows);
+            for (auto& batch : result->batches) {
                 RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
                                        batch.values.data(), unit.rowset_version));
             }
