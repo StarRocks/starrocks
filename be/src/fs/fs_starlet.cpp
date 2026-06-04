@@ -659,16 +659,6 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
-<<<<<<< HEAD
-        auto handle_or = g_worker->get_shard_filesystem(shard_id, _conf);
-        if (!handle_or.ok()) {
-            return handle_or.status();
-        }
-        if (replication_options) {
-            *replication_options = g_worker->get_replication_options(shard_id, (*handle_or).replicas);
-        }
-        return (*handle_or).file_system;
-=======
 #ifdef BE_TEST
         // Mirrors the hook in `new_fs_starlet(shard_id, ...)` at the bottom of this file.
         // Tests can inject either a mock filesystem or a failure status here without
@@ -679,8 +669,14 @@ private:
             return fs_st;
         }
 #endif
-        return g_worker->get_shard_filesystem(shard_id, _conf);
->>>>>>> cea528ae12a... [BugFix] Fix shared-data lake replication file-copy crashes (backport #73666) (#73918)
+        auto handle_or = g_worker->get_shard_filesystem(shard_id, _conf);
+        if (!handle_or.ok()) {
+            return handle_or.status();
+        }
+        if (replication_options) {
+            *replication_options = g_worker->get_replication_options(shard_id, (*handle_or).replicas);
+        }
+        return (*handle_or).file_system;
     }
 
 private:
