@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, including:"
+description: "Cancels an in-progress ALTER TABLE operation such as column modification, schema optimization, or rollup index creation."
 ---
 
 # CANCEL ALTER TABLE

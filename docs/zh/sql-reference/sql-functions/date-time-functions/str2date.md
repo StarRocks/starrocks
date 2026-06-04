@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "按照指定格式将字符串转换为 DATE 类型的值。"
 ---
 
 # str2date

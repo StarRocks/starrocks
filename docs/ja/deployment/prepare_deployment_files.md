@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x86 または ARM ベースの CPU 向け StarRocks デプロイメントファイルの準備方法。"
 ---
 
 # デプロイメントファイルの準備

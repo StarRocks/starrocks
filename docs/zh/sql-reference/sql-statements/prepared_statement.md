@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "预准备语句用于多次执行结构相同、仅部分变量不同的 SQL 语句。"
 ---
 
 # 预准备语句

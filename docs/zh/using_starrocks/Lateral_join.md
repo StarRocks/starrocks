@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Lateral Join with unnest() in StarRocks to convert array columns to rows for ETL column-to-row transformations."
 sidebar_position: 50
 keywords: ['爆裂函数','一行转多行','炸开','explode']
 ---

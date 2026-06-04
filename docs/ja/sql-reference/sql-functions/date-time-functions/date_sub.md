@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された時間間隔を日付から減算します。"
 ---
 
 # date_sub,subdate

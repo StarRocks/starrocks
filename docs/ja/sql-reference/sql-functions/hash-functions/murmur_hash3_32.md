@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力文字列の32ビットのmurmur3ハッシュ値を返します。"
 ---
 
 # murmur_hash3_32

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY列の異なる値（NULLを含む）を集約し、1つの行にまとめます。"
 ---
 
 # array_unique_agg

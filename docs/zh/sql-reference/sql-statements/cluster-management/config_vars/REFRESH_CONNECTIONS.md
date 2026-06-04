@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "REFRESH CONNECTIONS 刷新所有活动连接以应用通过 SET GLOBAL 更改的全局变量。"
 ---
 
 # REFRESH CONNECTIONS

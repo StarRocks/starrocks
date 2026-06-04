@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算 SHA-2 系列哈希函数（SHA-224/SHA-256/SHA-384/SHA-512）。"
 ---
 
 # sha2

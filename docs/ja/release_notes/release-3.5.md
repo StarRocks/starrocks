@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAuth 2.0/JWT 認証、複数パーティション列マテリアライズドビュー。"
 ---
 
 # StarRocks version 3.5

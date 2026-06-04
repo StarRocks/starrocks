@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：ログ、サーバー設定、メタデータ管理に関連する設定項目。"
 sidebar_label: "ログ、サーバー、およびメタデータ"
 ---
 

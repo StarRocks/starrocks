@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将指定表的数据导出到指定位置。"
 ---
 
 # EXPORT

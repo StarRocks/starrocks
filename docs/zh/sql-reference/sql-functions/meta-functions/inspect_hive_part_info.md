@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定外部表的 Hive 分区信息，以 JSON 格式呈现。"
 ---
 
 # inspect_hive_part_info

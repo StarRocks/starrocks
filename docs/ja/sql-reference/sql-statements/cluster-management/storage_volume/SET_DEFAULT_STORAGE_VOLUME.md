@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET DEFAULT STORAGE VOLUME は、ストレージボリュームをデフォルトのストレージボリュームとして設定します。"
 ---
 
 # SET DEFAULT STORAGE VOLUME

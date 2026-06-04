@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ANALYZE STATUS 查看当前所有采集任务的状态。"
 ---
 
 # SHOW ANALYZE STATUS
