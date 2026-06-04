@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Prometheus と Grafana を使用して StarRocks クラスターの稼働状況を監視、可視化、アラートします。"
 ---
 
 # Prometheus と Grafana を使用した監視とアラート

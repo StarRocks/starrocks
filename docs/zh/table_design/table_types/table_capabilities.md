@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Comparison of capabilities across StarRocks table types: Duplicate Key, Aggregate, Unique Key, and Primary Key tables."
 sidebar_position: 10
 ---
 

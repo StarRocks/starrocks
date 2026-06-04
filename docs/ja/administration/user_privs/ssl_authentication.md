@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v3.4.1以降、SSL で暗号化されたセキュア接続をサポートしてエンドポイント認証とデータ暗号化を提供します。"
 sidebar_position: 40
 ---
 

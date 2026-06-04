@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 StarRocks Kubernetes Operator 在 Kubernetes 集群上自动化部署和管理集群。"
 ---
 
 # 使用 Operator 部署 StarRocks 集群

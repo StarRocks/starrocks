@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v2.5以降、StarRocks はクエリキューで同時実行やリソース制限に達時にクエリを自動的にキューイングします。"
 sidebar_position: 20
 ---
 

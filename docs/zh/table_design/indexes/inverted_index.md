@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and use full-text inverted indexes in StarRocks to accelerate text keyword searches by indexing individual words."
 toc_max_heading_level: 4
 sidebar_position: 50
 ---

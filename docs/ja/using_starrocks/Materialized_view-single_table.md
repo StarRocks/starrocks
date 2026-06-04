@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "同期マテリアライズドビュー (Rollup) は StarRocks で単一テーブル集計クエリをリアルタイムで透過的に加速させます。"
 sidebar_position: 20
 ---
 

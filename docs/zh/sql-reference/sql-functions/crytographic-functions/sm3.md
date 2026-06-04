@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 SM3 摘要算法将字符串加密为 256-bit 的十六进制字符串。"
 ---
 
 # sm3

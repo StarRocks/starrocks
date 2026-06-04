@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load 可以持续从 Apache Kafka® 消费消息并导入数据到 StarRocks。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';

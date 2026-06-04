@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 Apache Flink connector 持续加载数据到 StarRocks，支持 DataStream、Table API 和 Python API。"
 ---
 
 # 从 Apache Flink® 持续导入

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UPDATE modifies rows in a Primary Key table with optional multi-table joins and CTE support."
 ---
 
 # UPDATE

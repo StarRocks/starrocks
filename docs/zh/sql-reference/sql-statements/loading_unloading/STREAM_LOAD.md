@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream Load 允许从本地文件系统或流式数据源导入数据，支持压缩传输。"
 toc_max_heading_level: 4
 ---
 

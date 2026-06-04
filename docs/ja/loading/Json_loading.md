@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream Load または Routine Load を使用して JSON データを StarRocks にロードする方法（JSON パス式とネストされたオブジェクト処理を含む）。"
 ---
 
 # はじめに

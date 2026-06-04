@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "共有なし StarRocks クラスタを手動でデプロイする方法（BE がストレージとコンピューティングの両方を担当）。"
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、マルチテーブル書き込みトランザクション、Iceberg compaction。"
 ---
 
 # StarRocks version 4.0

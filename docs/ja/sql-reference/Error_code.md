@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "クエリリクエストに関連する一般的な StarRocks エラーコードのリファレンス。"
 ---
 
 # エラーコード

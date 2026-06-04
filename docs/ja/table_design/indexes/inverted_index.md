@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.3 以降の全文転置インデックスはテキストを単語に分割してキーワード検索を加速します。"
 toc_max_heading_level: 4
 sidebar_position: 50
 ---

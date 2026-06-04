@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Flink コネクタは DataStream API・Table API & SQL・Python API に対応し、Flink から StarRocks への継続的なデータロードを実現します。"
 ---
 
 # Apache Flink® からデータを継続的にロードする

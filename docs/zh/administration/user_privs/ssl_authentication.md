@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "From v3.4.1 onwards, StarRocks supports secure connections encrypted by SSL for endpoint verification and data encryption."
 sidebar_position: 40
 ---
 

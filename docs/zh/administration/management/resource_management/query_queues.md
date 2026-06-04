@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks supports query queues from v2.5 to automatically queue queries when concurrent count or resource usage reaches thresholds, preventing cluster overload."
 ---
 
 # 查询队列

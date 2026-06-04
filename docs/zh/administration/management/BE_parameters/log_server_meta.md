@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 keywords: ['Canshu']
 ---

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "与えられた式が指定されたパターンの正規表現に一致するかどうかをチェックします。"
 ---
 
 # regexp

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ローカルファイルシステムまたはストリーミングソースからデータを同期的にロードします。"
 toc_max_heading_level: 4
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE TABLE LIKE 创建表结构相同的空表，支持指定不同的分区和分桶方式。"
 ---
 
 # CREATE TABLE LIKE

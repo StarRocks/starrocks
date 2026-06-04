@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Operator で Kubernetes クラスタ上の StarRocks クラスタをデプロイ・管理する方法。"
 ---
 
 # Operator を使用して StarRocks をデプロイする

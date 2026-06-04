@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数据导入的系统限制和配置参数：内存限制、并发控制、超时设置和性能调优。"
 toc_max_heading_level: 4
 ---
 

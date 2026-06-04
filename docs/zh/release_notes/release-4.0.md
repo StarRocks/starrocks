@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.0 版本发布说明：DECIMAL256 类型、文件捆绑、多表写入事务、Iceberg 压缩、隐藏分区。"
 ---
 
 # StarRocks version 4.0

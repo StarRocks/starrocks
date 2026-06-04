@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "删除 Map 中重复的 Key，保留最后一个出现的键值对。"
 ---
 
 # distinct_map_keys

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.5：Delta Lake カタログ、外部ストレージ用 Data Cache、Query Cache、クエリキュー、データロード用リソースグループ、STRUCT/MAP 型。"
 ---
 
 # StarRocks version 2.5

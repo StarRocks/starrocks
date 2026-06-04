@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Apache Kafka からメッセージを継続的に消費し StarRocks にロードします。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';

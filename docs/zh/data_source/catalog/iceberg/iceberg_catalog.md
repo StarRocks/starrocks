@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Iceberg catalog 是外部 catalog，支持无导入查询 Iceberg 数据及数据转换导入。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
 ---

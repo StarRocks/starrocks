@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+description: "StarRocks でのパーティショニング戦略を通じて、クエリパフォーマンスと管理を最適化する方法。"
 ---
 
 # パーティショニング
