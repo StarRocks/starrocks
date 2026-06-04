@@ -142,6 +142,11 @@ preseeded_archive_exists() {
     fi
 
     if [ -n "${!SOURCE}" ] && [ -d "$TP_SOURCE_DIR/${!SOURCE}" ]; then
+        if [[ "${STARROCKS_TRUST_EXTRACTED_THIRDPARTY_SOURCES:-0}" != "1" ]]; then
+            echo "Found extracted source directory $TP_SOURCE_DIR/${!SOURCE}, but ${!NAME} is missing." >&2
+            echo "Provide the md5-checked archive or set STARROCKS_TRUST_EXTRACTED_THIRDPARTY_SOURCES=1 to trust extracted sources." >&2
+            return 1
+        fi
         echo "Source ${!SOURCE} already exists."
         return 0
     fi
