@@ -428,7 +428,7 @@ echo "Finished patching $AWS_SDK_CPP_SOURCE"
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.1" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
     patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
     patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
