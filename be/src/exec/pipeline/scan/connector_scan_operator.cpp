@@ -20,6 +20,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_state.h"
+#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_morsel.h"
@@ -370,7 +371,7 @@ void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
 
     [[maybe_unused]] auto build_debug_string = [&]() {
         std::stringstream ss;
-        ss << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
+        ss << "end_driver_process. query_id = " << print_id(driver->query_runtime_state()->query_id())
            << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
         return ss.str();
     };

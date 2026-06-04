@@ -23,6 +23,7 @@
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
@@ -95,7 +96,8 @@ void PipelineDriverPoller::run_internal() {
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
                 WARN_IF_POLLER_TIMEOUT(driver->to_readable_string());
-                if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
+                auto* query_runtime_state = driver->query_runtime_state();
+                if (!driver->is_query_never_expired() && query_runtime_state->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                     // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -107,8 +109,8 @@ void PipelineDriverPoller::run_internal() {
                         LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
                         driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
                     }
-                    auto query_id = driver->query_ctx()->query_id();
-                    size_t timeout = driver->query_ctx()->get_query_expire_seconds();
+                    auto query_id = query_runtime_state->query_id();
+                    size_t timeout = query_runtime_state->get_query_expire_seconds();
                     hook_on_query_timeout(query_id, timeout);
                     driver->fragment_ctx()->cancel(
                             Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));

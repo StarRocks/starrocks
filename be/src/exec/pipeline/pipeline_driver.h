@@ -96,7 +96,7 @@ public:
     };
 
 public:
-    PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
+    PipelineDriver(const Operators& operators, QueryRuntimeState* query_runtime_state, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
@@ -104,8 +104,8 @@ public:
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
 
-    QueryContext* query_ctx() { return _query_ctx; }
-    const QueryContext* query_ctx() const { return _query_ctx; }
+    QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
+    const QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
     const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
@@ -464,7 +464,7 @@ protected:
     int64_t _global_rf_wait_timeout_ns = -1;
 
     size_t _first_unfinished{0};
-    QueryContext* _query_ctx;
+    QueryRuntimeState* _query_runtime_state;
     FragmentContext* _fragment_ctx;
     Pipeline* _pipeline;
     DriverObserver* _driver_observer;

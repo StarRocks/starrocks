@@ -31,6 +31,7 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "gutil/strings/substitute.h"
@@ -123,7 +124,8 @@ void GlobalDriverExecutor::_worker_thread() {
 
         auto* fragment_ctx = driver->fragment_ctx();
         auto* runtime_state = fragment_ctx->runtime_state();
-        auto* query_ctx = driver->query_ctx();
+        auto* query_ctx = runtime_state->query_ctx();
+        auto* query_runtime_state = driver->query_runtime_state();
 
         DCHECK(!driver->is_in_ready());
         DCHECK(!driver->is_in_blocked());
@@ -136,9 +138,11 @@ void GlobalDriverExecutor::_worker_thread() {
         driver->increment_schedule_times();
         _metrics->driver_schedule_count.increment(1);
 
-        SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
+        SCOPED_SET_TRACE_INFO(driver->driver_id(), query_runtime_state->query_id(),
+                              fragment_ctx->fragment_instance_id());
         DUMP_TRACE_IF_TIMEOUT(config::pipeline_process_timeout_guard_ms);
-        SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
+        SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_runtime_state->query_trace(), fragment_ctx->fragment_instance_id(),
+                                             driver);
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
@@ -190,9 +194,9 @@ void GlobalDriverExecutor::_worker_thread() {
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
                 workgroup::WorkGroupQueryStats query_stats;
-                query_stats.cpu_runtime_ns = query_ctx->cpu_cost();
-                query_stats.scan_rows = query_ctx->cur_scan_rows_num();
-                query_stats.scan_rows_limit = query_ctx->get_scan_limit();
+                query_stats.cpu_runtime_ns = query_runtime_state->cpu_cost();
+                query_stats.scan_rows = query_runtime_state->cur_scan_rows_num();
+                query_stats.scan_rows_limit = query_runtime_state->get_scan_limit();
                 status = driver->workgroup()->check_big_query(query_stats);
             }
 
@@ -207,7 +211,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 int64_t be_id = o_id.has_value() ? o_id.value() : -1;
                 status = status.clone_and_append(fmt::format("BE:{}", be_id));
                 LOG_IF(WARNING, !status.is_suppressed())
-                        << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                        << "[Driver] Process error, query_id=" << print_id(query_runtime_state->query_id())
                         << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                         << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
