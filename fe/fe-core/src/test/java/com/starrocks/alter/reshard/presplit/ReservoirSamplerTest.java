@@ -49,7 +49,23 @@ public class ReservoirSamplerTest {
 
         @Override
         public SampleExecution execute(SampleRequest request) {
-            return new SampleExecution(rows.iterator(), estimates);
+            // The fake executor models the pre-partition-source row shape — each canned row
+            // is sort-key only. SampleRow.ofSortKey wraps it with an empty partition-source
+            // tuple so the executor contract matches the production type.
+            Iterator<List<Variant>> sourceIterator = rows.iterator();
+            Iterator<SampleRow> rowIterator = new Iterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return sourceIterator.hasNext();
+                }
+
+                @Override
+                public SampleRow next() {
+                    List<Variant> next = sourceIterator.next();
+                    return next == null ? null : SampleRow.ofSortKey(next);
+                }
+            };
+            return new SampleExecution(rowIterator, estimates);
         }
     }
 
@@ -183,7 +199,7 @@ public class ReservoirSamplerTest {
         List<Variant> reusableBuffer = new ArrayList<>();
         reusableBuffer.add(Variant.of(IntegerType.BIGINT, "1"));
         SampleSubqueryExecutor mutatingExecutor = request -> {
-            Iterator<List<Variant>> iter = new Iterator<>() {
+            Iterator<SampleRow> iter = new Iterator<>() {
                 int remaining = 2;
 
                 @Override
@@ -192,10 +208,10 @@ public class ReservoirSamplerTest {
                 }
 
                 @Override
-                public List<Variant> next() {
+                public SampleRow next() {
                     reusableBuffer.set(0, Variant.of(IntegerType.BIGINT, Integer.toString(3 - remaining)));
                     remaining--;
-                    return reusableBuffer;
+                    return SampleRow.ofSortKey(reusableBuffer);
                 }
             };
             return new SampleSubqueryExecutor.SampleExecution(iter, new Estimates(100L, 2L));

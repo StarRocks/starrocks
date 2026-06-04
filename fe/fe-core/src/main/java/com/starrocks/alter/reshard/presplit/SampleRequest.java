@@ -24,22 +24,43 @@ import java.util.Objects;
 /**
  * Input to a {@link Sampler}. Immutable. {@code sampleByteLimit} is a soft
  * limit — the sampler is allowed to stop short of reading the full input.
+ *
+ * <p>{@code partitionSourceColumns} are additional source-table columns the
+ * sampler should project alongside the sort key when the target is
+ * partitioned. They flow through to the per-row partition-source tuple in
+ * {@link SampleSet#getPartitionSourceTuples()} so a downstream multi-partition
+ * grouper can split the sample by source-partition before computing per-group
+ * boundaries. Empty for unpartitioned targets (no projection extension, no
+ * tuple population) — existing callers use the four-arg constructor and see
+ * no behavior change.
  */
 public final class SampleRequest {
     private final ScanContext scanContext;
     private final List<Column> sortKey;
+    private final List<Column> partitionSourceColumns;
     private final long sampleByteLimit;
     private final long seed;
 
-    public SampleRequest(ScanContext scanContext, List<Column> sortKey, long sampleByteLimit, long seed) {
+    public SampleRequest(ScanContext scanContext, List<Column> sortKey,
+                         List<Column> partitionSourceColumns, long sampleByteLimit, long seed) {
         this.scanContext = Objects.requireNonNull(scanContext, "scanContext");
         Objects.requireNonNull(sortKey, "sortKey");
+        Objects.requireNonNull(partitionSourceColumns, "partitionSourceColumns");
         Preconditions.checkArgument(!sortKey.isEmpty(), "sortKey must be non-empty");
         Preconditions.checkArgument(sampleByteLimit > 0,
                 "sampleByteLimit must be positive, was %s", sampleByteLimit);
         this.sortKey = ImmutableList.copyOf(sortKey);
+        this.partitionSourceColumns = ImmutableList.copyOf(partitionSourceColumns);
         this.sampleByteLimit = sampleByteLimit;
         this.seed = seed;
+    }
+
+    /**
+     * Backwards-compatible constructor for unpartitioned-target callers; defaults
+     * {@code partitionSourceColumns} to an empty list.
+     */
+    public SampleRequest(ScanContext scanContext, List<Column> sortKey, long sampleByteLimit, long seed) {
+        this(scanContext, sortKey, ImmutableList.of(), sampleByteLimit, seed);
     }
 
     public ScanContext getScanContext() {
@@ -48,6 +69,10 @@ public final class SampleRequest {
 
     public List<Column> getSortKey() {
         return sortKey;
+    }
+
+    public List<Column> getPartitionSourceColumns() {
+        return partitionSourceColumns;
     }
 
     public long getSampleByteLimit() {
