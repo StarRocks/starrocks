@@ -32,7 +32,7 @@ public:
         _db = "test_db";
         _tbl = "test_tbl";
         _auth = {"test_user", "test_password"};
-        ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
+        ASSERT_OK(ThreadPoolBuilder("IsoBatchWrTest")
                           .set_min_threads(0)
                           .set_max_threads(1)
                           .set_max_queue_size(2048)

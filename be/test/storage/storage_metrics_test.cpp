@@ -209,7 +209,7 @@ TEST(StorageMetricsTest, RegisterGaugeHooksBeforeInstall) {
 
 TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     std::unique_ptr<ThreadPool> threadpool;
-    auto status = ThreadPoolBuilder("storage_metrics_test")
+    auto status = ThreadPoolBuilder("stor_metric_tst")
                           .set_min_threads(0)
                           .set_max_threads(3)
                           .set_max_queue_size(5)

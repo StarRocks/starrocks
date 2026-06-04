@@ -6950,7 +6950,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
     std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("range_split_test_pool").set_max_threads(4).build(&pool);
+    ThreadPoolBuilder("rng_split_test").set_max_threads(4).build(&pool);
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});

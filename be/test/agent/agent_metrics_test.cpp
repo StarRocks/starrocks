@@ -101,7 +101,7 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
 
-    auto status = ThreadPoolBuilder("agent_metrics_test")
+    auto status = ThreadPoolBuilder("agent_met_test")
                           .set_min_threads(0)
                           .set_max_threads(3)
                           .set_max_queue_size(5)
@@ -118,7 +118,7 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
 TEST(AgentMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     std::unique_ptr<ThreadPool> threadpool;
     AgentMetrics metrics;
-    auto status = ThreadPoolBuilder("agent_metrics_test")
+    auto status = ThreadPoolBuilder("agent_met_test")
                           .set_min_threads(0)
                           .set_max_threads(3)
                           .set_max_queue_size(5)

@@ -77,7 +77,7 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
             nap_sleep(interval, [this] { return _is_stopped.load(); });
         }
     });
-    Thread::set_thread_name(_transaction_clean_thread, "transaction_clean");
+    Thread::set_thread_name(_transaction_clean_thread, "txn_clean");
 }
 
 TransactionMgr::~TransactionMgr() {

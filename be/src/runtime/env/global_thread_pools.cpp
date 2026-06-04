@@ -65,7 +65,7 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
 
     int automatic_partition_thread_num = config::automatic_partition_thread_pool_thread_num;
     int automatic_partition_queue_size = automatic_partition_thread_num * 10;
-    RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition")
+    RETURN_IF_ERROR(ThreadPoolBuilder("auto_partition")
                             .set_min_threads(0)
                             .set_max_threads(automatic_partition_thread_num)
                             .set_max_queue_size(automatic_partition_queue_size)
@@ -116,7 +116,7 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                             .build(&_load_rpc_pool));
     REGISTER_GAUGE_RUNTIME_METRIC(metrics, load_rpc_threadpool_size, [this]() { return _load_rpc_pool->num_threads(); })
 
-    RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache")
+    RETURN_IF_ERROR(ThreadPoolBuilder("dict_cache")
                             .set_min_threads(1)
                             .set_max_threads(config::dictionary_cache_refresh_threadpool_size)
                             .set_max_queue_size(INT32_MAX)
@@ -131,7 +131,7 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
 
     RETURN_IF_ERROR(
-            ThreadPoolBuilder("load_rowset_pool")
+            ThreadPoolBuilder("load_rowset")
                     .set_min_threads(0)
                     .set_max_threads(config::load_segment_thread_pool_num_max)
                     .set_max_queue_size(config::load_segment_thread_pool_queue_size)
@@ -139,14 +139,14 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                     .build(&_load_rowset_thread_pool));
 
     RETURN_IF_ERROR(
-            ThreadPoolBuilder("load_segment_pool")
+            ThreadPoolBuilder("load_segment")
                     .set_min_threads(0)
                     .set_max_threads(config::load_segment_thread_pool_num_max)
                     .set_max_queue_size(config::load_segment_thread_pool_queue_size)
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&_load_segment_thread_pool));
 
-    RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_cmb_txnlog")
                             .set_min_threads(0)
                             .set_max_threads(config::put_combined_txn_log_thread_pool_num_max)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(500))
@@ -165,7 +165,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores();
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata")
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_agg_meta")
                             .set_min_threads(1)
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
@@ -176,7 +176,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores() / 2;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_pkidx_exec")
                             .set_min_threads(1)
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
@@ -187,7 +187,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores() / 2;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_pidx_flush")
                             .set_min_threads(1)
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
@@ -199,36 +199,36 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores() / 2;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("lake_partial_update")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_part_upd")
                             .set_min_threads(0)
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::lake_partial_update_thread_pool_queue_size)
                             .build(&_lake_partial_update_thread_pool));
     REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_partial_update, _lake_partial_update_thread_pool);
 #elif defined(BE_TEST)
-    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata_pool")
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_agg_meta")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_pkidx_exec")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_execution_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_pidx_flush")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_memtable_flush_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("lake_partial_update")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_part_upd")
                             .set_min_threads(0)
                             .set_max_threads(4)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_partial_update_thread_pool));
 #endif
 
-    RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_meta_fetch")
                             .set_min_threads(0)
                             .set_max_threads(std::max(1, static_cast<int>(config::lake_metadata_fetch_thread_count)))
                             .set_max_queue_size(std::numeric_limits<int>::max())

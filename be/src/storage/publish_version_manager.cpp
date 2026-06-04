@@ -31,7 +31,7 @@ Status PublishVersionManager::init() {
         max_thread_count = CpuInfo::num_cores();
     }
     max_thread_count = std::max(max_thread_count, MIN_FINISH_PUBLISH_WORKER_COUNT);
-    RETURN_IF_ERROR(ThreadPoolBuilder("finish_publish_version")
+    RETURN_IF_ERROR(ThreadPoolBuilder("finish_pub_ver")
                             .set_min_threads(MIN_FINISH_PUBLISH_WORKER_COUNT)
                             .set_max_threads(max_thread_count)
                             .build(&_finish_publish_version_thread_pool));

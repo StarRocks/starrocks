@@ -442,7 +442,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
 
     // Build a dedicated thread pool with a single worker
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_TRUE(ThreadPoolBuilder("publish-cancel-test")
+    ASSERT_TRUE(ThreadPoolBuilder("pub-cancel-test")
                         .set_min_threads(1)
                         .set_max_threads(1)
                         .set_max_queue_size(128)
@@ -634,7 +634,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_submit_failure) {
 
     // Build a dedicated pool and shut it down to force submit() to fail
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_TRUE(ThreadPoolBuilder("publish-submit-fail-test").set_min_threads(1).set_max_threads(1).build(&pool).ok());
+    ASSERT_TRUE(ThreadPoolBuilder("pub-submit-fail").set_min_threads(1).set_max_threads(1).build(&pool).ok());
     auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     pool->shutdown();
 

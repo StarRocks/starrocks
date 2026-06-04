@@ -90,7 +90,7 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_update_cache_expire_thread, "cache_expire");
 
     _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
-    Thread::set_thread_name(_update_cache_evict_thread, "evict_update_cache");
+    Thread::set_thread_name(_update_cache_evict_thread, "evict_upd_cache");
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
@@ -104,7 +104,7 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
-    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_idx_cmpt_sch");
 
     _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_dump_thread, "pk_dump");
@@ -112,12 +112,12 @@ Status StorageEngine::start_bg_threads() {
 #ifdef USE_STAROS
     _local_pk_index_shared_data_gc_evict_thread =
             std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
-    Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pk_index_shared_data_gc_evict");
+    Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pindex_gc_evict");
 #endif
 
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
-    Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
+    Thread::set_thread_name(_finish_publish_version_thread, "finish_pub_ver");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -240,7 +240,7 @@ Status StorageEngine::start_bg_threads() {
 
     _clear_expired_replcation_snapshots_thread =
             std::thread([this]() { _clear_expired_replication_snapshots_callback(nullptr); });
-    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expired_replication_snapshots");
+    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clr_exp_repsnap");
 
     start_schedule_apply_thread();
 
