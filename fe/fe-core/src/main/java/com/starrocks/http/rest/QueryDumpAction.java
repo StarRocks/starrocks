@@ -22,6 +22,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.dump.QueryDumper;
 import io.netty.handler.codec.http.HttpMethod;
@@ -54,7 +55,9 @@ public class QueryDumpAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
         boolean enableMock = request.getSingleParameter(MOCK) == null ||

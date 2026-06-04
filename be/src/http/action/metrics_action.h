@@ -63,6 +63,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    bool need_auth() const override { return false; }
+
 private:
     MetricRegistry* _metrics;
     MockFunc _mock_func;
