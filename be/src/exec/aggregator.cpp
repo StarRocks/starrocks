@@ -285,8 +285,6 @@ Status Aggregator::open(RuntimeState* state) {
         auto& opts = state->query_options();
         bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
         auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
-            std::vector<int> attached_udaf_idx;
-            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
@@ -307,13 +305,7 @@ Status Aggregator::open(RuntimeState* state) {
                             COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
                         }
                     }
-                    if (!st.ok()) {
-                        for (int idx : attached_udaf_idx) {
-                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
-                        }
-                        return st;
-                    }
-                    attached_udaf_idx.emplace_back(i);
+                    RETURN_IF_ERROR(st);
                 }
             }
             return Status::OK();
