@@ -52,6 +52,30 @@ description: "Alphabetical d - h"
 - 类型：Gauge
 - 描述：datacache 元数据的内存使用量。
 
+## `datacache_page_hit_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：datacache 页缓存命中累计次数。
+
+## `datacache_page_miss_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：datacache 页缓存未命中累计次数。
+
+## `datacache_page_hit_count_last_minute`
+
+- 单位：个
+- 类型：Gauge
+- 描述：最近一分钟 datacache 页缓存命中次数。
+
+## `datacache_page_miss_count_last_minute`
+
+- 单位：个
+- 类型：Gauge
+- 描述：最近一分钟 datacache 页缓存未命中次数。
+
 ## `date_column_pool_bytes`
 
 - 单位：字节

@@ -63,7 +63,7 @@ void DataCacheAction::handle(HttpRequest* req) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req);
-    } else {
+    } else if (req->param(ACTION_KEY) == ACTION_APP_STAT) {
         _handle_app_stat(req);
     }
 }

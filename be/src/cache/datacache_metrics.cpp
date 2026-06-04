@@ -56,6 +56,31 @@ void DataCacheMetrics::install(MetricRegistry* registry) {
     registry->register_metric("datacache_meta_used_bytes", &datacache_meta_used_bytes);
     registry->register_metric("block_cache_hit_bytes", &block_cache_hit_bytes);
     registry->register_metric("block_cache_miss_bytes", &block_cache_miss_bytes);
+
+    registry->register_metric("block_cache_hit_count", &block_cache_hit_count);
+    registry->register_metric("block_cache_miss_count", &block_cache_miss_count);
+    registry->register_metric("block_cache_hit_count_last_minute", &block_cache_hit_count_last_minute);
+    registry->register_metric("block_cache_miss_count_last_minute", &block_cache_miss_count_last_minute);
+    registry->register_metric("block_cache_hit_bytes_last_minute", &block_cache_hit_bytes_last_minute);
+    registry->register_metric("block_cache_miss_bytes_last_minute", &block_cache_miss_bytes_last_minute);
+    registry->register_metric("block_cache_read_mem_bytes", &block_cache_read_mem_bytes);
+    registry->register_metric("block_cache_read_disk_bytes", &block_cache_read_disk_bytes);
+    registry->register_metric("block_cache_write_bytes", &block_cache_write_bytes);
+    registry->register_metric("block_cache_write_success_count", &block_cache_write_success_count);
+    registry->register_metric("block_cache_write_fail_count", &block_cache_write_fail_count);
+    registry->register_metric("block_cache_remove_bytes", &block_cache_remove_bytes);
+    registry->register_metric("block_cache_remove_success_count", &block_cache_remove_success_count);
+    registry->register_metric("block_cache_remove_fail_count", &block_cache_remove_fail_count);
+    registry->register_metric("block_cache_current_reading_count", &block_cache_current_reading_count);
+    registry->register_metric("block_cache_current_writing_count", &block_cache_current_writing_count);
+    registry->register_metric("block_cache_current_removing_count", &block_cache_current_removing_count);
+    registry->register_metric("block_cache_buffer_item_count", &block_cache_buffer_item_count);
+    registry->register_metric("block_cache_buffer_item_bytes", &block_cache_buffer_item_bytes);
+
+    registry->register_metric("datacache_page_hit_count", &datacache_page_hit_count);
+    registry->register_metric("datacache_page_miss_count", &datacache_page_miss_count);
+    registry->register_metric("datacache_page_hit_count_last_minute", &datacache_page_hit_count_last_minute);
+    registry->register_metric("datacache_page_miss_count_last_minute", &datacache_page_miss_count_last_minute);
 }
 
 void DataCacheMetrics::enable_update_hook(bool use_same_instance) {
@@ -81,14 +106,33 @@ void DataCacheMetrics::update() {
     if (local_disk_cache && local_disk_cache->is_initialized()) {
         disk_metrics = local_disk_cache->cache_metrics();
         auto* starcache = static_cast<StarCacheEngine*>(local_disk_cache);
-        auto&& star_metrics = starcache->starcache_metrics(0);
+        auto&& star_metrics = starcache->starcache_metrics(2);
         meta_used_bytes = star_metrics.meta_used_bytes;
+
+        block_cache_hit_count.set_value(star_metrics.detail_l1->hit_count);
+        block_cache_miss_count.set_value(star_metrics.detail_l1->miss_count);
+        block_cache_hit_count_last_minute.set_value(star_metrics.detail_l2->hit_count_last_minite);
+        block_cache_miss_count_last_minute.set_value(star_metrics.detail_l2->miss_count_last_minite);
+        block_cache_hit_bytes_last_minute.set_value(star_metrics.detail_l2->hit_bytes_last_minite);
+        block_cache_miss_bytes_last_minute.set_value(star_metrics.detail_l2->miss_bytes_last_minite);
+        block_cache_read_mem_bytes.set_value(star_metrics.detail_l2->read_mem_bytes);
+        block_cache_read_disk_bytes.set_value(star_metrics.detail_l2->read_disk_bytes);
+        block_cache_write_bytes.set_value(star_metrics.detail_l2->write_bytes);
+        block_cache_write_success_count.set_value(star_metrics.detail_l2->write_success_count);
+        block_cache_write_fail_count.set_value(star_metrics.detail_l2->write_fail_count);
+        block_cache_remove_bytes.set_value(star_metrics.detail_l2->remove_bytes);
+        block_cache_remove_success_count.set_value(star_metrics.detail_l2->remove_success_count);
+        block_cache_remove_fail_count.set_value(star_metrics.detail_l2->remove_fail_count);
+        block_cache_current_reading_count.set_value(star_metrics.detail_l2->current_reading_count);
+        block_cache_current_writing_count.set_value(star_metrics.detail_l2->current_writing_count);
+        block_cache_current_removing_count.set_value(star_metrics.detail_l2->current_removing_count);
+        block_cache_buffer_item_count.set_value(star_metrics.detail_l2->buffer_item_count);
+        block_cache_buffer_item_bytes.set_value(star_metrics.detail_l2->buffer_item_bytes);
     }
 #ifdef USE_STAROS
     if (!_use_same_instance.load(std::memory_order_relaxed)) {
         starcache::CacheMetrics starlet_cache_metrics{};
         staros::starlet::fslib::star_cache_get_metrics(&starlet_cache_metrics);
-        // merge the disk cache metrics
         disk_metrics.disk_quota_bytes += starlet_cache_metrics.disk_quota_bytes;
         disk_metrics.disk_used_bytes += starlet_cache_metrics.disk_used_bytes;
         meta_used_bytes += starlet_cache_metrics.mem_used_bytes;
@@ -100,10 +144,13 @@ void DataCacheMetrics::update() {
     datacache_disk_used_bytes.set_value(disk_metrics.disk_used_bytes);
     datacache_meta_used_bytes.set_value(meta_used_bytes);
 
-    // Update hit rate metrics from DataCacheHitRateCounter
     auto* hit_rate_counter = DataCacheHitRateCounter::instance();
     block_cache_hit_bytes.set_value(hit_rate_counter->block_cache_hit_bytes());
     block_cache_miss_bytes.set_value(hit_rate_counter->block_cache_miss_bytes());
+    datacache_page_hit_count.set_value(hit_rate_counter->page_cache_hit_count());
+    datacache_page_miss_count.set_value(hit_rate_counter->page_cache_miss_count());
+    datacache_page_hit_count_last_minute.set_value(hit_rate_counter->page_cache_hit_count_last_minute());
+    datacache_page_miss_count_last_minute.set_value(hit_rate_counter->page_cache_miss_count_last_minute());
 #endif
 }
 

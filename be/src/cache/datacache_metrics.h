@@ -45,6 +45,32 @@ public:
     METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_bytes, MetricUnit::BYTES);
 
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_hit_count_last_minute, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_miss_count_last_minute, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_hit_bytes_last_minute, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(block_cache_miss_bytes_last_minute, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(block_cache_read_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(block_cache_read_disk_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(block_cache_write_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(block_cache_write_success_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_write_fail_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_remove_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(block_cache_remove_success_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_remove_fail_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_current_reading_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_current_writing_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_current_removing_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_buffer_item_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(block_cache_buffer_item_bytes, MetricUnit::BYTES);
+
+    // Prefixed with datacache_ to avoid collision with StoragePageCache metrics
+    METRIC_DEFINE_INT_GAUGE(datacache_page_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(datacache_page_miss_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(datacache_page_hit_count_last_minute, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(datacache_page_miss_count_last_minute, MetricUnit::NOUNIT);
+
 private:
     MetricRegistry* _registry = nullptr;
     std::atomic<bool> _use_same_instance{false};

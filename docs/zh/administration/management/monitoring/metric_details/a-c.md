@@ -305,6 +305,120 @@ description: "Alphabetical a - c"
 - 类型：计数器
 - 描述：块缓存未命中累计字节数。目前，仅计算外部表的缓存未命中字节数。
 
+## `block_cache_hit_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存命中累计次数。
+
+## `block_cache_miss_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存未命中累计次数。
+
+## `block_cache_hit_count_last_minute`
+
+- 单位：个
+- 类型：Gauge
+- 描述：最近一分钟块缓存命中次数。
+
+## `block_cache_miss_count_last_minute`
+
+- 单位：个
+- 类型：Gauge
+- 描述：最近一分钟块缓存未命中次数。
+
+## `block_cache_hit_bytes_last_minute`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：最近一分钟块缓存命中字节数。
+
+## `block_cache_miss_bytes_last_minute`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：最近一分钟块缓存未命中字节数。
+
+## `block_cache_read_mem_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：从块缓存内存层读取的字节数。
+
+## `block_cache_read_disk_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：从块缓存磁盘层读取的字节数。
+
+## `block_cache_write_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：写入块缓存的字节数。
+
+## `block_cache_write_success_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：块缓存写入成功次数。
+
+## `block_cache_write_fail_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：块缓存写入失败次数。
+
+## `block_cache_remove_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：从块缓存移除（淘汰）的字节数。
+
+## `block_cache_remove_success_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：块缓存移除成功次数。
+
+## `block_cache_remove_fail_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：块缓存移除失败次数。
+
+## `block_cache_current_reading_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：当前正在进行的块缓存读取操作数。
+
+## `block_cache_current_writing_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：当前正在进行的块缓存写入操作数。
+
+## `block_cache_current_removing_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：当前正在进行的块缓存移除操作数。
+
+## `block_cache_buffer_item_count`
+
+- 单位：个
+- 类型：Gauge
+- 描述：块缓存写缓冲区中的条目数。
+
+## `block_cache_buffer_item_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：块缓存写缓冲区中的字节数。
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`

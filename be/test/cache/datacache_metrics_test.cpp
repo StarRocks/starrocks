@@ -75,6 +75,33 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
     ASSERT_NE(nullptr, metrics->get_metric("datacache_meta_used_bytes"));
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_bytes"));
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_bytes"));
+
+    // Block cache detailed metrics
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_count_last_minute"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_count_last_minute"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_bytes_last_minute"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_bytes_last_minute"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_read_mem_bytes"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_read_disk_bytes"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_write_bytes"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_write_success_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_write_fail_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_remove_bytes"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_remove_success_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_remove_fail_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_current_reading_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_current_writing_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_current_removing_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_buffer_item_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_buffer_item_bytes"));
+
+    // Page cache metrics
+    ASSERT_NE(nullptr, metrics->get_metric("datacache_page_hit_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("datacache_page_miss_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("datacache_page_hit_count_last_minute"));
+    ASSERT_NE(nullptr, metrics->get_metric("datacache_page_miss_count_last_minute"));
 }
 
 // Test that metrics have correct initial values
@@ -116,45 +143,71 @@ TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
     ASSERT_LE(instance->datacache_disk_used_bytes.value(), instance->datacache_disk_quota_bytes.value());
 }
 
-// Test metrics types are correct (should be INT_GAUGE)
 TEST_F(DataCacheMetricsTest, test_metrics_types) {
     auto metrics = backend_metrics_registry_for_test();
 
+    // Quota/used metrics should be gauge type with BYTES unit
     auto mem_quota_metric = metrics->get_metric("datacache_mem_quota_bytes");
     auto mem_used_metric = metrics->get_metric("datacache_mem_used_bytes");
     auto disk_quota_metric = metrics->get_metric("datacache_disk_quota_bytes");
     auto disk_used_metric = metrics->get_metric("datacache_disk_used_bytes");
     auto meta_used_metric = metrics->get_metric("datacache_meta_used_bytes");
-    auto hit_bytes_metric = metrics->get_metric("block_cache_hit_bytes");
-    auto miss_bytes_metric = metrics->get_metric("block_cache_miss_bytes");
-
-    ASSERT_NE(nullptr, mem_quota_metric);
-    ASSERT_NE(nullptr, mem_used_metric);
-    ASSERT_NE(nullptr, disk_quota_metric);
-    ASSERT_NE(nullptr, disk_used_metric);
-    ASSERT_NE(nullptr, meta_used_metric);
-    ASSERT_NE(nullptr, hit_bytes_metric);
-    ASSERT_NE(nullptr, miss_bytes_metric);
-
-    // Quota/used metrics should be gauge type
     ASSERT_EQ(MetricType::GAUGE, mem_quota_metric->type());
     ASSERT_EQ(MetricType::GAUGE, mem_used_metric->type());
     ASSERT_EQ(MetricType::GAUGE, disk_quota_metric->type());
     ASSERT_EQ(MetricType::GAUGE, disk_used_metric->type());
     ASSERT_EQ(MetricType::GAUGE, meta_used_metric->type());
-
-    // Hit/miss byte counters should be counter type
-    ASSERT_EQ(MetricType::COUNTER, hit_bytes_metric->type());
-    ASSERT_EQ(MetricType::COUNTER, miss_bytes_metric->type());
-
-    // All should have BYTES unit
     ASSERT_EQ(MetricUnit::BYTES, mem_quota_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, mem_used_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, disk_quota_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, disk_used_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, meta_used_metric->unit());
+
+    // Cumulative byte counters should be counter type
+    auto hit_bytes_metric = metrics->get_metric("block_cache_hit_bytes");
+    auto miss_bytes_metric = metrics->get_metric("block_cache_miss_bytes");
+    ASSERT_EQ(MetricType::COUNTER, hit_bytes_metric->type());
+    ASSERT_EQ(MetricType::COUNTER, miss_bytes_metric->type());
     ASSERT_EQ(MetricUnit::BYTES, hit_bytes_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, miss_bytes_metric->unit());
+
+    // Cumulative hit/miss count totals should be counter type
+    auto hit_count_metric = metrics->get_metric("block_cache_hit_count");
+    auto miss_count_metric = metrics->get_metric("block_cache_miss_count");
+    ASSERT_EQ(MetricType::COUNTER, hit_count_metric->type());
+    ASSERT_EQ(MetricType::COUNTER, miss_count_metric->type());
+    ASSERT_EQ(MetricUnit::NOUNIT, hit_count_metric->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, miss_count_metric->unit());
+
+    // Sliding-window and snapshot metrics should be gauge type
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_hit_count_last_minute")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_miss_count_last_minute")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_hit_bytes_last_minute")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_miss_bytes_last_minute")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_current_reading_count")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_current_writing_count")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_current_removing_count")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_buffer_item_count")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("block_cache_buffer_item_bytes")->type());
+
+    // Byte-valued gauges should have BYTES unit
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_hit_bytes_last_minute")->unit());
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_miss_bytes_last_minute")->unit());
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_read_mem_bytes")->unit());
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_read_disk_bytes")->unit());
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_write_bytes")->unit());
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_remove_bytes")->unit());
+    ASSERT_EQ(MetricUnit::BYTES, metrics->get_metric("block_cache_buffer_item_bytes")->unit());
+
+    // Page cache metrics should be gauge type with NOUNIT
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("datacache_page_hit_count")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("datacache_page_miss_count")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("datacache_page_hit_count_last_minute")->type());
+    ASSERT_EQ(MetricType::GAUGE, metrics->get_metric("datacache_page_miss_count_last_minute")->type());
+    ASSERT_EQ(MetricUnit::NOUNIT, metrics->get_metric("datacache_page_hit_count")->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, metrics->get_metric("datacache_page_miss_count")->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, metrics->get_metric("datacache_page_hit_count_last_minute")->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, metrics->get_metric("datacache_page_miss_count_last_minute")->unit());
 }
 
 #else // !WITH_STARCACHE

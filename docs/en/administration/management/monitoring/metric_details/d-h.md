@@ -52,6 +52,30 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Gauge
 - Description: The memory usage for datacache metadata.
 
+## `datacache_page_hit_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative page cache hit count for datacache.
+
+## `datacache_page_miss_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative page cache miss count for datacache.
+
+## `datacache_page_hit_count_last_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Page cache hits in the last minute for datacache.
+
+## `datacache_page_miss_count_last_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Page cache misses in the last minute for datacache.
+
 ## `date_column_pool_bytes`
 
 - Unit: Bytes
