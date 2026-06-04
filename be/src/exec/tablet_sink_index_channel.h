@@ -337,15 +337,9 @@ private:
     std::unique_ptr<Chunk> _cur_chunk;
     int64_t _cur_chunk_mem_usage = 0;
 
-<<<<<<< HEAD:be/src/exec/tablet_sink_index_channel.h
-    PTabletWriterAddChunksRequest _rpc_request;
-    using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
-    std::deque<AddMultiChunkReq> _request_queue;
-=======
     AddChunksRequestBuilder _builder;
     AddChunksBatchAccumulator _accumulator;
     std::deque<AddChunksBatchPayload> _request_queue;
->>>>>>> b06bf5f2ba ([BugFix] Fix memory accounting in OlapTableSink (#73807)):be/src/exec/data_sinks/tablet_sink_index_channel.h
 
     size_t _current_request_index = 0;
     size_t _max_request_queue_size = 8;
