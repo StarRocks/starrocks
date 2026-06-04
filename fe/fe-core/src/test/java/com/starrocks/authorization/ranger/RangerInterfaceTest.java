@@ -16,15 +16,23 @@ package com.starrocks.authorization.ranger;
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ColumnPrivilege;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.View;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.QueryStatement;
@@ -46,6 +54,7 @@ import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
 import org.apache.ranger.plugin.policyengine.RangerAccessRequest;
 import org.apache.ranger.plugin.policyengine.RangerAccessRequestImpl;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerAccessResultProcessor;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
@@ -56,6 +65,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,6 +102,27 @@ public class RangerInterfaceTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+
+        // Create view and materialized view for ColumnPrivilege integration tests
+        starRocksAssert.withView("create view db.test_view as select v4, v5 from db.t1");
+        starRocksAssert.withMaterializedView("create materialized view db.test_mv " +
+                "distributed by hash(v4) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\"replication_num\" = \"1\") " +
+                "as select v4, v5 from db.t1;");
+
+        // Create a security view used for checkViewPrivilege unit tests
+        starRocksAssert.withView("create view db.test_security_view as select v4, v5 from db.t1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        Table secTbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_security_view");
+        ((View) secTbl).setSecurity(true);
+
+        // Create a security view referencing a materialized view, used for covering the
+        // checkViewPrivilege branch where the underlying table is a materialized view.
+        starRocksAssert.withView("create view db.test_security_view_mv as select v4, v5 from db.test_mv");
+        Table secMvTbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_security_view_mv");
+        ((View) secMvTbl).setSecurity(true);
     }
 
     @Test
@@ -306,5 +337,360 @@ public class RangerInterfaceTest {
         Assertions.assertEquals("refresh", controller.convertToAccessType(PrivilegeType.REFRESH));
         Assertions.assertEquals("drop", controller.convertToAccessType(PrivilegeType.DROP));
         Assertions.assertEquals("alter", controller.convertToAccessType(PrivilegeType.ALTER));
+    }
+
+    @Test
+    public void testColumnPrivilegeCheckViewWithExternalAccessController() throws Exception {
+        // Mock Ranger to allow all requests, and track whether Ranger was actually called
+        final List<RangerAccessResourceImpl> capturedResources = new ArrayList<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                capturedResources.add((RangerAccessResourceImpl) request.getResource());
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        // Set ExternalAccessController for default_catalog to trigger the branch
+        AccessControlProvider provider = Authorizer.getInstance();
+        RangerStarRocksAccessController rangerController = new RangerStarRocksAccessController();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, rangerController);
+
+        try {
+            // Use non-ROOT user to avoid bypassing Ranger
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("test_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            // Parse and analyze a SELECT on the view
+            StatementBase stmt = SqlParser.parse("select * from db.test_view",
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            // ColumnPrivilege.check should succeed (Ranger allows)
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            Assertions.assertDoesNotThrow(() ->
+                    ColumnPrivilege.check(ctx, queryStmt, Collections.emptyList()));
+
+            // Verify Ranger was actually called for the view.
+            // Before the fix, Ranger was never invoked (privilege silently bypassed).
+            Assertions.assertFalse(capturedResources.isEmpty(),
+                    "Ranger must be called for View privilege check; if empty, privilege was silently bypassed");
+        } finally {
+            // Restore NativeAccessController
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testColumnPrivilegeCheckViewDeniedWithExternalAccessController() throws Exception {
+        // Mock Ranger to deny all requests
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        // Set ExternalAccessController for default_catalog
+        AccessControlProvider provider = Authorizer.getInstance();
+        RangerStarRocksAccessController rangerController = new RangerStarRocksAccessController();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, rangerController);
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("denied_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            // Parse and analyze a SELECT on the view
+            StatementBase stmt = SqlParser.parse("select * from db.test_view",
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            // ColumnPrivilege.check should throw ErrorReportException (Ranger denies, reportAccessDenied wraps it)
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            Assertions.assertThrows(ErrorReportException.class, () ->
+                    ColumnPrivilege.check(ctx, queryStmt, Collections.emptyList()));
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testColumnPrivilegeCheckMaterializedViewWithExternalAccessController() throws Exception {
+        // Mock Ranger to allow all requests, and track whether Ranger was actually called
+        final List<RangerAccessResourceImpl> capturedResources = new ArrayList<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                capturedResources.add((RangerAccessResourceImpl) request.getResource());
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        // Set ExternalAccessController for default_catalog
+        AccessControlProvider provider = Authorizer.getInstance();
+        RangerStarRocksAccessController rangerController = new RangerStarRocksAccessController();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, rangerController);
+
+        try {
+            // Use non-ROOT user to avoid bypassing Ranger
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("test_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            // Parse and analyze a SELECT on the materialized view
+            StatementBase stmt = SqlParser.parse("select * from db.test_mv",
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            // ColumnPrivilege.check should succeed (Ranger allows)
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            Assertions.assertDoesNotThrow(() ->
+                    ColumnPrivilege.check(ctx, queryStmt, Collections.emptyList()));
+
+            // Verify Ranger was actually called for the materialized view.
+            // Before the fix, Ranger was never invoked (privilege silently bypassed).
+            Assertions.assertFalse(capturedResources.isEmpty(),
+                    "Ranger must be called for MV privilege check; if empty, privilege was silently bypassed");
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testColumnPrivilegeCheckMaterializedViewDeniedWithExternalAccessController() throws Exception {
+        // Mock Ranger to deny all requests
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        // Set ExternalAccessController for default_catalog
+        AccessControlProvider provider = Authorizer.getInstance();
+        RangerStarRocksAccessController rangerController = new RangerStarRocksAccessController();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, rangerController);
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("denied_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            // Parse and analyze a SELECT on the materialized view
+            StatementBase stmt = SqlParser.parse("select * from db.test_mv",
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            // ColumnPrivilege.check should throw ErrorReportException (Ranger denies, reportAccessDenied wraps it)
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            Assertions.assertThrows(ErrorReportException.class, () ->
+                    ColumnPrivilege.check(ctx, queryStmt, Collections.emptyList()));
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testCheckViewPrivilegeSecurityViewWithRanger() {
+        final List<RangerAccessResourceImpl> capturedResources = new ArrayList<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                capturedResources.add((RangerAccessResourceImpl) request.getResource());
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("test_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+            View secView = (View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_security_view");
+            Assertions.assertTrue(secView.isSecurity(),
+                    "test_security_view must be marked as security view in beforeClass");
+
+            TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "db", "test_security_view");
+            Assertions.assertDoesNotThrow(() ->
+                    ColumnPrivilege.checkViewPrivilege(ctx, tableName, secView));
+
+            // For a security view referencing db.t1, Ranger must be called for both the
+            // underlying base table t1 and the view itself.
+            Assertions.assertFalse(capturedResources.isEmpty(),
+                    "Ranger must be called for security view privilege check");
+            boolean checkedUnderlyingTable = capturedResources.stream()
+                    .anyMatch(r -> "t1".equals(r.getValue("table")));
+            boolean checkedView = capturedResources.stream()
+                    .anyMatch(r -> "test_security_view".equals(r.getValue("view")));
+            Assertions.assertTrue(checkedUnderlyingTable,
+                    "Security view must trigger underlying table 't1' privilege check");
+            Assertions.assertTrue(checkedView,
+                    "Security view must also trigger privilege check on the view itself");
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testColumnPrivilegeCheckTableColumnWithExternalAccessController() throws Exception {
+        // Mock Ranger to allow all requests, and track whether Ranger was actually called
+        final List<RangerAccessResourceImpl> capturedResources = new ArrayList<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                capturedResources.add((RangerAccessResourceImpl) request.getResource());
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        // Set ExternalAccessController for default_catalog to trigger the column-level branch
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            // Use non-ROOT user to avoid bypassing Ranger
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("test_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            // Select specific columns from a regular OLAP table to trigger column-level privilege check.
+            StatementBase stmt = SqlParser.parse("select v4, v5 from db.t1",
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            Assertions.assertDoesNotThrow(() ->
+                    ColumnPrivilege.check(ctx, queryStmt, Collections.emptyList()));
+
+            // Verify Ranger was actually called for column-level access on t1
+            Assertions.assertFalse(capturedResources.isEmpty(),
+                    "Ranger must be called for column-level privilege check on regular table");
+            boolean checkedColumn = capturedResources.stream()
+                    .anyMatch(r -> "t1".equals(r.getValue("table"))
+                            && r.getValue("column") != null);
+            Assertions.assertTrue(checkedColumn,
+                    "Ranger must be invoked with column-level resource on table 't1'");
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testColumnPrivilegeCheckTableColumnDeniedWithExternalAccessController() throws Exception {
+        // Mock Ranger to deny all requests so column-level check throws AccessDeniedException
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("denied_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            StatementBase stmt = SqlParser.parse("select v4, v5 from db.t1",
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            // Column-level check denied -> reportAccessDenied wraps it into ErrorReportException
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            Assertions.assertThrows(ErrorReportException.class, () ->
+                    ColumnPrivilege.check(ctx, queryStmt, Collections.emptyList()));
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    @Test
+    public void testCheckViewPrivilegeSecurityViewReferencingMv() {
+        // Mock Ranger to allow all requests, and track whether Ranger was actually called
+        final List<RangerAccessResourceImpl> capturedResources = new ArrayList<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                capturedResources.add((RangerAccessResourceImpl) request.getResource());
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("test_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+            View secView = (View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_security_view_mv");
+            Assertions.assertTrue(secView.isSecurity(),
+                    "test_security_view_mv must be marked as security view in beforeClass");
+
+            TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    "db", "test_security_view_mv");
+            Assertions.assertDoesNotThrow(() ->
+                    ColumnPrivilege.checkViewPrivilege(ctx, tableName, secView));
+
+            // For a security view referencing a materialized view, Ranger must be invoked
+            // for both the underlying MV and the view itself.
+            // RangerStarRocksResource uses key "materialized_view" for MVs (not "table").
+            Assertions.assertFalse(capturedResources.isEmpty(),
+                    "Ranger must be called for security view privilege check");
+            boolean checkedUnderlyingMv = capturedResources.stream()
+                    .anyMatch(r -> "test_mv".equals(r.getValue("materialized_view")));
+            boolean checkedView = capturedResources.stream()
+                    .anyMatch(r -> "test_security_view_mv".equals(r.getValue("view")));
+            Assertions.assertTrue(checkedUnderlyingMv,
+                    "Security view must trigger underlying materialized view 'test_mv' privilege check");
+            Assertions.assertTrue(checkedView,
+                    "Security view must also trigger privilege check on the view itself");
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
     }
 }
