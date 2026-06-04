@@ -1345,7 +1345,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = (Scan) scan.filter(icebergPredicate);
         }
 
-        if (fieldNames != null && !fieldNames.isEmpty()) {
+        if (fieldNames != null) {
             scan = (Scan) scan.select(fieldNames);
         }
 
