@@ -310,6 +310,32 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
 
+    @Test
+    public void testReplayFinishedWithNullDistributionInfo() throws Exception {
+        // Regression: a job persisted with allPartitionOptimized=true but no distribution change
+        // (e.g. from a previously-accepted empty alter clause) must not clobber the table's
+        // defaultDistributionInfo during replay.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        Assertions.assertNotNull(olapTable.getDefaultDistributionInfo());
+
+        OnlineOptimizeJobV2 badPersistedJob = new OnlineOptimizeJobV2(
+                9999L, db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+        badPersistedJob.setJobState(JobState.FINISHED);
+        java.lang.reflect.Field allOptField = OnlineOptimizeJobV2.class.getDeclaredField("allPartitionOptimized");
+        allOptField.setAccessible(true);
+        allOptField.set(badPersistedJob, true);
+        // distributionInfo stays null - this is the corruption shape
+
+        OnlineOptimizeJobV2 replayJob = new OnlineOptimizeJobV2(
+                9999L, db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+        replayJob.replay(badPersistedJob);
+
+        Assertions.assertNotNull(olapTable.getDefaultDistributionInfo(),
+                "replay must not null out defaultDistributionInfo when persisted job has null distributionInfo");
+    }
+
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
         // Detach the job from schema change handler to prevent background scheduler from changing state
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
