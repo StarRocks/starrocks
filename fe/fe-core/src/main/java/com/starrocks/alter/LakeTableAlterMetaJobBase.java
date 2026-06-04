@@ -30,6 +30,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -46,6 +48,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -623,7 +626,32 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
-        // LakeTableAlterMetaJob is not supported by show for now
+        // A meta-only change (file_bundling / persistent_index / compaction_strategy ...) has no
+        // shadow index or schema version, so the index/schema columns are filled with placeholders.
+        // Numeric columns must stay numeric (not NULL_STRING) so the cross-job sort in
+        // SchemaChangeHandler.getAlterJobInfosByDb does not mix String and Long comparables.
+        String progress = FeConstants.NULL_STRING;
+        if (jobState == JobState.RUNNING && getBatchTask() != null) {
+            progress = getBatchTask().getFinishedTaskNum() + "/" + getBatchTask().getTaskNum();
+        }
+
+        List<Comparable> info = Lists.newArrayList();
+        info.add(jobId);
+        info.add(tableName);
+        info.add(TimeUtils.longToTimeString(createTimeMs));
+        info.add(TimeUtils.longToTimeString(finishedTimeMs));
+        info.add(tableName); // IndexName: meta change applies to the whole table, use the table name
+        info.add(-1L); // IndexId: no shadow index
+        info.add(-1L); // OriginIndexId: no shadow index
+        info.add(FeConstants.NULL_STRING); // SchemaVersion: not a schema change
+        info.add(getWatershedTxnId());
+        info.add(jobState.name());
+        info.add(errMsg);
+        info.add(progress);
+        info.add(timeoutMs / 1000);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+        info.add(warehouse == null ? "null" : warehouse.getName());
+        infos.add(info);
     }
 
     @Override
