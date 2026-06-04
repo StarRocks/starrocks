@@ -298,6 +298,52 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: ERROR
 
+      # Rescue auto-merge when the sibling `auto-merge` job was skipped
+      # because the pr-label snapshot still contained ERROR (stale before
+      # this run cleared it). Mirrors `auto-merge` job's three actions.
+      - name: add automerge label (rescue after ERROR clear)
+        if: >
+          needs.build.result != 'failure' &&
+          needs.build.result != 'cancelled' &&
+          contains(github.event.pull_request.title, '(sync #') &&
+          contains(needs.pr-label.outputs.labels, 'sync') &&
+          contains(needs.pr-label.outputs.labels, 'ERROR') &&
+          !contains(needs.pr-label.outputs.labels, 'conflict') &&
+          !contains(needs.pr-label.outputs.labels, 'pending')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: automerge
+
+      - name: auto-approve (rescue after ERROR clear)
+        if: >
+          needs.build.result != 'failure' &&
+          needs.build.result != 'cancelled' &&
+          contains(github.event.pull_request.title, '(sync #') &&
+          contains(needs.pr-label.outputs.labels, 'sync') &&
+          contains(needs.pr-label.outputs.labels, 'ERROR') &&
+          !contains(needs.pr-label.outputs.labels, 'conflict') &&
+          !contains(needs.pr-label.outputs.labels, 'pending')
+        uses: hmarr/auto-approve-action@v3
+        with:
+          review-message: "Auto approved sync PR"
+          github-token: ${{ secrets.APPROVE_PAT }}
+
+      - name: enable automerge (rescue after ERROR clear)
+        if: >
+          needs.build.result != 'failure' &&
+          needs.build.result != 'cancelled' &&
+          contains(github.event.pull_request.title, '(sync #') &&
+          contains(needs.pr-label.outputs.labels, 'sync') &&
+          contains(needs.pr-label.outputs.labels, 'ERROR') &&
+          !contains(needs.pr-label.outputs.labels, 'conflict') &&
+          !contains(needs.pr-label.outputs.labels, 'pending')
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.APPROVE_PAT }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: rebase
+
       - name: notify
         if: >
           needs.build.result == 'failure' ||
