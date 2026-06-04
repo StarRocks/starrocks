@@ -25,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -1213,5 +1214,27 @@ public class CTEPlanTest extends PlanTestBase {
                 "cast(-1 AS BIGINT) FROM `baseall`";
         plan = getFragmentPlan(sql);
         assertContains(plan, "OlapScan");
+    }
+
+    @Test
+    public void testCommonPlanExtractionLeftJoinResidualPredicate() throws Exception {
+        boolean cboExtractCommonPlan = connectContext.getSessionVariable().isCboExtractCommonPlan();
+        connectContext.getSessionVariable().setCboExtractCommonPlan(true);
+        try {
+            String sql = "SELECT t0.v2, COUNT(*) AS cnt " +
+                    "FROM t0 LEFT JOIN t1 ON t0.v3 = t1.v4 " +
+                    "WHERE t1.v4 IS NULL " +
+                    "GROUP BY t0.v2 " +
+                    "UNION ALL " +
+                    "SELECT t0.v2, COUNT(*) AS cnt " +
+                    "FROM t0 LEFT JOIN t1 ON t0.v3 = t1.v4 " +
+                    "WHERE t1.v4 IS NULL " +
+                    "GROUP BY t0.v2";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "LEFT OUTER JOIN");
+        } finally {
+            connectContext.getSessionVariable().setCboExtractCommonPlan(cboExtractCommonPlan);
+        }
     }
 }

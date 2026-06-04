@@ -582,7 +582,8 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
             LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder()
                     .withOperator(node)
-                    .setOnPredicate(converter.convert(node.getOnPredicate()));
+                    .setOnPredicate(converter.convert(node.getOnPredicate()))
+                    .setPredicate(converter.convert(node.getPredicate()));
             return QueryPieces.of(builder.build(), filterRefs, left.get(), right.get());
         }
 

@@ -20,6 +20,10 @@ CREATE TABLE dim (d INT, tag VARCHAR(10))
 DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 3 PROPERTIES("replication_num"="1");
 -- result:
 -- !result
+CREATE TABLE dim_gap (d INT, tag VARCHAR(10))
+DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 3 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
 INSERT INTO t0 VALUES
   (1, 10, 100, 1, 10),
   (2, 10, 100, 2, NULL),
@@ -41,6 +45,11 @@ INSERT INTO dim VALUES
   (100, 'A'),
   (200, 'B'),
   (300, 'C');
+-- result:
+-- !result
+INSERT INTO dim_gap VALUES
+  (100, 'A'),
+  (200, 'B');
 -- result:
 -- !result
 SELECT k2, COUNT(*) FROM t0 WHERE k1 < 3 GROUP BY k2
@@ -891,6 +900,20 @@ ORDER BY 1, 2;
 20	30
 30	50
 -- !result
+SELECT t0.k2, COUNT(*) as cnt
+FROM t0 LEFT JOIN dim_gap ON t0.k3 = dim_gap.d
+WHERE dim_gap.d IS NULL
+GROUP BY t0.k2
+UNION ALL
+SELECT t0.k2, COUNT(*) as cnt
+FROM t0 LEFT JOIN dim_gap ON t0.k3 = dim_gap.d
+WHERE dim_gap.d IS NULL
+GROUP BY t0.k2
+ORDER BY 1, 2;
+-- result:
+30	2
+30	2
+-- !result
 DROP TABLE IF EXISTS t0;
 -- result:
 -- !result
@@ -898,5 +921,8 @@ DROP TABLE IF EXISTS t1;
 -- result:
 -- !result
 DROP TABLE IF EXISTS dim;
+-- result:
+-- !result
+DROP TABLE IF EXISTS dim_gap;
 -- result:
 -- !result
