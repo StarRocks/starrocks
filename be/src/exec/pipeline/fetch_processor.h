@@ -62,7 +62,6 @@ namespace starrocks::pipeline {
 //    drains the rebuilt chunks from the queue.
 class FetchProcessor : public std::enable_shared_from_this<FetchProcessor> {
 public:
-    friend class LocalLookUpRequestContext;
     friend class RemoteLookUpRequestContext;
     friend class FetchTask;
 
