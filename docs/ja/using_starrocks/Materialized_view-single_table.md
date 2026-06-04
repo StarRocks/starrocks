@@ -404,4 +404,4 @@ FROM tableA
 | count                                                  | count                                           |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
-```
+

@@ -89,6 +89,6 @@ LDAP 认证的配置方法已在官方文档 [设置用户认证](./authenticati
 
 ## FAQ
 
-#### Q1: 使用 DBeaver 连接 StarRocks 时返回错误 “Unable to load authentication plugin 'mysql_native_password'”.
+#### Q1: 使用 DBeaver 连接 StarRocks 时返回错误 “Unable to load authentication plugin 'mysql_native_password'”
 
 A: 需要将 JDBC 5 升级至 5.1.46 及以上版本。
