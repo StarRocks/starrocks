@@ -163,7 +163,7 @@ public class DeleteAnalyzer {
                 keysTypeName = "Duplicate Key";
                 break;
             case AGG_KEYS:
-                keysTypeName = "Aggregate";
+                keysTypeName = "Aggregate Key";
                 break;
             case UNIQUE_KEYS:
                 keysTypeName = "Unique Key";
