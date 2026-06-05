@@ -313,22 +313,18 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven
 
-      - name: Install Apache Thrift 0.13
-        id: install_thrift_0_13
+      - name: Install Apache Thrift
+        id: install_thrift
         if: steps.cache_maven_packages.outcome == 'success'
         run: |
-          mkdir -p ./.setup-thrift/oras
-          mkdir -p ./.setup-thrift/thrift
-          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
-          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
-          ln -sf $(pwd)/oras /usr/local/bin/oras
-          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
-          tar zxf ./thrift.v0.13.0.tar.gz -C .
-          ln -sf $(pwd)/thrift /usr/local/bin/thrift
+          curl -fsSL --retry 3 --retry-delay 2 https://cdn-thirdparty.starrocks.com/thrift-binaries/latest/thrift.xz -o ./thrift.xz
+          xz -d ./thrift.xz
+          chmod +x ./thrift
+          mv -f ./thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         id: analyze_fe
-        if: steps.install_thrift_0_13.outcome == 'success'
+        if: steps.install_thrift.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
