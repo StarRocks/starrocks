@@ -52,4 +52,4 @@
 #      - key: azure.adls2.endpoint
 #        value: https://starrocksadls.dfs.core.windows.net
 #      - key: azure.adls2.shared_key
-#        value: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#        value: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
