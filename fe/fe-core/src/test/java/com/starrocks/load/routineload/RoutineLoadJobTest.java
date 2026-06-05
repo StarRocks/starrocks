@@ -1273,11 +1273,6 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testAfterAbortedNonRetryableAttachment(@Mocked GlobalStateMgr globalStateMgr,
-                                                       @Injectable TransactionState transactionState,
-                                                       @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
-=======
     public void testMergeLoadDescToOriginStatementWithReservedKeywordTable() throws Exception {
         // The table name "order" is a reserved keyword. getTableName() returns it without
         // backquotes, so the regenerated statement must add backquotes itself; otherwise the
@@ -1310,9 +1305,9 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testAfterAbortedNonRetryableAttachment(@Injectable TransactionState transactionState,
-                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
->>>>>>> 95a3a53629 ([BugFix] Backquote table name when persisting routine load origStmt (#74188))
+    public void testAfterAbortedNonRetryableAttachment(@Mocked GlobalStateMgr globalStateMgr,
+                                                       @Injectable TransactionState transactionState,
+                                                       @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
