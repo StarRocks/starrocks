@@ -158,6 +158,35 @@ preseeded_archive_exists() {
     return 1
 }
 
+zip_entry_paths_are_safe() {
+    local archive=$1
+    local entries
+    local entry
+
+    if ! entries=$(unzip -Z1 "${archive}"); then
+        echo "Failed to list zip entries: ${archive}" >&2
+        return 1
+    fi
+
+    while IFS= read -r entry; do
+        [[ -n "${entry}" ]] || continue
+        case "${entry}" in
+            /*|../*|*/../*|*/..|..|[A-Za-z]:*|*\\*)
+                echo "Unsafe zip entry path in ${archive}: ${entry}" >&2
+                return 1
+                ;;
+        esac
+    done <<< "${entries}"
+}
+
+safe_unzip() {
+    local archive=$1
+    shift
+
+    zip_entry_paths_are_safe "${archive}" || return 1
+    unzip -q "${archive}" "$@"
+}
+
 preseed_aws_crt_dependency() {
     local archive_dir=$1
     local dep
@@ -207,7 +236,7 @@ preseed_aws_crt_dependency() {
         return 1
     fi
 
-    if ! unzip -q "${archive_dir}/aws-crt-cpp.zip" -d "${crt_dir}" -x '*/tests/*'; then
+    if ! safe_unzip "${archive_dir}/aws-crt-cpp.zip" -d "${crt_dir}" -x '*/tests/*'; then
         echo "Failed to unzip preseeded AWS CRT archive: ${archive_dir}/aws-crt-cpp.zip" >&2
         return 1
     fi
@@ -247,7 +276,7 @@ preseed_aws_crt_dependency() {
 
         rm -rf "${tmp_dir:?}/${dep}"
         mkdir -p "${tmp_dir}/${dep}"
-        if ! unzip -q "${archive_dir}/${dep}.zip" -d "${tmp_dir}/${dep}" -x '*/tests/*'; then
+        if ! safe_unzip "${archive_dir}/${dep}.zip" -d "${tmp_dir}/${dep}" -x '*/tests/*'; then
             echo "Failed to unzip preseeded AWS CRT archive: ${archive_dir}/${dep}.zip" >&2
             return 1
         fi
@@ -665,6 +694,7 @@ cd $TP_SOURCE_DIR/$SASL_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
     patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
     patch -p1 < $TP_PATCH_DIR/sasl2-gcc14.patch
+    # Keep md5.h ANSI prototypes enabled for the compilers StarRocks uses.
     patch -p1 < $TP_PATCH_DIR/sasl2-makemd5-prototypes.patch
     touch $PATCHED_MARK
 fi

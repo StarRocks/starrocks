@@ -201,13 +201,21 @@ set -euo pipefail
 . "$TP_DIR/vars.sh"
 . "$TP_DIR/package-manifest.sh"
 starrocks_set_default_packages "$MACHINE_TYPE"
-printf 'TP_ARCHIVES\0%s\0' "$TP_ARCHIVES"
+TP_ARCHIVE_LIST=()
+tp_archives_decl="$(declare -p TP_ARCHIVES)"
+tp_archives_attrs="${tp_archives_decl%% TP_ARCHIVES=*}"
+if [[ "${tp_archives_attrs}" == declare\ -*a* ]]; then
+  TP_ARCHIVE_LIST=("${TP_ARCHIVES[@]}")
+elif [[ -n "${TP_ARCHIVES:-}" ]]; then
+  read -r -a TP_ARCHIVE_LIST <<< "$TP_ARCHIVES"
+fi
+printf 'TP_ARCHIVES\0%s\0' "${TP_ARCHIVE_LIST[*]}"
 printf 'PACKAGES'
 for package in "${STARROCKS_THIRDPARTY_ALL_PACKAGES[@]}"; do
   printf '\0%s' "$package"
 done
 printf '\0END_PACKAGES\0'
-for archive in $TP_ARCHIVES; do
+for archive in "${TP_ARCHIVE_LIST[@]}"; do
   eval "name=\${${archive}_NAME:-}"
   eval "url=\${${archive}_DOWNLOAD:-}"
   eval "md5=\${${archive}_MD5SUM:-}"

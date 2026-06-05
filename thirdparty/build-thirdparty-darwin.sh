@@ -422,13 +422,16 @@ detect_java_jni_platform_include() {
 ensure_hadoop_libhdfs_makefile_uses_platform_include() {
     local makefile="$1"
 
-    if ! grep -Fq 'JNI_PLATFORM_INCLUDE ?= linux' "${makefile}"; then
-        perl -0pi -e 's@CC\s+:=\s+gcc@JNI_PLATFORM_INCLUDE ?= linux\n\nCC ?= cc@' "${makefile}"
-    fi
-
-    perl -0pi -e 's@CC\s+:=\s+gcc@CC ?= cc@g; s@(^\s*)ar rcs @${1}\$(AR) rcs @mg' "${makefile}"
-
-    perl -0pi -e 's@-I\$\(JAVA_HOME\)/include/linux@-I\$(JAVA_HOME)/include/\$(JNI_PLATFORM_INCLUDE)@g' "${makefile}"
+    perl -0pi -e '
+        my $jni_platform = "JNI_PLATFORM_INCLUDE ?= linux";
+        if (index($_, $jni_platform) < 0) {
+            s@CC\s+:=\s+gcc@$jni_platform\n\nCC ?= cc@
+                or s@CC\s+\?=\s+cc@$jni_platform\n\nCC ?= cc@;
+        }
+        s@CC\s+:=\s+gcc@CC ?= cc@g;
+        s@(^\s*)ar rcs @${1}\$(AR) rcs @mg;
+        s@-I\$\(\QJAVA_HOME\E\)/include/linux@-I\$(JAVA_HOME)/include/\$(JNI_PLATFORM_INCLUDE)@g;
+    ' "${makefile}"
 
     if ! grep -Fq -- '-I$(JAVA_HOME)/include/$(JNI_PLATFORM_INCLUDE)' "${makefile}"; then
         echo "Failed to update ${makefile} to use JNI_PLATFORM_INCLUDE" >&2
