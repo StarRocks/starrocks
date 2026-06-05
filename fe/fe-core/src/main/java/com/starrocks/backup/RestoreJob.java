@@ -889,13 +889,26 @@ public class RestoreJob extends AbstractJob {
 
     protected void addRestoredFunctions(Database db) {
         List<Function> functions = backupMeta.getFunctions();
-        for (Function fn : functions) {
-            try {
-                db.addFunction(fn, true, false);
-            } catch (StarRocksException e) {
-                status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + fn.signatureString() +
-                        " failed when restore");
+        // Hold the db write lock across the name read and the journal writes so a concurrent
+        // ALTER DATABASE RENAME cannot slip between getFullName() and addFunction(); otherwise a
+        // follower could replay the rename before an OP_ADD_FUNCTION_V2 that still names the old db.
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            for (Function function : functions) {
+                try {
+                    // Rewrite the function's db to the restore target so a renamed restore (RESTORE ... AS
+                    // <new_db>) works on followers, which replay OP_ADD_FUNCTION_V2 and route the function
+                    // by Database.replayCreateFunctionLog -> getDb(functionName.getDb()).
+                    function.getFunctionName().setDb(db.getFullName());
+                    db.addFunction(function, true, false);
+                } catch (StarRocksException e) {
+                    status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + function.signatureString() +
+                            " failed when restore");
+                }
             }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
