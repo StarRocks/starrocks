@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP MATERIALIZED VIEW drops a materialized view."
 ---
 
 # DROP MATERIALIZED VIEW

@@ -37,6 +37,17 @@ struct VariantShreddedReadHints {
     void clear();
 };
 
+// Which dict-aware wrapper a global-dict-encoded slot ended up with. Reported back
+// by the dict-wrapping create() overload so the GroupReader can attribute the
+// applied slot to the right counter (Parquet has no force-encode fallback like
+// OLAP; the two truthful paths are LowCardColumnReader for all-page-dict columns
+// and LowRowsColumnReader when row count fits the FE dictionary).
+enum class GlobalDictReaderKind {
+    kNone,          // no wrapper selected (factory returned GlobalDictNotMatch)
+    kDictCode,      // LowCardColumnReader: reader consumes Parquet dict codes directly
+    kLowRowsEncode, // LowRowsColumnReader: reader reads strings then encodes per row
+};
+
 class ColumnReaderFactory {
 public:
     // create a column reader
@@ -48,8 +59,13 @@ public:
                                             const TypeDescriptor& col_type,
                                             const TIcebergSchemaField* lake_schema_field);
 
+    // Wrap an already-built scalar reader with a dict-aware reader for the given
+    // FE global dictionary.  If out_kind is non-null, it is set to identify which
+    // wrapper was picked so the caller can publish profile counters for the
+    // dict-code vs. low-rows-encode path.  Out_kind is left at kNone on failure
+    // (the function returns a GlobalDictNotMatch status in that case).
     static StatusOr<ColumnReaderPtr> create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict, const SlotId slot_id,
-                                            int64_t num_rows);
+                                            int64_t num_rows, GlobalDictReaderKind* out_kind = nullptr);
 
     static StatusOr<ColumnReaderPtr> create_variant_column_reader(const ColumnReaderOptions& opts,
                                                                   const ParquetField* variant_field,

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
+description: "FE configuration parameters for logging, server settings, and metadata management."
 ---
 
 # FE Configuration - Logging, Server, and Metadata
@@ -247,12 +248,21 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the FE audit subsystem records the SQL text of statements into FE audit logs (`fe.audit.log`) processed by ConnectProcessor. The stored statement respects other controls: encrypted statements are redacted (`AuditEncryptionChecker`), sensitive credentials may be redacted or desensitized if `enable_sql_desensitize_in_log` is set, and digest recording is controlled by `enable_sql_digest`. When it is set to `false`, ConnectProcessor replaces the statement text with "?" in audit events — other audit fields (user, host, duration, status, slow-query detection via `qe_slow_log_ms`, and metrics) are still recorded. Enabling SQL audit increases forensic and troubleshooting visibility but may expose sensitive SQL content and increase log volume and I/O; disabling it improves privacy at the cost of losing full-statement visibility in audit logs.
 - Introduced in: -
 
+### `enable_print_load_profile_to_log`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, load profiles (such as Stream Load, Routine Load, Broker Load, and Merge Commit) are additionally written to the profile log (`fe.profile.log`) at INFO level when they are pushed to `ProfileManager`, as a single-line JSON record in the same format as the query profile log. This makes load profiles recoverable from the log even after they are evicted from `ProfileManager` due to the `profile_info_reserved_num` limit. The profile log is used (rather than `fe.log`) because its JSON layout caps strings at `sys_log_json_profile_max_string_length` instead of the much smaller `sys_log_json_max_string_length`, so large load profiles are not truncated; the file is rotated and retained by the `profile_log_*` parameters. Only profiles whose query type is `Load` are printed; query profiles are not affected. A load profile is printed only when it is actually collected (for example, when `enable_profile` is enabled or the load exceeds the big-load profile threshold).
+- Introduced in: -
+
 ### `enable_profile_log`
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
 - Introduced in: v3.2.5
 
@@ -271,7 +281,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs and query-detail records. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), and SimpleExecutor.formatSQL (internal executor logs). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). This reduces leakage of sensitive literals and credentials in audit/internal logs but also means logs and query details no longer contain the original full SQL text (which can affect replay or debugging).
+- Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs, query-detail records, and query profiles. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), SimpleExecutor.formatSQL (internal executor logs), and StmtExecutor.buildTopLevelProfile / processProfileAsync (the `Sql Statement` and `ExplainPlan` info-strings stored in a profile's `Summary` section). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). For the `ExplainPlan` field added by the `enable_explain_in_profile` session variable, this config also forces literal-digest rendering of the embedded `EXPLAIN COSTS` text, so the profile does not leak the literals that the persisted `Sql Statement` would have hidden. This reduces leakage of sensitive literals and credentials in audit/internal logs and profiles, but also means logs, query details, and profiles no longer contain the original full SQL text (which can affect replay or debugging).
 - Introduced in: -
 
 ### `internal_log_delete_age`
@@ -767,6 +777,19 @@ This topic introduces the following types of FE configurations:
 - Description: The port on which the HTTP server in the FE node listens.
 - Introduced in: -
 
+### `enable_http_auth`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Introduced in: v4.2.0
+- Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
+  - Public probes / observability: `/api/health`, `/api/bootstrap`, `/api/idle_status`, `/api/v2/feature`, `/metrics`, `/api/oauth2`.
+  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/dump`, `/dump_starmgr`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
+
+  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+
 ### `http_web_page_display_hardware`
 
 - Default: true
@@ -838,6 +861,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
+
+### `mysql_send_packet_timeout_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Per-packet write timeout for the MySQL protocol channel. Bounds how long the FE worker can wait for a slow client's TCP recv buffer to drain when sending result rows. Without this bound the worker can block in `Selector.select()` indefinitely and the query becomes unkillable via `KILL QUERY`. Set to `0` to disable (legacy unbounded wait).
+- Introduced in: v4.1
 
 ### `mysql_server_version`
 
@@ -1248,6 +1280,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it.
 - Introduced in: v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- Default: 4
+- Type: Integer
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the FE-global dispatch executor for asynchronous "refresh other FE" jobs. These threads only schedule background refresh tasks from connector write paths. They do not send peer FE refresh RPCs directly. Changes take effect on running FEs without restart.
+- Introduced in: -
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- Default: 4
+- Type: Integer
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the FE-global RPC executor for "refresh other FE" fan-out. This executor bounds the number of concurrent refresh RPCs sent to peer FEs for both synchronous and asynchronous external table refresh flows. Changes take effect on running FEs without restart.
+- Introduced in: -
 
 ### `enable_collect_query_detail_info`
 

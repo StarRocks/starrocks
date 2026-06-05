@@ -27,6 +27,7 @@
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 
@@ -182,6 +183,12 @@ Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predi
     rowset->set_num_rows(0);
     rowset->set_data_size(0);
     rowset->mutable_delete_predicate()->CopyFrom(delete_predicate);
+    // A delete-predicate rowset still needs a uid to satisfy the reshard-merge
+    // invariant (every rowset must carry one). The uid is per-tablet and independent
+    // across siblings; MERGE dedups predicate rowsets by version (one txn == one
+    // predicate), not uid, so independent per-tablet deletes still collapse to one.
+    // This is a freshly built delete-predicate rowset, so always assign a uid.
+    tablet_reshard_helper::set_rowset_uid(rowset);
     return put_txn_log(std::move(txn_log));
 }
 

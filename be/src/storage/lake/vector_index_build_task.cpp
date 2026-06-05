@@ -20,6 +20,7 @@
 #include <set>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -80,8 +81,8 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             continue;
         }
         bool has_vi = false;
-        for (int i = 0; i < rowset.segment_metas_size(); i++) {
-            if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            if (segment_meta.vector_index_ids_size() > 0) {
                 has_vi = true;
                 break;
             }
@@ -102,17 +103,15 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
         if (processed >= batch_limit) break;
 
         const auto& rowset = *cand.rowset;
-        bool has_segment_size = (rowset.segment_size_size() == rowset.segments_size());
-        bool has_bundle_offsets = (rowset.bundle_file_offsets_size() == rowset.segments_size());
 
-        for (int seg_idx = 0; seg_idx < rowset.segments_size(); ++seg_idx) {
-            if (seg_idx >= rowset.segment_metas_size() || rowset.segment_metas(seg_idx).vector_index_ids_size() == 0) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            if (segment_meta.vector_index_ids_size() == 0) {
                 continue;
             }
 
-            const auto& seg_name = rowset.segments(seg_idx);
+            const auto& seg_name = segment_meta.filename();
             std::vector<int64_t> index_ids;
-            for (int64_t idx_id : rowset.segment_metas(seg_idx).vector_index_ids()) {
+            for (int64_t idx_id : segment_meta.vector_index_ids()) {
                 // Skip indexes whose .vi file already exists (partial retry recovery).
                 // This only runs for segments in the current batch (bounded by
                 // max_rowsets_per_batch), so S3 HEAD cost is minimal.
@@ -131,14 +130,14 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
 
             std::string seg_path = _tablet_mgr->segment_location(_tablet_id, seg_name);
             FileInfo segment_file_info{.path = seg_path};
-            if (has_segment_size) {
-                segment_file_info.size = rowset.segment_size(seg_idx);
+            if (segment_meta.has_size()) {
+                segment_file_info.size = segment_meta.size();
             }
-            if (has_bundle_offsets) {
-                segment_file_info.bundle_file_offset = rowset.bundle_file_offsets(seg_idx);
+            if (segment_meta.has_bundle_file_offset()) {
+                segment_file_info.bundle_file_offset = segment_meta.bundle_file_offset();
             }
-            if (seg_idx < rowset.segment_encryption_metas_size()) {
-                segment_file_info.encryption_meta = rowset.segment_encryption_metas(seg_idx);
+            if (segment_meta.has_encryption_meta()) {
+                segment_file_info.encryption_meta = segment_meta.encryption_meta();
             }
 
             _work_items.push_back({cand.version, std::move(segment_file_info), std::move(index_ids)});
@@ -311,7 +310,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
 
         // Read column data in batches and add to builder
         auto field = ChunkHelper::convert_field(col_idx, column);
-        auto col_ptr = ChunkHelper::column_from_field(field);
+        auto col_ptr = ChunkFactory::column_from_field(field);
         ordinal_t total_rows = col_iter->num_rows();
         ordinal_t rows_read = 0;
 

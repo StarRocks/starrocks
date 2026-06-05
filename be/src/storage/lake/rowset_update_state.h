@@ -20,9 +20,10 @@
 
 #include "gutil/macros.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -83,64 +84,6 @@ struct RowsetUpdateStateParams {
     const Tablet* tablet;
     const RssidFileInfoContainer& container;
 };
-
-class SegmentPKIterator {
-public:
-    SegmentPKIterator() = default;
-    ~SegmentPKIterator() { close(); }
-    // If defer_data_load is true, only save parameters without loading the first chunk.
-    // The first chunk will be loaded lazily on the first done()/next() call.
-    // This avoids memory spikes when many iterators are created upfront.
-    Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                PrimaryKeyEncodingType encoding_type, bool defer_data_load = false);
-    void next();
-    bool done();
-    Status status();
-    void close();
-    // <Current pk column chunk, begin rowid>
-    std::pair<ChunkPtr, size_t> current();
-
-    // Return the memory usage of this encode pk column.
-    // If _lazy_load is true, return 0, because memory allocation is lazy.
-    size_t memory_usage() const { return _memory_usage; }
-
-    // Encode `pk_column_chunk` to the given |pk_column|
-    StatusOr<MutableColumnPtr> encoded_pk_column(const Chunk* chunk);
-
-    const MutableColumnPtr& standalone_pk_column() const { return _standalone_pk_column; }
-
-private:
-    Status _load();
-
-    // Iterator of this segment file.
-    ChunkIteratorPtr _iter;
-    // The PK schema of this segment file.
-    Schema _pkey_schema;
-    // status
-    Status _status = Status::OK();
-    // The current pk column index.
-    size_t _current_pk_column_idx = 0;
-    // The rowid offsets of each piece.
-    // E.g. if we have column vec : 100 rows, 101 rows, 200 rows,
-    // offset will be [0, 100, 201, 401]
-    std::vector<size_t> _begin_rowid_offsets;
-    // Current loaded row count of the segment.
-    size_t _current_rows = 0;
-    // If true, we will load segment peice by piece when needed.
-    bool _lazy_load = false;
-    // If true, first _load() is deferred until done() is first called.
-    bool _defer_data_load = false;
-    // If enable lazy load, `_memory_usage` will record first piece of pk column memory usage.
-    size_t _memory_usage = 0;
-    // For large segment, we need to load segment file piece by piece.
-    ChunkUniquePtr _pk_column_chunk;
-    // For no lazy load, we can load whole pk column and encode at once.
-    MutableColumnPtr _standalone_pk_column;
-    // The encoding type of primary key.
-    PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
-};
-
-using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;
 
 class RowsetUpdateState {
 public:

@@ -82,7 +82,7 @@ starrocks_setup_darwin_build_env() {
     local bundled_java_home=""
 
     export STARROCKS_ENV_QUIET=1
-    . "${STARROCKS_HOME}/build-mac/env_macos.sh"
+    . "${STARROCKS_HOME}/build-support/darwin_build_env.sh"
 
     unset STARROCKS_GCC_HOME
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
+description: "FE configuration parameters for authentication, query execution, and data loading."
 ---
 
 # FE Configuration - Authentication, Query, and Loading
@@ -761,7 +762,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `statistic_cache_thread_pool_size`
 
-- Default: 10
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: No
@@ -1063,6 +1064,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`.
 - Introduced in: -
 
+### `max_load_initial_open_partition_number`
+
+- Default: 4096
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The upper bound on how many partitions a load can open up front. The value is used as a cap in two scenarios: (1) for LIST-partitioned tables (which open all partitions by default) and (2) for RANGE-partitioned tables loaded via INSERT / Broker Load / Spark Load (which also open all partitions by default). Stream Load and Routine Load on RANGE-partitioned tables ignore this cap and keep the conservative latest-32 default. The per-table property `load_initial_open_partition_number` overrides this value, bypasses this cap, and is the highest-priority setting. From v4.0 onwards, the default value is increased from 32 to 4096.
+- Introduced in: -
+
 ### `max_load_timeout_second`
 
 - Default: 259200
@@ -1169,6 +1179,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The default timeout duration for a prepared transaction.
+- Introduced in: -
+
+### `rejected_records_retained_days`
+
+- Default: 7
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Number of daily partitions to keep in the internal `_statistics_.rejected_records` system table. The value is passed to `TableKeeper` (clamped to a minimum of 1) and reconciled into the target table's `partition_live_number` property on every keeper tick. Adjust this value when you need rejected row history beyond the default week (for audit or longer replay windows) or when storage budgets are tight. The value only affects new daily partitions and the keeper's TTL reconciliation; it does not retroactively restore already-dropped partitions.
 - Introduced in: -
 
 ### `routine_load_task_consume_second`

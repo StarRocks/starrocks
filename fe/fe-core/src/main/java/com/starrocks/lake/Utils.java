@@ -35,6 +35,7 @@ import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.TabletRangePB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -121,7 +122,60 @@ public class Utils {
         List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
                 null, useAggregatePublish, vectorIndexBuildInfos);
-        VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+        VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
+    }
+
+    /**
+     * Shared no-op publish used by the CANCEL ALTER TABLE ... FORCE escape hatch
+     * across all lake alter job types. For each affected partition it sends a
+     * {@code publish_version} RPC carrying {@code TxnInfoPB.no_op_publish=true} at
+     * {@code commitVersion-1 -> commitVersion}; BE short-circuits the txn-log
+     * apply path and writes V-1 content tagged as version V, so the partition
+     * version chain advances past the cancelled alter without including any of
+     * its data changes.
+     *
+     * <p>Callers differ only in WHICH tablets to publish (heavy schema change
+     * publishes the visible/original indices and skips its shadow indices;
+     * metadata alter publishes its dirty indices) and in the single-vs-aggregate
+     * decision, so those are computed by the caller and passed in. The TxnInfoPB
+     * construction and the publish loop — the parts that must stay identical to
+     * avoid leader/replay or cross-job-type divergence — live here.
+     *
+     * @return {@code true} on success; {@code false} if any RPC fails or throws,
+     *         in which case the caller should leave the job at
+     *         {@code FINISHED_REWRITING} so the operator can retry.
+     */
+    public static boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+                                                  Map<Long, Long> commitVersionMap,
+                                                  Map<Long, List<Tablet>> tabletsByPartition,
+                                                  ComputeResource computeResource, boolean useAggregatePublish) {
+        LOG.info("force-cancel no-op publish: alter job {} watershedTxnId {} useAggregatePublish {} reason \"{}\"",
+                jobId, watershedTxnId, useAggregatePublish, reason);
+        try {
+            for (Map.Entry<Long, List<Tablet>> entry : tabletsByPartition.entrySet()) {
+                List<Tablet> tablets = entry.getValue();
+                if (tablets == null || tablets.isEmpty()) {
+                    continue;
+                }
+                Long commitVersion = commitVersionMap.get(entry.getKey());
+                if (commitVersion == null) {
+                    continue;
+                }
+                TxnInfoPB txnInfo = new TxnInfoPB();
+                txnInfo.txnId = watershedTxnId;
+                txnInfo.combinedTxnLog = false;
+                txnInfo.commitTime = System.currentTimeMillis() / 1000;
+                txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+                txnInfo.gtid = watershedGtid;
+                txnInfo.noOpPublish = true;
+                publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, computeResource,
+                        useAggregatePublish);
+            }
+            return true;
+        } catch (Exception e) {
+            LOG.error("Fail to no-op publish for force-cancel of alter job {}: {}", jobId, e.getMessage());
+            return false;
+        }
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,

@@ -48,7 +48,9 @@
 #include "base/coding.h"
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
+#include "common/column_id.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
@@ -69,18 +71,18 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
+#include "platform/store_path.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
-#include "storage/key_coder.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
-#include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
-#include "storage/options.h"
 #include "storage/primary_key_dump.h"
+#include "storage/primitive/key_coder.h"
+#include "storage/primitive/storage_stats.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -94,7 +96,8 @@
 #include "storage/sstable/table.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/zone_map_detail.h"
+#include "types/olap_type_infra.h"
+#include "util/logging.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -384,17 +387,16 @@ void dump_lake_persistent_index_sst(const std::string& file_name, const starrock
 
     // Open the table via the official API for full KV iteration.
     Options tbl_opts;
-    Table* table = nullptr;
-    st = Table::Open(tbl_opts, file.get(), file_size, &table);
+    std::unique_ptr<Table> table;
+    st = Table::Open(tbl_opts, file.get(), file_size, table);
     if (!st.ok()) {
         std::cerr << "open SST table for iteration failed: " << st << std::endl;
         return;
     }
-    std::unique_ptr<Table> table_guard(table);
 
     ReadOptions iter_opts;
     iter_opts.fill_cache = false;
-    auto* iter = table_guard->NewIterator(iter_opts);
+    auto* iter = table->NewIterator(iter_opts);
     std::unique_ptr<Iterator> iter_guard(iter);
 
     // Dump all key-value entries.
@@ -1328,7 +1330,7 @@ Status SegmentDump::calc_checksum() {
 
     int64_t checksum = 0;
 
-    auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
     st = seg_iter->get_next(chunk.get());
     while (st.ok()) {
         size_t size = chunk->num_rows();
@@ -1411,7 +1413,7 @@ Status SegmentDump::dump_segment_data() {
 
     // iter chunk
     size_t row = 0;
-    auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+    auto chunk = ChunkFactory::new_chunk(*schema, 4096);
     do {
         st = seg_iter->get_next(chunk.get());
         if (!st.ok()) {
@@ -1462,7 +1464,7 @@ Status SegmentDump::dump_column_size() {
             auto seg_iter = std::move(seg_res.value());
 
             // iter chunk
-            auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+            auto chunk = ChunkFactory::new_chunk(*schema, 4096);
             do {
                 st = seg_iter->get_next(chunk.get());
                 if (!st.ok()) {

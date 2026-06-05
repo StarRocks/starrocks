@@ -18,6 +18,8 @@
 
 #include "base/debug/trace.h"
 #include "base/time/time.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
@@ -131,8 +133,8 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, Tab
     TRACE("[Compaction] start to compact data");
     auto status = Status::OK();
     size_t output_rows = 0;
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     while (LIKELY(!should_stop())) {
 #ifndef BE_TEST
         status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");

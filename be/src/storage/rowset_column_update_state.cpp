@@ -17,6 +17,8 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -113,7 +115,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     }
 
     ChunkPtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();
@@ -213,9 +215,10 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {
         _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-        // build `rss_rowid_to_update_rowid`
+        // build `rss_rowid_to_update_rowid`; non-lake update files are read in full, so
+        // physical == logical and the segment base is 0.
         _partial_update_states[idx].read_version = read_version;
-        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid());
+        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid(/*base=*/0));
         _partial_update_states[idx].inited = true;
     }
     int64_t t_end = MonotonicMillis();
@@ -240,8 +243,9 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
         TRY_CATCH_BAD_ALLOC({
             _partial_update_states[idx].src_rss_rowids.clear();
             _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-            // rebuild rss_rowid_to_update_rowid
-            _partial_update_states[idx].build_rss_rowid_to_update_rowid();
+            // rebuild rss_rowid_to_update_rowid; non-lake path reads update files in full,
+            // so physical == logical and the segment base is 0.
+            _partial_update_states[idx].build_rss_rowid_to_update_rowid(/*base=*/0);
         });
     }
     int64_t t_end = MonotonicMillis();
@@ -345,8 +349,8 @@ static Status read_from_source_segment_and_update(
     ASSIGN_OR_RETURN(auto seg_iter, (*segment)->new_iterator(schema, seg_options));
     ChunkUniquePtr source_chunk_ptr;
     ChunkUniquePtr tmp_chunk_ptr;
-    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size));
-    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size));
     uint32_t start_rowid = 0;
     while (true) {
         tmp_chunk_ptr->reset();
@@ -457,7 +461,7 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         const uint32_t upt_id = each.first;
         // 1. get chunk from upt file
         ChunkUniquePtr upt_chunk;
-        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE));
+        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE));
         ASSIGN_OR_RETURN(auto update_iterator, rowset->get_update_file_iterator(partial_schema, upt_id, stats));
         DeferOp iter_defer([&]() {
             if (update_iterator != nullptr) {
@@ -475,7 +479,7 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
         // fetch upt rows from upt_chunk
-        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
         // update source chunk use upt rows
@@ -596,7 +600,7 @@ Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& sta
 }
 
 static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& tschema, Chunk* chunk) {
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
 }
 
@@ -623,8 +627,8 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
                 }
             });
             // 1. generate segment file
-            auto chunk_ptr = ChunkHelper::new_chunk(schema, _partial_update_states[upt_id].insert_rowids.size());
-            ChunkUniquePtr partial_chunk_ptr = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+            auto chunk_ptr = ChunkFactory::new_chunk(schema, _partial_update_states[upt_id].insert_rowids.size());
+            ChunkUniquePtr partial_chunk_ptr = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
             ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {

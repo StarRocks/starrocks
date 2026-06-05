@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "获取 Bitmap 中的最大值。"
 ---
 
 # bitmap_max

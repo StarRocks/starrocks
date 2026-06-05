@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstring>
 #include <thread>
+#include <type_traits>
 #include <utility>
 
 #include "base/compiler_util.h"
@@ -70,6 +71,18 @@ std::string Random::RandomBinaryString(int len) {
         ret[i] = static_cast<char>(static_cast<unsigned char>(Uniform(256)));
     }
     return ret;
+}
+
+int32_t ThreadLocalRandomUniform(int32_t range) {
+    STORAGE_DECL Random32* tls_instance;
+    STORAGE_DECL std::aligned_storage<sizeof(Random32)>::type tls_instance_bytes;
+
+    auto* rv = tls_instance;
+    if (UNLIKELY(rv == nullptr)) {
+        rv = new (&tls_instance_bytes) Random32(std::random_device{}());
+        tls_instance = rv;
+    }
+    return static_cast<int32_t>(rv->Uniform(static_cast<uint32_t>(range)));
 }
 
 } // namespace starrocks

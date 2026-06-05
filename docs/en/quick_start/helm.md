@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: Use Helm to deploy StarRocks
+description: "Quick start guide for deploying StarRocks on Kubernetes using Helm."
 toc_max_heading_level: 2
 ---
 
@@ -54,7 +54,7 @@ You can use the SQL client provided in the Kubernetes environment, or use one on
 
 ### curl
 
-`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/).
 
 ---
 

@@ -36,7 +36,7 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "runtime/user_function_cache.h"
+#include "platform/user_function_cache.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"

@@ -115,6 +115,12 @@ public:
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
+    // Phase 4 of the rejected records feature: capture every row marked 0
+    // in _broker_load_filter as a structured JSON Lines record before the
+    // caller filters the chunk. Called unconditionally; itself gates on
+    // `state->enable_log_rejected_record()` so it is a cheap no-op when
+    // rejected-record logging is disabled.
+    void capture_rejected_rows_before_filter(Chunk* chunk);
     const orc::Type* get_orc_type_by_slot_id(const SlotId& slot_id) const;
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
@@ -214,5 +220,14 @@ private:
 
     std::string _current_file_name;
 };
+
+// Free helper extracted from OrcChunkReader::capture_rejected_rows_before_filter
+// for testability. For each row where filter[i] == 0, calls
+// writer->append_from_chunk with per-slot column names derived from
+// src_slot_descriptors. Declared here so unit tests can exercise the
+// per-row emit path without constructing a full OrcChunkReader.
+class RejectedRecordWriter;
+void orc_emit_rejected_rows(RejectedRecordWriter* writer, const Chunk& chunk,
+                            const std::vector<SlotDescriptor*>& src_slot_descriptors, const Filter& filter);
 
 } // namespace starrocks

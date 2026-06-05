@@ -7,6 +7,7 @@
 #include "base/string/slice.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/schema.h"
 #include "fs/fs.h"
@@ -71,7 +72,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);
-    auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
+    auto chunk = ChunkFactory::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
         chunk->get_column_by_index(i).reset(std::move(columns[i]));
     }
@@ -122,7 +123,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     }
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();
 
     SegmentReadOptions seg_options;
@@ -147,7 +148,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     std::vector<uint32_t> full_column_ids(tschema->num_columns());
     std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
     auto schema = ChunkHelper::convert_schema(tschema, full_column_ids);
-    auto chunk = ChunkHelper::new_chunk(schema, full_column_ids.size());
+    auto chunk = ChunkFactory::new_chunk(schema, full_column_ids.size());
 
     size_t update_columns_index = 0;
     size_t read_columns_index = 0;
@@ -219,7 +220,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
                      tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();
 
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();
 
     SegmentReadOptions seg_options;
@@ -246,7 +247,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
 
     auto schema = tschema->schema();
-    auto chunk = ChunkHelper::new_chunk(*schema, num_rows);
+    auto chunk = ChunkFactory::new_chunk(*schema, num_rows);
 
     // Fill in the values of columns that have not been modified
     size_t unmodified_column_index = 0;

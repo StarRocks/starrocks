@@ -24,20 +24,21 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
+#include "runtime/env/global_env.h"
 
 namespace starrocks {
 
 void MemoryMetricsAction::handle(HttpRequest* req) {
     LOG(INFO) << "Start collect memory metrics.";
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_memory_metrics"));
-    MemTracker* process_mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    MemTracker* process_mem_tracker = _global_env.process_mem_tracker();
     std::stringstream result;
     result << "[";
     getMemoryMetricTree(process_mem_tracker, result, process_mem_tracker->consumption());
     result << ",";
-    getMemoryMetricTree(GlobalEnv::GetInstance()->metadata_mem_tracker(), result, process_mem_tracker->consumption());
+    getMemoryMetricTree(_global_env.metadata_mem_tracker(), result, process_mem_tracker->consumption());
     result << ",";
-    getMemoryMetricTree(GlobalEnv::GetInstance()->update_mem_tracker(), result, process_mem_tracker->consumption());
+    getMemoryMetricTree(_global_env.update_mem_tracker(), result, process_mem_tracker->consumption());
     result << "]";
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
     LOG(INFO) << "End collect memory metrics. " << result.str();

@@ -245,7 +245,7 @@ public class PaimonMetadataTest {
         assertEquals("db1", paimonTable.getCatalogDBName());
         assertEquals("tbl1", paimonTable.getCatalogTableName());
         assertEquals("CREATE TABLE `tbl1` (\n" +
-                        "  `col2` int(11) NOT NULL,\n" +
+                        "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
                         "PRIMARY KEY (`col2`)\n" +
@@ -254,7 +254,7 @@ public class PaimonMetadataTest {
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
-        org.junit.jupiter.api.Assertions.assertFalse(paimonTable.getBaseSchema().get(0).isAllowNull());
+        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
@@ -357,6 +357,37 @@ public class PaimonMetadataTest {
         metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), new ArrayList<>(), false);
         metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), expectations, false);
 
+    }
+
+    @Test
+    public void testListPartitionNamesWithDateNullPartition(@Mocked FileStoreTable mockPaimonTable)
+            throws Catalog.TableNotExistException {
+        List<String> partitionNames = Lists.newArrayList("dt");
+        RowType partitionRowType = new RowType(
+                Arrays.asList(new DataField(0, "dt", new org.apache.paimon.types.DateType(true))));
+        Identifier tblIdentifier = new Identifier("db1", "tbl_date_null");
+        org.apache.paimon.partition.Partition partitionDate = new Partition(
+                Map.of("dt", "19723"), 100L, 1L, 1L, 1741327322000L, true);
+        org.apache.paimon.partition.Partition partitionNull = new Partition(
+                Map.of("dt", "__DEFAULT_PARTITION__"), 50L, 1L, 1L, 1741327322000L, true);
+
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(tblIdentifier);
+                result = mockPaimonTable;
+                mockPaimonTable.partitionKeys();
+                result = partitionNames;
+                mockPaimonTable.rowType();
+                result = partitionRowType;
+                paimonNativeCatalog.listPartitions(tblIdentifier);
+                result = Arrays.asList(partitionDate, partitionNull);
+            }
+        };
+        List<String> result = metadata.listPartitionNames("db1", "tbl_date_null",
+                ConnectorMetadataRequestContext.DEFAULT);
+        assertEquals(2, result.size());
+        Assertions.assertThat(result).hasSameElementsAs(
+                Lists.newArrayList("dt=2024-01-01", "dt=__DEFAULT_PARTITION__"));
     }
 
     @Test

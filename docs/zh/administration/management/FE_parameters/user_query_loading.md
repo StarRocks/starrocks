@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
 ---
 
@@ -761,7 +762,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- 默认值: 10
+- 默认值: 5
 - 类型: Int
 - 单位: -
 - 是否可变: No
@@ -1063,6 +1064,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: StarRocks 集群中允许的最大并发 Broker Load 作业数。此参数仅对 Broker Load 有效。此参数的值必须小于 `max_running_txn_num_per_db` 的值。从 v2.5 开始，默认值从 `10` 更改为 `5`。
 - 引入版本: -
 
+### `max_load_initial_open_partition_number`
+
+- 默认值: 4096
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 单次导入开始时最多预先打开的分区数。该值在以下两种场景作为上限生效:(1) LIST 分区表(默认全部打开);(2) RANGE 分区表通过 INSERT / Broker Load / Spark Load 导入(默认全部打开)。Stream Load 与 Routine Load 写入 RANGE 分区表时不受该上限限制,保留更保守的「最新 32」默认行为。表属性 `load_initial_open_partition_number` 优先级最高,可覆盖该值并突破此上限。从 v4.0 起,默认值从 32 调整为 4096。
+- 引入版本: -
+
 ### `max_load_timeout_second`
 
 - 默认值: 259200
@@ -1169,6 +1179,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 准备事务的默认超时时长。
+- 引入版本: -
+
+### `rejected_records_retained_days`
+
+- 默认值: 7
+- 类型: Int
+- 单位: 天
+- 是否可变: Yes
+- 描述: 内部系统表 `_statistics_.rejected_records` 保留的每日分区数。该值会被传递给 `TableKeeper`（下限为 1），并在每次 keeper 调度时被反写到目标表的 `partition_live_number` 属性。当需要将拒绝行历史保留更久（用于审计或更长时间窗口的回放）或存储预算紧张时，可调整此值。该值只影响新建的每日分区及 keeper 的 TTL 对齐，不会使已被清理的分区恢复。
 - 引入版本: -
 
 ### `routine_load_task_consume_second`

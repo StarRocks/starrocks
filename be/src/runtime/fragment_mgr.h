@@ -55,6 +55,7 @@ namespace starrocks {
 
 class ExecEnv;
 class FragmentExecState;
+class MetricRegistry;
 class TExecPlanFragmentParams;
 class TUniqueId;
 class PlanFragmentExecutor;
@@ -69,7 +70,7 @@ public:
     typedef std::function<void(PlanFragmentExecutor*)> FinishCallback;
     typedef std::function<void(PlanFragmentExecutor*)> StartSuccCallback;
 
-    FragmentMgr(ExecEnv* exec_env);
+    FragmentMgr(ExecEnv* exec_env, MetricRegistry* metrics);
     ~FragmentMgr() override;
 
     // execute one plan fragment

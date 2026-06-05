@@ -18,6 +18,7 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
+#include "column/chunk_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -137,7 +138,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     }
     vector<uint32_t> rowids;
     rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     // 2. scan all rowsets and segments to build primary index
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
@@ -187,27 +188,27 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     return Status::OK();
 }
 
-Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
+Status LakePrimaryIndex::apply_opcompaction(const TabletMetadataPtr& metadata,
                                             const TxnLogPB_OpCompaction& op_compaction) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
-    switch (metadata.persistent_index_type()) {
+    switch (metadata->persistent_index_type()) {
     case PersistentIndexTypePB::LOCAL: {
         return Status::OK();
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->apply_opcompaction(op_compaction);
+            return lake_persistent_index->apply_opcompaction(metadata, op_compaction);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
     }
     default:
         return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                     PersistentIndexTypePB_Name(metadata.persistent_index_type()));
+                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
     return Status::OK();
 }
@@ -438,7 +439,7 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             Status st = Status::OK();
 
             // Encode primary keys for this segment
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.chunk.get());
             DCHECK(context_ptr->slots.size() > 0);
 
             if (pk_column_st.ok()) {
@@ -508,21 +509,22 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
     std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
 
     // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
+    // begin_rowid is each chunk's logical offset (rows emitted before it within the segment),
+    // i.e. its index into this segment's flat result array.
     for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
         auto* pk_iter = pk_iters[seg_idx].get();
+        size_t segment_logical_offset = 0;
         for (; !pk_iter->done(); pk_iter->next()) {
             auto current = pk_iter->current();
-            size_t num_rows = current.first->num_rows();
-            size_t begin_rowid = current.second;
-
             auto slot = std::make_unique<RssRowidSlot>();
-            slot->begin_rowid = begin_rowid;
-            slot->count = num_rows;
+            slot->begin_rowid = segment_logical_offset;
+            slot->count = current.chunk->num_rows();
+            segment_logical_offset += slot->count;
             per_segment_slots[seg_idx].push_back(std::move(slot));
             auto* slot_ptr = per_segment_slots[seg_idx].back().get();
 
             auto func = [this, slot_ptr, current = std::move(current), pk_iter, &mutex, &status]() {
-                auto pk_column_st = pk_iter->encoded_pk_column(current.first.get());
+                auto pk_column_st = pk_iter->encoded_pk_column(current.chunk.get());
                 Status st;
                 if (pk_column_st.ok()) {
                     slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
@@ -556,7 +558,7 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
         RETURN_IF_ERROR(pk_iters[seg_idx]->status());
     }
 
-    // Merge per-chunk results into per-segment output vectors
+    // Merge per-chunk results into per-segment output vectors.
     for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
         auto& slots = per_segment_slots[seg_idx];
         size_t total = 0;
@@ -604,7 +606,8 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
     // Setup context shared across all parallel tasks
     ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
 
-    // Process each segment in the iterator
+    // Process each segment in the iterator. Each chunk's absolute physical
+    // rowid is current.physical_rowid_offset + i_in_chunk (see SegmentPKChunkRef).
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
         if (token) {
@@ -615,14 +618,14 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
             // We can't return error directly, because we need to wait all previous tasks finish.
             // Instead, we accumulate errors in context->status for later checking.
             Status st = Status::OK();
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.chunk.get());
             if (pk_column_st.ok()) {
                 // Store pk_column in this task's slot to avoid data races
                 slot->pk_column = std::move(pk_column_st.value());
 
                 // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
                 // them in the context (not used for upsert, only for parallel_get)
-                st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, &context);
+                st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
                 TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
             } else {
                 st = pk_column_st.status();
@@ -635,8 +638,8 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
             }
         } else {
             // Serial mode: Execute inline with direct error propagation
-            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
-            RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context.deletes));
+            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
+            RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
         }
     }
     // Synchronize parallel execution if enabled

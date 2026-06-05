@@ -40,10 +40,12 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -53,6 +55,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
+#include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -114,7 +117,7 @@ struct MergeElement {
 bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
-        _swap_chunk = ChunkHelper::new_chunk(new_schema, chunk->num_rows());
+        _swap_chunk = ChunkFactory::new_chunk(new_schema, chunk->num_rows());
         if (_swap_chunk == nullptr) {
             LOG(WARNING) << "allocate swap chunk for sort failed";
             return false;
@@ -190,7 +193,7 @@ Status HeapChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* ro
     _make_heap(chunk_arr);
     size_t nread = 0;
     Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    ChunkPtr tmp_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(&new_schema, config::vector_chunk_size, 0));
     }
@@ -316,11 +319,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
     }
 
     Schema read_schema = ChunkHelper::convert_schema(base_tablet_schema, all_ref_columns_ids);
-    ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, config::vector_chunk_size);
+    ChunkPtr read_chunk = ChunkFactory::new_chunk(read_schema, config::vector_chunk_size);
 
     auto new_tablet_schema = new_tablet->tablet_schema();
     Schema new_schema = ChunkHelper::convert_schema(new_tablet_schema, new_columns_ids);
-    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
 
     OlapReaderStatistics stats;
     RowsetReleaseGuard guard(src_rowset->shared_from_this());
@@ -419,7 +422,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
     auto cur_base_tablet_schema = !base_tablet_schema ? base_tablet->tablet_schema() : base_tablet_schema;
     Schema base_schema =
             ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
-    ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+    ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
     auto new_tschema = new_tablet->tablet_schema();
     std::vector<ColumnId> cids;
     for (size_t i = 0; i < new_tschema->num_columns(); i++) {
@@ -429,9 +432,9 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
-    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     bool bg_worker_stopped = false;
@@ -517,7 +520,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (new_tschema->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -564,7 +567,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
                     << CurrentThread::mem_tracker()->consumption();
         }
 #endif
-        ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+        ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
         if (auto status = reader->do_get_next(base_chunk.get()); !status.ok()) {
             if (is_eos = status.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header() << "failed to get next chunk, status is:" << status.to_string();
@@ -576,7 +579,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             break;
         }
 
-        ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, base_chunk->num_rows());
+        ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, base_chunk->num_rows());
 
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
             std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",

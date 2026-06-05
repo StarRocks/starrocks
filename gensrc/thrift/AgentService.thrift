@@ -210,6 +210,27 @@ struct TAlterTabletReqV2 {
     //    schema matches tablet metadata schema. base_tablet_read_schema can directly replace columns;
     //    old BE will fall back to tablet metadata schema if columns are missing, with no compatibility impact.
     19: optional TTabletSchema base_tablet_read_schema
+
+    // ADD INDEX fast-path (lake-only). When true, BE skips data rewrite and
+    // builds indexes into standalone .idx files (Index Delta Group). The
+    // indexes_to_add list carries the new TabletIndex entries to build.
+    // BE that does not recognize this field falls back to the regular
+    // schema-change path automatically.
+    20: optional bool only_add_index
+    21: optional list<Descriptors.TOlapTableIndex> indexes_to_add
+
+    // DROP INDEX fast-path (lake-only). When true, BE writes a logical
+    // tombstone into IDG metadata; physical .idx file cleanup happens at
+    // compaction time.
+    22: optional bool only_drop_index
+    23: optional list<TDropIndexInfo> drop_indexes
+}
+
+// One index removal request used by the DROP INDEX fast-path.
+struct TDropIndexInfo {
+    1: optional i64 index_id
+    2: optional i32 col_unique_id
+    3: optional Descriptors.TIndexType index_type
 }
 
 struct TClusterInfo {
@@ -459,18 +480,47 @@ struct TReplicateSnapshotRequest {
     20: optional string src_partition_full_path
 }
 
+// Placeholder for external cluster snapshot feature.
+struct TComputeNodeTablets {
+    1: optional Types.TBackend compute_node
+    2: optional list<Types.TTabletId> tablets
+}
+
+// Placeholder for external cluster snapshot feature.
+// NOTE: fields 9-11 replace a prior placeholder definition (src_tablets/compute_nodes
+// at 9/10) that was never wired into any code path.
 struct TExternalClusterSnapshotRequest {
-    1: optional i64 job_id // ExternalClusterSnapshot job id
+    1: optional i64 job_id
     2: optional i64 db_id
     3: optional Types.TTableId table_id
     4: optional Types.TPartitionId partition_id
     5: optional Types.TPartitionId physical_partition_id
     6: optional Types.TVersion pre_version
     7: optional Types.TVersion new_version
-    8: optional Types.TTabletId dest_tablet_id // tablet id of the target storage volume
-    9: optional list<Types.TTabletId> src_tablets // tablets need to file synchronization
-    10: optional list<Types.TBackend> compute_nodes  // candidate cn to do file sync
- }
+    8: optional Types.TTabletId dest_tablet_id
+    9: optional bool is_filebundling
+    10: optional bool is_drop_partition
+    11: optional list<TComputeNodeTablets> compute_node_tablets
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TRestoreTabletInfo {
+    1: optional Types.TTabletId source_tablet_id
+    2: optional Types.TTabletId target_tablet_id
+    3: optional i64 target_schema_id
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TRestoreTabletRequest {
+    1: optional list<TRestoreTabletInfo> tablet_infos
+    2: optional i64 source_visible_version
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TRestoreTabletResult {
+     1: optional bool success
+     2: optional string error_msg
+}
 
 enum TTabletMetaType {
     PARTITIONID,
@@ -558,6 +608,8 @@ struct TAgentTaskRequest {
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
     33: optional TExternalClusterSnapshotRequest external_cluster_snapshot_req
+    // Placeholder for external cluster snapshot feature.
+    34: optional TRestoreTabletRequest restore_tablet_req
 }
 
 struct TAgentResult {

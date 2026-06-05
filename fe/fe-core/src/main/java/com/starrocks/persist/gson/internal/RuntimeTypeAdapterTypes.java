@@ -20,8 +20,10 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeRollupJob;
+import com.starrocks.alter.LakeTableAddIndexJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
+import com.starrocks.alter.LakeTableDropIndexJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.MergePartitionJob;
 import com.starrocks.alter.OnlineOptimizeJobV2;
@@ -86,7 +88,10 @@ import com.starrocks.catalog.LargeIntVariant;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaxVariant;
+import com.starrocks.catalog.MinVariant;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -239,7 +244,9 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                         .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                         .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
-                        .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
+                        .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")
+                        .registerSubtype(LakeTableAddIndexJob.class, "LakeTableAddIndexJob")
+                        .registerSubtype(LakeTableDropIndexJob.class, "LakeTableDropIndexJob");
 
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(AlterJobV2.class, alter_job_v2_type_adapter_factory);
 
@@ -445,7 +452,13 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(IntVariant.class, "IntVariant")
                         .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
                         .registerSubtype(StringVariant.class, "StringVariant")
-                        .registerSubtype(DateVariant.class, "DateVariant");
+                        .registerSubtype(DateVariant.class, "DateVariant")
+                        // Canonical colocate boundaries serialized via SplittingTablet contain
+                        // NullVariant suffixes; MinVariant / MaxVariant cover the unbounded
+                        // sentinel cases observed in ColocateRange persistence.
+                        .registerSubtype(NullVariant.class, "NullVariant")
+                        .registerSubtype(MinVariant.class, "MinVariant")
+                        .registerSubtype(MaxVariant.class, "MaxVariant");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(Variant.class, variant_runtime_type_adapter_factory);
 
         final RuntimeTypeAdapterFactory<TvrVersionRange> tvr_delta_runtime_type_adapter_factory =

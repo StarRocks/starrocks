@@ -30,7 +30,6 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.TabletGroupList;
 
@@ -77,8 +76,6 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             throw new StarRocksException("No tablets need to merge in table "
                     + db.getFullName() + '.' + table.getName());
         }
-
-        createNewShards(reshardingPhysicalPartitions);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         return new MergeTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
@@ -396,36 +393,6 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         }
 
         return newIndex;
-    }
-
-    private void createNewShards(Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions)
-            throws StarRocksException {
-        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-            long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
-            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                    .getReshardingIndexes().values()) {
-                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                Map<Long, List<Long>> newToOldTabletIds = new HashMap<>();
-                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
-                    List<Long> oldTabletIds = reshardingTablet.getOldTabletIds();
-                    for (long newTabletId : reshardingTablet.getNewTabletIds()) {
-                        newToOldTabletIds.put(newTabletId, oldTabletIds);
-                    }
-                }
-
-                Map<String, String> properties = new HashMap<>();
-                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
-                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
-                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
-
-                GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
-                        newToOldTabletIds,
-                        table.getPartitionFilePathInfo(physicalPartitionId),
-                        table.getPartitionFileCacheInfo(physicalPartitionId),
-                        newIndex.getShardGroupId(),
-                        properties, WarehouseManager.DEFAULT_RESOURCE);
-            }
-        }
     }
 
     private static MergingTablet createMergingTablet(List<Long> oldTabletIds) {

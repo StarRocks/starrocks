@@ -36,6 +36,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -66,6 +67,13 @@ import java.util.Objects;
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
 
+    // Shared by the @Mock static methods below: a static mock method cannot reference a
+    // test-method local, so these live at class scope. Each test resets them at the start.
+    private static java.util.concurrent.atomic.AtomicBoolean backfillSeen =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static java.util.concurrent.atomic.AtomicInteger partitionsBackfilled =
+            new java.util.concurrent.atomic.AtomicInteger(0);
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
@@ -84,6 +92,11 @@ public class CreateLakeTableTest {
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+    }
+
+    private static void alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
@@ -540,6 +553,7 @@ public class CreateLakeTableTest {
                 "\"datacache.enable\" = \"true\",\n" +
                 "\"enable_async_write_back\" = \"false\",\n" +
                 "\"file_bundling\" = \"true\",\n" +
+                "\"light_weight_tablet_creation\" = \"false\",\n" +
                 "\"partition_retention_condition\" = \"dt > current_date() - interval 1 month\",\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_volume\" = \"builtin_storage_volume\"\n" +
@@ -806,5 +820,167 @@ public class CreateLakeTableTest {
         TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
         Assertions.assertEquals(TStatusCode.NOT_IMPLEMENTED_ERROR, batchResp.getStatus().getStatus_code());
         Assertions.assertFalse(batchResp.isSetResponses());
+    }
+
+    @Test
+    public void testLightWeightTabletCreation() throws Exception {
+        boolean saved = Config.lake_enable_light_weight_tablet_creation;
+        try {
+            // Config.lake_enable_light_weight_tablet_creation = true: new tables default to light-weight.
+            Config.lake_enable_light_weight_tablet_creation = true;
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_default\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2"));
+            Assertions.assertTrue(getLakeTable("lake_test", "light_weight_default").isLightWeightTabletCreation());
+
+            // Explicit false overrides the cluster default.
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_false\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2\n" +
+                            "properties('light_weight_tablet_creation' = 'false')"));
+            Assertions.assertFalse(getLakeTable("lake_test", "light_weight_false").isLightWeightTabletCreation());
+
+            // Config off: new tables default to non-light-weight.
+            Config.lake_enable_light_weight_tablet_creation = false;
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_config_off\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2"));
+            Assertions.assertFalse(getLakeTable("lake_test", "light_weight_config_off").isLightWeightTabletCreation());
+
+            // Explicit true overrides the cluster default.
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_true\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2\n" +
+                            "properties('light_weight_tablet_creation' = 'true')"));
+            Assertions.assertTrue(getLakeTable("lake_test", "light_weight_true").isLightWeightTabletCreation());
+
+            // SHOW CREATE TABLE surfaces the property.
+            String sql = "show create table lake_test.light_weight_true";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+            List<List<String>> result = resultSet.getResultRows();
+            Assertions.assertFalse(result.isEmpty());
+            Assertions.assertTrue(result.get(0).get(1).contains("\"light_weight_tablet_creation\" = \"true\""));
+        } finally {
+            Config.lake_enable_light_weight_tablet_creation = saved;
+        }
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreation() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.alter_lw (c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('light_weight_tablet_creation' = 'false')"));
+        LakeTable table = getLakeTable("lake_test", "alter_lw");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // false -> true
+        alterTable("alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+
+        // true -> false
+        alterTable("alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'false')");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // No-op (same value) is a successful no-op, not an error.
+        ExceptionChecker.expectThrowsNoException(() -> alterTable(
+                "alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'false')"));
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // Invalid value rejected by analyzer.
+        ExceptionChecker.expectThrowsWithMsg(Exception.class, "must be bool type", () -> alterTable(
+                "alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'maybe')"));
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreationTrueToFalseTriggersBackfill() throws Exception {
+        backfillSeen.set(false);
+        partitionsBackfilled.set(0);
+        new MockUp<com.starrocks.task.TabletTaskExecutor>() {
+            @Mock
+            public static void buildPartitionsSequentially(long dbId,
+                                                           com.starrocks.catalog.OlapTable t,
+                                                           List<com.starrocks.catalog.PhysicalPartition> partitions,
+                                                           int numReplicas,
+                                                           int numBackends,
+                                                           com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                           com.starrocks.task.TabletTaskExecutor.CreateTabletOption option) {
+                if (option.isBackfill()) {
+                    backfillSeen.set(true);
+                    partitionsBackfilled.set(partitions.size());
+                }
+            }
+
+            @Mock
+            public static void buildPartitionsConcurrently(long dbId,
+                                                           com.starrocks.catalog.OlapTable t,
+                                                           List<com.starrocks.catalog.PhysicalPartition> partitions,
+                                                           int numReplicas,
+                                                           int numBackends,
+                                                           com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                           com.starrocks.task.TabletTaskExecutor.CreateTabletOption option) {
+                if (option.isBackfill()) {
+                    backfillSeen.set(true);
+                    partitionsBackfilled.set(partitions.size());
+                }
+            }
+        };
+
+        createTable("create table lake_test.alter_lw_bf (c0 int) duplicate key(c0)\n" +
+                "distributed by hash(c0) buckets 2\n" +
+                "properties('light_weight_tablet_creation' = 'true')");
+        LakeTable table = getLakeTable("lake_test", "alter_lw_bf");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+
+        // true -> false: backfill triggered, all PhysicalPartitions with visibleVersion == 1.
+        alterTable("alter table lake_test.alter_lw_bf set ('light_weight_tablet_creation' = 'false')");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+        Assertions.assertTrue(backfillSeen.get(),
+                "buildPartitions[Sequentially|Concurrently] must be called with option.backfill = true");
+        Assertions.assertEquals(1, partitionsBackfilled.get(),
+                "the single unpublished physical partition should be backfilled");
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreationFalseToTrueSkipsBackfill() throws Exception {
+        backfillSeen.set(false);
+        partitionsBackfilled.set(0);
+        new MockUp<com.starrocks.task.TabletTaskExecutor>() {
+            @Mock
+            public static void buildPartitionsSequentially(long dbId,
+                                                           com.starrocks.catalog.OlapTable t,
+                                                           List<com.starrocks.catalog.PhysicalPartition> partitions,
+                                                           int numReplicas,
+                                                           int numBackends,
+                                                           com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                           com.starrocks.task.TabletTaskExecutor.CreateTabletOption option) {
+                if (option.isBackfill()) {
+                    backfillSeen.set(true);
+                }
+            }
+        };
+
+        createTable("create table lake_test.alter_lw_no_bf (c0 int) duplicate key(c0)\n" +
+                "distributed by hash(c0) buckets 2\n" +
+                "properties('light_weight_tablet_creation' = 'false')");
+        LakeTable table = getLakeTable("lake_test", "alter_lw_no_bf");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // false -> true: no backfill needed; v1 metadata is already in object storage.
+        alterTable("alter table lake_test.alter_lw_no_bf set ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+        Assertions.assertFalse(backfillSeen.get(),
+                "false -> true must not trigger backfill");
     }
 }

@@ -63,7 +63,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
@@ -115,7 +115,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
-public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
+public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
@@ -150,7 +150,9 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     private GlobalStateMgr globalStateMgr;
 
     public BackupHandler() {
-        // for persist
+        // for persist - LeaderDaemon requires a name; the worker thread is never started for
+        // the deserialization-only instance (start() requires globalStateMgr to be non-null).
+        super("backup-handler", 3000L);
     }
 
     public BackupHandler(GlobalStateMgr globalStateMgr) {
@@ -210,7 +212,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!isInit) {
             if (!init()) {
                 return;
@@ -220,6 +222,23 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
             job.setGlobalStateMgr(globalStateMgr);
             job.run();
+        }
+    }
+
+    @Override
+    protected void onStopped() {
+        // dbIdToBackupOrRestoreJob is persistent state (saved/loaded via image and replayed
+        // through the editlog) - the next leader resumes those jobs from the same map. Only
+        // drop the per-leader-session init flag so the new leader re-validates backup/restore
+        // tmp directories before resuming jobs.
+        isInit = false;
+        // repoMgr was started by start(); stop its ping loop so it does not keep talking to
+        // remote storage after demotion. The same instance is reused on re-election; its
+        // persisted repo maps remain intact across the stop/start cycle.
+        try {
+            repoMgr.stopGracefully(Config.leader_demotion_drain_timeout_sec * 1000L);
+        } catch (Throwable t) {
+            LOG.warn("stop repoMgr failed", t);
         }
     }
 
@@ -517,12 +536,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         List<Function> allFunctions = Lists.newArrayList();
 
-        if (!stmt.withOnClause() || stmt.allFunction()) {
+        if (!stmt.containsExternalCatalog() && (!stmt.withOnClause() || stmt.allFunction())) {
             for (Map.Entry<String, List<Function>> entry : db.getNameToFunction().entrySet()) {
                 List<Function> fns = entry.getValue();
                 allFunctions.addAll(fns);
             }
-        } else {
+        } else if (!stmt.containsExternalCatalog()) {
             for (FunctionRef fnRef : stmt.getFnRefs()) {
                 String functionName = fnRef.getFunctionName();
 

@@ -18,7 +18,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/connector.h"
+#include "connector/connector_chunk_sink.h"
 #include "connector/partition_chunk_writer.h"
 #include "formats/file_writer.h"
 

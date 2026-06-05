@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 5
 keywords: ['iceberg']
+description: "An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards."
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -51,6 +52,7 @@ Before you create an Iceberg catalog, make sure your StarRocks cluster can integ
 Select the tab that matches your storage type:
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 If your Iceberg cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
@@ -153,6 +155,7 @@ The data access control policy. Valid values:
 A set of parameters about how StarRocks integrates with the metastore of your data source. Choose the tab that matches your metastore type:
 
 <Tabs groupId="metastore">
+
 <TabItem value="HIVE" label="Hive metastore" default>
 
 ##### Hive metastore
@@ -181,6 +184,7 @@ The following table describes the parameter you need to configure in `MetastoreP
   - Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
 
 </TabItem>
+
 <TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
@@ -247,6 +251,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>
+
 <TabItem value="REST" label="REST">
 
 ##### REST
@@ -467,6 +472,7 @@ Note the following points:
 Choose the tab that matches your storage type:
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
@@ -810,6 +816,7 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster. Chose the tab that matches your storage type:
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
@@ -976,6 +983,7 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
 </TabItem>
 
 <TabItem value="AZURE" label="Microsoft Azure Blob Storage" >

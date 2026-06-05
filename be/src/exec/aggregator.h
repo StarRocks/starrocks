@@ -32,7 +32,8 @@
 #include "exec/aggregator_fwd.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/expr.h"
@@ -44,6 +45,7 @@
 
 namespace starrocks {
 class RuntimeFilter;
+class RuntimeFilterBuildDescriptor;
 class AggTopNRuntimeFilterBuilder;
 class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;

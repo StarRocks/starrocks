@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.3 版本发布说明：子秒级 DDL、Fast Schema Evolution、数据迁移工具、数据湖预热缓存功能。"
 ---
 
 # StarRocks version 3.3
@@ -284,7 +285,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - 优化正则表达式解析失败时的报错信息。[#57904](https://github.com/StarRocks/starrocks/pull/57904)
-- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
+- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
 
 ### 问题修复
 

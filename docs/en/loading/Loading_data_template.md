@@ -395,6 +395,6 @@ INSERT INTO user_behavior_declared
 - For more details on synchronous and asynchronous data loading, see [Loading concepts](./loading_introduction/loading_concepts.md).
 - Learn about how Broker Load supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 - This document only covered IAM user-based authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
-- The [AWS CLI Command Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) covers the S3 URI in detail.
+- The [AWS CLI Command Reference](https://docs.aws.amazon.com/cli/latest/reference/s3/) covers the S3 URI in detail.
 - Learn more about [table design](../table_design/StarRocks_table_design.md).
 - Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)

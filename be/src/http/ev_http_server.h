@@ -19,21 +19,43 @@
 
 #include <event2/event.h>
 
+#include <functional>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "base/path/path_trie.hpp"
 #include "common/status.h"
+#include "http/http_handler.h"
 #include "http/http_method.h"
+#include "http/http_status.h"
 
 namespace starrocks {
 
-class HttpHandler;
 class HttpRequest;
 
 class EvHttpServer {
 public:
+    // Result returned by an AuthVerifier when authentication or authorization fails.
+    // The verifier (injected by the service layer) is responsible for shaping the
+    // response body — HttpCore stays format-agnostic.
+    struct AuthVerifyFailure {
+        HttpStatus http_status = HttpStatus::UNAUTHORIZED;
+        // Value for the response's `WWW-Authenticate` header. Empty means the server
+        // will not add the header (e.g. for 403 where the header is semantically wrong).
+        std::string www_authenticate;
+        // Pre-serialized response body sent to the client as-is (Content-Type: application/json).
+        std::string body;
+    };
+
+    // Callback used to verify Basic Auth credentials (plus an optional role/privilege
+    // requirement) carried by an HTTP request. Returning std::nullopt means OK and the
+    // server proceeds to dispatch to the handler; returning a populated AuthVerifyFailure
+    // causes the server to short-circuit with that response. Service layer injects an
+    // implementation that talks to FE.
+    using AuthVerifier = std::function<std::optional<AuthVerifyFailure>(HttpRequest*, HttpHandler::RequiredPrivilege)>;
+
     EvHttpServer(int port, int num_workers = 1);
     EvHttpServer(std::string host, int port, int num_workers = 1);
     ~EvHttpServer();
@@ -42,6 +64,15 @@ public:
     bool register_handler(const HttpMethod& method, const std::string& path, HttpHandler* handler);
 
     void register_static_file_handler(HttpHandler* handler);
+
+    // Wire a Basic-Auth verifier. When set, EvHttpServer invokes it before dispatching
+    // any request whose handler reports `need_auth() == true`.
+    // Must be called BEFORE `start()`; not thread-safe to change after worker threads
+    // begin reading `_auth_verifier`.
+    void set_auth_verifier(AuthVerifier verifier) {
+        DCHECK(!_started) << "set_auth_verifier must be called before start()";
+        _auth_verifier = std::move(verifier);
+    }
 
     Status start();
     void stop();
@@ -66,6 +97,14 @@ private:
     int _real_port;
 
     int _server_fd = -1;
+    // True iff `_server_fd` was opened with SO_REUSEPORT set before bind(),
+    // i.e. it is a real member of the kernel's reuseport group. Workers only
+    // open their own per-worker listen sockets in that case; otherwise every
+    // worker shares `_server_fd` (legacy single-listener behaviour).
+    bool _reuseport_enabled = false;
+    // Per-worker listening fds bound with SO_REUSEPORT. Empty when reuseport
+    // mode is disabled — in that case all workers share `_server_fd`.
+    std::vector<int> _worker_fds;
     std::vector<std::thread> _workers;
 
     pthread_rwlock_t _rw_lock;
@@ -79,6 +118,10 @@ private:
     PathTrie<HttpHandler*> _options_handlers;
     std::vector<struct event_base*> _event_bases;
     std::vector<struct evhttp*> _https;
+    AuthVerifier _auth_verifier;
+    // Set true once `start()` begins; gates `set_auth_verifier` so the verifier
+    // can't be swapped after worker threads start reading it.
+    bool _started = false;
 };
 
 } // namespace starrocks

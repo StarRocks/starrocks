@@ -22,6 +22,7 @@
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -41,8 +42,8 @@ static const IcebergColumnMeta k_delete_file_pos{
 
 StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
         const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
-        std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
+        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _params.fs,
                                   .path = delete_file.full_path,
                                   .file_size = delete_file.length,
@@ -51,7 +52,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_ac
                                   .datacache_options = _params.datacache_options};
     ASSIGN_OR_RETURN(auto file,
                      HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
-    std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+    std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     int64_t offset = 0;
     while (offset < delete_file.length) {
         const int64_t remain_length =
@@ -78,8 +79,8 @@ Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
 Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {
     HdfsScanStats app_scan_stats;
     HdfsScanStats fs_scan_stats;
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
+    std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_scan_stats, app_scan_stats,
                                                         shared_buffered_input_stream, cache_input_stream));
@@ -140,7 +141,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
 
     while (true) {
         ASSIGN_OR_RETURN(ChunkPtr chunk,
-                         ChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
+                         RuntimeChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
 
         Status status = reader->get_next(&chunk);
         if (status.is_end_of_file()) {
@@ -162,8 +163,8 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
 
     HdfsScanStats app_scan_stats;
     HdfsScanStats fs_scan_stats;
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<CacheInputStream> cache_input_stream;
 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_scan_stats, app_scan_stats,
                                                         shared_buffered_input_stream, cache_input_stream));
@@ -230,8 +231,8 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
 
 void IcebergDeleteBuilder::update_delete_file_io_counter(
         RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
-        const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
-        const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream) {
+        const std::shared_ptr<CacheInputStream>& cache_input_stream,
+        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
     const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";
     ADD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE);
     {
@@ -327,7 +328,7 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         RuntimeProfile::Counter* datacache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
 
-        const io::CacheInputStream::Stats& stats = cache_input_stream->stats();
+        const CacheInputStream::Stats& stats = cache_input_stream->stats();
         COUNTER_UPDATE(datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(datacache_read_mem_bytes, stats.read_mem_cache_bytes);

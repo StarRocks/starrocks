@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 
@@ -35,7 +36,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [統計レポート](#統計レポート)
 - [ストレージ](#ストレージ)
 
@@ -772,6 +773,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
+- 導入バージョン: -
+
+### pk_index_parallel_rebuild_mem_ratio
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: パーセント (0-100)
+- 変更可能: はい
+- 説明: 共有データモードで、Primary Key インデックスの再構築時に使用される並列プリフェッチ経路に対するメモリ圧迫ゲートです。update メモリトラッカーの使用量が上限のこの割合を超えている場合、再構築は一度に 1 つのデコード済みカラムのみを保持するシングルパスループにフォールバックし、コールドスタートのレイテンシ改善を諦めてピークメモリを抑制します。再構築中の del ファイル、segment ファイルなどの並列読み込みを制御します。値を大きくすると、より高いメモリ圧迫下でも最適化を許可します。`100` に設定するとメモリゲートが無効化され、`enable_pk_index_parallel_execution=true` の場合は常に並列実行されます。
 - 導入バージョン: -
 
 ### lake_partial_update_thread_pool_max_threads

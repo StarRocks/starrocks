@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "检查array2的所有元素是否以完全相同的顺序出现在array1中。"
 ---
 
 # array_contains_seq

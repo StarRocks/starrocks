@@ -55,7 +55,7 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -81,7 +81,7 @@ import java.util.stream.IntStream;
 /**
  * ColocateTableBalancer is responsible for tablets' repair and balance of colocated tables.
  */
-public class ColocateTableBalancer extends FrontendDaemon {
+public class ColocateTableBalancer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ColocateTableBalancer.class);
 
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
@@ -250,13 +250,24 @@ public class ColocateTableBalancer extends FrontendDaemon {
      *   Otherwise, mark the group as stable
      */
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!Config.tablet_sched_disable_colocate_balance && isSystemStable(GlobalStateMgr
                 .getCurrentState().getNodeMgr().getClusterInfo())) {
             relocateAndBalancePerGroup();
             relocateAndBalanceAllGroups();
         }
         matchGroups();
+    }
+
+    @Override
+    protected void onStopped() {
+        // aliveBackendIds and systemStableStartTime are leader-session watermarks used to gate
+        // balancing on cluster stability. Reset both so the next leader re-observes BE liveness
+        // and re-times the stability window from scratch instead of trusting the demoted
+        // leader's view. group2ColocateRelocationInfo is left as-is: it tracks in-progress
+        // relocation decisions tied to ColocateTableIndex and is reused on re-election.
+        aliveBackendIds = new HashSet<>();
+        systemStableStartTime = -1L;
     }
 
     /**
@@ -742,6 +753,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
         boolean isGroupStable = true;
         // set the config to a local variable to avoid config params changed.
         int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+        boolean disableColocateBalance = Config.tablet_sched_disable_colocate_balance;
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
         int partitionChecked = 0;
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -810,6 +823,15 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             // check tablet colocate status
                             TabletHealthStatus st = TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion,
                                     replicationNum, bucketSeq);
+                            // When balance is gated off, the bucket assignment can retain dead BEs that
+                            // the inner verdict trusts. Mark the group unstable directly so the dead-BE
+                            // fact surfaces via 'show proc "/colocation_group"', without producing a
+                            // repair task that has no valid clone target.
+                            if (disableColocateBalance && st == TabletHealthStatus.HEALTHY
+                                    && !TabletChecker.hasEnoughAliveBackendsInBucketSeq(
+                                            bucketSeq, replicationNum, infoService)) {
+                                isGroupStable = false;
+                            }
                             if (st == TabletHealthStatus.COLOCATE_MISMATCH && balanceStat.isBalanced()) {
                                 balanceStat =
                                         BalanceStat.createColocationGroupBalanceStat(tabletId, tablet.getBackendIds(), bucketSeq);
@@ -1254,7 +1276,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
      * check backend available
      * backend stopped for a short period of time is still considered available
      */
-    private boolean checkBackendAvailable(Long backendId, SystemInfoService infoService) {
+    static boolean checkBackendAvailable(Long backendId, SystemInfoService infoService) {
         long currTime = System.currentTimeMillis();
         Backend be = infoService.getBackend(backendId);
         if (be == null) {

@@ -59,15 +59,15 @@
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/bthreads/executor.h"
+#include "common/util/thrift_client_cache.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -170,10 +170,13 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
-        threads.emplace_back([data_dir] { (void)data_dir->load(); });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        threads.emplace_back([data_dir] {
+            Thread::set_thread_name(pthread_self(), "load_data_dir");
+            data_dir->load();
+        });
 
         threads.emplace_back([data_dir] {
+            Thread::set_thread_name(pthread_self(), "cmpt_data_dir");
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -194,7 +197,6 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                 }
             }
         });
-        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         DCHECK(thread.joinable());
@@ -529,7 +531,6 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     }
 
     // randomize the preferential paths to balance number of tablets each disk has
-    std::srand(std::random_device()());
     std::shuffle(stores.begin(), stores.begin() + last_candidate_idx, std::mt19937(std::random_device()()));
     return stores;
 }

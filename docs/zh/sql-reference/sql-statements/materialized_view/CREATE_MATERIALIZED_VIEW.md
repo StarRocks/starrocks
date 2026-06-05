@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建物化视图，支持同步和异步刷新方式。"
 ---
 
 # CREATE MATERIALIZED VIEW
@@ -326,7 +327,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 ```
 
-**PROPERTIES**（选填）
+#### PROPERTIES（选填）
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 

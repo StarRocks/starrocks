@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.0 版本发布说明：DECIMAL256 类型、文件捆绑、多表写入事务、Iceberg 压缩、隐藏分区。"
 ---
 
 # StarRocks version 4.0
@@ -340,7 +341,7 @@ displayed_sidebar: docs
 - 为 Iceberg 表的 Sink 引入主机级排序功能，通过系统变量 `connector_sink_sort_scope` 控制（默认值：FILE），以优化数据布局并提升读取性能。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
 - 改进了 Iceberg 分区转换函数（例如 `bucket`、`truncate`）在参数数量错误时的错误提示信息。[#68349](https://github.com/StarRocks/starrocks/pull/68349)
 - 重构了表属性处理逻辑，以增强对 Iceberg 表不同文件格式（ORC/Parquet）和压缩编码的支持。[#68588](https://github.com/StarRocks/starrocks/pull/68588)
-- 新增表级查询超时配置 `table_query_timeout`，支持更细粒度的控制（优先级：Session &gt; Table &gt; Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- 新增表级查询超时配置 `table_query_timeout`，支持更细粒度的控制（优先级：Session `>` Table `>` Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
 - 支持使用 `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` 语句查看自动快照的状态和调度信息。[#68455](https://github.com/StarRocks/starrocks/pull/68455)
 - 在 `SHOW CREATE VIEW` 中支持显示包含注释的原始用户自定义 SQL。[#68040](https://github.com/StarRocks/starrocks/pull/68040)
 - 在 `information_schema.loads` 中暴露启用 Merge Commit 的 Stream Load 任务，以增强可观测性。[#67879](https://github.com/StarRocks/starrocks/pull/67879)

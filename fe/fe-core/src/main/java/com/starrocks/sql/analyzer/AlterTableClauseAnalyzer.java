@@ -253,6 +253,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             PropertyAnalyzer.analyzePartitionLiveNumber(properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
@@ -500,6 +502,18 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
                                 " must be bool type(false/true)");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                                " must be bool type(false/true)");
+            }
+            if (!table.isCloudNativeTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                                " can only be set for cloud native tables");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -549,6 +563,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         if (olapTable.getAutomaticBucketSize() > 0 && clause.getPartitionDesc() == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "Random distribution table already supports automatic scaling and does not require optimization");
+        }
+
+        if (olapTable.isRangeDistribution()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "OPTIMIZE is not supported on tables with range " +
+                            "distribution, because it redistributes data and would " +
+                            "violate range tablet boundaries.");
         }
 
         // set the sort keys into OptimizeClause

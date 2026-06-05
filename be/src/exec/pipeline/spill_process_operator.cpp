@@ -16,9 +16,9 @@
 
 #include <memory>
 
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller.hpp"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

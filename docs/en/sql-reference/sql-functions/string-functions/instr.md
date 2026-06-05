@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the 1-based character position of the first occurrence of a substring within a string."
 ---
 
 # instr

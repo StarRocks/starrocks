@@ -21,6 +21,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -575,6 +576,114 @@ public class StmtExecutorTest {
         };
 
         Deencapsulation.invoke(executor, "handleDdlStmt");
+    }
+
+    @Test
+    public void testEmbedExplainPlanInProfileScenarios() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext setupCtx = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(setupCtx);
+        String dbName = "test_explain_in_profile_db";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        starRocksAssert.withTable("CREATE TABLE `embed_explain_t` (\n" +
+                "  `k1` int NULL,\n" +
+                "  `k2` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String querySql = "SELECT k1, k2 FROM embed_explain_t WHERE k2 = 12345";
+
+        // Case 1: Flag off -> Summary must NOT carry ExplainPlan info-string.
+        ConnectContext offCtx = UtFrameUtils.createDefaultCtx();
+        offCtx.setDatabase(dbName);
+        ConnectContext.threadLocalInfo.set(offCtx);
+        offCtx.getSessionVariable().setEnableProfile(true);
+        offCtx.getSessionVariable().setEnableExplainInProfile(false);
+        ExecPlan offPlan = UtFrameUtils.getPlanAndFragment(offCtx, querySql).second;
+        StatementBase offStmt = SqlParser.parseSingleStatement(querySql, SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor offExecutor = new StmtExecutor(offCtx, offStmt);
+        RuntimeProfile offProfile = Deencapsulation.invoke(offExecutor, "buildTopLevelProfile");
+        Deencapsulation.invoke(offExecutor, "maybeEmbedExplainPlanInProfile", offProfile, offPlan);
+        RuntimeProfile offSummary = offProfile.getChild("Summary");
+        Assertions.assertNotNull(offSummary);
+        Assertions.assertNull(offSummary.getInfoString(ProfileKeyDictionary.EXPLAIN_PLAN),
+                "ExplainPlan must be absent when enable_explain_in_profile is false");
+
+        // Case 2: Flag on -> Summary should carry ExplainPlan info-string with COSTS-level content
+        // produced by the real optimizer (not a synthetic plan).
+        ConnectContext onCtx = UtFrameUtils.createDefaultCtx();
+        onCtx.setDatabase(dbName);
+        ConnectContext.threadLocalInfo.set(onCtx);
+        onCtx.getSessionVariable().setEnableProfile(true);
+        onCtx.getSessionVariable().setEnableExplainInProfile(true);
+        ExecPlan onPlan = UtFrameUtils.getPlanAndFragment(onCtx, querySql).second;
+        StatementBase onStmt = SqlParser.parseSingleStatement(querySql, SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor onExecutor = new StmtExecutor(onCtx, onStmt);
+        RuntimeProfile onProfile = Deencapsulation.invoke(onExecutor, "buildTopLevelProfile");
+        Deencapsulation.invoke(onExecutor, "maybeEmbedExplainPlanInProfile", onProfile, onPlan);
+        RuntimeProfile onSummary = onProfile.getChild("Summary");
+        Assertions.assertNotNull(onSummary);
+        String embedded = onSummary.getInfoString(ProfileKeyDictionary.EXPLAIN_PLAN);
+        Assertions.assertNotNull(embedded,
+                "ExplainPlan must be embedded when enable_explain_in_profile is true");
+        Assertions.assertTrue(embedded.contains("PLAN FRAGMENT"),
+                "Embedded explain plan should contain rendered fragment headers");
+        Assertions.assertTrue(embedded.contains("OlapScanNode"),
+                "Embedded explain plan should describe the OLAP scan against the test table");
+        Assertions.assertTrue(embedded.contains("embed_explain_t"),
+                "Embedded explain plan should reference the table being scanned");
+        // COSTS-level output renders cardinality/column-statistics that NORMAL/VERBOSE-only paths skip.
+        Assertions.assertTrue(embedded.contains("cardinality:"),
+                "Embedded explain plan should render COSTS-level content (cardinality)");
+        // Sanity-check the literal predicate is rendered (not digested) when desensitization is off.
+        Assertions.assertTrue(embedded.contains("= 12345"),
+                "Embedded explain plan should render predicate literals as-is when desensitization is off");
+
+        // Case 3: Flag on + Config.enable_sql_desensitize_in_log -> embedded plan must digest predicate
+        // literals via the EnableDigest path, even though the session-local enable_desensitize_explain
+        // signal starts off. The helper must also restore the session signal afterward.
+        boolean prevConfigDesensitize = Config.enable_sql_desensitize_in_log;
+        Config.enable_sql_desensitize_in_log = true;
+        try {
+            ConnectContext desensitizeCtx = UtFrameUtils.createDefaultCtx();
+            desensitizeCtx.setDatabase(dbName);
+            ConnectContext.threadLocalInfo.set(desensitizeCtx);
+            desensitizeCtx.getSessionVariable().setEnableProfile(true);
+            desensitizeCtx.getSessionVariable().setEnableExplainInProfile(true);
+            desensitizeCtx.getSessionVariable().setEnableDesensitizeExplain(false);
+            ExecPlan desensitizePlan = UtFrameUtils.getPlanAndFragment(desensitizeCtx, querySql).second;
+            StatementBase desensitizeStmt = SqlParser.parseSingleStatement(querySql, SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor desensitizeExecutor = new StmtExecutor(desensitizeCtx, desensitizeStmt);
+            RuntimeProfile desensitizeProfile = Deencapsulation.invoke(desensitizeExecutor, "buildTopLevelProfile");
+            Deencapsulation.invoke(desensitizeExecutor, "maybeEmbedExplainPlanInProfile",
+                    desensitizeProfile, desensitizePlan);
+            String desensitizedEmbedded =
+                    desensitizeProfile.getChild("Summary").getInfoString(ProfileKeyDictionary.EXPLAIN_PLAN);
+            Assertions.assertNotNull(desensitizedEmbedded);
+            // The predicate literal must be digested via the explainExpr path, not rendered as 12345.
+            Assertions.assertFalse(desensitizedEmbedded.contains("= 12345"),
+                    "Predicate literals must be digested when desensitization is enabled");
+            Assertions.assertTrue(desensitizedEmbedded.contains("= ?"),
+                    "Predicate literals must be rendered as a digest marker when desensitization is enabled");
+            // The helper must restore the previous value of enable_desensitize_explain so that
+            // subsequent code in the session does not see a leaked override.
+            Assertions.assertFalse(desensitizeCtx.getSessionVariable().isEnableDesensitizeExplain(),
+                    "Embedding must restore enable_desensitize_explain after rendering");
+        } finally {
+            Config.enable_sql_desensitize_in_log = prevConfigDesensitize;
+        }
     }
 
     @Test

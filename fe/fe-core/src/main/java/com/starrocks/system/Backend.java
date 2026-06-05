@@ -40,11 +40,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.persist.UpdateDiskInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -516,15 +518,50 @@ public class Backend extends ComputeNode {
     }
 
     /**
-     * Note: This class must be a POJO in order to display in JSON format
-     * Add additional information in the class to show in `show backends`
-     * if just change new added backendStatus, you can do like following
-     * BackendStatus status = Backend.getBackendStatus();
-     * status.newItem = xxx;
+     * Surfaced in the {@code Status} column of {@code SHOW BACKENDS} /
+     * {@code SHOW PROC '/backends'} via {@link #toShowBackendsJson()}. The JSON shape
+     * {@code {"lastSuccessReportTabletsTime":"yyyy-MM-dd HH:mm:ss"}} (or {@code "N/A"}
+     * when no report has happened yet) is part of the user-visible SQL contract.
+     * {@code toShowBackendsJson()} writes that shape explicitly so the storage type
+     * can stay a long without leaking into the SQL output.
+     *
+     * <p>When adding new state, extend {@code toShowBackendsJson()} alongside it -
+     * this class is never persisted (no {@code @SerializedName}) and never
+     * deserialized, so the explicit serializer is the entire contract.
      */
     public static class BackendStatus {
-        // this will be output as json, so not using FeConstants.null_string;
-        public String lastSuccessReportTabletsTime = "N/A";
+        // Epoch-millisecond timestamp of the last successful tablet report from the BE.
+        // Stored as a long so internal consumers (ReportHandler, MetaRecoveryDaemon)
+        // can compare directly without going through a wall-clock string round-trip
+        // whose result depended on the session timezone. 0 means "never reported";
+        // display code renders that as "N/A".
+        public long lastSuccessReportTabletsTimeMs = 0L;
+
+        /**
+         * Display string for {@link #lastSuccessReportTabletsTimeMs}. Renders 0 (the
+         * "never reported" sentinel) as {@code "N/A"} and any positive value as a
+         * "yyyy-MM-dd HH:mm:ss" wall-clock in the caller's session timezone.
+         * Used by the HTTP backends page, the v2 REST node-info response, and
+         * {@link #toShowBackendsJson()}.
+         */
+        public String getLastSuccessReportTabletsTimeStr() {
+            return lastSuccessReportTabletsTimeMs <= 0L
+                    ? "N/A"
+                    : TimeUtils.longToTimeString(lastSuccessReportTabletsTimeMs);
+        }
+
+        /**
+         * Renders this status as the JSON value that appears in the {@code Status}
+         * column of {@code SHOW BACKENDS} / {@code SHOW PROC '/backends'}. The shape
+         * is pinned to what the previous String-backed implementation produced, so
+         * external tooling that parses the documented JSON keeps working after the
+         * storage type was switched to a long.
+         */
+        public String toShowBackendsJson() {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("lastSuccessReportTabletsTime", getLastSuccessReportTabletsTimeStr());
+            return obj.toString();
+        }
     }
 }
 

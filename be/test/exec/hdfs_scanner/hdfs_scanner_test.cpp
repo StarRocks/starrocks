@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -34,13 +35,13 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -256,7 +257,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(chunk->num_rows(), 4);
@@ -265,6 +266,60 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     ASSERT_TRUE(status.is_end_of_file());
 
     scanner->close();
+}
+
+static SlotDesc avro_multiblock_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+std::string avro_multiblock_file = "./be/test/formats/test_data/avro/cpp/multiblock.avro";
+
+TEST_F(HdfsScannerTest, TestAvroGetNextWithDirectReader) {
+    auto scanner = std::make_shared<HdfsAvroScanner>();
+
+    auto* range = _create_scan_range(avro_multiblock_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(avro_multiblock_descs);
+    auto* param = _create_param(avro_multiblock_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+    ASSERT_EQ(100, chunk->num_rows());
+    ASSERT_EQ("[0]", chunk->debug_row(0));
+    ASSERT_EQ("[99]", chunk->debug_row(99));
+    ASSERT_EQ(100, scanner->raw_rows_read());
+    ASSERT_EQ(100, scanner->num_rows_read());
+
+    HdfsScanProfile profile;
+    profile.runtime_profile = _runtime_profile;
+    scanner->do_update_counter(&profile);
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("DirectPathUsed"));
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectPathUsed")->value());
+    ASSERT_EQ(100, _runtime_profile->get_counter("DirectRowsDecoded")->value());
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectReadEntries")->value());
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectSkipEntries")->value());
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectFastSkipEntries")->value());
+
+    ChunkPtr eof_chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &eof_chunk);
+    ASSERT_TRUE(status.is_end_of_file()) << status.to_string();
+
+    scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestAvroUpdateCounterWithoutOpen) {
+    HdfsAvroScanner scanner;
+    HdfsScanProfile profile;
+    profile.runtime_profile = _runtime_profile;
+
+    scanner.do_update_counter(&profile);
+
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("InputStreamReadCount"));
+    ASSERT_EQ(0, _runtime_profile->get_counter("InputStreamReadCount")->value());
 }
 
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
@@ -277,7 +332,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
     ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
     EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
@@ -291,7 +346,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
     EXPECT_EQ("['']", chunk->debug_row(0));
@@ -305,7 +360,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
     EXPECT_EQ("['']", chunk->debug_row(0));
@@ -318,7 +373,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
     EXPECT_FALSE(status.ok());
 }
@@ -440,7 +495,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 #define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
     do {                                                                                  \
         _debug_row_output = "";                                                           \
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                          \
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);                   \
         for (;;) {                                                                        \
             chunk->reset();                                                               \
             status = scanner->get_next(_runtime_state, &chunk);                           \
@@ -1446,7 +1501,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 
@@ -1512,7 +1567,7 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 
@@ -1572,7 +1627,7 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 
@@ -1670,7 +1725,7 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
     EXPECT_EQ("leaf-0 = (column(id=2) = 1), leaf-1 = (column(id=3) = 1), expr = (or leaf-0 leaf-1)",
               scanner->_orc_reader->get_search_argument_string());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.is_end_of_file());
     scanner->close();
@@ -2173,7 +2228,7 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2205,7 +2260,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2231,7 +2286,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2256,7 +2311,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2290,7 +2345,7 @@ TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2327,7 +2382,7 @@ TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2376,7 +2431,7 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());
@@ -2417,7 +2472,7 @@ TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
 
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
 
         status = scanner->get_next(_runtime_state, &chunk);
         EXPECT_TRUE(status.ok());

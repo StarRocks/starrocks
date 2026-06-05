@@ -108,7 +108,6 @@ public class HiveMetadata implements ConnectorMetadata {
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
-    private Executor refreshOthersFeExecutor;
     private final ConnectorProperties properties;
 
     public HiveMetadata(String catalogName,
@@ -118,7 +117,6 @@ public class HiveMetadata implements ConnectorMetadata {
                         HiveStatisticsProvider statisticsProvider,
                         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
                         Executor updateExecutor,
-                        Executor refreshOthersFeExecutor,
                         ConnectorProperties properties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
@@ -127,8 +125,21 @@ public class HiveMetadata implements ConnectorMetadata {
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.properties = properties;
+    }
+
+    @Deprecated
+    public HiveMetadata(String catalogName,
+                        HdfsEnvironment hdfsEnvironment,
+                        HiveMetastoreOperations hmsOps,
+                        RemoteFileOperations fileOperations,
+                        HiveStatisticsProvider statisticsProvider,
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
+                        Executor updateExecutor,
+                        Executor refreshOthersFeExecutor,
+                        ConnectorProperties properties) {
+        this(catalogName, hdfsEnvironment, hmsOps, fileOperations, statisticsProvider, cacheUpdateProcessor,
+                updateExecutor, properties);
     }
 
     @Override
@@ -568,7 +579,7 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         HiveCommitter committer = new HiveCommitter(
-                hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
+                hmsOps, fileOps, updateExecutor, table, new Path(stagingDir));
         String writeType = isOverwrite ? "overwrite" : "insert";
         long startMs = System.currentTimeMillis();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {

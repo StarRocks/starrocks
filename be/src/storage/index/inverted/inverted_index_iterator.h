@@ -35,10 +35,10 @@ public:
 
     virtual ~InvertedIndexIterator() = default;
 
-    virtual Status read_from_inverted_index(const std::string& column_name, const void* query_value,
+    virtual Status read_from_inverted_index(const std::string_view column_name, const void* query_value,
                                             InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
 
-    virtual Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
+    virtual Status read_null(const std::string_view column_name, roaring::Roaring* bit_map);
 
     virtual InvertedIndexParserType get_inverted_index_analyser_type() const;
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ファイルを CREATE FILE ステートメントで作成して、StarRocks にアップロードして永続化します。"
 ---
 
 # CREATE FILE

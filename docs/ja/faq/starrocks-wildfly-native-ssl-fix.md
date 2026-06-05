@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hadoop 3.4.3 アップグレードによる Wildfly OpenSSL 互換性問題の解決方法を説明します。"
 sidebar_label: "Hadoop Wildfly Native SSL ライブラリ問題"
 sidebar_position: 99
 ---

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
 ---
@@ -32,7 +33,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [统计报告](#统计报告)
 - [存储](#存储)
 
@@ -122,6 +123,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
+
+### lake_schema_change_per_tablet_parallelism
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离表单个 schema change 任务（按 tablet 粒度）内部最大并行 segment 子任务数。当前仅对 ADD INDEX 快速路径生效，其它 schema change 路径（Linked / Direct / Sorted）以及 DROP INDEX 快速路径保持单线程，不受该参数影响。专用线程池容量自动推导为 `alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism`，外层 alter 池与内层 segment 池物理隔离，不会相互死锁。
+- 引入版本：v4.0
 
 ### automatic_partition_thread_pool_thread_num
 
@@ -897,6 +907,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：-
 - 是否动态：是
 - 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
+- 引入版本：-
+
+### pk_index_parallel_rebuild_mem_ratio
+
+- 默认值：50
+- 类型：Int
+- 单位：百分比（0-100）
+- 是否动态：是
+- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
 - 引入版本：-
 
 ### lake_partial_update_thread_pool_max_threads

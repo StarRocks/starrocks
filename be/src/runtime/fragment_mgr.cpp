@@ -48,12 +48,14 @@
 #include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/config_runtime_fwd.h"
+#include "common/constexpr.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
+#include "common/util/thrift_client_cache.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -61,7 +63,7 @@
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -72,7 +74,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
@@ -301,9 +302,10 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
-        if (!runtime_state->get_rejected_record_file_path().empty()) {
-            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
-        }
+        // The legacy tab-delimited rejected-record file was removed. The
+        // rejected_record_path Thrift field is kept for wire-compat but
+        // is never populated -- consumers should query
+        // `_statistics_.rejected_records` via load_label/txn_id instead.
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();
@@ -352,10 +354,11 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     }
 }
 
-FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
+FragmentMgr::FragmentMgr(ExecEnv* exec_env, MetricRegistry* metrics)
+        : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
-    if (_exec_env->metrics() != nullptr) {
-        REGISTER_GAUGE_RUNTIME_METRIC(_exec_env->metrics(), plan_fragment_count, [this]() {
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, plan_fragment_count, [this]() {
             std::lock_guard<std::mutex> lock(_lock);
             return _fragment_map.size();
         });
@@ -832,6 +835,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    VLOG_ROW << "BackendService execute open() TQueryPlanInfo: "
+             << apache::thrift::ThriftDebugString(t_query_plan_info);
+
     *query_id = t_query_plan_info.query_id;
 
     // set up desc tbl
@@ -861,7 +867,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
@@ -878,8 +884,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         i++;
     }
 
-    LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "
-              << apache::thrift::ThriftDebugString(t_query_plan_info);
     // assign the param used to execute PlanFragment
     TExecPlanFragmentParams exec_fragment_params;
     exec_fragment_params.protocol_version = (InternalServiceVersion::type)0;

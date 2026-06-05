@@ -1,0 +1,56 @@
+-- name: testAvroDirectReaderExternalFile
+shell: ossutil64 mkdir oss://${oss_bucket}/test_avro_direct_reader_external/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/formats/test_data/avro/cpp/multiblock.avro oss://${oss_bucket}/test_avro_direct_reader_external/${uuid0}/multiblock.avro | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,292. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE avro_multiblock_direct
+(
+    id int,
+    name string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_avro_direct_reader_external/${uuid0}/multiblock.avro",
+    "format" = "avro"
+);
+-- result:
+-- !result
+select count(*) from avro_multiblock_direct;
+-- result:
+100
+-- !result
+select min(id), max(id), min(name), max(name) from avro_multiblock_direct;
+-- result:
+0	99	name_0	name_99
+-- !result
+[ORDER]select id, name from avro_multiblock_direct where id in (0, 9, 10, 99) order by id;
+-- result:
+0	name_0
+9	name_9
+10	name_10
+99	name_99
+-- !result
+select sum(id) from avro_multiblock_direct where name >= 'name_90';
+-- result:
+945
+-- !result
+select name from avro_multiblock_direct where id = 42;
+-- result:
+name_42
+-- !result
+drop table avro_multiblock_direct;
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_avro_direct_reader_external/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

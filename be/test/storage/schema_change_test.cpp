@@ -18,6 +18,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -171,7 +172,7 @@ void SchemaChangeTest::create_dest_tablet_with_index(TTabletId base_tablet_id, T
 void SchemaChangeTest::write_data_to_base_tablet(TTabletId tablet_id, Version version) {
     auto tablet = _tablet_mgr->get_tablet(tablet_id);
     Schema base_schema = *tablet->tablet_schema()->schema();
-    ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+    ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
     for (size_t i = 0; i < 4; ++i) {
         ColumnPtr& base_col = base_chunk->get_column_by_index(i);
         base_col = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
@@ -425,8 +426,8 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "OBJECT", "BITMAP_UNION", 8);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -449,8 +450,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
     auto dst_tablet_schema = gen_tablet_schema("c2", "HLL", "HLL_UNION", 8);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
@@ -475,8 +476,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "BIGINT", "SUM", 8);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));

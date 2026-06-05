@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds a specified number of months to a given date (DATE or DATETIME)."
 ---
 
 # add_months

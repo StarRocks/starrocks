@@ -24,6 +24,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -37,7 +38,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
@@ -118,11 +119,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -148,7 +148,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -245,11 +245,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -274,11 +273,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(2);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -294,7 +292,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
     for (int i = 0, sz = k0.size(); i < sz; i++) {
@@ -382,11 +380,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -455,7 +452,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -535,11 +532,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -570,7 +566,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(1, read_chunk_ptr->num_rows());
     EXPECT_EQ(10, read_chunk_ptr->get(0)[0].get_int32());
@@ -663,11 +659,10 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -693,11 +688,10 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_overlapped(false);
         rowset->set_id(2);
         rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -751,7 +745,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(params));
 
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(20, read_chunk_ptr->num_rows());
@@ -861,11 +855,10 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -882,7 +875,7 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -973,11 +966,10 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1001,7 +993,7 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
@@ -1050,11 +1042,10 @@ StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::test
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1076,7 +1067,7 @@ StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::test
     TabletReaderParams params;
     RETURN_IF_ERROR(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     RETURN_IF_ERROR(reader->get_next(read_chunk_ptr.get()));
     EXPECT_EQ(segment_rows, read_chunk_ptr->num_rows());
@@ -1155,7 +1146,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_empty_tablet_with_split) {
     // This should not crash even with need_split=true and empty rowsets
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     // Should return end of file immediately for empty tablet
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
@@ -1198,11 +1189,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1219,11 +1209,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(2);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }

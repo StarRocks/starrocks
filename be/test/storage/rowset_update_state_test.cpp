@@ -21,6 +21,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
@@ -28,8 +29,9 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
@@ -37,7 +39,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -88,7 +89,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto col0 = chunk->get_column_raw_ptr_by_index(0);
         auto col1 = chunk->get_column_raw_ptr_by_index(1);
         auto col2 = chunk->get_column_raw_ptr_by_index(2);
@@ -163,12 +164,12 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
@@ -200,7 +201,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
@@ -338,12 +339,12 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
     auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    auto chunk = ChunkHelper::new_chunk(schema, N);
-    auto cols = chunk->mutable_columns();
+    auto chunk = ChunkFactory::new_chunk(schema, N);
+    auto cols = chunk->columns();
     for (uint64_t i = 0; i < N; i++) {
-        cols[0]->append_datum(Datum(i));
-        cols[1]->append_datum(Datum((int16_t)(i % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(i % 1000 + 3)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(i));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(i % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(i % 1000 + 3)));
     }
     CHECK_OK(writer->flush_chunk(*chunk));
     RowsetSharedPtr new_rowset = *writer->build();

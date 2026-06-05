@@ -20,6 +20,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -27,6 +28,7 @@
 #include "common/util/thrift_util.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -194,10 +196,10 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
-                                                      ExecEnv::GetInstance()->diagnose_daemon(),
-                                                      ExecEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(),
-                                                      next_id(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(
+                _load_channel_mgr.get(), _tablet_manager.get(), ExecEnv::GetInstance()->diagnose_daemon(),
+                PlatformEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(), next_id(), string(), 1000,
+                std::move(load_mem_tracker));
     }
 
     void TearDown() override {
@@ -221,9 +223,9 @@ protected:
         opts.chunk_size = 1024;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         while (true) {
-            auto tmp_chunk = ChunkHelper::new_chunk(*_schema, 1024);
+            auto tmp_chunk = ChunkFactory::new_chunk(*_schema, 1024);
             auto st = seg_iter->get_next(tmp_chunk.get());
             if (st.is_end_of_file()) {
                 break;
@@ -332,8 +334,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
     for (auto tablet_id : finished_tablets) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kChunkSizePerTablet, chunk1->num_rows());
     }
 }
@@ -406,8 +408,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
     for (auto tablet_id : std::vector<int64_t>{10086, 10087, 10088, 10089}) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
         ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto chunk1 = read_segment(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
         ASSERT_EQ(kSegmentRows, chunk1->num_rows());
     }
 }

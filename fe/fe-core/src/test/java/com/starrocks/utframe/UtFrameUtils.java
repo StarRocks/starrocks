@@ -1461,10 +1461,10 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), tableName.getTbl()));
-                    if (tbl != null) {
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        OlapTable tbl = (OlapTable) table;
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
                             setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
@@ -1473,10 +1473,11 @@ public class UtFrameUtils {
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
                     TableName tableName = com.starrocks.catalog.TableName.fromTableRef(delete.getTableRef());
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), tableName.getTbl()));
-                    tbl.setHasDelete();
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        ((OlapTable) table).setHasDelete();
+                    }
                 }
             }
         };
@@ -1558,8 +1559,11 @@ public class UtFrameUtils {
 
     public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
+        // This UT helper only stops the background schema-change loop so tests can drive
+        // schema-change jobs manually. Do not call stopGracefully() here: it runs the
+        // demotion cleanup hook and shuts down AlterHandler's executor, which prevents
+        // subsequent manual job progress in schema-change tests.
         schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
         long endTime = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeHandler.isRunning()) {
             if (System.currentTimeMillis() > endTime) {

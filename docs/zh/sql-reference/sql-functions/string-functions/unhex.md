@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将十六进制字符串转换为其对应的二进制字符串；hex 函数的反向函数。"
 ---
 
 # unhex

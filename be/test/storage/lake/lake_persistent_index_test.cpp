@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
@@ -24,7 +25,9 @@
 #include "common/config_primary_key_fwd.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "test_util.h"
@@ -292,12 +295,86 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
     ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() > 0);
     ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
-    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
+    ASSERT_OK(index->apply_opcompaction(tablet_metadata_ptr, txn_log->op_compaction()));
     ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
     for (int i = 0; i < M * N; i++) {
         ASSERT_EQ(total_values[i], get_values[i]);
     }
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Regression test for: publish failing with
+//   "metadata is null when loading delvec from file"
+// when apply_opcompaction opens a compaction output sstable that carries an
+// embedded delvec (as preserved by the parallel-compaction passthrough/move
+// path). apply_opcompaction must pass the tablet metadata so the delvec can be
+// loaded -- exactly like LakePersistentIndex::init() does.
+TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delvec) {
+    auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10; // force a flush so the upsert produces an on-disk sstable
+    DeferOp restore_config([&]() { config::l0_max_mem_usage = saved_l0_max_mem_usage; });
+
+    using Key = uint64_t;
+    const int kNumKeys = 100;
+    const int64_t kVersion = 2;
+    const uint32_t kSegmentId = 0;
+    auto tablet_id = _tablet_metadata->id();
+
+    // 1. Build an index with a single flushed sstable.
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    std::vector<Key> keys(kNumKeys);
+    std::vector<Slice> key_slices(kNumKeys);
+    std::vector<IndexValue> values(kNumKeys);
+    for (int i = 0; i < kNumKeys; i++) {
+        keys[i] = i;
+        key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
+        values[i] = i * 2;
+    }
+    index->prepare(EditVersion(1, 0), 0);
+    std::vector<IndexValue> old_values(kNumKeys);
+    ASSERT_OK(index->upsert(kNumKeys, key_slices.data(), values.data(), old_values.data()));
+    ASSERT_OK(index->flush_memtable(true));
+    ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000));
+
+    // 2. Commit the sstable metadata, then append a delete vector into the same metadata and finalize.
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    metadata->set_version(kVersion);
+    MetaFileBuilder builder(tablet, metadata);
+    ASSERT_OK(index->commit(&builder));
+    DelVector delete_vector;
+    delete_vector.set_empty();
+    std::shared_ptr<DelVector> new_delete_vector;
+    std::vector<uint32_t> deleted_row_ids = {1, 3, 5};
+    delete_vector.add_dels_as_new_version(deleted_row_ids, kVersion, &new_delete_vector);
+    builder.append_delvec(new_delete_vector, kSegmentId);
+    ASSERT_OK(builder.finalize(next_id()));
+
+    // 3. Read back the finalized metadata: it now has the sstable plus a delete-vector page.
+    ASSIGN_OR_ABORT(auto committed_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, kVersion));
+    ASSERT_GT(committed_metadata->sstable_meta().sstables_size(), 0);
+    auto delete_vector_entry = committed_metadata->delvec_meta().delvecs().find(kSegmentId);
+    ASSERT_TRUE(delete_vector_entry != committed_metadata->delvec_meta().delvecs().end());
+
+    // 4. Build an op_compaction that simulates the parallel-compaction passthrough: the output
+    //    sstable is the input sstable carried over together with its embedded delete vector.
+    const auto& base_sstable = committed_metadata->sstable_meta().sstables(0);
+    TxnLogPB txn_log;
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    op_compaction->add_input_sstables()->CopyFrom(base_sstable);
+    auto* output_sstable = op_compaction->add_output_sstables();
+    output_sstable->CopyFrom(base_sstable);
+    output_sstable->mutable_delvec()->CopyFrom(delete_vector_entry->second);
+
+    // 5. A fresh index loaded from the committed metadata owns the input fileset.
+    auto reloaded_index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(reloaded_index->init(committed_metadata));
+
+    // Before the fix this returned InvalidArgument:
+    //   "metadata is null when loading delvec from file".
+    ASSERT_OK(reloaded_index->apply_opcompaction(committed_metadata, txn_log.op_compaction()));
 }
 
 TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
@@ -492,7 +569,7 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
     ASSERT_EQ(encode_key(100), out_sst.range().start_key());
     ASSERT_EQ(encode_key(100 + 3 * N - 1), out_sst.range().end_key());
 
-    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
+    ASSERT_OK(index->apply_opcompaction(tablet_metadata_ptr, txn_log->op_compaction()));
 
     std::vector<std::string> probe_keys = {encode_key(99), encode_key(100), encode_key(150), encode_key(189),
                                            encode_key(199)};
@@ -876,8 +953,8 @@ static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg
     rowset.set_id(id);
     int64_t total_rows = 0;
     for (int64_t r : seg_rows) {
-        rowset.add_segments("seg.dat");
         auto* meta = rowset.add_segment_metas();
+        meta->set_filename("seg.dat");
         meta->set_num_rows(r);
         total_rows += r;
     }
@@ -893,7 +970,7 @@ static RowsetMetadataPB make_rowset_no_meta(uint32_t id, int seg_cnt, int64_t to
     RowsetMetadataPB rowset;
     rowset.set_id(id);
     for (int i = 0; i < seg_cnt; ++i) {
-        rowset.add_segments("seg.dat");
+        rowset.add_segment_metas()->set_filename("seg.dat");
     }
     rowset.set_num_rows(total_rows);
     return rowset;
@@ -1137,6 +1214,42 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     EXPECT_EQ(match_count, 1);
 
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Failure-injection guard for the parallel path in load_dels (see
+// be/src/storage/lake/lake_persistent_index.cpp). With N=3 del files where every
+// read fails (files do not exist on disk), the parallel phase must propagate the
+// error via shared_status and return cleanly instead of crashing or proceeding
+// to Phase 2 with default-constructed pkc slots. This is the regression surface
+// added by the parallel refactor that existing publish-version tests do not
+// cover, and is the targeted guard requested before broader backports.
+TEST_F(LakePersistentIndexTest, test_load_dels_parallel_propagates_io_error) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(42);
+    for (int i = 0; i < 3; ++i) {
+        auto* d = rowset_meta.add_del_files();
+        d->set_name("nonexistent_del_" + std::to_string(i));
+        d->set_origin_rowset_id(42);
+        d->set_op_offset(0);
+    }
+    auto tablet_schema = std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+
+    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
+    for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    // Force the parallel path on so the test can't be silently weakened by a future flag flip.
+    ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, true);
+
+    auto st = index->load_dels(rowset, pkey_schema, /*rowset_version=*/1);
+    EXPECT_FALSE(st.ok()) << "expected error from missing del files; got OK";
 }
 
 } // namespace starrocks::lake

@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
@@ -41,7 +42,7 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        _exec_env->metrics()->set_collect_hook_enabled(true);
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
 
         _create_runtime_state();
         _pool = _runtime_state->obj_pool();
@@ -350,7 +351,6 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_runtime_state.get(), _pool);
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

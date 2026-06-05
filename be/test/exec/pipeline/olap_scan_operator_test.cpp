@@ -15,6 +15,8 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
@@ -74,7 +76,7 @@ TEST_F(OlapScanOperatorTest, test_finish_sequence) {
                                           [](void* arg) { *(Status*)arg = Status::EndOfFile(""); });
 
     Morsels morsels;
-    FixedMorselQueue morsel_queue(std::move(morsels));
+    OlapFixedMorselQueue morsel_queue(std::move(morsels));
 
     OlapScanNode scan_node(&_object_pool, _tnode, *_tbl);
     auto scan_ctx_factory =

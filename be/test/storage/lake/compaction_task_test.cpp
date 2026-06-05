@@ -20,6 +20,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -117,7 +118,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -355,7 +356,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -440,14 +441,14 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
-    ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segments_size());
+    ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segment_metas_size());
 
     // check data
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+    auto chunk = ChunkFactory::new_chunk(*_schema, 128);
     auto st = reader->get_next(chunk.get());
     ASSERT_FALSE(st.is_end_of_file());
     ASSERT_EQ(kChunkSize * 6, chunk->num_rows());
@@ -515,7 +516,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -639,7 +640,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());

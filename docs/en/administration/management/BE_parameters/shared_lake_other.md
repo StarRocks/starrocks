@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
+description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -33,7 +34,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Shared-data](#shared-data)
 - [Data Lake](#data-lake)
 - [Other](#other)
@@ -93,6 +94,22 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### lake_rows_mapper_read_parallelism
+
+- Default: 32
+- Type: Int
+- Unit: sub-chunks
+- Is mutable: Yes
+- Description: Maximum number of in-flight `.lcrm` (lake compaction rows-mapper) sub-chunk reads kept by `RowsMapperIterator` during light Primary Key compaction publish in a shared-data cluster. Each sub-chunk is `lake_rows_mapper_sub_chunk_bytes` in size and never crosses a segment boundary; the iterator submits up to this many reads to the PK index execution thread pool and pipelines them against the caller's per-segment processing. Memory bound is `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`. Set to `1` to disable pipelining and fall back to sequential reads.
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- Default: 4194304
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
 ### loop_count_wait_fragments_finish
 
@@ -391,7 +408,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The read buffer size used when downloading lake segment files during lake replication. This value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more I/O calls. Tune according to network bandwidth, storage I/O characteristics, and the number of parallel replication threads.
-- Introduced in: -
+- Introduced in: v4.1.2
 
 ### lake_replication_max_file_copy_retry
 
@@ -400,7 +417,16 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of retry attempts for non-segment file copy (`.sst`, `.delvec`, `.del`, `.cols`) during lake-to-lake (shared-data) cross-cluster replication. Each attempt verifies the copied file size matches the source to detect truncated copies caused by transient object storage issues. Increase this value if experiencing intermittent file corruption during replication over unreliable storage.
-- Introduced in: -
+- Introduced in: v4.1.2
+
+### lake_replication_file_copy_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of threads in the dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. `0` means `cpu_cores * 4` (the same default semantics as `replication_threads`); negative values mean `-value * cpu_cores`. This pool is intentionally separate from the agent-task `replicate_snapshot` pool so that per-file copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock guard. The pool is built once at startup and has no runtime resize hook, so CN restart is required to change its size.
+- Introduced in: v4.1.2
 
 ### lake_service_max_concurrency
 

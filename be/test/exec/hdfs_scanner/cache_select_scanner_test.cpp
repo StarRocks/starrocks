@@ -25,9 +25,9 @@
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/pipeline/fragment_context.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -150,7 +150,7 @@ TEST_F(CacheSelectScannerTest, TestUnknowFormat) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
 }

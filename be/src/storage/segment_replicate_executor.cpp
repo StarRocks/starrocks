@@ -25,8 +25,9 @@
 #include "common/config_compaction_fwd.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
+#include "platform/platform_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
@@ -92,7 +93,7 @@ Status ReplicateChannel::_init() {
     }
     _inited = true;
 
-    _stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(_host, _port);
+    _stub = PlatformEnv::GetInstance()->brpc_stub_cache()->get_stub(_host, _port);
     if (_stub == nullptr) {
         auto msg = fmt::format("Failed to Connect {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;
@@ -431,7 +432,7 @@ Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
     int max_threads = std::max(data_dir_num * min_threads, min_threads);
-    return ThreadPoolBuilder("segment_replicate")
+    return ThreadPoolBuilder("seg_replicate")
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_replicate_pool);

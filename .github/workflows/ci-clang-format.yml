@@ -174,6 +174,9 @@ jobs:
             git reset HEAD~1
             echo "::error::Auto-push failed. Files that need formatting:"
             git diff --name-only
+            echo "::group::Full clang-format diff (apply locally with 'git apply' to fix)"
+            git --no-pager diff
+            echo "::endgroup::"
             if [ "${HEAD_REPO}" != "${{ github.repository }}" ]; then
               echo "::error::This is a fork PR. Please enable 'Allow edits from maintainers' on your PR."
             else

@@ -51,6 +51,7 @@
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "storage/base/short_key_index.h"
 #include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
@@ -59,7 +60,6 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/seek_tuple.h"
-#include "storage/short_key_index.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -329,17 +329,6 @@ void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
     file_info.sort_key_max = _sort_key_max;
     file_info.sort_key_samples = std::move(_sort_key_samples);
     file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
-}
-
-void SegmentWriter::write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const {
-    _sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-    _sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-    for (const auto& sample : _sort_key_samples) {
-        sample.to_proto(segment_meta->add_sort_key_samples());
-    }
-    if (!_sort_key_samples.empty() && _sort_key_sample_row_interval > 0) {
-        segment_meta->set_sort_key_sample_row_interval(_sort_key_sample_row_interval);
-    }
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,

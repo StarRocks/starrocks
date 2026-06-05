@@ -66,9 +66,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
@@ -200,10 +202,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
+        boolean lightWeight;
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
+            lightWeight = table.isLightWeightTabletCreation();
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {
@@ -218,7 +222,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
             long gtid = getNextGtid();
-            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
+            // Light-weight tablet creation skips CreateReplicaTask; the rollup tablet's
+            // version 1 metadata is materialized on demand by the CN-side fallback when
+            // the first read or publish hits it.
+            Set<Map.Entry<Long, MaterializedIndex>> rollupEntries = lightWeight
+                    ? Collections.<Map.Entry<Long, MaterializedIndex>>emptySet()
+                    : this.physicalPartitionIdToRollupIndex.entrySet();
+            for (Map.Entry<Long, MaterializedIndex> entry : rollupEntries) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 if (partition == null) {
@@ -293,7 +303,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets);
+        if (!lightWeight) {
+            sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets);
+        }
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
@@ -765,7 +777,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
                             vectorIndexBuildInfos);
-                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
             return true;

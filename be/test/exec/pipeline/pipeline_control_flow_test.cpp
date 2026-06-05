@@ -21,15 +21,15 @@
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/spill/dir_manager.h"
+#include "compute_env/spill/global_spill_manager.h"
+#include "compute_env/spill/operator_mem_resource_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/dir_manager.h"
-#include "exec/spill/global_spill_manager.h"
-#include "exec/spill/operator_mem_resource_manager.h"
 #include "pipeline_test_base.h"
 #include "runtime/service_contexts.h"
 
@@ -669,7 +669,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
     SpillLifecycleOperatorFactory spillable_factory(2, 20, true, false);
     Operators operators{source_factory.create(1, 0), spillable_factory.create(1, 0)};
 
-    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline, -1);
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline,
+                              &harness.pipeline, -1);
 
     ASSERT_OK(driver.prepare(harness.state()));
     ASSERT_EQ(config::local_exchange_buffer_mem_limit_per_driver +
@@ -689,7 +690,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all
     SpillLifecycleOperatorFactory failing_factory(2, 20, true, false, Status::InternalError("prepare failed"));
     Operators operators{source_factory.create(1, 0), failing_factory.create(1, 0)};
 
-    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline, -1);
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline,
+                              &harness.pipeline, -1);
 
     auto st = driver.prepare(harness.state());
     ASSERT_FALSE(st.ok());

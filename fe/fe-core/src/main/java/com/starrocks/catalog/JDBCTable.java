@@ -61,6 +61,12 @@ public class JDBCTable extends Table {
     // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
     private transient Map<String, Integer> originalJdbcColumnTypes;
 
+    // Transient: marker for {@link com.starrocks.connector.jdbc.JDBCMetadata#getTableComment}
+    // dedup. Once REMARKS has been fetched for this cached instance, further calls return the
+    // already-stored comment without another remote round-trip. Reset when the cache entry is
+    // evicted or refreshTable creates a new JDBCTable.
+    private transient boolean commentFetched;
+
     public JDBCTable() {
         super(TableType.JDBC);
     }
@@ -155,6 +161,14 @@ public class JDBCTable extends Table {
         } else {
             this.originalJdbcColumnTypes = new HashMap<>(originalJdbcColumnTypes);
         }
+    }
+
+    public boolean isCommentFetched() {
+        return commentFetched;
+    }
+
+    public void setCommentFetched(boolean commentFetched) {
+        this.commentFetched = commentFetched;
     }
 
     public boolean isQueryTable() {

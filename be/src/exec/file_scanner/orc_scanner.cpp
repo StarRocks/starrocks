@@ -223,15 +223,15 @@ Status ORCScanner::_open_next_orc_reader() {
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
 
         auto shared_buffered_input_stream =
-                std::make_shared<io::SharedBufferedInputStream>(input_stream, file_name, file_size);
-        const io::SharedBufferedInputStream::CoalesceOptions options = {
+                std::make_shared<SharedBufferedInputStream>(input_stream, file_name, file_size);
+        const SharedBufferedInputStream::CoalesceOptions options = {
                 .max_dist_size = config::io_coalesce_read_max_distance_size,
                 .max_buffer_size = config::io_coalesce_read_max_buffer_size};
         shared_buffered_input_stream->set_coalesce_options(options);
 
         // If file size smaller than orc_loading_buffer_size, we will load the whole file in one IO request
         if (file_size < config::orc_loading_buffer_size) {
-            std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+            std::vector<SharedBufferedInputStream::IORange> io_ranges{};
             io_ranges.emplace_back(0, file_size);
             RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
         }

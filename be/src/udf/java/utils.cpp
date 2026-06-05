@@ -20,10 +20,12 @@
 
 #include "common/compiler_util.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/scan_task_queue.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/scan_task.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "runtime/current_thread.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -31,7 +33,7 @@ namespace starrocks {
 PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
-        state->exec_env()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
+        GlobalEnv::GetInstance()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
             Status st;
             {
                 MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());
