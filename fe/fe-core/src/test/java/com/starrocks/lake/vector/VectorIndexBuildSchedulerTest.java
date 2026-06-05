@@ -227,7 +227,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(tablet1, tablet2));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 
@@ -237,6 +237,45 @@ public class VectorIndexBuildSchedulerTest {
         ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
         Assertions.assertEquals(5L, pending.get(2001L).latestVersion);
         Assertions.assertEquals(5L, pending.get(2002L).latestVersion);
+    }
+
+    // recoveryScan must scan VISIBLE indexes only, never SHADOW. A shadow tablet of an in-flight
+    // ALTER has only staged (publish_log_version) — not applied — the partition's visibleVersion, so
+    // scheduling it here would dispatch a build that cannot load that metadata. The shadow's
+    // incremental data is enqueued by the schema-change watershed publish instead.
+    @Test
+    public void testRecoveryScanScansVisibleOnlyNotShadow() {
+        LakeTable table = mockLakeTable(true);
+        Database db = mockDatabase(table);
+
+        // Visible index has a lagging tablet -> must be enqueued.
+        LakeTablet visibleTablet = new LakeTablet(2001L);
+        visibleTablet.setVectorIndexBuiltVersion(3L);
+        MaterializedIndex visibleIndex = Mockito.mock(MaterializedIndex.class);
+        Mockito.when(visibleIndex.getTablets()).thenReturn(Lists.newArrayList(visibleTablet));
+
+        // Shadow index also has a lagging tablet -> must NOT be enqueued by recoveryScan.
+        LakeTablet shadowTablet = new LakeTablet(9001L);
+        shadowTablet.setVectorIndexBuiltVersion(3L);
+        MaterializedIndex shadowIndex = Mockito.mock(MaterializedIndex.class);
+        Mockito.when(shadowIndex.getTablets()).thenReturn(Lists.newArrayList(shadowTablet));
+
+        PhysicalPartition partition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Lists.newArrayList(visibleIndex));
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+                .thenReturn(Lists.newArrayList(visibleIndex, shadowIndex));
+        Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
+
+        setupRecoveryScanExpectations(db);
+        scheduler.recoveryScan();
+
+        ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
+        Assertions.assertTrue(pending.containsKey(2001L), "visible lagging tablet must be enqueued");
+        Assertions.assertFalse(pending.containsKey(9001L), "shadow tablet must NOT be enqueued by recoveryScan");
+        Mockito.verify(partition, Mockito.never())
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
     }
 
     @Test
@@ -251,7 +290,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(tablet));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 

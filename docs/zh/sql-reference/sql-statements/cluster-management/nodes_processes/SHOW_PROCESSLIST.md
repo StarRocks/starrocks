@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PROCESSLIST 展示当前服务器内运行线程执行的操作。"
 ---
 
 # SHOW PROCESSLIST

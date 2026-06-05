@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream LoadまたはINSERT INTOのデータロード時に使用する空のPERCENTILE値を構築します。"
 ---
 
 # percentile_empty

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "16進数でエンコードされた文字列をもとの文字列値に逆変換します。"
 ---
 
 # hex_decode_string

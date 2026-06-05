@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Example:"
+description: "System view listing which objects reference row access policies and column masking policies in a StarRocks cluster."
 ---
 
 # policy_references

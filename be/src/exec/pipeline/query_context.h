@@ -31,6 +31,7 @@
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/descriptors_fwd.h"
@@ -63,8 +64,10 @@ public:
         _query_execution_services = query_execution_services;
     }
     const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
-    void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    TUniqueId query_id() const { return _query_id; }
+    void set_query_id(const TUniqueId& query_id) { _query_runtime_state.set_query_id(query_id); }
+    TUniqueId query_id() const { return _query_runtime_state.query_id(); }
+    QueryRuntimeState& query_runtime_state() { return _query_runtime_state; }
+    const QueryRuntimeState& query_runtime_state() const { return _query_runtime_state; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
@@ -323,7 +326,7 @@ public:
 
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
-    TUniqueId _query_id;
+    QueryRuntimeState _query_runtime_state;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;

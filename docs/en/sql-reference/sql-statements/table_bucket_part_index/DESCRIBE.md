@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "DESC is used to view table schemas:"
+description: "Views the schema of a StarRocks table or external table, including its sort key and materialized view information."
 ---
 
 # DESC

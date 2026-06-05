@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 ---
 

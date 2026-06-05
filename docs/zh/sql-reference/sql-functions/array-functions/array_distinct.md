@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "移除数组中的重复元素。"
 ---
 
 # array_distinct

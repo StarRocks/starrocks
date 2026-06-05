@@ -425,6 +425,11 @@ struct TMaterializedViewStatus {
     29: optional string last_refresh_process_time
     30: optional string last_refresh_job_id
     31: optional string last_refresh_time
+    32: optional string warehouse
+    33: optional string refresh_mode
+    34: optional string refresh_trigger
+    35: optional string refresh_policy
+    36: optional string resource_group
 }
 
 struct TListPipesParams {

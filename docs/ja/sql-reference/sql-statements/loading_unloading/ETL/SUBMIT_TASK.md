@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ETL ステートメントを非同期タスクとして送信し、バックグラウンドで実行またはスケジュール実行します。"
 ---
 
 import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'

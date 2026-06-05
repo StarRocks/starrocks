@@ -355,12 +355,23 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
     // print log of add batch time of all node, for tracing load performance easily
     std::stringstream ss;
     ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-       << ", add chunk time(ms)/wait lock time(ms)/num: ";
+       << ", add chunk time(ms)/wait lock time(ms)/wait memtable flush time(ms)/wait writer time(ms)/other "
+          "time(ms)/num: ";
     for (auto const& pair : node_add_batch_counter_map) {
         total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
         total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        // Residual of execution_time not covered by the lock/flush/writer buckets (e.g. write-context
+        // setup, delta-writer open, the immutable-partition scan and stale-memtable flush). Clamp to 0
+        // since the buckets are sampled independently.
+        int64_t other_time_us = pair.second.add_batch_execution_time_us - pair.second.add_batch_wait_lock_time_us -
+                                pair.second.add_batch_wait_memtable_flush_time_us -
+                                pair.second.add_batch_wait_writer_time_us;
+        other_time_us = other_time_us > 0 ? other_time_us : 0;
         ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
-           << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
+           << (pair.second.add_batch_wait_lock_time_us / 1000) << ")("
+           << (pair.second.add_batch_wait_memtable_flush_time_us / 1000) << ")("
+           << (pair.second.add_batch_wait_writer_time_us / 1000) << ")(" << (other_time_us / 1000) << ")("
+           << pair.second.add_batch_num << ")} ";
     }
     COUNTER_UPDATE(ts_profile->server_rpc_timer, total_server_rpc_time_us * 1000);
     COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);

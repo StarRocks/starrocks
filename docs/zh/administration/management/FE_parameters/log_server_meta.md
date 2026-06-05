@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 ---
 
@@ -780,8 +781,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: false
 - 类型: Boolean
 - 单位: -
-- 是否可变: Yes
-- 引入版本: -
+- 是否可变: No
+- 引入版本: v4.2.0
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
   - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。

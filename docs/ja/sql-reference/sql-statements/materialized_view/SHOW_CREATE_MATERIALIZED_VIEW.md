@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "特定の非同期マテリアライズドビューの定義を表示します。"
 ---
 
 # SHOW CREATE MATERIALIZED VIEW

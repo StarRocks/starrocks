@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：ログ、サーバー設定、メタデータ管理に関連する設定項目。"
 sidebar_label: "ログ、サーバー、およびメタデータ"
 ---
 
@@ -772,8 +773,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：false
 - タイプ：Boolean
 - 単位：-
-- 変更可能：Yes
-- 導入時期：-
+- 変更可能：No
+- 導入時期：v4.2.0
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
   - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。

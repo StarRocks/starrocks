@@ -143,6 +143,14 @@ public:
 
     bool not_empty() const { return !is_empty(); }
 
+    size_t accumulate_memory_usage() const {
+        size_t total_memory_usage = 0;
+        for (const auto& chunk : _chunks) {
+            total_memory_usage += chunk->memory_usage();
+        }
+        return total_memory_usage;
+    }
+
 private:
     MemTracker* _tracker;
     std::deque<ChunkPtr> _chunks;
@@ -266,22 +274,31 @@ Status PartitionedHashJoinProberImpl::push_probe_chunk(RuntimeState* state, Chun
             continue;
         }
 
-        if (_partition_input_channels[i].is_empty()) {
-            _partition_input_channels[i].push(chunk->clone_empty());
+        auto& partition_input_channel = _partition_input_channels[i];
+
+        if (partition_input_channel.is_empty()) {
+            partition_input_channel.push(chunk->clone_empty());
         }
 
-        if (_partition_input_channels[i].back()->num_rows() + size <= state->chunk_size()) {
-            _partition_input_channels[i].back()->append_selective(*chunk, selection.data(), from, size);
+        if (partition_input_channel.back()->num_rows() + size <= state->chunk_size()) {
+            partition_input_channel.append_selective_to_back(*chunk, selection.data(), from, size);
         } else {
-            _partition_input_channels[i].push(chunk->clone_empty());
-            _partition_input_channels[i].back()->append_selective(*chunk, selection.data(), from, size);
+            partition_input_channel.push(chunk->clone_empty());
+            partition_input_channel.append_selective_to_back(*chunk, selection.data(), from, size);
         }
 
-        if (_partition_input_channels[i].is_full()) {
-            _partition_input_channels[i].set_processing(true);
-            RETURN_IF_ERROR(probers[i]->push_probe_chunk(state, _partition_input_channels[i].pull()));
+        if (partition_input_channel.is_full()) {
+            partition_input_channel.set_processing(true);
+            RETURN_IF_ERROR(probers[i]->push_probe_chunk(state, partition_input_channel.pull()));
         }
     }
+#ifndef NDEBUG
+    size_t memory_usage = 0;
+    for (auto& channel : _partition_input_channels) {
+        memory_usage += channel.accumulate_memory_usage();
+    }
+    DCHECK_EQ(memory_usage, _mem_tracker.consumption());
+#endif
 
     return Status::OK();
 }
@@ -346,6 +363,7 @@ void PartitionedHashJoinProberImpl::reset(RuntimeState* runtime_state) {
         prober->reset(runtime_state);
     }
     _partition_input_channels.clear();
+    _mem_tracker.release(_mem_tracker.consumption());
     _all_input_finished = false;
     _remain_partition_idx = 0;
 }

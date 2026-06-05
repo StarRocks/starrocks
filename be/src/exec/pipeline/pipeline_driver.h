@@ -106,6 +106,10 @@ public:
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
+    QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
+    const QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
+    FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
+    const FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
     const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
@@ -465,6 +469,8 @@ protected:
 
     size_t _first_unfinished{0};
     QueryContext* _query_ctx;
+    QueryRuntimeState* _query_runtime_state;
+    FragmentRuntimeState* _fragment_runtime_state;
     FragmentContext* _fragment_ctx;
     Pipeline* _pipeline;
     DriverObserver* _driver_observer;

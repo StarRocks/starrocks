@@ -22,8 +22,10 @@ set(EXEC_PRIMITIVE_TEST_FILES
     exec_node_exec_primitive_test.cpp
     morsel_primitive_test.cpp
     pipeline_event_exec_primitive_test.cpp
+    pipeline_fragment_runtime_state_exec_primitive_test.cpp
     pipeline_metrics_exec_primitive_test.cpp
     pipeline_observer_exec_primitive_test.cpp
+    pipeline_query_runtime_state_exec_primitive_test.cpp
     runtime_filter_exec_primitive_test.cpp
 )
 

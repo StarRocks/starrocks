@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "式から n 個の最小値または最大値を配列として返します。"
 ---
 
 # MIN_N, MAX_N

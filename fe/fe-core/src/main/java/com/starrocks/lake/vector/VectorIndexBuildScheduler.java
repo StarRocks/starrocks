@@ -268,8 +268,17 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                     if (visibleVersion <= 1) {
                         continue;
                     }
+                    // Scan VISIBLE indexes only — never SHADOW. A SHADOW index belongs to an
+                    // in-flight ALTER: its existing data (<= V_snap) is force-inline-built by the
+                    // schema-change conversion, and its incrementally double-written data (> V_snap)
+                    // is enqueued by the conversion's final publish (onPublishComplete at
+                    // commitVersion). Scheduling a shadow tablet here would enqueue it at the
+                    // partition's visibleVersion — a version the shadow tablet has only staged via
+                    // publish_log_version, not applied — so the async build would fail to load that
+                    // metadata. Once the ALTER finishes and the index becomes visible, its tablets
+                    // are picked up here normally (builtVersion < visibleVersion).
                     for (MaterializedIndex index :
-                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             long builtVersion = 0;
                             if (tablet instanceof LakeTablet) {
@@ -669,20 +678,13 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
 
     // ========== Test helpers ==========
 
+    // Package-private: only same-package tests inspect/mutate the internal maps directly.
     Map<Long, VectorIndexBuildTask> getRunningTasksForTest() {
         return runningTasks;
     }
 
     ConcurrentHashMap<Long, Pending> getPendingTabletsForTest() {
         return pendingTablets;
-    }
-
-    Map<Long, Long> getCooldownUntilForTest() {
-        return cooldownUntil;
-    }
-
-    Map<Long, ComputeNode> getPreferredNodesForTest() {
-        return preferredNodes;
     }
 
     void setRecoveryScanDoneForTest(boolean done) {

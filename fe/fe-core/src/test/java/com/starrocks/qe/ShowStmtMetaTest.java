@@ -1001,7 +1001,12 @@ public class ShowStmtMetaTest {
     public void testShowMaterializedViewsStmt() {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("test_db", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(28, metaData.getColumnCount());
+        Assertions.assertEquals(33, metaData.getColumnCount());
+        Assertions.assertEquals("warehouse", metaData.getColumn(28).getName());
+        Assertions.assertEquals("refresh_mode", metaData.getColumn(29).getName());
+        Assertions.assertEquals("refresh_trigger", metaData.getColumn(30).getName());
+        Assertions.assertEquals("refresh_policy", metaData.getColumn(31).getName());
+        Assertions.assertEquals("resource_group", metaData.getColumn(32).getName());
         Assertions.assertEquals("id", metaData.getColumn(0).getName());
         Assertions.assertEquals("database_name", metaData.getColumn(1).getName());
         Assertions.assertEquals("name", metaData.getColumn(2).getName());

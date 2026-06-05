@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 keywords: ['Canshu']
 ---
@@ -188,8 +189,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：false
 - 类型：Boolean
 - 单位：-
-- 是否动态：是
-- 引入版本：-
+- 是否动态：否
+- 引入版本：v4.2.0
 - 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。以下接口始终豁免：
   - 公开探针 / 可观测性：`/api/health`、`/metrics`、`/metrics/memory`。
   - Token 鉴权的内部传输（FE/BE 用于 tablet clone 和 load 错误文件拉取）：`/api/_tablet/_download`、`/api/_download_load`。这些接口仍由各自的 token 检查保护；开启 `enable_http_auth=true` **不**能弥补 `enable_token_check=false` 带来的安全损失。
@@ -293,7 +294,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：一致性相关任务的内存百分比上限。启动时会取 `consistency_max_memory_limit`（字节）与 `process_mem_limit * percent / 100` 的较小值作为最终上限；`process_mem_limit` 为 -1 时视为不限制。非法取值(&lt;0 或 &gt;100)按 100 处理。
+- 描述：一致性相关任务的内存百分比上限。启动时会取 `consistency_max_memory_limit`（字节）与 `process_mem_limit * percent / 100` 的较小值作为最终上限；`process_mem_limit` 为 -1 时视为不限制。非法取值(`<`0 或 `>`100)按 100 处理。
 - 引入版本：v3.2.0
 
 ### consistency_max_memory_limit
