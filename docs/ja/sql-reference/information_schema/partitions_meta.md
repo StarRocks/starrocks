@@ -41,5 +41,3 @@ displayed_sidebar: docs
 | STORAGE_SIZE                  | パーティションのストレージサイズ。               |
 | METADATA_SWITCH_VERSION       | パーティションのメタデータスイッチバージョン。   |
 | TABLET_BALANCED               | Tablet の配置がパーティション内で均等に分散されているかどうか。 |
-| MIN_VI_BUILT_VERSION          | パーティションの base index Tablet 全体におけるベクトルインデックスのビルド済みバージョンの最小値。非同期ベクトルインデックスを持つテーブル（共有データ）でのみ意味を持ち、それ以外は `0`。`VISIBLE_VERSION` より小さい場合、非同期ベクトルインデックスはまだビルド中です。 |
-| MAX_VI_BUILT_VERSION          | パーティションの base index Tablet 全体におけるベクトルインデックスのビルド済みバージョンの最大値。`MIN_VI_BUILT_VERSION` と異なる場合、Tablet 間でビルドの進捗にばらつきがあります。 |
