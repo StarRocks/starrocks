@@ -34,14 +34,18 @@
 
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
+import com.starrocks.mysql.ProxyProtocolParser;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import inet.ipaddr.IPAddressString;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -85,8 +89,22 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                     try {
                         // Set thread local info
                         context.setThreadLocalInfo();
+
+                        try {
+                            applyProxyProtocol(context.getMysqlChannel(), context,
+                                    Config.mysql_proxy_protocol_networks);
+                        } catch (IOException e) {
+                            String msg = "PROXY protocol header required but not received: " + e.getMessage();
+                            LOG.warn("Rejected connection from {} (connectionId={}): {}",
+                                    context.getMysqlChannel().getRemoteHostPortString(), connectionId, e.getMessage());
+                            context.getState().setError(msg);
+                            MysqlProto.sendResponsePacket(context);
+                            throw new AfterConnectedException(msg);
+                        }
+
                         LOG.info("Connection scheduled to worker thread {}. remote={}, connectionId={}",
-                                Thread.currentThread().getId(), remoteAddr, connectionId);
+                                Thread.currentThread().getId(),
+                                context.getMysqlChannel().getRemoteHostPortString(), connectionId);
 
                         // authenticate check failed.
                         result = MysqlProto.negotiate(context);
@@ -148,6 +166,37 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
         } catch (IOException e) {
             LOG.warn("Connection accept failed.", e);
         }
+    }
+
+    // Parses and applies a PROXY protocol header when the peer is trusted, updating the channel
+    // and context with the real client address. No-ops when proxyNetworks is empty or the peer
+    // is not in the trusted list. Returns without updating if the header family is UNKNOWN.
+    static void applyProxyProtocol(MysqlChannel channel, ConnectContext context, String proxyNetworks)
+            throws IOException {
+        String networks = proxyNetworks.trim();
+        if (!networks.isEmpty() && isTrustedProxyPeer(channel.getRemoteIp(), networks)) {
+            ProxyProtocolParser.Result ppResult = ProxyProtocolParser.parse(channel,
+                    Config.mysql_proxy_protocol_header_timeout_ms);
+            if (ppResult != null) {
+                channel.setRemoteAddress(ppResult.ip, ppResult.port);
+                context.setRemoteIP(ppResult.ip);
+            }
+        }
+    }
+
+    // Returns true when peerIp is allowed to supply a PROXY protocol header.
+    // networks == "*" -> all peers trusted.
+    static boolean isTrustedProxyPeer(String peerIp, String networks) {
+        if ("*".equals(networks)) {
+            return true;
+        }
+        IPAddressString address = new IPAddressString(peerIp);
+        for (String cidr : networks.split("\\s*;\\s*")) {
+            if (!cidr.isEmpty() && new IPAddressString(cidr).contains(address)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // this exception is only used for some expected exception after connection established.

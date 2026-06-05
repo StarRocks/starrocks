@@ -1119,6 +1119,30 @@ public class Config extends ConfigBase {
     public static String mysql_server_version = "8.0.33";
 
     /**
+     * Controls which upstream peers are trusted to supply a HAProxy PROXY protocol v1 header
+     * on the MySQL port (9030). The header carries the real client IP and port, which are used
+     * for authentication and audit logging.
+     *
+     * Format:
+     *   ''  (empty, default) — PROXY protocol disabled; all connections use the TCP peer address.
+     *   '*'                  — Accept PROXY headers from any peer.
+     *   '192.168.1.0/24;...' — Semicolon-separated IPv4/IPv6 CIDR list; only connections from those
+     *                          ranges are expected to carry a PROXY header. Connections from other
+     *                          peers are served directly without PROXY parsing.
+     */
+    @ConfField(mutable = true)
+    public static String mysql_proxy_protocol_networks = "";
+
+    /**
+     * Timeout in milliseconds for reading a PROXY protocol v1 header from a trusted peer.
+     * Applies when the peer address matches mysql_proxy_protocol_networks. If the header is
+     * not fully received within this window the connection is closed with an error.
+     * Set to 0 to wait indefinitely (not recommended).
+     */
+    @ConfField(mutable = true)
+    public static int mysql_proxy_protocol_header_timeout_ms = 1000;
+
+    /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
      * Do not set this if you know what you are doing.
      */
