@@ -155,7 +155,7 @@ public:
                         b.CreateBr(else_block);
                     } else { // if (whenExpr !=null & caseExpr = whenExpr), store the result
                         llvm::Value* cmp_eq = nullptr;
-                        if constexpr (lt_is_float<ResultType>) {
+                        if constexpr (lt_is_float<WhenType>) {
                             cmp_eq = b.CreateFCmpOEQ(datum_0.value, datum_i.value);
                         } else {
                             cmp_eq = b.CreateICmpEQ(datum_0.value, datum_i.value);
