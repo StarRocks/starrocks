@@ -1744,7 +1744,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         Map<String, String> jobProperties = Maps.newHashMap();
         jobProperties.put("partitions",
                 partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
-        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
+        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : columnDescsToSql(columnDescs));
         jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
@@ -1763,6 +1763,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
+    }
+
+    private static String columnDescsToSql(List<ImportColumnDesc> columnDescs) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < columnDescs.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            ImportColumnDesc desc = columnDescs.get(i);
+            sb.append("`").append(desc.getColumnName()).append("`");
+            if (desc.getExpr() != null) {
+                sb.append("=").append(ExprToSql.toSql(desc.getExpr()));
+            }
+        }
+        return sb.toString();
     }
 
     public String jobPropertiesToSql() {
