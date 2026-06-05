@@ -54,11 +54,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.KeysType;
->>>>>>> 8d3c949931 ([BugFix] Render columnToColumnExpr as SQL in SHOW ROUTINE LOAD (#74199))
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionRef;
