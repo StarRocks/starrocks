@@ -383,6 +383,58 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     ASSERT_FALSE(close_channel);
 }
 
+// Verify that timing fields in the response are accumulated, not overwritten, when one response
+// object is reused across multiple successful add_chunk() calls (the repeated-chunk RPC path that
+// LoadChannel::add_chunks drives for enable_load_colocate_mv).
+TEST_F(LakeTabletsChannelTest, test_add_chunk_accumulates_stats) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+    {
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+    }
+
+    // Reuse a single response across two successful add_chunk() calls.
+    PTabletWriterAddBatchResult response;
+    bool close_channel = false;
+
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &response, &close_channel);
+    ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+    ASSERT_TRUE(response.has_execution_time_us());
+    ASSERT_TRUE(response.has_wait_writer_time_us());
+    int64_t exec_after_first = response.execution_time_us();
+    int64_t writer_after_first = response.wait_writer_time_us();
+
+    // Second in-order call reuses `response`, so it enters the has_execution_time_us() accumulate
+    // branch. The accumulated values must not drop below the first call's.
+    add_chunk_request.set_packet_seq(1);
+    {
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+    }
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &response, &close_channel);
+    ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+    ASSERT_GE(response.execution_time_us(), exec_after_first);
+    ASSERT_GE(response.wait_writer_time_us(), writer_after_first);
+}
+
 TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
