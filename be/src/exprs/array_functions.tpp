@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #pragma once
+
 #include <chrono>
 #include <memory>
 
 #include "base/bit/bit_mask.h"
 #include "base/orlp/pdqsort.h"
 #include "base/phmap/phmap.h"
+#include "base/simd/string_length_filter.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_hash.h"
@@ -2278,6 +2280,75 @@ private:
         return result;
     }
 
+    // SIMD-optimized string search within array elements; 1-based position, 0 if not found.
+    template <bool CheckNull>
+    static size_t _find_string_in_array_simd(const BinaryColumn* str_column,
+                                             const NullColumn::ValueType* elements_null_data, size_t array_offset,
+                                             size_t array_size, const Slice& target) {
+        if (array_size == 0) return 0;
+
+        const auto& str_offsets = str_column->get_offset();
+        const char* str_bytes = reinterpret_cast<const char*>(str_column->raw_bytes());
+        const uint32_t target_len = static_cast<uint32_t>(target.size);
+
+        size_t j = 0;
+        constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+
+        for (; j + kSimdWidth <= array_size; j += kSimdWidth) {
+            size_t base = array_offset + j;
+
+            if constexpr (CheckNull) {
+                bool all_null = true;
+                for (int k = 0; k < kSimdWidth; k++) {
+                    if (elements_null_data[base + k] == 0) {
+                        all_null = false;
+                        break;
+                    }
+                }
+                if (all_null) {
+                    continue;
+                }
+            }
+
+            uint32_t mask = SIMD::length_eq_mask(str_offsets.data(), base, target_len);
+            if (mask == 0) {
+                continue;
+            }
+
+            while (mask) {
+                uint32_t bit = __builtin_ctz(mask);
+                size_t elem_idx = base + bit;
+
+                if constexpr (CheckNull) {
+                    if (elements_null_data[elem_idx]) {
+                        mask &= (mask - 1);
+                        continue;
+                    }
+                }
+
+                const char* elem_ptr = str_bytes + str_offsets[elem_idx];
+                if (memcmp(elem_ptr, target.data, target_len) == 0) {
+                    return j + bit + 1;
+                }
+                mask &= (mask - 1);
+            }
+        }
+        for (; j < array_size; j++) {
+            size_t elem_idx = array_offset + j;
+            if constexpr (CheckNull) {
+                if (elements_null_data[elem_idx]) continue;
+            }
+            uint32_t elem_len = str_offsets[elem_idx + 1] - str_offsets[elem_idx];
+            if (elem_len == target_len) {
+                const char* elem_ptr = str_bytes + str_offsets[elem_idx];
+                if (memcmp(elem_ptr, target.data, target_len) == 0) {
+                    return j + 1;
+                }
+            }
+        }
+        return 0;
+    }
+
     static void _build_hash_table(const ColumnPtr& column, ArrayContainsState* state) {
         DCHECK(!column->is_constant() && !column->is_nullable());
         const ArrayColumn* array_column = down_cast<const ArrayColumn*>(column.get());
@@ -2368,6 +2439,19 @@ private:
         result_column->resize(num_rows);
         auto* result_data = result_column->get_data().data();
 
+        // For STRING type with const target, use SIMD length filtering
+        [[maybe_unused]] const BinaryColumn* str_column = nullptr;
+        [[maybe_unused]] Slice const_target;
+        if constexpr (lt_is_string<LT>) {
+            if (is_const_target && !NullableTarget) {
+                // `elements_column` is a NullableColumn wrapping the BinaryColumn
+                // (see the immutable_null_column_data() cast above); unwrap first.
+                const auto* nullable_elements = down_cast<const NullableColumn*>(elements_column.get());
+                str_column = down_cast<const BinaryColumn*>(nullable_elements->data_column().get());
+                const_target = targets_data[0]; // Cache const target
+            }
+        }
+
         for (size_t i = 0; i < num_rows; i++) {
             if constexpr (NullableArray) {
                 bool is_array_null = is_const_array ? arrays_null_data[0] : arrays_null_data[i];
@@ -2397,7 +2481,17 @@ private:
                 }
             }
 
-            // check non-null value one by one
+            // Use SIMD path for STRING with const non-null target
+            if constexpr (lt_is_string<LT>) {
+                if (is_const_target && !NullableTarget && str_column != nullptr) {
+                    position = _find_string_in_array_simd<true>(str_column, elements_null_data, offset, array_size,
+                                                                const_target);
+                    result_data[i] = PositionEnabled ? position : (position != 0);
+                    continue;
+                }
+            }
+
+            // Fallback: check non-null value one by one
             size_t target_idx = is_const_target ? 0 : i;
             for (size_t j = 0; j < array_size; j++) {
                 if (!elements_null_data[offset + j] && elements_data[offset + j] == targets_data[target_idx]) {

@@ -331,10 +331,8 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
             }
         }
 
-        // null data
-        for (size_t i = 0; i < num_rows; ++i) {
-            filter_data[i] |= null_data[i];
-        }
+        // null data - use SIMD-optimized OR
+        ColumnHelper::or_two_filters(num_rows, filter_data.data(), null_data.data());
 
         // process other conjucts
         for (size_t i = 1; i < _join_conjuncts.size(); ++i) {
