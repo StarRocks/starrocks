@@ -43,9 +43,7 @@ env:
 jobs:
   thirdparty-filter:
     runs-on: ubuntu-latest
-    if: >
-      github.event.pull_request.merged == true &&
-      github.repository == 'StarRocks/starrocks'
+    if: github.event.pull_request.merged == true
     outputs:
       thirdparty: ${{ steps.filter-info.outputs.thirdparty }}
     steps:
@@ -74,10 +72,7 @@ jobs:
     needs: thirdparty-filter
     runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
-    if: >
-      github.event.pull_request.merged == true &&
-      github.repository == 'StarRocks/starrocks' &&
-      needs.thirdparty-filter.outputs.thirdparty == 'true'
+    if: github.event.pull_request.merged == true && needs.thirdparty-filter.outputs.thirdparty == 'true'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
