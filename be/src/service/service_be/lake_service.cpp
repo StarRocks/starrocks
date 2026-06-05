@@ -448,9 +448,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         //   false -> nothing to build this version; FE advances built_version
                         //            directly (no CN round-trip), so observability isn't stuck.
                         // Sync-mode tables build VI inline, so no FE dispatch is needed.
-                        const bool async_vi = is_async_vector_index_table(*metadata);
-                        bool new_rowset_has_vi = false;
-                        if (async_vi) {
+                        if (is_async_vector_index_table(*metadata) && metadata->version() > base_version) {
+                            bool new_rowset_has_vi = false;
                             for (const auto& rowset : metadata->rowsets()) {
                                 int64_t rv = rowset.has_version() ? rowset.version() : 0;
                                 if (rv <= base_version) continue; // existing rowset, not from this publish
@@ -462,8 +461,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 }
                                 if (new_rowset_has_vi) break;
                             }
-                        }
-                        if (async_vi && metadata->version() > base_version) {
                             std::lock_guard l(response_mtx);
                             auto* info = response->add_vector_index_build_infos();
                             info->set_tablet_id(metadata->id());
