@@ -1686,8 +1686,23 @@ public class IcebergMetadataTest extends TableTestBase {
         PredicateSearchKey newFilter = PredicateSearchKey.of("db", "table", newCallParams);
         Assertions.assertEquals(filter, newFilter);
 
+        GetRemoteFilesParams projectedParams = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
+                .setPredicate(newCallOperator)
+                .setFieldNames(Lists.newArrayList("date_col"))
+                .setLimit(10)
+                .build();
+        GetRemoteFilesParams fullSchemaParams = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
+                .setPredicate(newCallOperator)
+                .setLimit(10)
+                .build();
+
         Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", newCallParams));
         Assertions.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", emptyParams));
+        Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", projectedParams));
+        Assertions.assertEquals(PredicateSearchKey.of("db", "table", projectedParams),
+                PredicateSearchKey.of("db", "table", fullSchemaParams));
     }
 
     @Test

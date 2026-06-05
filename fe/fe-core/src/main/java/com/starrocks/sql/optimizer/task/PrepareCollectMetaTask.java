@@ -24,6 +24,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,7 +73,10 @@ public class PrepareCollectMetaTask extends OptimizerTask {
                     .map(op -> CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
                                             new MetaPreparationItem(op.getTable(), op.getPredicate(),
-                                                    op.getLimit(), op.getTvrVersionRange()),
+                                                    op.getLimit(), op.getTvrVersionRange(),
+                                                    op.getColRefToColumnMetaMap().keySet().stream()
+                                                            .map(ColumnRefOperator::getName)
+                                                            .collect(Collectors.toList())),
                                             tracers, connectContext),
                             executorService)).toArray(CompletableFuture[]::new));
             allFutures.join();

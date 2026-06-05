@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -46,6 +47,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
@@ -67,9 +69,13 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.IncrementalAppendScan;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.metrics.ImmutableScanReport;
+import org.apache.iceberg.metrics.ScanMetricsResult;
 import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -89,6 +95,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Resource cleanup tests shared by Iceberg and Delta Lake connectors / scan nodes.
@@ -590,6 +597,158 @@ public class ExternalResourceCleanupTest {
         // iterator should be created and be consumable without exception
         iter.hasNext();
         iter.close();
+    }
+
+    @Test
+    public void testIcebergMetadataGetRemoteFilesAsyncSelectsEmptyProjection() throws Exception {
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
+                java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
+        IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
+                icebergCatalog, exec, exec, catalogProps);
+
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
+        org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
+        IcebergMetricsReporter reporter = new IcebergMetricsReporter();
+        Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
+        Mockito.when(table.getCatalogDBName()).thenReturn("db");
+        Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
+        Mockito.when(table.getIcebergMetricsReporter()).thenReturn(reporter);
+
+        StarRocksIcebergTableScan scan = Mockito.mock(StarRocksIcebergTableScan.class);
+        Mockito.when(icebergCatalog.getTableScan(Mockito.eq(nativeTbl), Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.useSnapshot(Mockito.anyLong())).thenReturn(scan);
+        Mockito.when(scan.metricsReporter(Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.planWith(Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.select(Mockito.anyList())).thenReturn(scan);
+        Mockito.when(scan.includeColumnStats()).thenReturn(scan);
+        Mockito.when(scan.filter(Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.targetSplitSize()).thenReturn(128L);
+        Mockito.when(scan.planFiles()).thenReturn(CloseableIterable.withNoopClose(List.of()));
+        Mockito.when(scan.getMetricsReporter()).thenReturn(reporter);
+
+        IcebergGetRemoteFilesParams.Builder builder = IcebergGetRemoteFilesParams.newBuilder();
+        builder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+        builder.setPredicate(ConstantOperator.TRUE);
+        builder.setFieldNames(List.of());
+        builder.setAllParams(IcebergTableMORParams.EMPTY);
+        builder.setParams(IcebergMORParams.EMPTY);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        Tracers.register(ctx);
+        try {
+            RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, builder.build());
+            Assertions.assertFalse(source.hasMoreOutput());
+            Mockito.verify(scan).select(List.of());
+            source.close();
+        } finally {
+            Tracers.close();
+        }
+    }
+
+    @Test
+    public void testIcebergCacheHitUpdatesProjectionReport() throws Exception {
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
+                java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
+        IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
+                icebergCatalog, exec, exec, catalogProps);
+
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
+        Schema schema = new Schema(
+                org.apache.iceberg.types.Types.NestedField.required(1, "id", org.apache.iceberg.types.Types.IntegerType.get()),
+                org.apache.iceberg.types.Types.NestedField.optional(2, "data", org.apache.iceberg.types.Types.StringType.get()));
+        IcebergMetricsReporter firstReporter = new IcebergMetricsReporter();
+        AtomicReference<IcebergMetricsReporter> reporterRef = new AtomicReference<>(firstReporter);
+        Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
+        Mockito.when(table.getCatalogDBName()).thenReturn("db");
+        Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
+        Mockito.when(table.getIcebergMetricsReporter()).thenAnswer(invocation -> reporterRef.get());
+
+        StarRocksIcebergTableScan scan = Mockito.mock(StarRocksIcebergTableScan.class);
+        Mockito.when(icebergCatalog.getTableScan(Mockito.eq(nativeTbl), Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.useSnapshot(Mockito.anyLong())).thenReturn(scan);
+        Mockito.when(scan.metricsReporter(Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.planWith(Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.select(Mockito.anyList())).thenReturn(scan);
+        Mockito.when(scan.includeColumnStats()).thenReturn(scan);
+        Mockito.when(scan.filter(Mockito.any())).thenReturn(scan);
+        Mockito.when(scan.targetSplitSize()).thenReturn(128L);
+        Mockito.when(scan.planFiles()).thenReturn(CloseableIterable.withNoopClose(List.of()));
+        Mockito.when(scan.getMetricsReporter()).thenAnswer(invocation -> reporterRef.get());
+        Mockito.when(scan.getIcebergTableName())
+                .thenReturn(new com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName("db", "tbl"));
+
+        firstReporter.report(ImmutableScanReport.builder()
+                .tableName("db.tbl")
+                .snapshotId(1L)
+                .filter(Expressions.alwaysTrue())
+                .schemaId(schema.schemaId())
+                .projectedFieldIds(List.of(1))
+                .projectedFieldNames(List.of("id"))
+                .scanMetrics(Mockito.mock(ScanMetricsResult.class))
+                .metadata(Map.of())
+                .build());
+
+        MetaPreparationItem item = new MetaPreparationItem(table, ConstantOperator.TRUE, -1L,
+                TvrTableSnapshot.of(Optional.of(1L)), List.of("id"));
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        Tracers.register(ctx);
+        try {
+            Assertions.assertTrue(metadata.prepareMetadata(item, Tracers.get(), ctx));
+            Mockito.verify(scan).select(List.of("id"));
+
+            IcebergMetricsReporter secondReporter = new IcebergMetricsReporter();
+            reporterRef.set(secondReporter);
+
+            IcebergGetRemoteFilesParams.Builder dataBuilder = IcebergGetRemoteFilesParams.newBuilder();
+            dataBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            dataBuilder.setPredicate(ConstantOperator.TRUE);
+            dataBuilder.setFieldNames(List.of("data"));
+            dataBuilder.setAllParams(IcebergTableMORParams.EMPTY);
+            dataBuilder.setParams(IcebergMORParams.EMPTY);
+
+            RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, dataBuilder.build());
+            Assertions.assertFalse(source.hasMoreOutput());
+            Assertions.assertNotNull(secondReporter.getScanReport());
+            Assertions.assertEquals(List.of(2), secondReporter.getScanReport().projectedFieldIds());
+            Assertions.assertEquals(List.of("data"), secondReporter.getScanReport().projectedFieldNames());
+            source.close();
+
+            Field splitField = IcebergMetadata.class.getDeclaredField("splitTasks");
+            splitField.setAccessible(true);
+            Map<PredicateSearchKey, List<FileScanTask>> splitTasks =
+                    (Map<PredicateSearchKey, List<FileScanTask>>) splitField.get(metadata);
+
+            IcebergGetRemoteFilesParams.Builder idBuilder = IcebergGetRemoteFilesParams.newBuilder();
+            idBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            idBuilder.setPredicate(ConstantOperator.TRUE);
+            idBuilder.setFieldNames(List.of("id"));
+            idBuilder.setAllParams(IcebergTableMORParams.EMPTY);
+            idBuilder.setParams(IcebergMORParams.EMPTY);
+
+            IcebergGetRemoteFilesParams.Builder fullBuilder = IcebergGetRemoteFilesParams.newBuilder();
+            fullBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            fullBuilder.setPredicate(ConstantOperator.TRUE);
+            fullBuilder.setAllParams(IcebergTableMORParams.EMPTY);
+            fullBuilder.setParams(IcebergMORParams.EMPTY);
+
+            Assertions.assertTrue(splitTasks.containsKey(PredicateSearchKey.of("db", "tbl", idBuilder.build())));
+            Assertions.assertTrue(splitTasks.containsKey(PredicateSearchKey.of("db", "tbl", fullBuilder.build())));
+            Assertions.assertEquals(1, splitTasks.size());
+            Mockito.verify(scan, Mockito.times(1)).planFiles();
+        } finally {
+            Tracers.close();
+        }
     }
 
     @Test

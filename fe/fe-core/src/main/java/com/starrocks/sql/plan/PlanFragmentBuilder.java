@@ -1771,6 +1771,9 @@ public class PlanFragmentBuilder {
 
             // partition id generator
             PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
+            List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toList());
 
             boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
             IcebergScanNode icebergScanNode;
@@ -1778,14 +1781,14 @@ public class PlanFragmentBuilder {
             if (!isEqDeleteScan) {
                 PhysicalIcebergScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
+                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator, fieldNames);
                 icebergScanNode.updateAppliedDictStringColumns(
                         ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
                                 .map(entry -> entry.first).collect(Collectors.toSet()));
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
+                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator, fieldNames);
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());

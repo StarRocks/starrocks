@@ -10,6 +10,7 @@ import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -61,6 +62,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
@@ -1093,6 +1095,45 @@ public class IcebergScanNodeTest {
                 "reachLimit should be reset to false");
         Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
                 "scanRangeSource should be cleared");
+    }
+
+    @Test
+    public void testSetupScanRangeLocationsPassesEmptyProjection(@Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked MetadataMgr metadataMgr,
+                                                                 @Mocked IcebergTable table) throws Exception {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null, List.of());
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getMetadataMgr();
+            result = metadataMgr;
+            minTimes = 0;
+
+            metadataMgr.getRemoteFiles(table, (GetRemoteFilesParams) any);
+            result = List.of();
+            minTimes = 0;
+
+            table.getCatalogDBName();
+            result = "db";
+            minTimes = 0;
+
+            table.getCatalogTableName();
+            result = "tbl";
+            minTimes = 0;
+        }};
+
+        scanNode.setupScanRangeLocations(false);
+
+        new Verifications() {{
+            GetRemoteFilesParams params;
+            metadataMgr.getRemoteFiles(table, params = withCapture());
+            Assertions.assertEquals(List.of(), params.getFieldNames());
+        }};
     }
 
     @Test

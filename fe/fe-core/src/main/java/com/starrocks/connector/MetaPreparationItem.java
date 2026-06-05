@@ -14,10 +14,12 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.StringJoiner;
 
 public class MetaPreparationItem {
@@ -25,12 +27,19 @@ public class MetaPreparationItem {
     private final ScalarOperator predicate;
     private final long limit;
     private final TvrVersionRange version;
+    private final List<String> fieldNames;
 
     public MetaPreparationItem(Table table, ScalarOperator predicate, long limit, TvrVersionRange version) {
+        this(table, predicate, limit, version, null);
+    }
+
+    public MetaPreparationItem(Table table, ScalarOperator predicate, long limit, TvrVersionRange version,
+                               List<String> fieldNames) {
         this.table = table;
         this.predicate = predicate;
         this.limit = limit;
         this.version = version;
+        this.fieldNames = fieldNames == null ? null : ImmutableList.copyOf(fieldNames);
     }
 
     public Table getTable() {
@@ -49,6 +58,10 @@ public class MetaPreparationItem {
         return version;
     }
 
+    public List<String> getFieldNames() {
+        return fieldNames;
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", MetaPreparationItem.class.getSimpleName() + "[", "]")
@@ -56,6 +69,7 @@ public class MetaPreparationItem {
                 .add("predicate=" + predicate)
                 .add("limit=" + limit)
                 .add("version=" + version)
+                .add("fieldNames=" + fieldNames)
                 .toString();
     }
 }

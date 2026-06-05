@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
@@ -72,6 +73,7 @@ public class IcebergScanNode extends ScanNode {
     private int selectedPartitionCount = -1;
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
     private PartitionIdGenerator partitionIdGenerator = null;
+    private final List<String> fieldNames;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
     private boolean enableGlobalLateMaterialization = false;
@@ -80,11 +82,18 @@ public class IcebergScanNode extends ScanNode {
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
                            PartitionIdGenerator partitionIdGenerator) {
+        this(id, desc, planNodeName, tableFullMORParams, morParams, partitionIdGenerator, null);
+    }
+
+    public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
+                           PartitionIdGenerator partitionIdGenerator, List<String> fieldNames) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
         this.partitionIdGenerator = partitionIdGenerator;
+        this.fieldNames = fieldNames == null ? null : ImmutableList.copyOf(fieldNames);
         this.icebergScanMetricsReporter = new IcebergMetricsReporter();
         this.icebergTable.setIcebergMetricsReporter(icebergScanMetricsReporter);
         setupCloudCredential();
@@ -180,6 +189,7 @@ public class IcebergScanNode extends ScanNode {
                         .setParams(morParams)
                         .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
+                        .setFieldNames(fieldNames)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
                         .setUsedForDelete(usedForDelete)
                         .build();
