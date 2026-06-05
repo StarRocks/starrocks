@@ -22,6 +22,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <functional>
+#include <map>
+#include <set>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -375,8 +379,9 @@ TEST_F(LakeSparseDcgTest, test_sparse_then_dense_supersedes_and_orphans) {
 
 // (d) Flag off -> no .spcols ever (kinds empty), behavior == dense.
 TEST_F(LakeSparseDcgTest, test_flag_off_is_dense) {
-    // enable_sparse_dcg stays false (default).
-    ASSERT_FALSE(config::enable_sparse_dcg);
+    // Explicitly force the flag off (other tests may have mutated the global config;
+    // never depend on the default still being in effect).
+    ConfigResetGuard<bool> flag_guard(&config::enable_sparse_dcg, false);
 
     constexpr int M = 2000;
     int64_t version = 1;

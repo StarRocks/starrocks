@@ -159,8 +159,9 @@ Status LayeredOverlayColumnIterator::_apply_one_layer(SparseLayer& l, const std:
     // blind positional overwrite into dst at dst_offsets via update_rows. update_rows requires
     // src.size() == dst_offsets.size() and uses src row i for dst row dst_offsets[i].
     auto src = l.values->clone_empty();
-    src->append_selective(*l.values, local_ordinals.data(), 0, static_cast<uint32_t>(local_ordinals.size()));
-    dst->update_rows(*src, dst_offsets.data());
+    RETURN_IF_EXCEPTION(
+            src->append_selective(*l.values, local_ordinals.data(), 0, static_cast<uint32_t>(local_ordinals.size())));
+    RETURN_IF_EXCEPTION(dst->update_rows(*src, dst_offsets.data()));
     return Status::OK();
 }
 
