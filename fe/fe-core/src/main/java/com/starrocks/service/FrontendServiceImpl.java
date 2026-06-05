@@ -2657,9 +2657,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     " already create partition failed");
         }
 
+        boolean newInnerCtx = ConnectContext.get() == null;
         ConnectContext ctx = Util.getOrCreateInnerContext();
         if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
             ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            if (newInnerCtx) {
+                // setCurrentWarehouseId replaces sessionVariable with a clone of the global
+                // default, discarding ConnectContext.buildInner's MV-rewrite override. Only
+                // re-apply when the context is freshly created so we don't mutate a reused
+                // user session.
+                ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
+            }
         }
 
         // Run analyzer first so that system partitions enclosed by existing partitions
