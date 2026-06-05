@@ -47,7 +47,6 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -1785,12 +1784,6 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(50L, mcv.get("2024-02-01"));
     }
 
-    private static void assertOnlyBooleanMcvs(ColumnStatistic predicateStatistic, long expectedRows) {
-        Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
-        Assertions.assertTrue(Set.of("0", "1").containsAll(mcvs.keySet()));
-        Assertions.assertEquals(expectedRows, mcvs.values().stream().mapToLong(Long::longValue).sum());
-    }
-
     private static ColumnStatistic booleanColumnStatistic(long trueRows, long falseRows, long nullRows) {
         long totalRows = trueRows + falseRows + nullRows;
         return ColumnStatistic.builder()
@@ -1872,7 +1865,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
         Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
 
-        // probability for true should be 2/100, so 0.02 * 1000 = 20 rows for each value.
+        // probability for true should be 2/100, so 0.02 * 1000 = 20 rows.
         assertBooleanDistribution(stat, 20, 980, 0.0);
     }
 
@@ -1982,6 +1975,58 @@ public class ExpressionStatisticsCalculatorTest {
         // null input statistics should return unknown
         ColumnStatistic stat = ExpressionStatisticCalculator.calculate(notOp, null);
         Assertions.assertTrue(stat.isUnknown());
+    }
+
+    @Test
+    public void testCompoundPredicateFiltersOutNonBooleanMcvs() {
+        // When a predicate child has non-boolean MCVs (e.g., integer MCVs from a column whose statistics
+        // leak through because the visitor is not implemented for that predicate type), the compound predicate
+        // calculator should NOT use those MCVs as boolean probabilities. It should fall back to using
+        // PredicateStatisticsCalculator selectivity instead.
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
+
+        // Attach non-boolean (integer) MCVs to the column statistics, simulating the scenario where a predicate
+        // falls through to the default visitor and returns its first child's statistics (which has integer MCVs).
+        Map<String, Long> integerMcvs = Map.of("10", 200L, "20", 300L, "30", 500L);
+        Histogram intHistogram = new Histogram(Collections.emptyList(), integerMcvs);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(100)
+                        .setHistogram(intHistogram)
+                        .build())
+                .addColumnStatistic(col2, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(50)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(50)
+                        .setHistogram(intHistogram)
+                        .build())
+                .build();
+
+        // col1 > 50 AND col2 > 25 — these predicates fall through to the default visitor which returns
+        // col1/col2 stats (with integer MCVs). The booleanOnly guard should reject those MCVs.
+        BinaryPredicateOperator left = new BinaryPredicateOperator(
+                BinaryType.GT, col1, ConstantOperator.createInt(50));
+        BinaryPredicateOperator right = new BinaryPredicateOperator(
+                BinaryType.GT, col2, ConstantOperator.createInt(25));
+        CompoundPredicateOperator andOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, left, right);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(andOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(stat.getHistogram());
+
+        Map<String, Long> resultMcv = stat.getHistogram().getMCV();
+        Assertions.assertNotNull(resultMcv);
+        Assertions.assertTrue(resultMcv.keySet().stream().allMatch(k -> k.equals("0") || k.equals("1")));
+
+        assertBooleanDistribution(stat, 250L, 750L, 0.0);
     }
 
     @Test

@@ -104,7 +104,7 @@ public class ArraySortLambdaTest extends PlanTestBase {
     }
 
     @Test
-    public void testArraySortLambdaCompoundConditionStats() throws Exception {
+    public void testArraySortLambdaCompoundCondition() throws Exception {
         String sql = "select array_sort([1,2,3,4,5,6,7,8], " +
                 "(x,y)->case when (x = 1 and y = 2) or (y = 1 and x = 2) then -1 else x - y end)";
         String plan = getFragmentPlan(sql);

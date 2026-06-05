@@ -154,8 +154,8 @@ public class ExpressionStatisticCalculator {
 
             if (operator.isNot()) {
                 // not just swaps pTrue and pFalse, pNull stays the same.
-                return computeBooleanProbabilities(operator.getChild(0), context).stream()
-                        .map(p -> buildCompoundResult(operator, p.pFalse(), p.pTrue(), p.pNull())).findFirst()
+                return computeBooleanProbabilities(operator.getChild(0), context)
+                        .map(p -> buildCompoundResult(operator, p.pFalse(), p.pTrue(), p.pNull()))
                         .orElseGet(ColumnStatistic::unknown);
             }
 
@@ -177,40 +177,48 @@ public class ExpressionStatisticCalculator {
                 pTrue = (l.pTrue() + r.pTrue()) - (l.pTrue() * r.pTrue());
                 pFalse = l.pFalse() * r.pFalse();
             }
-            double pNull = 1.0 - pTrue - pFalse;
+            double pNull = clampFraction(1.0 - pTrue - pFalse);
 
             return buildCompoundResult(operator, pTrue, pFalse, pNull);
         }
 
         private Optional<NullableBooleanProbabilities> computeBooleanProbabilities(ScalarOperator child, Void context) {
             ColumnStatistic childStat = child.accept(this, context);
+            double pNull = childStat.isUnknown() ? 0.0 : clampFraction(childStat.getNullsFraction());
+            double nonNullMass = 1.0 - pNull;
 
-            // Extract from boolean MCV histogram if available. This is the most accurate strategy since it reflects the actual boolean value distribution.
+            // Extract from boolean MCV histogram if available. This is the most accurate strategy since it reflects the actual
+            // boolean value distribution. The MCV's true/false counts are treated as the conditional distribution among
+            // non-null rows and scaled by (1 - pNull), so pTrue + pFalse + pNull == 1 by construction (independent of how
+            // the MCV counts relate to rowCount).
             if (!childStat.isUnknown() && childStat.getHistogram() != null) {
                 Map<String, Long> mcv = childStat.getHistogram().getMCV();
                 if (mcv != null && (!mcv.isEmpty())) {
                     String trueKey = booleanToMcvValue(true);
                     String falseKey = booleanToMcvValue(false);
-                    if (mcv.containsKey(trueKey) || mcv.containsKey(falseKey)) {
+                    // although we expect child operators to be predicates, it might happen that a predicate has non-boolean MCVs
+                    // (e.g visitor is not implemented for child predicate and default visitor returns statistics of first child)
+                    boolean booleanOnly = mcv.keySet().stream().allMatch(k -> k.equals(trueKey) || k.equals(falseKey));
+                    if (booleanOnly && (mcv.containsKey(trueKey) || mcv.containsKey(falseKey))) {
                         long trueCount = mcv.getOrDefault(trueKey, 0L);
                         long falseCount = mcv.getOrDefault(falseKey, 0L);
-                        long inputRows = Math.max(1L, Math.round(rowCount));
-                        double pNull = childStat.getNullsFraction();
-                        double pTrue = clampFraction((double) trueCount / inputRows);
-                        double pFalse = clampFraction((double) falseCount / inputRows);
+                        long mcvTotal = trueCount + falseCount;
+                        double pTrue = mcvTotal > 0 ? nonNullMass * trueCount / mcvTotal : 0.0;
+                        double pFalse = mcvTotal > 0 ? nonNullMass - pTrue : 0.0;
                         return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
                     }
                 }
             }
 
-            // Use PredicateStatisticsCalculator selectivity as a fallback.
+            // Use PredicateStatisticsCalculator selectivity as a fallback. A predicate evaluates to UNKNOWN (not TRUE) on NULL
+            // inputs, so pTrue is capped at the non-null mass and pFalse takes the remainder, again keeping the sum at 1.
             Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(child, inputStatistics);
             if (predicateStatistics != null && !Double.isNaN(predicateStatistics.getOutputRowCount())) {
                 double inputStatisticsRows = inputStatistics.getOutputRowCount();
                 if (!Double.isNaN(inputStatisticsRows) && inputStatisticsRows > 0) {
-                    double pTrue = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
-                    double pNull = childStat.isUnknown() ? 0.0 : childStat.getNullsFraction();
-                    double pFalse = clampFraction(1.0 - pTrue - pNull);
+                    double pTrueRaw = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
+                    double pTrue = Math.min(pTrueRaw, nonNullMass);
+                    double pFalse = nonNullMass - pTrue;
                     return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
                 }
             }
@@ -223,7 +231,7 @@ public class ExpressionStatisticCalculator {
             long trueRows = Math.round(rowCount * pTrue);
             long falseRows = Math.round(rowCount * pFalse);
 
-            Map<String, Long> mcvs = new HashMap<>();
+            Map<String, Long> mcvs = new java.util.LinkedHashMap<>();
             if (trueRows > 0) {
                 mcvs.put(booleanToMcvValue(true), trueRows);
             }
@@ -235,7 +243,7 @@ public class ExpressionStatisticCalculator {
                     .setMinValue(0)
                     .setMaxValue(1).setNullsFraction(pNull)
                     .setAverageRowSize(operator.getType().getTypeSize())
-                    .setDistinctValuesCount(mcvs.size());
+                    .setDistinctValuesCount(2);
 
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
