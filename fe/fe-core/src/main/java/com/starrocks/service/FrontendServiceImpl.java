@@ -383,7 +383,6 @@ import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
@@ -1892,16 +1891,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
-        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (request.isSetBackend_id()) {
-            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
-                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        }
-        // TODO(ComputeResource): support more better compute resource acquiring.
+        // The whole load transaction runs on a single compute resource (worker group). The new
+        // sub-partition shards, the tablet locations, and the nodes_info built below must all be
+        // derived from this same resource; otherwise a tablet location may reference a compute node
+        // that is absent from nodes_info and the BE reports "Unknown node_id". This mirrors the
+        // self-consistent handling on the create-partition path (buildCreatePartitionResponse).
+        final ComputeResource computeResource = txnState.getComputeResource();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        // Validate the resource before mutating any metadata below, so an unavailable worker group
+        // fails fast instead of leaving partitions marked immutable with no replacement created.
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "No available worker group for warehouse " + computeResource));
+            result.setStatus(errorStatus);
+            return result;
+        }
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
@@ -1968,9 +1972,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setPartitions(partitions);
         result.setTablets(tablets);
 
-        // build nodes
-        // TODO(ComputeResource): support more better compute resource acquiring.
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
+        // build nodes from the same compute resource used for the tablet locations above, so every
+        // location node id is guaranteed to be present in nodes_info.
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
