@@ -17,8 +17,11 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -26,7 +29,9 @@ import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
@@ -62,58 +67,69 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
 
         Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos = Maps.newHashMap();
 
-        List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root);
-        for (PhysicalOlapScanOperator scanOperator : scanOperators) {
-            final Map<Integer, ColumnDict> globalDicts =
-                    scanOperator.getGlobalDicts().stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
-            OlapTable table = (OlapTable) scanOperator.getTable();
+        List<PhysicalOlapScanOperator> olapScans = Utils.extractPhysicalOlapScanOperator(root);
+        for (PhysicalOlapScanOperator scan : olapScans) {
+            OlapTable table = (OlapTable) scan.getTable();
             final Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
             if (null == lastUpdateTime) {
                 continue;
             }
-            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
+            if (table.inputHasTempPartition(scan.getSelectedPartitionId())) {
                 continue;
             }
-            if (scanOperator.getProjection() != null) {
-                for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
-                    if (groupByRefSets.contains(entry.getKey()) &&
-                            entry.getValue() instanceof DictMappingOperator mappingOperator) {
-                        ColumnRefOperator column = mappingOperator.getDictColumn();
-                        if (!column.getType().isNumericType() && !column.getType().isDate()) {
-                            continue;
-                        }
-                        if (globalDicts.containsKey(column.getId())) {
-                            final ConstantOperator min = ConstantOperator.createVarchar("0");
-                            final ColumnDict columnDict = globalDicts.get(column.getId());
-                            final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
-                            infos.put(entry.getKey().getId(), new Pair<>(min, max));
-                        }
-                    }
+            Map<Integer, ColumnDict> globalDicts = toGlobalDictMap(scan.getGlobalDicts());
+            // Dict-encoded group-by keys (shared with the iceberg branch below).
+            collectDictGroupByMinMax(scan, groupByRefSets, globalDicts, infos);
+            // Fallback to the internal table-level min/max stats manager for the remaining
+            // numeric/date group-by keys that are not dict-encoded.
+            for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+                if (!isUncoveredGroupByKey(column, groupByRefSets, infos)) {
+                    continue;
                 }
+                Column c = table.getColumn(column.getName());
+                if (c == null) {
+                    continue;
+                }
+                putStatsMgrMinMax(column, infos, IMinMaxStatsMgr.internalInstance(),
+                        new ColumnIdentifier(table.getId(), c.getColumnId()),
+                        new StatsVersion(-1, lastUpdateTime));
             }
-            for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
-                if (groupByRefSets.contains(column.getId())) {
-                    if (!column.getType().isNumericType() && !column.getType().isDate()) {
-                        continue;
-                    }
-                    if (globalDicts.containsKey(column.getId())) {
-                        final ConstantOperator min = ConstantOperator.createVarchar("0");
-                        final ColumnDict columnDict = globalDicts.get(column.getId());
-                        final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
-                        infos.put(column.getId(), new Pair<>(min, max));
-                        continue;
-                    }
-                    Column c = table.getColumn(column.getName());
-                    Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
-                            .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
-                                    new StatsVersion(-1, lastUpdateTime));
-                    if (minMax.isEmpty()) {
-                        continue;
-                    }
-                    final ConstantOperator min = ConstantOperator.createVarchar(minMax.get().minValue());
-                    final ConstantOperator max = ConstantOperator.createVarchar(minMax.get().maxValue());
-                    infos.put(column.getId(), new Pair<>(min, max));
+        }
+
+        // Iceberg scans. After low-cardinality rewrite the varchar group-by becomes TYPE_INT with
+        // codes in [1, dictSize]; the runtime contract is enforced by GlobalDictNotMatch retry on
+        // the BE side. globalDicts is only populated for parquet scans (gated in
+        // DecodeCollector.visitPhysicalIcebergScan), so non-parquet falls through naturally.
+        List<PhysicalScanOperator> icebergScans = Lists.newArrayList();
+        Utils.extractOperator(root, icebergScans,
+                op -> OperatorType.PHYSICAL_ICEBERG_SCAN.equals(op.getOpType()));
+        for (PhysicalScanOperator scan : icebergScans) {
+            PhysicalIcebergScanOperator iceberg = (PhysicalIcebergScanOperator) scan;
+            IcebergTable table = (IcebergTable) iceberg.getTable();
+            Map<Integer, ColumnDict> globalDicts = toGlobalDictMap(iceberg.getGlobalDicts());
+            // Dict-encoded group-by keys (shared with the OLAP branch above).
+            collectDictGroupByMinMax(iceberg, groupByRefSets, globalDicts, infos);
+            // Fallback to IcebergColumnMinMaxMgr for the remaining numeric/date group-by keys. Take
+            // the snapshot from the scan's own TvrVersionRange — analyzer already pinned it — so the
+            // cache key matches the exact snapshot BE will read. Null/empty/non-single-snapshot
+            // ranges (e.g. TvrTableDelta) skip the fallback.
+            TvrVersionRange tvr = iceberg.getTvrVersionRange();
+            Long snapshotId = (tvr instanceof TvrTableSnapshot snap && !snap.isEmpty())
+                    ? snap.getSnapshotId() : null;
+            if (snapshotId == null) {
+                continue;
+            }
+            for (ColumnRefOperator column : iceberg.getColRefToColumnMetaMap().keySet()) {
+                if (!isUncoveredGroupByKey(column, groupByRefSets, infos)) {
+                    continue;
                 }
+                Column c = table.getColumn(column.getName());
+                if (c == null) {
+                    continue;
+                }
+                putStatsMgrMinMax(column, infos, IMinMaxStatsMgr.icebergInstance(),
+                        new ColumnIdentifier(table.getUUID(), c.getColumnId()),
+                        new StatsVersion(-1, snapshotId));
             }
         }
 
@@ -131,5 +147,62 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
         }
 
         return root;
+    }
+
+    // Numeric/date columns are the only ones whose dict codes form the contiguous [0, dictSize]
+    // range the aggregator's compressed-key path can use as group-by min/max bounds.
+    private static boolean isNumericOrDate(ColumnRefOperator column) {
+        return column.getType().isNumericType() || column.getType().isDate();
+    }
+
+    private static Map<Integer, ColumnDict> toGlobalDictMap(List<Pair<Integer, ColumnDict>> globalDicts) {
+        return globalDicts.stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
+    }
+
+    // A numeric/date group-by key on this scan that no scan has supplied min/max for yet.
+    private static boolean isUncoveredGroupByKey(ColumnRefOperator column, ColumnRefSet groupByRefSets,
+            Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos) {
+        return groupByRefSets.contains(column.getId()) && isNumericOrDate(column)
+                && !infos.containsKey(column.getId());
+    }
+
+    // Emit (0, dictSize) min/max for every group-by key backed by a global dict on this scan — both
+    // the projection's DictMappingOperator form and bare scan columns. Shared by the OLAP and
+    // iceberg branches so their dict handling stays identical.
+    private static void collectDictGroupByMinMax(PhysicalScanOperator scan, ColumnRefSet groupByRefSets,
+            Map<Integer, ColumnDict> globalDicts, Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos) {
+        if (scan.getProjection() != null) {
+            for (var entry : scan.getProjection().getColumnRefMap().entrySet()) {
+                if (groupByRefSets.contains(entry.getKey())
+                        && entry.getValue() instanceof DictMappingOperator mappingOperator) {
+                    ColumnRefOperator column = mappingOperator.getDictColumn();
+                    if (isNumericOrDate(column) && globalDicts.containsKey(column.getId())) {
+                        infos.put(entry.getKey().getId(), dictMinMax(globalDicts.get(column.getId())));
+                    }
+                }
+            }
+        }
+        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+            if (groupByRefSets.contains(column.getId()) && isNumericOrDate(column)
+                    && globalDicts.containsKey(column.getId())) {
+                infos.put(column.getId(), dictMinMax(globalDicts.get(column.getId())));
+            }
+        }
+    }
+
+    private static Pair<ConstantOperator, ConstantOperator> dictMinMax(ColumnDict dict) {
+        return new Pair<>(ConstantOperator.createVarchar("0"),
+                ConstantOperator.createVarchar("" + dict.getDictSize()));
+    }
+
+    private static void putStatsMgrMinMax(ColumnRefOperator column,
+            Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos, IMinMaxStatsMgr mgr,
+            ColumnIdentifier columnId, StatsVersion version) {
+        Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = mgr.getStats(columnId, version);
+        if (minMax.isEmpty()) {
+            return;
+        }
+        infos.put(column.getId(), new Pair<>(ConstantOperator.createVarchar(minMax.get().minValue()),
+                ConstantOperator.createVarchar(minMax.get().maxValue())));
     }
 }

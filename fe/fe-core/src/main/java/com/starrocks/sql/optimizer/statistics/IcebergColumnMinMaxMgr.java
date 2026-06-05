@@ -47,7 +47,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
-    private record CacheKey(ColumnIdentifier id, StatsVersion version) {}
+    // Key by the primitive snapshot version rather than the StatsVersion object: StatsVersion has no
+    // value-based equals/hashCode (and its version field is mutable), so caching by the object would make
+    // every lookup a distinct key and never hit the warmed entry.
+    private record CacheKey(ColumnIdentifier id, long version) {}
 
     private static final Logger LOG = LogManager.getLogger(IcebergColumnMinMaxMgr.class);
 
@@ -72,7 +75,7 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
         }
 
         try {
-            CompletableFuture<Optional<ColumnMinMax>> result = cache.get(new CacheKey(identifier, version));
+            CompletableFuture<Optional<ColumnMinMax>> result = cache.get(new CacheKey(identifier, version.getVersion()));
             if (result.isDone()) {
                 return result.get();
             }
@@ -113,7 +116,7 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
                     String tableName = StatisticUtils.quoting(names.get(0), names.get(1), names.get(2));
 
                     String sql = "select min(" + columnName + ") as min, max(" + columnName + ") as max " +
-                            " from " + tableName + " VERSION AS OF " + key.version.getVersion();
+                            " from " + tableName + " VERSION AS OF " + key.version;
 
                     ConnectContext context = SIMPLE_EXECUTOR.createConnectContext();
                     context.getSessionVariable().setPipelineDop(1);
