@@ -852,6 +852,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_port = 8030;
 
+    @ConfField(comment = "Whether to require Basic Auth for external HTTP endpoints. " +
+            "Internal endpoints (FE meta sync, health/metrics probes, OAuth2 callback) are always exempt. " +
+            "Default false for backward compatibility. Immutable; requires an FE restart to change.")
+    public static boolean enable_http_auth = false;
+
     /**
      * Fe https port
      * Currently, all FEs' https port must be the same.
@@ -1150,6 +1155,15 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean lake_enable_batch_publish_version = true;
+
+    /**
+     * Route lake ADD INDEX / DROP INDEX alters through the LakeTableAddIndexJob /
+     * LakeTableDropIndexJob fast path (metadata-only, no shadow index). Set to
+     * false to fall back to the regular LakeTableSchemaChangeJob path. Intended
+     * as a safety valve; the fast path is the supported default.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_lake_add_index_fast_path = true;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
@@ -2568,6 +2582,11 @@ public class Config extends ConfigBase {
     public static String statistics_sample_ndv_estimator =
             NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
+    @ConfField(mutable = true, comment = "Declared-length threshold above which a string column " +
+            "is collected by its own dedicated statistics SQL during statistics collection. " +
+            "Disabled by default (0); set a positive value to enable the isolation.")
+    public static long statistics_large_string_column_merge_threshold = 0;
+
     /**
      * The partition size of sample collect, default 300 partitions
      */
@@ -2701,7 +2720,7 @@ public class Config extends ConfigBase {
      * Used to limit num of partition for load open partition number
      */
     @ConfField(mutable = true)
-    public static long max_load_initial_open_partition_number = 32;
+    public static long max_load_initial_open_partition_number = 4096;
 
     /**
      * enable automatic bucket for random distribution table
@@ -3627,6 +3646,20 @@ public class Config extends ConfigBase {
     public static String profile_info_format = "default";
 
     /**
+     * When enabled, load profiles (stream load, routine load, broker load, merge commit, etc.) are
+     * additionally written to the profile log (fe.profile.log) when pushed to `ProfileManager`, as a
+     * single-line JSON record in the same format as the query profile log. This makes load profiles
+     * recoverable from the log even after they are evicted from `ProfileManager`
+     * due to `profile_info_reserved_num`. The profile log is used rather than fe.log because its JSON
+     * layout caps strings at `sys_log_json_profile_max_string_length` instead of the much smaller
+     * `sys_log_json_max_string_length`, so large profiles are not truncated. Only profiles with
+     * QUERY_TYPE = "Load" are printed; query profiles are not affected.
+     * Default value: false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_print_load_profile_to_log = false;
+
+    /**
      * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
      * the amount of time taken by a load exceeds the default_big_load_profile_threshold_second,
      * a profile is generated for that load.
@@ -4055,12 +4088,6 @@ public class Config extends ConfigBase {
     public static boolean allow_system_reserved_names = false;
 
     /**
-     * Whether to use LockManager to manage lock usage
-     */
-    @ConfField
-    public static boolean lock_manager_enabled = true;
-
-    /**
      * Number of Hash of Lock Table
      */
     @ConfField
@@ -4477,18 +4504,28 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
             + "On expiry the coordinator skips pre-split and the load proceeds against the "
-            + "original single tablet.")
-    public static long tablet_pre_split_pre_submit_timeout_seconds = 30L;
+            + "original single tablet. Default 300s: the data-tier sampler can take tens of "
+            + "seconds on large datasets / slow object storage (a ~40GB many-file Parquet "
+            + "load sampled in ~78s in testing), and this budget mainly bites large loads — "
+            + "exactly the ones pre-split benefits; small loads sample in well under a second "
+            + "regardless. The load stays PENDING for at most this long during sampling, so "
+            + "keep it below the load's own timeout.")
+    public static long tablet_pre_split_pre_submit_timeout_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Maximum time the coordinator will wait for an admitted "
-            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Semantics differ by "
-            + "load path: INSERT-from-FILES synchronously waits and on expiry proceeds without "
-            + "abort — the INSERT then plans against the currently visible tablet layout (still "
-            + "the original layout if the daemon has not yet transitioned, or partially / fully "
-            + "post-split if the daemon raced past the wait), and the hard-cap counter records "
-            + "the timeout; the strict runPreSplit wrapper used by tests aborts the calling load "
-            + "via PreSplitPostSubmitTimeoutException; Broker Load is fire-and-forget and does "
-            + "not wait at all.")
+            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Both INSERT-from-FILES "
+            + "and Broker Load synchronously wait and on expiry proceed without abort — the load "
+            + "then plans against the currently visible tablet layout (still the original layout "
+            + "if the daemon has not yet transitioned, or partially / fully post-split if the "
+            + "daemon raced past the wait), and the hard-cap counter records the timeout. The "
+            + "strict runPreSplit wrapper used by tests aborts the calling load via "
+            + "PreSplitPostSubmitTimeoutException. For Broker Load the wait runs after the broker "
+            + "pending task resolves file statuses but before beginTxn opens T_load — the wait "
+            + "occupies a pending_load_task_scheduler thread for at most this many seconds per "
+            + "table, so size max_broker_load_job_concurrency accordingly when many concurrent "
+            + "Broker Loads target a pre-splittable layout. Operator note: the Broker Load remains "
+            + "PENDING in SHOW LOAD during the wait and is still subject to its own timeoutSecond — "
+            + "set this well below the smallest Broker Load timeout in normal use.")
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "

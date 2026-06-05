@@ -28,6 +28,11 @@ set(EXEC_PRIMITIVE_FILES
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
     pipeline/operator.cpp
+    pipeline/operator_factory.cpp
+    pipeline/source_operator.cpp
+    pipeline/primitives/event.cpp
+    pipeline/primitives/pipeline_metrics.cpp
+    pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
@@ -60,23 +65,6 @@ ADD_BE_LIB(ExecSinkCore
 )
 
 target_link_libraries(ExecSinkCore PUBLIC Common Base Gutil StarRocksGen)
-
-set(SPILL_CORE_FILES
-    spill/dir_manager.cpp
-    spill/block_reader.cpp
-    spill/log_block_manager.cpp
-    spill/file_block_manager.cpp
-    spill/hybird_block_manager.cpp
-    spill/query_spill_manager.cpp
-    spill/operator_mem_resource_manager.cpp
-    spill/spill_metrics.cpp
-)
-
-ADD_BE_LIB(SpillCore
-    ${SPILL_CORE_FILES}
-)
-
-target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IO Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -175,7 +163,8 @@ set(PIPELINE_GRAPH_SRCS
 )
 
 set(PIPELINE_RUNTIME_SRCS
-    pipeline/pipeline_metrics.cpp
+    pipeline/driver_executor_factory.cpp
+    pipeline/driver_queue_factory.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -183,15 +172,13 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
+    pipeline/fragment_context_manager.cpp
     pipeline/query_context.cpp
-    pipeline/operator_factory.cpp
-    pipeline/source_operator.cpp
+    pipeline/query_context_manager.cpp
     pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
-    workgroup/pipeline_executor_set.cpp
-    workgroup/pipeline_executor_set_manager.cpp
 )
 
 set(PIPELINE_ADAPTERS_SRCS
@@ -312,8 +299,8 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
+    pipeline/adaptive/collect_stats_event.cpp
     pipeline/adaptive/utils.cpp
-    pipeline/adaptive/event.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
     query_cache/multilane_operator.cpp
@@ -321,18 +308,9 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
-    spill/spill_components.cpp
-    spill/executor.cpp
-    spill/spiller.cpp
-    spill/spiller_factory.cpp
-    spill/mem_table.cpp
-    spill/serde.cpp
-    spill/input_stream.cpp
-    spill/data_stream.cpp
 )
 
 set(EXEC_NON_PIPELINE_FILES
-    spill/spill_dir_manager_bootstrap.cpp
     catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp
@@ -344,7 +322,6 @@ set(EXEC_NON_PIPELINE_FILES
     exchange_node.cpp
     scan_node.cpp
     select_node.cpp
-    sort_exec_exprs.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
     olap_common.cpp
@@ -476,12 +453,6 @@ set(EXEC_NON_PIPELINE_FILES
     jdbc/type_checker_manager.cpp
     jdbc/type_checker_xml_loader.cpp
     connector_scan_node.cpp
-    workgroup/work_group.cpp
-    workgroup/mem_tracker_manager.cpp
-    workgroup/scan_executor.cpp
-    workgroup/scan_task_queue.cpp
-    workgroup/lock_free_scan_task_queue.cpp
-    workgroup/lock_free_work_group_scan_task_queue.cpp
 )
 
 set(EXEC_DATA_SINK_FILES
@@ -552,5 +523,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

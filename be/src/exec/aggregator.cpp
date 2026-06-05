@@ -26,6 +26,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
@@ -177,7 +178,7 @@ Status init_udaf_context(int64_t fid, const std::string& url, const std::string&
 
 int64_t Aggregator::get_two_level_threahold() {
     if (config::two_level_memory_threshold < 0) {
-        return agg::two_level_memory_threshold;
+        return agg::two_level_memory_threshold();
     }
     return config::two_level_memory_threshold;
 }

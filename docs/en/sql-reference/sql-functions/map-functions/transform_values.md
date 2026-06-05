@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Transforms values in a map using a [Lambda expression](../Lambda_expression.md) and produces a new value for each entry in the map."
+description: "Transforms values in a map using a Lambda expression and produces a new value for each entry in the map."
 ---
 
 # transform_values

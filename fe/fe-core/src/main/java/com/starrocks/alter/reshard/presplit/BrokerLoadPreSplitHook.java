@@ -31,26 +31,30 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 /**
  * BrokerLoadJob → coordinator bridge for Sample-Based Tablet Pre-Split on the
  * Broker Load path.
  *
  * <p>The hook is invoked from {@code BrokerLoadJob.createLoadingTask} after
- * the per-table {@link OlapTable} is resolved and the file statuses are
- * known. The triggering load's {@code LoadLoadingTask.prepare()} has ALREADY
- * built the sink plan against the pre-hook tablet layout by the time the
- * hook fires, so pre-created partitions and post-reshard tablet layouts are
- * invisible to the triggering Broker Load — they accelerate only SUBSEQUENT
- * loads on the same table. The triggering load goes through BE runtime
- * auto-create as today.
+ * the per-table {@link OlapTable} reference and the broker-resolved file
+ * statuses are snapshotted — but <b>before</b> {@code beginTxn()} opens
+ * {@code T_load} and before any {@code LoadLoadingTask.prepare()} pins the
+ * sink plan. Pre-created partitions and the post-reshard tablet layout
+ * therefore accelerate the triggering Broker Load itself, symmetric with
+ * the INSERT-from-FILES hook.
  *
- * <p>The hook is fire-and-forget: unlike the INSERT-from-FILES hook (which
- * runs before the planner and can synchronously await FINISHED), the Broker
- * Load txn is already open at this point. A synchronous wait for the reshard
- * daemon would deadlock its cleanup-phase prev-txn wait against this same
- * load txn, so we never call {@code awaitCombinedJobAllowingFallback} on the
- * Broker Load path.
+ * <p>The hook sync-awaits the reshard daemon's {@code FINISHED} transition
+ * on both the single-partition path ({@link #awaitFinishedAllowingFallback})
+ * and the multi-partition path ({@link #awaitCombinedJobAllowingFallback}).
+ * Both are fail-safe: on timeout / abort / wait failure the hook logs and
+ * proceeds against whatever tablet layout is currently visible — never
+ * aborts the triggering load. Sync-await is deadlock-safe here specifically
+ * because {@code BrokerLoadJob.unprotectedExecute()} defers {@code beginTxn}
+ * until <b>after</b> the hook returns, so the reshard daemon's cleanup-phase
+ * {@code isPreviousTransactionsFinished(endTransactionId, ...)} wait cannot
+ * include the not-yet-allocated {@code T_load}.
  *
  * <p>Sampler-executor selection is delegated to
  * {@link DefaultPreSplitPipeline#forLoadKind}: meta tier uses
@@ -77,6 +81,13 @@ public final class BrokerLoadPreSplitHook {
      * load proceeds without pre-split. Failing here must not abort an
      * otherwise-valid load.
      *
+     * <p>{@code shouldAbort} is polled between reshard-daemon polls so that
+     * {@code processTimeout} / user-cancel releases the
+     * {@code pending_load_task_scheduler} slot promptly rather than waiting
+     * out the {@code tablet_pre_split_post_submit_wait_seconds} ceiling. A
+     * {@code true} return short-circuits the wait without aborting the load.
+     * Pass {@code () -> false} to disable.
+     *
      * @param context      the load's {@link ConnectContext}. Mirrors the
      *                     {@link InsertFromFilesPreSplitHook} parameter
      *                     threading: passing the context explicitly avoids
@@ -91,9 +102,10 @@ public final class BrokerLoadPreSplitHook {
     public static void maybeRunPreSplit(
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort) {
         try {
-            tryRunPreSplit(context, database, targetTable, brokerDesc, fileGroups, fileStatuses, computeResource);
+            tryRunPreSplit(context, database, targetTable, brokerDesc, fileGroups, fileStatuses,
+                    computeResource, shouldAbort);
         } catch (Throwable unexpected) {
             LOG.warn("Sample-Based Tablet Pre-Split hook failed for Broker Load; proceeding without pre-split",
                     unexpected);
@@ -103,9 +115,12 @@ public final class BrokerLoadPreSplitHook {
     private static void tryRunPreSplit(
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort) {
         Objects.requireNonNull(context, "context");
         if (!Config.enable_tablet_pre_split_for_broker_load) {
+            // Record here: the coordinator's checkConfigAndSession is never
+            // reached on this early return, so it can't bump the bucket itself.
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_CONFIG);
             return;
         }
         // Honor the per-session opt-out before target resolution + scan-context
@@ -136,30 +151,34 @@ public final class BrokerLoadPreSplitHook {
         // Branch on partitioned vs unpartitioned, mirroring the INSERT-from-FILES hook
         // (see InsertFromFilesPreSplitHook#tryRunPreSplit). Partitioned tables go
         // through the multi-partition flow (data tier sampler → grouper → combined
-        // submit, NO await); unpartitioned tables keep the legacy single-partition
-        // path (behavior unchanged).
+        // submit → sync-await); unpartitioned tables take the single-partition path
+        // (submit → sync-await). Both paths sync-await fail-safely.
         if (targetTable.getPartitionInfo().isPartitioned()) {
-            runMultiPartitionFlow(context, database, targetTable, brokerDesc, fileGroups, fileStatuses, computeResource);
+            runMultiPartitionFlow(context, database, targetTable, brokerDesc, fileGroups, fileStatuses,
+                    computeResource, shouldAbort);
         } else {
-            runSinglePartitionFlow(database, targetTable, brokerDesc, fileGroups, fileStatuses, computeResource);
+            runSinglePartitionFlow(database, targetTable, brokerDesc, fileGroups, fileStatuses,
+                    computeResource, shouldAbort);
         }
     }
 
     /**
-     * Legacy single-partition path: resolve the unique partition + base tablet,
+     * Single-partition path: resolve the unique partition + base tablet,
      * then go through {@link DefaultPreSplitPipeline} + {@link TabletPreSplitCoordinator#submitAsynchronously}.
-     * Unpartitioned-table behavior is unchanged; the Broker Load path
-     * has always been fire-and-forget here (no await wrapper).
+     * The hook sync-awaits the reshard daemon's {@code FINISHED} transition via
+     * {@link #awaitFinishedAllowingFallback} so the triggering Broker Load's
+     * {@code LoadLoadingTask.prepare()} (called downstream by
+     * {@code BrokerLoadJob.createLoadingTask}) plans against the post-split layout.
      */
     private static void runSinglePartitionFlow(
             Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort) {
         PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTarget(database, targetTable);
         if (target == null) {
             return;
         }
-        submitToCoordinator(target, brokerDesc, fileGroups, fileStatuses, computeResource);
+        submitToCoordinator(target, brokerDesc, fileGroups, fileStatuses, computeResource, shouldAbort);
     }
 
     /**
@@ -168,17 +187,18 @@ public final class BrokerLoadPreSplitHook {
      * partitions, and submit ONE combined reshard via
      * {@link TabletPreSplitCoordinator#submitForPartitionsCombined}.
      *
-     * <p><b>No await</b>: unlike the INSERT-from-FILES hook, the Broker Load
-     * hook fires AFTER {@code LoadLoadingTask.prepare()} builds the sink plan,
-     * and the load txn is already open. A synchronous wait would deadlock the
-     * reshard daemon's cleanup-phase prev-txn wait against this same load txn.
-     * Pre-created partitions and the post-reshard layout are visible only to
-     * subsequent Broker Loads on the same partitions.
+     * <p>After submit returns {@link PreSplitOutcome.SubmittedCombined}, the hook
+     * sync-awaits the combined reshard job's {@code FINISHED} transition via
+     * {@link #awaitCombinedJobAllowingFallback}. The triggering load's downstream
+     * {@code LoadLoadingTask.prepare()} (called by
+     * {@code BrokerLoadJob.createLoadingTask} after this hook returns) therefore
+     * plans against the post-split tablet layout — symmetric with the
+     * INSERT-from-FILES hook.
      */
     private static void runMultiPartitionFlow(
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort) {
         int activeComputeNodeCount = Math.max(1,
                 LoadScanNode.getAvailableComputeNodes(computeResource).size());
         long fileTotalBytes = sumFileBytes(fileStatuses);
@@ -201,10 +221,11 @@ public final class BrokerLoadPreSplitHook {
                 database, targetTable, groups, activeComputeNodeCount, context);
         LOG.info("Sample-Based Tablet Pre-Split (multi-partition) outcome for Broker Load on table {}: {}",
                 targetTable.getName(), outcome);
-        // NO awaitCombinedJobAllowingFallback — Broker Load is fire-and-forget.
-        // The triggering load's sink plan was already built by task.prepare()
-        // before this hook fires; the daemon drives the combined job to FINISHED
-        // asynchronously for subsequent loads to observe.
+
+        if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
+            TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                    LoadKind.BROKER_LOAD, targetTable, submittedCombined.combinedJob(), shouldAbort);
+        }
     }
 
     /**
@@ -223,9 +244,15 @@ public final class BrokerLoadPreSplitHook {
             List<Column> sortKey = MetaUtils.getRangeDistributionColumns(targetTable);
             List<Column> partitionSourceColumns =
                     targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn());
+            // Cap the BE sample at the pre-submit budget — the same bound the
+            // single-partition path applies via DefaultPreSplitPipeline.runDataTier.
+            // This multi-partition path bypasses the pipeline, so without the cap the
+            // sample would run until the default query_timeout while the Broker Load
+            // holds a pending_load_task_scheduler slot in PENDING.
             SampleRequest request = new SampleRequest(
                     scanContext, sortKey, partitionSourceColumns,
-                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
+                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
             Sampler sampler = new ReservoirSampler(new BrokerLoadSampleSubqueryExecutor());
             return sampler.sample(request);
         } catch (StarRocksException sampleFailure) {
@@ -244,7 +271,7 @@ public final class BrokerLoadPreSplitHook {
     private static void submitToCoordinator(
             PreSplitTargets.EligibleTarget target, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort) {
         BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
                 brokerDesc, fileGroups, fileStatuses, computeResource);
         int activeComputeNodeCount = Math.max(1,
@@ -260,6 +287,11 @@ public final class BrokerLoadPreSplitHook {
                 LoadKind.BROKER_LOAD, pipeline, activeComputeNodeCount);
         LOG.info("Sample-Based Tablet Pre-Split outcome for Broker Load on table {}: {}",
                 target.olapTable().getName(), outcome);
+
+        if (outcome instanceof PreSplitOutcome.Submitted submitted) {
+            TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
+                    LoadKind.BROKER_LOAD, target.olapTable(), pipeline, submitted.preparedJob(), shouldAbort);
+        }
     }
 
     private static long sumFileBytes(List<List<TBrokerFileStatus>> fileStatuses) {

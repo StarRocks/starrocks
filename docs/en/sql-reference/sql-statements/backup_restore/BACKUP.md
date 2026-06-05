@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "StarRocks supports backing up and restoring the following objects:"
+description: "Backs up databases, tables, materialized views, logical views, and UDFs in StarRocks to a remote storage repository."
 ---
 
 # BACKUP

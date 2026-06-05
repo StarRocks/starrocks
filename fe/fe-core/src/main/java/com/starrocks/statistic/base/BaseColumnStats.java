@@ -44,6 +44,10 @@ public abstract class BaseColumnStats implements ColumnStats {
         return columnType.getTypeSize();
     }
 
+    public Type getColumnType() {
+        return columnType;
+    }
+
     public String getColumnNameStr() {
         return StringEscapeUtils.escapeSql(columnName);
     }

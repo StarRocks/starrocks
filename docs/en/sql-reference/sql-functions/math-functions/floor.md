@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the largest integer that is not more than `x`."
+description: "Returns the largest integer that is not more than x."
 ---
 
 # floor, dfloor

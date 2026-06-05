@@ -15,6 +15,8 @@
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
 #include "base/debug/trace.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -164,17 +166,37 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     RowsMapperIterator mapper_iter;
     RETURN_IF_ERROR(mapper_iter.open(filename));
 
+    // Accumulate mapper next_values() latency across all per-segment reads (the call
+    // itself sits inside a tight loop, so a per-call scope guard is too noisy).
+    int64_t mapper_read_us_accum = 0;
+    DeferOp emit_mapper_read([&] { TRACE_COUNTER_INCREMENT("compact_mapper_read_us", mapper_read_us_accum); });
+
     // 1. iterate all segment in output rowset
     RETURN_IF_ERROR(segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
+                // Pre-declare every segment's row count so the iterator can fire
+                // up to K parallel per-segment reads (each on its own RAF) and
+                // pipeline our processing of segment N against the still-pending
+                // downloads for segments N+1..N+K-1.
+                std::vector<size_t> per_segment_rows;
+                per_segment_rows.reserve(segments.size());
+                for (const auto& seg : segments) {
+                    per_segment_rows.push_back(seg->num_rows());
+                }
+                RETURN_IF_ERROR(mapper_iter.prepare_segments(per_segment_rows));
+
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
                     // 2. get input rssid & rowids, so we can generate delvec
                     vector<uint32_t> tmp_deletes;
                     std::vector<uint64_t> rssid_rowids;
-                    RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                    {
+                        const int64_t t0 = MonotonicMicros();
+                        RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                        mapper_read_us_accum += MonotonicMicros() - t0;
+                    }
                     DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
                     for (int i = 0; i < rssid_rowids.size(); i++) {
                         const uint32_t rssid = rssid_rowids[i] >> 32;

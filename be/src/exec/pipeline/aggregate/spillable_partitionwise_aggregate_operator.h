@@ -16,11 +16,11 @@
 #pragma once
 #include <memory>
 
+#include "compute_env/spill/spill_components.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
-#include "exec/spill/spill_components.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {

@@ -4689,7 +4689,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
-        ConnectorSinkShuffleMode mode = ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+        return ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+    }
+
+    public ConnectorSinkShuffleMode getIcebergConnectorSinkShuffleMode() {
+        ConnectorSinkShuffleMode mode = getConnectorSinkShuffleMode();
         // Backward compatibility: legacy iceberg-only boolean implies FORCE when new mode stays at default AUTO.
         if (mode == ConnectorSinkShuffleMode.AUTO && enableIcebergSinkGlobalShuffle) {
             return ConnectorSinkShuffleMode.FORCE;

@@ -675,7 +675,9 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
     ASSIGN_OR_RETURN(auto cb,
                      compact_mgr->async_compact(
                              result.candidate_filesets, metadata, is_merge_base_level,
-                             [&, result](const std::vector<PersistentIndexSstablePB>& sstables) {
+                             // Capture `result` and `metadata` by value: this callback runs
+                             // asynchronously on the compaction thread pool.
+                             [&, result, metadata](const std::vector<PersistentIndexSstablePB>& sstables) {
                                  // 4. Merge output sstables into current index.
                                  //    reuse `apply_opcompaction` to do this.
                                  TxnLogPB txn_log;
@@ -701,7 +703,7 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
                                      output_sstable->CopyFrom(sstable_pb);
                                      output_sstable->set_max_rss_rowid(result.max_max_rss_rowid);
                                  }
-                                 return apply_opcompaction(txn_log.op_compaction());
+                                 return apply_opcompaction(metadata, txn_log.op_compaction());
                              }));
     return cb;
 }
@@ -780,7 +782,8 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     return Status::OK();
 }
 
-Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
+Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata,
+                                               const TxnLogPB_OpCompaction& op_compaction) {
     if (op_compaction.input_sstables().empty()) {
         return Status::OK();
     }
@@ -788,6 +791,15 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
+
+    // A compaction output sstable may carry an embedded delete vector (the parallel-compaction
+    // "move" path keeps the input sstable's); loading it needs the tablet metadata, like init() --
+    // otherwise new_sstable() fails with "metadata is null when loading delvec from file".
+    auto open_output_sstable = [&](const PersistentIndexSstablePB& sstable_pb) {
+        return PersistentIndexSstable::new_sstable(
+                sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()), block_cache->cache(),
+                /*need_filter=*/true, /*delvec=*/nullptr, metadata, _tablet_mgr);
+    };
 
     // Handle multiple output sstables (from parallel compaction).
     std::unique_ptr<PersistentIndexSstableFileset> new_sstable_fileset;
@@ -797,18 +809,13 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         sstable_pb.CopyFrom(op_compaction.output_sstable());
         sstable_pb.set_max_rss_rowid(
                 op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
-        ASSIGN_OR_RETURN(auto sstable, PersistentIndexSstable::new_sstable(
-                                               sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
-                                               block_cache->cache()));
+        ASSIGN_OR_RETURN(auto sstable, open_output_sstable(sstable_pb));
         new_sstable_fileset = std::make_unique<PersistentIndexSstableFileset>();
         RETURN_IF_ERROR(new_sstable_fileset->init(sstable));
     } else if (!op_compaction.output_sstables().empty()) {
         std::vector<std::unique_ptr<PersistentIndexSstable>> new_sstables;
         for (const auto& sstable_pb : op_compaction.output_sstables()) {
-            ASSIGN_OR_RETURN(auto sstable,
-                             PersistentIndexSstable::new_sstable(
-                                     sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
-                                     block_cache->cache()));
+            ASSIGN_OR_RETURN(auto sstable, open_output_sstable(sstable_pb));
             new_sstables.push_back(std::move(sstable));
         }
         new_sstable_fileset = std::make_unique<PersistentIndexSstableFileset>();
@@ -896,6 +903,22 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     return Status::OK();
 }
 
+// Decide whether the parallel two-phase prefetch should run while rebuilding the PK index.
+// The parallel path reads all `num_files` files concurrently and holds their decoded columns
+// in memory at once, so it is gated on update-memtracker pressure: returns false (use the
+// single-pass fallback) when parallel execution is disabled, there is nothing to parallelise,
+// or the update tracker is already past `pk_index_parallel_rebuild_mem_ratio` of its limit.
+// Cold-start latency loss is acceptable in that regime; OOM is not. Shared by del-file loading
+// and segment-file parallel reads.
+static bool should_parallel_rebuild_prefetch(int num_files) {
+    if (!config::enable_pk_index_parallel_execution || num_files <= 1) {
+        return false;
+    }
+    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+    return update_tracker != nullptr &&
+           !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_rebuild_mem_ratio);
+}
+
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
@@ -977,14 +1000,10 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         return Status::OK();
     };
 
-    // Gate the two-phase parallel path on update-memtracker pressure: when the update tracker
-    // is already past `pk_index_parallel_load_dels_mem_ratio` percent of its limit, fall back
-    // to the legacy single-pass loop to avoid holding all decoded del-file columns in memory
-    // at once. Cold-start latency loss is acceptable in that regime; OOM is not.
-    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-    const bool use_two_phase = config::enable_pk_index_parallel_execution && num_del_files > 1 &&
-                               update_tracker != nullptr &&
-                               !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_load_dels_mem_ratio);
+    // Gate the two-phase parallel path on update-memtracker pressure (see
+    // should_parallel_rebuild_prefetch): under pressure, fall back to the legacy single-pass loop
+    // to avoid holding all decoded del-file columns in memory at once.
+    const bool use_two_phase = should_parallel_rebuild_prefetch(num_del_files);
 
     if (!use_two_phase) {
         // Legacy single-pass loop: read+decode+apply per file, only one decoded column held at a time.
@@ -1047,8 +1066,8 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
 static std::pair<size_t, int64_t> rebuild_segment_counts(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
     size_t file_cnt = 0;
     int64_t row_cnt = 0;
-    bool exact = (rowset.segment_metas_size() == rowset.segments_size());
-    for (int i = 0; i < rowset.segments_size(); ++i) {
+    bool exact = true;
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
         if (get_rssid(rowset, i) >= rebuild_rss_id) {
             ++file_cnt;
             if (exact) {
@@ -1062,16 +1081,16 @@ static std::pair<size_t, int64_t> rebuild_segment_counts(const RowsetMetadataPB&
             }
         }
     }
-    if (!exact && file_cnt > 0 && rowset.segments_size() > 0) {
+    if (!exact && file_cnt > 0 && rowset.segment_metas_size() > 0) {
         // Proportional estimate when per-segment metadata is unavailable or incomplete.
-        row_cnt = rowset.num_rows() * static_cast<int64_t>(file_cnt) / rowset.segments_size();
+        row_cnt = rowset.num_rows() * static_cast<int64_t>(file_cnt) / rowset.segment_metas_size();
     }
     return {file_cnt, row_cnt};
 }
 
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
 bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
-    if (rowset.segments_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
+    if (rowset.segment_metas_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
         // All segments and del files under this rowset are not need to rebuild.
         // E.g.
         // If `rebuild_rss_id` is 12, and
@@ -1081,7 +1100,7 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
         //     is 12 which is equal to 12, it may not dump to sst yet.
         return false;
     }
-    if (rowset.segments_size() == 0 && (rowset.id() < rebuild_rss_id)) {
+    if (rowset.segment_metas_size() == 0 && (rowset.id() < rebuild_rss_id)) {
         // Rowset with empty segments may has del files, and need to rebuild them.
         // E.g.
         // If `rebuild_rss_id` is 12, and

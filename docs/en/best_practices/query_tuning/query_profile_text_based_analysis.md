@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 60
-description: "This document explains how to obtain and analyze text-based Query Profiles in StarRocks."
+description: "How to obtain and analyze text-based Query Profiles in StarRocks to diagnose slow query execution."
 ---
 
 # Explain Analyze

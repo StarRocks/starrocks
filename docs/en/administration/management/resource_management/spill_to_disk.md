@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
-description: "This topic describes how to spill intermediate computation results of large operators to local disks and object storage."
+description: "How to configure StarRocks to spill intermediate query results to disk or object storage to prevent out-of-memory errors."
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

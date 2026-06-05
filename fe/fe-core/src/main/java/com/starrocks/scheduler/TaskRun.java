@@ -212,8 +212,13 @@ public class TaskRun implements Comparable<TaskRun> {
         int defaultTimeoutS = Config.task_runs_timeout_second;
         if (properties != null) {
             for (Map.Entry<String, String> entry : properties.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
-                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                String key = entry.getKey();
+                // session variables are stored with a "session." prefix; strip it before matching
+                if (key.startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                }
+                if (key.equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || key.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
                     try {
                         int timeout = Integer.parseInt(entry.getValue());
                         if (timeout > 0) {

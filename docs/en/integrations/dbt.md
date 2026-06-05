@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`dbt-starrocks` enables the use of `dbt` to transform data in StarRocks using dbt's modeling patterns and best practices."
+description: "How to use dbt-starrocks to transform data in StarRocks using dbt modeling patterns and best practices."
 ---
 
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された条件を満たすレコードの数を返します。"
 ---
 
 # count_if

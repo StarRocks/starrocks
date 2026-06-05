@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic provides answers to some frequently asked questions about shared-data clusters."
+description: "FAQ for common StarRocks shared-data cluster questions."
 ---
 
 # Shared-data

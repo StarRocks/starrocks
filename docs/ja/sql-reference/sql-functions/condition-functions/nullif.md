@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "expr1 が expr2 と等しい場合、NULL を返します。"
 ---
 
 # nullif

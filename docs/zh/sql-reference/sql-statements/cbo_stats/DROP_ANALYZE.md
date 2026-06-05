@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP ANALYZE 删除自定义自动采集任务。"
 ---
 
 # DROP ANALYZE

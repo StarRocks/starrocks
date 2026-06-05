@@ -583,11 +583,11 @@ This topic introduces the following types of FE configurations:
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
-- Default: 30
+- Default: 300
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Wall-clock budget for the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). On expiry the coordinator skips pre-split and the load proceeds against the original single tablet.
+- Description: Wall-clock budget for the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). On expiry the coordinator skips pre-split and the load proceeds against the original single tablet. Default 300s: the data-tier sampler can take tens of seconds on large datasets / slow object storage (a ~40GB many-file Parquet load sampled in ~78s in testing), and this budget mainly bites large loads — exactly the ones pre-split benefits; small loads sample in well under a second regardless. The load stays `PENDING` for at most this long during sampling, so keep it below the load's own timeout.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_post_submit_wait_seconds`
@@ -596,7 +596,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. Semantics differ by load path: INSERT-from-FILES synchronously waits and on expiry **proceeds without abort** — the INSERT then plans against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); the `tablet_pre_split_post_submit_hard_cap` counter records the timeout. The strict `runPreSplit` wrapper used by tests aborts the calling load via `PreSplitPostSubmitTimeoutException`. Broker Load is fire-and-forget and does not wait at all (the load never waits on the reshard daemon).
+- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. Both INSERT-from-FILES and Broker Load synchronously wait and on expiry **proceed without abort** — the load then plans against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); the `tablet_pre_split_post_submit_hard_cap` counter records the timeout. The strict `runPreSplit` wrapper used by tests aborts the calling load via `PreSplitPostSubmitTimeoutException`. For Broker Load the wait runs after the broker pending task resolves file statuses but before `beginTxn` opens `T_load` — it occupies a `pending_load_task_scheduler` thread for at most this many seconds per table, so size `max_broker_load_job_concurrency` accordingly when many concurrent Broker Loads target a pre-splittable layout. **Operator note:** the Broker Load remains `PENDING` in `SHOW LOAD` during the wait and is still subject to its own `timeoutSecond` — set this well below the smallest Broker Load timeout in normal use.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_sample_byte_limit`

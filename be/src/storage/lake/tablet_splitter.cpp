@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "common/logging.h"
@@ -35,6 +36,8 @@
 
 extern bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total;
 extern bvar::Adder<int64_t> g_tablet_reshard_split_external_boundaries_fallback_total;
+extern bvar::Adder<int64_t> g_tablet_reshard_split_exclusive_segments_total;
+extern bvar::Adder<int64_t> g_tablet_reshard_split_anomaly_total;
 
 namespace starrocks::lake {
 
@@ -327,7 +330,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     // The overlap predicate mirrors find_overlapping_ranges' last-range
     // semantics: every ordered_range except the last is the half-open interval
     // [min, max); the last range is the closed interval [min, max]. The check
-    // also has to honor TabletRange's lower / upper inclusion flags (a child
+    // also has to honor TabletRange's lower / upper inclusion flags (a new tablet
     // produced by split has lower_bound_included=true and upper_bound_included
     // =false, so e.g. a range whose r.max == tablet_range.lower_bound is
     // entirely below the tablet — TabletRange::greater_than alone misses this
@@ -502,8 +505,8 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
 
 namespace {
 
-// Per-rowset anchor totals taken from the parent's recorded metadata. Used to
-// renormalize per-split-group estimates so Σ children equals parent exactly,
+// Per-rowset anchor totals taken from the old tablet's recorded metadata. Used to
+// renormalize per-split-group estimates so Σ new tablets equals the old tablet exactly,
 // preserving stat conservation across re-splits regardless of how the
 // underlying segment-distribution model approximates straddling sub-segments.
 struct RowsetAnchor {
@@ -512,12 +515,12 @@ struct RowsetAnchor {
     int64_t num_dels = 0;
 };
 
-// Build the per-rowset anchor map from the parent tablet metadata. For PK
+// Build the per-rowset anchor map from the old tablet metadata. For PK
 // tablets without a populated num_dels field on the rowset (legacy
 // metadata), derive num_dels from the delvec — same fallback as the
 // pre-anchor code path. If a rowset reports num_dels > num_rows
 // (pathological metadata), clamp up front with a WARNING; the
-// cap-and-redistribute contract assumes parent.num_dels <= parent.num_rows.
+// cap-and-redistribute contract assumes the old tablet's num_dels <= num_rows.
 std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetadataPB& metadata,
                                                                TabletManager* tablet_manager) {
     std::unordered_map<uint32_t, RowsetAnchor> anchor;
@@ -528,7 +531,7 @@ std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetad
         // Anchor totals: prefer the rowset-level fields. When legacy /
         // incomplete metadata omits them, fall back to summing the
         // segment-level fields. Without this fallback, anchor=0 collapses
-        // every child's stat to 0 even though segment metadata still
+        // every new tablet's stat to 0 even though segment metadata still
         // carries real values — the pre-anchor path implicitly used the
         // segment-derived numbers via range_source_stats, so we preserve
         // that property explicitly here.
@@ -542,8 +545,8 @@ std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetad
         if (rowset.has_data_size()) {
             a.data_size = rowset.data_size();
         } else {
-            for (int i = 0; i < rowset.segment_size_size(); ++i) {
-                a.data_size += rowset.segment_size(i);
+            for (const auto& sm : rowset.segment_metas()) {
+                a.data_size += sm.size();
             }
         }
         if (rowset.has_num_dels()) {
@@ -563,10 +566,10 @@ std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetad
     return anchor;
 }
 
-// Anchor each split group's per-rowset stats to the parent's recorded totals
-// using the Hare-Niemeyer helper. Σ children stat == parent stat exactly for
+// Anchor each split group's per-rowset stats to the old tablet's recorded totals
+// using the Hare-Niemeyer helper. Σ new tablets stat == old tablet stat exactly for
 // num_rows, data_size, and num_dels per rowset (modulo cap-and-redistribute
-// for invalid parents — see tablet_reshard_helper.h contracts).
+// for invalid old tablets — see tablet_reshard_helper.h contracts).
 //
 // Replaces the pre-anchor flow which wrote per-source weights raw into
 // rowset_stats and ran a separate num_dels Hare-Niemeyer pass after.
@@ -617,26 +620,20 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
     }
 }
 
-// Build SegmentSplitInfo[] from a tablet's rowsets. Rejects per-rowset segment
-// metadata that is internally inconsistent (segments / segment_size /
-// segment_metas array sizes diverge). Does NOT enforce "segments non-empty" —
-// the data-driven and external-boundaries callers have different semantics on empty (one
-// errors, the other treats it as a no-op fast path) and own that check.
+// Build SegmentSplitInfo[] from a tablet's rowsets. Does NOT enforce "segments
+// non-empty" — the data-driven and external-boundaries callers have different
+// semantics on empty (one errors, the other treats it as a no-op fast path) and
+// own that check.
 Status build_segments_from_rowsets(const RepeatedPtrField<RowsetMetadataPB>& rowsets,
                                    std::vector<SegmentSplitInfo>* segments) {
     for (const auto& rowset : rowsets) {
-        if (rowset.segments_size() != rowset.segment_size_size() ||
-            rowset.segments_size() != rowset.segment_metas_size()) {
-            return Status::InvalidArgument("Segment metadata is inconsistent with segment list");
-        }
-        for (int32_t i = 0; i < rowset.segments_size(); ++i) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
-            const auto& segment_meta = rowset.segment_metas(i);
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
             segment.num_rows = segment_meta.num_rows();
-            segment.data_size = rowset.segment_size(i);
+            segment.data_size = segment_meta.size();
             RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
             segments->push_back(std::move(segment));
         }
@@ -735,11 +732,11 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
                 fmt::format("Insufficient split boundaries: requested {}, produced {}", split_count, produced));
     }
 
-    // Anchor per-split per-rowset stats to the parent's recorded totals so
-    // that Σ children stat == parent stat exactly for num_rows / data_size /
+    // Anchor per-split per-rowset stats to the old tablet's recorded totals so
+    // that Σ new tablets stat == old tablet stat exactly for num_rows / data_size /
     // num_dels. The segment-level distribution from
     // calculate_range_split_boundaries is used as relative weights only;
-    // absolute values come from the parent metadata. This eliminates the
+    // absolute values come from the old tablet metadata. This eliminates the
     // residual drift seen across multi-level splits when the algorithm
     // re-runs on the same physical segments under a different
     // ordered_boundaries set.
@@ -773,6 +770,8 @@ MutableTabletMetadataPtr make_identical_new_tablet_metadata(const TabletMetadata
     new_tablet_metadata->clear_compaction_inputs();
     new_tablet_metadata->clear_orphan_files();
     new_tablet_metadata->clear_prev_garbage_version();
+    // Every rowset already carries a uid (minted by its producer); the metadata copy
+    // above preserves it, so no per-rowset uid handling is needed here.
     return new_tablet_metadata;
 }
 
@@ -793,8 +792,8 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     DCHECK(split_ranges->empty());
 
     // 1a. Structural validation (schema-free): closed-open per range, no
-    //     byte-equal zero-width child, first.lower matches parent.lower,
-    //     last.upper matches parent.upper, adjacent ranges meet exactly.
+    //     byte-equal zero-width new tablet, first.lower matches old tablet.lower,
+    //     last.upper matches old tablet.upper, adjacent ranges meet exactly.
     RETURN_IF_ERROR(TabletRangeHelper::validate_new_tablet_ranges(old_tablet_metadata->range(), external_ranges));
 
     // 1b. Schema-aware validation of FE-supplied TuplePB bounds. Without
@@ -912,9 +911,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
         bool hi_explicit = false;
     };
     // validate_new_tablet_ranges already enforces that first.has_lower_bound() ==
-    // parent.has_lower_bound() and last.has_upper_bound() == parent.has_upper_bound(),
+    // old tablet.has_lower_bound() and last.has_upper_bound() == old tablet.has_upper_bound(),
     // and that interior bounds are always set. So an absent external bound here means
-    // parent is unbounded on that side too — no parent inheritance is ever needed.
+    // the old tablet is unbounded on that side too — no old tablet inheritance is ever needed.
     std::vector<ParsedBounds> parsed(external_ranges.size());
     for (int i = 0; i < external_ranges.size(); ++i) {
         const auto& external_range = external_ranges[i];
@@ -988,8 +987,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     // both cases return InvalidArgument and the caller falls back.
     if (effective_lo.compare(effective_hi) >= 0) {
         return Status::InvalidArgument(
-                "effective envelope empty or degenerate-point (segments don't overlap parent's range or collapse to a "
-                "single key)");
+                "effective envelope empty or degenerate-point (segments don't overlap old tablet's range or collapse "
+                "to "
+                "a single key)");
     }
 
     // 7. Build distribution vector covering the FULL segment envelope.
@@ -1031,14 +1031,14 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     }
     // Defense-in-depth: should be unreachable under v20 invariants (envelope
     // check at step 5 ensures effective_lo < effective_hi; FE ranges tile
-    // parent's range; at least one FE range must overlap effective envelope).
+    // the old tablet's range; at least one FE range must overlap effective envelope).
     // Asserted at runtime so a future regression in invariants doesn't OOB
     // find_overlapping_ranges' last_range_index = size()-1.
     if (dist_ranges.empty()) {
         return Status::InvalidArgument("distribution vector empty (degenerate envelope or all active slots skipped)");
     }
 
-    // 8. Distribute segments into the full distribution vector. Out-of-parent
+    // 8. Distribute segments into the full distribution vector. Out-of-old-tablet
     //    data flows into sink buckets; sink stats are discarded at step 10.
     for (const auto& seg : segments) {
         distribute_segment_to_ranges(seg, dist_ranges, /*track_sources=*/true);
@@ -1090,7 +1090,7 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
         fake_result.range_source_stats[dist_to_final[j]] = dist_ranges[j].source_stats;
     }
 
-    // 12. Anchor: Σ children stat == parent stat exactly for num_rows /
+    // 12. Anchor: Σ new tablets stat == old tablet stat exactly for num_rows /
     //     data_size / num_dels. Writes split_ranges[i].rowset_stats.
     apply_rowset_anchor(anchor, fake_result, split_ranges);
 
@@ -1105,12 +1105,68 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
 // and its rowset list is restricted to the new range with per-rowset stats
 // applied from split_ranges[i].rowset_stats.
 //
+// Propagates per-segment split ownership of |rowset| (computed in |ownership| for
+// the new tablet at |new_tablet_index|) onto |new_tablet_metadata|'s non-segment
+// files (delvec pages, dcg entries), so they follow the per-segment shared decision
+// instead of all staying shared:
+//   - a segment pruned away from this new tablet (keep == false): erase its dcg
+//     entry (sstable projection never consults dcg), and erase its delvec page
+//     unless a surviving has_shared_rssid sstable still needs it (protected_rssids);
+//   - an exclusive kept segment (shared == false): mark its dcg files private, so
+//     vacuum can reclaim them alongside the now-private segment. (Delvec FILES stay
+//     shared: one file holds pages for many segments, so it is not reclaimed per-rssid.)
+//
+// Must run BEFORE apply_segment_ownership_to_new_tablet_rowset, which compacts the
+// segment arrays away (this needs each segment's original rssid). Returns true if any
+// pruned segment of |rowset| had a protected rssid, which blocks removal of an
+// otherwise-empty rowset (the surviving sstable still anchors that rssid at MERGE).
+bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& rowset, const RowsetOwnership& ownership,
+                                                     int new_tablet_index,
+                                                     const std::unordered_set<uint32_t>& protected_rssids,
+                                                     TabletMetadataPB* new_tablet_metadata) {
+    auto* delvecs = new_tablet_metadata->has_delvec_meta()
+                            ? new_tablet_metadata->mutable_delvec_meta()->mutable_delvecs()
+                            : nullptr;
+    auto* dcgs =
+            new_tablet_metadata->has_dcg_meta() ? new_tablet_metadata->mutable_dcg_meta()->mutable_dcgs() : nullptr;
+    bool has_pruned_protected_rssid = false;
+    for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
+        const uint32_t rssid = get_rssid(rowset, segment_index);
+        const auto& segment_ownership = ownership.segments[segment_index];
+        if (!segment_ownership.keep[new_tablet_index]) {
+            if (dcgs != nullptr) dcgs->erase(rssid);
+            if (protected_rssids.contains(rssid)) {
+                // Leave the delvec page as-is (all-shared) rather than erasing it: MERGE's
+                // modern sstable projection re-reads this rssid's delvec, so erasing risks
+                // dropping real deletions. Keeping it preserves the pre-cleanup baseline --
+                // before per-segment delvec erase existed, every pruned segment's delvec was
+                // carried into MERGE unconditionally, so this is not a new orphan; this cleanup
+                // only ever REDUCES carried pages. The protected residual can still map to an
+                // unreferenced rssid at MERGE (e.g. a delvec kept by a non-first shared-sstable
+                // duplicate that merge_sstables skips before projection); bounding/remapping
+                // those orphan delvec keys is left to the merge-side follow-up.
+                has_pruned_protected_rssid = true;
+            } else if (delvecs != nullptr) {
+                delvecs->erase(rssid);
+            }
+        } else if (!segment_ownership.shared[new_tablet_index]) {
+            if (dcgs != nullptr) {
+                auto dcg_it = dcgs->find(rssid);
+                if (dcg_it != dcgs->end()) {
+                    tablet_reshard_helper::set_dcg_shared(&dcg_it->second, /*shared=*/false);
+                }
+            }
+        }
+    }
+    return has_pruned_protected_rssid;
+}
+
 // Precondition: split_ranges.size() == splitting_tablet.new_tablet_ids_size().
 // Per-rowset stats are honored when present in split_ranges[i].rowset_stats;
 // otherwise the rowset is preserved in the new tablet's metadata (still
 // referencing the same shared segment files) but with num_rows / data_size /
-// num_dels set to 0, signaling "rowset is visible in this child's metadata
-// but contributes no rows here under the child's range".
+// num_dels set to 0, signaling "rowset is visible in this new tablet's metadata
+// but contributes no rows here under the new tablet's range".
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablets_from_split_ranges(
         const TabletMetadataPtr& old_tablet_metadata, const SplittingTabletInfoPB& splitting_tablet,
         int64_t new_version, const TxnInfoPB& txn_info, const std::vector<TabletRangeInfo>& split_ranges) {
@@ -1126,6 +1182,57 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
     new_metadatas.reserve(splitting_tablet.new_tablet_ids_size());
 
+    // The full set of new-tablet ranges, used by per-segment ownership to test
+    // overlap/containment of each segment against every sibling's range.
+    std::vector<TabletRangePB> new_tablet_ranges(split_ranges.size());
+    for (size_t new_tablet_index = 0; new_tablet_index < split_ranges.size(); ++new_tablet_index) {
+        new_tablet_ranges[new_tablet_index] = split_ranges[new_tablet_index].range;
+    }
+
+    // Per-segment ownership depends only on (source rowset, new_tablet_ranges),
+    // not on which new tablet we build, so compute it ONCE per source rowset before
+    // the per-new-tablet loop. This keeps the bvar counters per-decision (not
+    // per-new-tablet) and avoids recomputing the geometry split_count times.
+    // rowset_prunable[rowset_index] is false when the rowset is non-pruneable OR
+    // was degraded to all-shared on an unparseable sort key.
+    //
+    // Parse new_tablet_ranges into TabletRange ONCE before the per-rowset loop;
+    // the parsed form is invariant across rowsets, so this saves N redundant
+    // proto parses for a tablet with N pruneable rowsets.
+    ASSIGN_OR_RETURN(auto parsed_new_tablet_ranges, parse_tablet_ranges(new_tablet_ranges));
+    const int rowset_count = old_tablet_metadata->rowsets_size();
+    std::vector<RowsetOwnership> rowset_ownership(rowset_count);
+    std::vector<bool> rowset_prunable(rowset_count, false);
+    for (int rowset_index = 0; rowset_index < rowset_count; ++rowset_index) {
+        const auto& source_rowset = old_tablet_metadata->rowsets(rowset_index);
+        if (!can_prune_rowset_segments(source_rowset)) continue;
+        auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges);
+        if (ownership_or.ok()) {
+            rowset_ownership[rowset_index] = std::move(ownership_or.value());
+            rowset_prunable[rowset_index] = true;
+        } else {
+            // Unparseable sort key: degrade the whole rowset to all-shared below.
+            g_tablet_reshard_split_anomaly_total << 1;
+        }
+    }
+
+    // rssids referenced by a surviving modern `has_shared_rssid` PK-index sstable.
+    // When such a segment is pruned from a new tablet we must NOT erase its delvec
+    // page: MERGE's modern shared_rssid sstable projection reads the delvec for that
+    // rssid directly (it does NOT go through the legacy remap_legacy_entry_or_drop
+    // drop path), so erasing it would break MERGE. This exception is load-bearing.
+    // DCG is never consulted by sstable projection, so DCG erase is never gated.
+    // sstable_meta is identical across new tablets (each is a copy of the old
+    // tablet), so compute the protected set once.
+    std::unordered_set<uint32_t> protected_rssids;
+    if (old_tablet_metadata->has_sstable_meta()) {
+        for (const auto& sstable : old_tablet_metadata->sstable_meta().sstables()) {
+            if (sstable.has_shared_rssid()) {
+                protected_rssids.insert(sstable.shared_rssid());
+            }
+        }
+    }
+
     for (int32_t i = 0; i < splitting_tablet.new_tablet_ids_size(); ++i) {
         auto new_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_metadata);
         new_tablet_new_metadata->set_id(splitting_tablet.new_tablet_ids(i));
@@ -1136,14 +1243,52 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
         new_tablet_new_metadata->clear_orphan_files();
         new_tablet_new_metadata->clear_prev_garbage_version();
         new_tablet_new_metadata->mutable_range()->CopyFrom(split_ranges[i].range);
-        tablet_reshard_helper::set_all_data_files_shared(new_tablet_new_metadata.get());
+        // Non-segment files (delvec/dcg/sstable) stay all-shared; each rowset's
+        // per-segment shared flags are (re)written below by exactly one branch per rowset.
+        tablet_reshard_helper::set_non_segment_files_shared(new_tablet_new_metadata.get());
 
+        // The copy preserves rowset order, so rowset_index aligns with old_tablet_metadata.
+        // keep_rowset[idx] is cleared for a rowset whose every segment was pruned from
+        // this new tablet (and which carries no other semantics); such rowsets are
+        // compacted out of rowsets[] after the loop.
+        const int rowset_count = new_tablet_new_metadata->rowsets_size();
+        std::vector<bool> keep_rowset(rowset_count, true);
+        std::vector<uint32_t> removed_rowset_ids;
+        int rowset_index = 0;
         for (auto& rowset_metadata : *new_tablet_new_metadata->mutable_rowsets()) {
             RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
+
+            // Phase-1 per-segment shared. The uid (family identity for the later MERGE) is
+            // preserved verbatim by the metadata copy, identical across new tablets. Segments
+            // are then pruned to those overlapping this new tablet (shared=false where provably
+            // exclusive+contained), or for non-pruneable / degraded rowsets stay all-shared.
+            if (rowset_prunable[rowset_index]) {
+                const bool has_pruned_protected_rssid = propagate_pruned_ownership_to_non_segment_files(
+                        rowset_metadata, rowset_ownership[rowset_index], i, protected_rssids,
+                        new_tablet_new_metadata.get());
+
+                RETURN_IF_ERROR(apply_segment_ownership_to_new_tablet_rowset(&rowset_metadata,
+                                                                             rowset_ownership[rowset_index], i));
+                // del_files stay shared (per-segment pruning operates on segments, not del_files).
+                for (auto& del_file : *rowset_metadata.mutable_del_files()) del_file.set_shared(true);
+
+                // A rowset whose every segment was pruned from this new tablet carries no
+                // data here. Remove it (and its rowset_to_schema mapping) unless it still
+                // holds a delete predicate, del_files, or a pruned protected rssid that a
+                // surviving sstable still anchors at MERGE.
+                if (rowset_metadata.segment_metas_size() == 0 && !rowset_metadata.has_delete_predicate() &&
+                    rowset_metadata.del_files_size() == 0 && !has_pruned_protected_rssid) {
+                    keep_rowset[rowset_index] = false;
+                    removed_rowset_ids.push_back(rowset_metadata.id());
+                }
+            } else {
+                tablet_reshard_helper::set_all_data_files_shared(&rowset_metadata);
+            }
+
             const auto it = split_ranges[i].rowset_stats.find(rowset_metadata.id());
             if (it != split_ranges[i].rowset_stats.end()) {
                 // apply_rowset_anchor + cap_and_redistribute_dels guarantee
-                // num_dels <= num_rows for every (rowset, child). The std::min
+                // num_dels <= num_rows for every (rowset, new tablet). The std::min
                 // below is defense-in-depth against an upstream regression.
                 DCHECK_LE(it->second.num_dels, it->second.num_rows);
                 int64_t scaled_num_dels = std::min<int64_t>(it->second.num_dels, it->second.num_rows);
@@ -1155,6 +1300,32 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
                 rowset_metadata.set_data_size(0);
                 rowset_metadata.set_num_dels(0);
             }
+            ++rowset_index;
+        }
+
+        // Compact out removed (fully-pruned) rowsets, preserving order, and drop their
+        // rowset_to_schema mappings. Move survivors into a fresh field then swap — the
+        // order-stable RepeatedPtrField idiom (positional swap-compaction would desync
+        // from the original-position keep_rowset[] vector).
+        if (!removed_rowset_ids.empty()) {
+            // cumulative_point indexes into rowsets[] (base rowsets are [0, cp), cumulative
+            // [cp, size)) for non-PK base+cumulative compaction. Removing rowsets shifts
+            // positions, so recompute the point as the number of SURVIVING rowsets that
+            // were originally in the base region [0, old_cp); otherwise the inherited point
+            // could misclassify rowsets or exceed rowsets_size().
+            const int old_cumulative_point = static_cast<int>(new_tablet_new_metadata->cumulative_point());
+            google::protobuf::RepeatedPtrField<RowsetMetadataPB> survivors;
+            auto* rowsets = new_tablet_new_metadata->mutable_rowsets();
+            uint32_t new_cumulative_point = 0;
+            for (int idx = 0; idx < rowsets->size(); ++idx) {
+                if (!keep_rowset[idx]) continue;
+                if (idx < old_cumulative_point) ++new_cumulative_point;
+                survivors.Add()->Swap(rowsets->Mutable(idx));
+            }
+            rowsets->Swap(&survivors);
+            new_tablet_new_metadata->set_cumulative_point(new_cumulative_point);
+            auto* rowset_to_schema = new_tablet_new_metadata->mutable_rowset_to_schema();
+            for (uint32_t id : removed_rowset_ids) rowset_to_schema->erase(id);
         }
 
         new_metadatas.emplace(new_tablet_new_metadata->id(), std::move(new_tablet_new_metadata));
@@ -1186,6 +1357,155 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                                         colocate_column_count);
 }
 
+// -----------------------------------------------------------------------------
+// Phase-1 per-segment shared optimization helpers (declared in tablet_splitter.h).
+// -----------------------------------------------------------------------------
+
+bool can_prune_rowset_segments(const RowsetMetadataPB& rowset) {
+    if (rowset.next_compaction_offset() != 0) return false; // (a) no partial-compaction cursor
+    // (b) every segment must carry sort-key bounds so it maps to a key range. Each
+    // SegmentMetadataPB is self-contained (filename/size/shared/bundle_file_offset all
+    // travel with it), so a bundled rowset prunes uniformly with any other — no separate
+    // parallel-array shape check is needed.
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) return false;
+    }
+    return true;
+}
+
+StatusOr<std::vector<TabletRange>> parse_tablet_ranges(const std::vector<TabletRangePB>& new_tablet_ranges) {
+    std::vector<TabletRange> parsed(new_tablet_ranges.size());
+    for (size_t i = 0; i < new_tablet_ranges.size(); ++i) {
+        RETURN_IF_ERROR(parsed[i].from_proto(new_tablet_ranges[i]));
+    }
+    return parsed;
+}
+
+StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
+                                                           const std::vector<TabletRangePB>& new_tablet_ranges) {
+    ASSIGN_OR_RETURN(auto parsed_ranges, parse_tablet_ranges(new_tablet_ranges));
+    return compute_rowset_segment_ownership(rowset, parsed_ranges);
+}
+
+StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
+                                                           const std::vector<TabletRange>& parsed_ranges) {
+    const int new_tablet_count = static_cast<int>(parsed_ranges.size());
+
+    RowsetOwnership ownership;
+    ownership.segments.resize(rowset.segment_metas_size());
+
+    for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
+        const auto& segment_meta = rowset.segment_metas(segment_index);
+        VariantTuple segment_min_key;
+        VariantTuple segment_max_key;
+        // An unparseable key means we cannot reason about this rowset's geometry;
+        // return non-OK so the caller degrades the whole rowset to all-shared.
+        RETURN_IF_ERROR(segment_min_key.from_proto(segment_meta.sort_key_min()));
+        RETURN_IF_ERROR(segment_max_key.from_proto(segment_meta.sort_key_max()));
+        // The segment spans the inclusive key interval [min, max].
+        TabletRange segment_range(segment_min_key, segment_max_key, /*lower_bound_included=*/true,
+                                  /*upper_bound_included=*/true);
+
+        auto& segment_ownership = ownership.segments[segment_index];
+        segment_ownership.keep.assign(new_tablet_count, false);
+        segment_ownership.shared.assign(new_tablet_count, false);
+
+        // Which new tablets the segment overlaps, and which fully contain it.
+        int overlap_count = 0;
+        std::vector<bool> contained_in_tablet(new_tablet_count, false);
+        for (int tablet_index = 0; tablet_index < new_tablet_count; ++tablet_index) {
+            ASSIGN_OR_RETURN(auto intersection, segment_range.intersect(parsed_ranges[tablet_index]));
+            if (!intersection.is_empty()) {
+                segment_ownership.keep[tablet_index] = true;
+                ++overlap_count;
+                contained_in_tablet[tablet_index] = parsed_ranges[tablet_index].contains(segment_min_key) &&
+                                                    parsed_ranges[tablet_index].contains(segment_max_key);
+            }
+        }
+
+        const bool source_segment_shared = segment_meta.shared();
+
+        if (overlap_count == 0) {
+            // Defensive: the partition property guarantees every segment overlaps
+            // at least one new tablet, so this is a should-not-happen anomaly.
+            // Data-safe fallback: keep the segment on every new tablet with
+            // shared=true so the file survives until every new tablet is dropped.
+            // Trade-off: if source_segment_shared was false (exclusively owned),
+            // the fallback relaxes ownership to all-shared, which causes vacuum
+            // to retain the file beyond the original owner's drop. We accept
+            // this garbage-retention cost in exchange for data safety in a path
+            // that should never fire — routing to one new tablet without proven
+            // containment would risk dangling references on the others.
+            LOG_EVERY_N(WARNING, 1024) << "tablet_split: segment with no overlapping new-tablet range, rowset="
+                                       << rowset.id() << " segment=" << segment_index
+                                       << " source_segment_shared=" << source_segment_shared
+                                       << " new_tablet_count=" << new_tablet_count;
+            g_tablet_reshard_split_anomaly_total << 1;
+            segment_ownership.keep.assign(new_tablet_count, true);
+            segment_ownership.shared.assign(new_tablet_count, true);
+            continue;
+        }
+
+        for (int tablet_index = 0; tablet_index < new_tablet_count; ++tablet_index) {
+            if (!segment_ownership.keep[tablet_index]) continue;
+            const bool must_stay_shared = source_segment_shared || overlap_count >= 2;
+            if (must_stay_shared) {
+                segment_ownership.shared[tablet_index] = true;
+            } else if (contained_in_tablet[tablet_index]) {
+                // Exclusive to this tablet AND provably contained -> private.
+                segment_ownership.shared[tablet_index] = false;
+                g_tablet_reshard_split_exclusive_segments_total << 1;
+            } else {
+                // Fail-closed: cannot prove containment, so keep it shared.
+                segment_ownership.shared[tablet_index] = true;
+                g_tablet_reshard_split_anomaly_total << 1;
+            }
+        }
+    }
+    return ownership;
+}
+
+Status apply_segment_ownership_to_new_tablet_rowset(RowsetMetadataPB* rowset, const RowsetOwnership& ownership,
+                                                    int new_tablet_index) {
+    const int segment_count = rowset->segment_metas_size();
+
+    // STEP 0: validate shapes; on any mismatch return WITHOUT mutating the rowset.
+    if (static_cast<int>(ownership.segments.size()) != segment_count) {
+        return Status::InternalError(
+                fmt::format("ownership size {} != segment_metas_size {}", ownership.segments.size(), segment_count));
+    }
+    for (const auto& segment_ownership : ownership.segments) {
+        if (static_cast<int>(segment_ownership.keep.size()) <= new_tablet_index ||
+            static_cast<int>(segment_ownership.shared.size()) <= new_tablet_index) {
+            return Status::InternalError("ownership inner vector shorter than new_tablet_index");
+        }
+    }
+
+    // STEP 1: keep only the segments this new tablet owns. Each SegmentMetadataPB is
+    // self-contained, so filtering segment_metas[] carries filename/size/encryption_meta/
+    // bundle_file_offset along automatically — no parallel arrays to keep in lockstep.
+    // The kept segment's shared flag is overwritten with the freshly computed ownership
+    // (source_segment_shared || overlap), and a positional segment_idx is synthesized when absent so
+    // the global rssid (rowset.id + segment_idx) stays stable. bundle_file_offset is an
+    // absolute byte offset into the untouched shared physical file, so it is preserved
+    // verbatim with its segment.
+    std::vector<SegmentMetadataPB> kept_segment_metas;
+    kept_segment_metas.reserve(segment_count);
+    for (int segment_index = 0; segment_index < segment_count; ++segment_index) {
+        if (!ownership.segments[segment_index].keep[new_tablet_index]) continue;
+        SegmentMetadataPB segment_meta = rowset->segment_metas(segment_index);
+        if (!segment_meta.has_segment_idx()) segment_meta.set_segment_idx(segment_index);
+        segment_meta.set_shared(ownership.segments[segment_index].shared[new_tablet_index]);
+        kept_segment_metas.push_back(std::move(segment_meta));
+    }
+
+    rowset->clear_segment_metas();
+    for (auto& segment_meta : kept_segment_metas) *rowset->add_segment_metas() = std::move(segment_meta);
+
+    if (rowset->segment_metas_size() <= 1) rowset->set_overlapped(false);
+    return Status::OK();
+}
+
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
         const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info) {
@@ -1196,8 +1516,8 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         return Status::InvalidArgument("splitting tablet has no new tablet");
     }
 
-    // Flush the parent's PK-index memtable into sstables before propagating
-    // metadata to the children, so every child inherits an sstable_meta that
+    // Flush the old tablet's PK-index memtable into sstables before propagating
+    // metadata to the new tablets, so every new tablet inherits an sstable_meta that
     // already covers its rowsets' live data. This is the pre-split half of
     // the "reshard inputs must have full sstable coverage" invariant; merge
     // does the post-split half in merge_sstables.
@@ -1211,7 +1531,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     //
     // Symmetric identical-fallback: either path's non-OK Status routes through
     // make_identical_new_tablet_metadata to produce a single identical new
-    // tablet that inherits parent's data. Distinct bvar counters distinguish
+    // tablet that inherits the old tablet's data. Distinct bvar counters distinguish
     // the failure root cause for ops alerting.
     std::vector<TabletRangeInfo> split_ranges;
     // colocate_column_count is carried at the txn level (single split job = single txn) since

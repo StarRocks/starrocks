@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 分散トレースツールを使用したクエリ実行トレース収集・分析方法。"
 ---
 
 ### 背景

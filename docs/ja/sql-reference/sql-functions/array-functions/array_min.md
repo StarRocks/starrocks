@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_MIN関数はARRAY内のすべてのデータの最小値を返します。"
 ---
 
 # array_min

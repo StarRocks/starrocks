@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream Load、Broker Load、Routine Load を使用して Primary Key テーブルで INSERT、UPDATE、DELETE、部分更新、条件付き更新を実行する方法。"
 ---
 
 # ロードによるデータ変更

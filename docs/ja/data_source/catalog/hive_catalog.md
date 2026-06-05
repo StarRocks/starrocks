@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hive catalog は Hive データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
 ---
 

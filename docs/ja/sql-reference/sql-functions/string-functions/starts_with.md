@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列が指定されたプレフィックスで始まる場合に1、そうでない場合は0を返します。"
 ---
 
 # starts_with

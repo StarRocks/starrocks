@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP RESOURCE removes an existing resource from StarRocks."
 ---
 
 # DROP RESOURCE

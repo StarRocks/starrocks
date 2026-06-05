@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JDBC catalogを通じてソースデータベースでネイティブSELECT文を実行します。"
 ---
 
 # native_query

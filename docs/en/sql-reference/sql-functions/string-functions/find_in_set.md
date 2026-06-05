@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function returns the position of the first str in strlist (start counting with 1)."
+description: "Returns the 1-based position of a string within a comma-separated list."
 ---
 
 # find_in_set

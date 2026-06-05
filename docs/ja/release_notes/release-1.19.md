@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 1.19：初期機能改善、CBO プランナーデフォルト有効化、主キーテーブル実験的機能、ストレージおよびクエリ実行エンジンの改善。"
 ---
 
 # StarRocks バージョン 1.19

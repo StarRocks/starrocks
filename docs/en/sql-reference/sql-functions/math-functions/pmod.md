@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the positive remainder of `dividend` divided by`divisor`."
+description: "Returns the positive remainder of dividend divided bydivisor."
 ---
 
 # pmod

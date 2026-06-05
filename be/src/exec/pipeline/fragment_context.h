@@ -14,20 +14,26 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <map>
 #include <memory>
+#include <memory_resource>
 #include <unordered_map>
+#include <vector>
 
 #include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/primitives/fragment_runtime_state.h"
+#include "exec/pipeline/runtime_filter_hub.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -53,7 +59,7 @@ using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
 class FragmentContext {
-    friend FragmentContextManager;
+    friend class FragmentContextManager;
 
 public:
     FragmentContext();
@@ -67,16 +73,19 @@ public:
 
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const TUniqueId& fragment_instance_id() const { return _fragment_runtime_state.fragment_instance_id(); }
     void set_fragment_instance_id(const TUniqueId& fragment_instance_id) {
-        _fragment_instance_id = fragment_instance_id;
+        _fragment_runtime_state.set_fragment_instance_id(fragment_instance_id);
     }
+    FragmentRuntimeState& fragment_runtime_state() { return _fragment_runtime_state; }
+    const FragmentRuntimeState& fragment_runtime_state() const { return _fragment_runtime_state; }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
+    void attach_to_runtime_state(RuntimeState* state);
     FragmentDictState* dict_state() const { return _fragment_dict_state.get(); }
     ExecNode*& plan() { return _plan; }
 
@@ -111,14 +120,7 @@ public:
 
     Status prepare_all_pipelines();
 
-    template <class Func>
-    void iterate_drivers(Func&& call) {
-        iterate_pipeline([&](const Pipeline* pipeline) {
-            for (auto& driver : pipeline->drivers()) {
-                call(driver);
-            }
-        });
-    }
+    void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
     void clear_all_drivers();
     void close_all_execution_groups();
@@ -187,13 +189,14 @@ public:
     Status submit_all_timer();
 
 private:
+    void _set_default_workgroup();
     void _close_stream_load_contexts();
 
     bool _enable_group_execution = false;
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
-    TUniqueId _fragment_instance_id;
+    FragmentRuntimeState _fragment_runtime_state;
     TNetworkAddress _fe_addr;
 
     // Hold tplan data datasink from delivery request to create driver lazily
@@ -249,37 +252,6 @@ private:
     RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
-};
-
-class FragmentContextManager {
-public:
-    FragmentContextManager() = default;
-    ~FragmentContextManager() = default;
-
-    FragmentContextManager(const FragmentContextManager&) = delete;
-    FragmentContextManager(FragmentContextManager&&) = delete;
-    FragmentContextManager& operator=(const FragmentContextManager&) = delete;
-    FragmentContextManager& operator=(FragmentContextManager&&) = delete;
-
-    FragmentContext* get_or_register(const TUniqueId& fragment_id);
-    FragmentContextPtr get(const TUniqueId& fragment_id);
-
-    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
-    void unregister(const TUniqueId& fragment_id);
-
-    void cancel(const Status& status);
-
-    template <class Caller>
-    void for_each_fragment(Caller&& caller) {
-        std::lock_guard guard(_lock);
-        for (auto& [_, fragment] : _fragment_contexts) {
-            caller(fragment);
-        }
-    }
-
-private:
-    std::mutex _lock;
-    std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
 };
 } // namespace pipeline
 } // namespace starrocks

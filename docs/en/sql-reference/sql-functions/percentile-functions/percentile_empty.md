@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Constructs a PERCENTILE value, which is used to fill in null values for data loading using [Stream Load](../../../loading/StreamLoad.md) or [INSERT INTO](../../../loading/InsertInto.md)."
+description: "Constructs an empty PERCENTILE value used as a placeholder during Stream Load or INSERT INTO data loading."
 ---
 
 # percentile_empty

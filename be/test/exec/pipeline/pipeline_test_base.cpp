@@ -20,16 +20,23 @@
 #include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exprs/function_context.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
+#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -104,7 +111,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state->set_chunk_size(_vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
-    _runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
