@@ -253,14 +253,10 @@ public:
     DISALLOW_COPY_AND_MOVE(Segment);
 
     // for ut test
-    void set_num_rows(uint32_t num_rows) {
-        _num_rows = num_rows;
-    }
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
 
 #ifdef BE_TEST
-    static void toggle_batch_update_cache_mode(bool enabled) {
-        _s_allow_batch_update_mode = enabled;
-    }
+    static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
 #endif
 
 private:
@@ -297,9 +293,7 @@ private:
 
     void _reset();
 
-    size_t _basic_info_mem_usage() const {
-        return sizeof(Segment) + _segment_file_info.path.size();
-    }
+    size_t _basic_info_mem_usage() const { return sizeof(Segment) + _segment_file_info.path.size(); }
 
     size_t _short_key_index_mem_usage() const {
         size_t size = _sk_index_handle.mem_usage();
