@@ -1309,9 +1309,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
 
 // Helper: build a tablet_metadata-like vector of rowset PBs with explicit num_dels set,
 // so pick_rowset_indexes does not need to consult UpdateManager for delete counts.
-// Each rowset carries one segment: real rowsets always have >= 1 segment, and the
-// v2 gate's benefit_cost_ratio counts input segments via segments_size() — leaving
-// the segment list empty would zero out the benefit term and silently disable bcr.
+// Each rowset carries one segment meta: real rowsets always have >= 1 segment, and
+// the v2 gate's benefit_cost_ratio counts input segments via segment_metas_size() —
+// leaving the segment list empty would zero out the benefit term and disable bcr.
 static void build_rowsets_with_dels(const std::vector<std::pair<int64_t /*bytes*/, int64_t /*dels*/>>& specs,
                                     std::vector<RowsetMetadataPB>* rowset_metas) {
     uint32_t id = 0;
@@ -1322,7 +1322,9 @@ static void build_rowsets_with_dels(const std::vector<std::pair<int64_t /*bytes*
         rm.set_num_rows(1000);
         rm.set_data_size(spec.first);
         rm.set_num_dels(spec.second);
-        rm.add_segments("seg_" + std::to_string(rm.id()) + ".dat");
+        auto* seg_meta = rm.add_segment_metas();
+        seg_meta->set_filename("seg_" + std::to_string(rm.id()) + ".dat");
+        seg_meta->set_size(spec.first);
         rowset_metas->push_back(rm);
     }
 }
@@ -1675,7 +1677,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
                     rm->set_data_size(std::get<0>(spec));
                     rm->set_num_dels(std::get<1>(spec));
                     rm->set_num_rows(std::get<2>(spec));
-                    rm->add_segments("seg_" + std::to_string(rm->id()) + ".dat");
+                    auto* seg_meta = rm->add_segment_metas();
+                    seg_meta->set_filename("seg_" + std::to_string(rm->id()) + ".dat");
+                    seg_meta->set_size(std::get<0>(spec));
                 }
                 return md;
             };

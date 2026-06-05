@@ -270,7 +270,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             // compaction reads the entire rowset to filter via delvec, so the I/O cost
             // is dominated by the raw byte count.
             total_input_bytes += static_cast<int64_t>(r.stat.bytes);
-            input_segs += r.rowset_meta_ptr->segments_size();
+            input_segs += r.rowset_meta_ptr->segment_metas_size();
             max_rowset_bytes = std::max(max_rowset_bytes, static_cast<int64_t>(r.stat.bytes));
             rs_copy.pop();
         }
