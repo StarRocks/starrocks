@@ -115,30 +115,68 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                                  const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                                  const std::vector<int64_t>& file_sizes) {
+    // Back-compat: dense-only callers get all-DENSE kinds and zero sparse counts. The density-aware form
+    // below detects this case and emits NO SDCG arrays, so the produced DeltaColumnGroupVerPB stays
+    // byte-identical to the pre-SDCG behavior (zero-regression hinge).
+    append_dcg(rssid, file_with_encryption_metas, unique_column_id_list, file_sizes,
+               std::vector<DeltaColumnFileKindPB>(file_with_encryption_metas.size(), DENSE_COLS),
+               std::vector<int64_t>(file_with_encryption_metas.size(), 0), /*source_segment_num_rows=*/0);
+}
+
+void MetaFileBuilder::append_dcg(uint32_t rssid,
+                                 const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
+                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                                 const std::vector<int64_t>& file_sizes,
+                                 const std::vector<DeltaColumnFileKindPB>& file_kinds,
+                                 const std::vector<int64_t>& sparse_row_counts, int64_t source_segment_num_rows) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
+    // SDCG semantics: only a DENSE new file supersedes (strips + orphans) older layers of its columns.
+    // A SPARSE new file is an overlay; its columns are NOT added to this filter, so older entries
+    // (dense or sparse) of those columns are carried forward and remain reachable for the layered reader.
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
+
+    // Accumulate the SDCG kinds/counts for every emitted entry (new first, then surviving old) in the
+    // exact order entries are appended to new_dcg_ver. We only attach them at the end if this message is
+    // "SDCG-active" (any sparse file present, or a source row count to record). When everything is dense
+    // and there is nothing sparse to track, the arrays are omitted entirely so legacy tablets keep their
+    // byte-identical meta — DENSE_COLS=0 is the proto default but an explicitly-present repeated field is
+    // NOT byte-identical to an absent one.
+    std::vector<DeltaColumnFileKindPB> emitted_kinds;
+    std::vector<int64_t> emitted_sparse_counts;
+    bool sdcg_active = source_segment_num_rows > 0 || dcg_ver.has_source_segment_num_rows();
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
     DCHECK(file_with_encryption_metas.size() == file_sizes.size());
+    DCHECK(file_with_encryption_metas.size() == file_kinds.size());
+    DCHECK(file_with_encryption_metas.size() == sparse_row_counts.size());
     for (int i = 0; i < file_with_encryption_metas.size(); i++) {
+        const DeltaColumnFileKindPB kind = file_kinds[i];
         new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
         // Keep column_file_sizes strictly 1:1 with column_files so readers can index by position.
         new_dcg_ver.add_column_file_sizes(file_sizes[i]);
+        emitted_kinds.push_back(kind);
+        emitted_sparse_counts.push_back(kind == SPARSE_PERCOL ? sparse_row_counts[i] : 0);
+        if (kind == SPARSE_PERCOL) {
+            sdcg_active = true;
+        }
         if (!file_with_encryption_metas[i].second.empty()) {
             new_dcg_ver.add_encryption_metas(file_with_encryption_metas[i].second);
         }
         DeltaColumnGroupColumnIdsPB unique_cids;
         for (const ColumnUID uid : unique_column_id_list[i]) {
             unique_cids.add_column_ids(uid);
-            // Build filter so we can remove old columns at second step.
-            need_to_remove_cuids_filter.insert(uid);
+            // Only a DENSE new file fully replaces older layers of its columns; build the strip filter
+            // from dense uids only. SPARSE files are layers and must not strip anything.
+            if (kind == DENSE_COLS) {
+                need_to_remove_cuids_filter.insert(uid);
+            }
         }
         new_dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
         new_dcg_ver.add_versions(_tablet_meta->version());
     }
-    // 2. remove old dcgs
+    // 2. carry forward old dcgs, stripping only columns superseded by a DENSE new file.
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.column_files_size());
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.versions_size());
     for (int i = 0; i < dcg_ver.unique_column_ids_size(); i++) {
@@ -152,18 +190,45 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Carry forward the old size, or 0 (unknown) for data written before this field existed,
             // so column_file_sizes stays aligned with column_files.
             new_dcg_ver.add_column_file_sizes(i < dcg_ver.column_file_sizes_size() ? dcg_ver.column_file_sizes(i) : 0);
+            // Carry forward the SDCG arrays in lockstep; normalize absent -> DENSE/0 (legacy entries).
+            const DeltaColumnFileKindPB old_kind = i < dcg_ver.file_kinds_size() ? dcg_ver.file_kinds(i) : DENSE_COLS;
+            const int64_t old_count = i < dcg_ver.sparse_row_counts_size() ? dcg_ver.sparse_row_counts(i) : 0;
+            emitted_kinds.push_back(old_kind);
+            emitted_sparse_counts.push_back(old_count);
+            if (old_kind == SPARSE_PERCOL) {
+                sdcg_active = true;
+            }
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
             }
         } else {
-            // Put this `.cols` files into orphan files
+            // The old entry's columns were all superseded by a DENSE new file (its uid set emptied).
+            // Orphan its file. With SDCG this may now orphan a `.spcols` too, which is correct: a
+            // superseding dense layer makes the older sparse layers of those columns dead.
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+    }
+
+    // Attach the SDCG arrays only when this message actually carries sparse content (or a base row
+    // count). Dense-only tablets keep absent arrays => byte-identical to pre-SDCG meta.
+    if (sdcg_active) {
+        DCHECK_EQ(static_cast<int>(emitted_kinds.size()), new_dcg_ver.column_files_size());
+        for (size_t i = 0; i < emitted_kinds.size(); ++i) {
+            new_dcg_ver.add_file_kinds(emitted_kinds[i]);
+            new_dcg_ver.add_sparse_row_counts(emitted_sparse_counts[i]);
+        }
+        // Record the base segment row count (fingerprint) once. Carry forward any previously stored
+        // value when this call doesn't supply one.
+        if (source_segment_num_rows > 0) {
+            new_dcg_ver.set_source_segment_num_rows(source_segment_num_rows);
+        } else if (dcg_ver.has_source_segment_num_rows()) {
+            new_dcg_ver.set_source_segment_num_rows(dcg_ver.source_segment_num_rows());
         }
     }
 

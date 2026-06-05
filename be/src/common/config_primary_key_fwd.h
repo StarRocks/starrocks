@@ -38,6 +38,22 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
+// === SDCG (Sparse Delta Column Group) ===
+// Master gate for the sparse delta column group write path (lake / shared-data only).
+// When false the behavior is byte-identical to today: column-mode partial update
+// always writes dense `.cols`, and no `.spcols` files are produced or referenced.
+CONF_mBool(enable_sparse_dcg, "false");
+
+// Density decision threshold: when (K updated rows / M source-segment rows) is at
+// least this ratio, take the dense `.cols` path instead of writing a sparse `.spcols`.
+CONF_mDouble(sdcg_dense_threshold, "0.3");
+
+// Absolute cap on K (updated rows in one source segment) for the sparse path: at or
+// above this many rows, fall back to dense even if the density ratio is below
+// sdcg_dense_threshold (large K makes per-ordinal random seeks costlier than a full
+// sequential scan; lake/object-storage favors the conservative cap).
+CONF_mInt64(sdcg_sparse_max_rows, "50000");
+
 // Enable eager build of PK index files during import and compaction.
 CONF_mBool(enable_pk_index_eager_build, "true");
 

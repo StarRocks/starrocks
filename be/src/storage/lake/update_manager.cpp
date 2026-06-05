@@ -51,6 +51,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/layered_overlay_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
@@ -1591,6 +1592,111 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
     return dcg_segment->new_column_iterator(column, nullptr);
 }
 
+// SDCG lake read path: walk the DCG layer stack for |column|.unique_id() newest -> oldest, stop at
+// the first DENSE file. If any hit is SPARSE, assemble a LayeredOverlayColumnIterator (base = the
+// bottom dense `.cols` column if the walk ended at DENSE, else the original base segment column;
+// overlay layers = the SPARSE `.spcols` files in version-ASCENDING order). Returns NotFound when no
+// DCG entry contains the column, and OK with nullptr `*out` when no SPARSE layer is present (caller
+// then falls back to the legacy first-hit path).
+static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const std::shared_ptr<FileSystem>& fs,
+                                               const ColumnIteratorOptions& iter_opts, const TabletColumn& column,
+                                               const TabletSchemaCSPtr& read_tablet_schema,
+                                               io::SeekableInputStream* base_segment_read_file,
+                                               std::unique_ptr<ColumnIterator>* out) {
+    *out = nullptr;
+    const uint32_t ucid = column.unique_id();
+
+    // Collect hits newest -> oldest, stopping at the first DENSE file.
+    struct Hit {
+        DeltaColumnGroupPtr dcg;
+        int32_t file_idx = -1;
+        DeltaColumnFileKind kind = DeltaColumnFileKind::DENSE_COLS;
+    };
+    std::vector<Hit> hits;
+    bool has_sparse = false;
+    for (const auto& dcg : ctx.dcgs) {
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first < 0) {
+            continue;
+        }
+        Hit hit{.dcg = dcg, .file_idx = idx.first, .kind = dcg->file_kind(idx.first)};
+        hits.push_back(hit);
+        if (hit.kind == DeltaColumnFileKind::SPARSE_PERCOL) {
+            has_sparse = true;
+        } else {
+            break; // first DENSE becomes the base
+        }
+    }
+    if (hits.empty()) {
+        return Status::NotFound(fmt::format("Column {} not found in any DCG", ucid));
+    }
+    if (!has_sparse) {
+        return Status::OK(); // *out stays nullptr -> caller uses legacy first-hit path
+    }
+
+    // --- base iterator ---
+    std::unique_ptr<ColumnIterator> base_iter;
+    const Hit& bottom = hits.back();
+    if (bottom.kind == DeltaColumnFileKind::DENSE_COLS) {
+        ASSIGN_OR_RETURN(auto dense_seg,
+                         ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema));
+        RandomAccessFileOptions ropts;
+        if (!dense_seg->file_info().encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info,
+                             KeyCache::instance().unwrap_encryption_meta(dense_seg->file_info().encryption_meta));
+            ropts.encryption_info = std::move(info);
+        }
+        if (ctx.dcg_read_files.count(dense_seg->file_name()) == 0) {
+            ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file_with_bundling(ropts, dense_seg->file_info()));
+            ctx.dcg_read_files[dense_seg->file_name()] = std::move(rf);
+        }
+        ASSIGN_OR_RETURN(base_iter, dense_seg->new_column_iterator(column, nullptr));
+        ColumnIteratorOptions base_opts = iter_opts;
+        base_opts.read_file = ctx.dcg_read_files[dense_seg->file_name()].get();
+        RETURN_IF_ERROR(base_iter->init(base_opts));
+        // cache the dense segment for reuse, mirroring get_lake_dcg_segment
+        ctx.dcg_segments[dense_seg->file_name()] = dense_seg;
+    } else {
+        // Base = original segment column, read through the outer base segment read file.
+        ASSIGN_OR_RETURN(base_iter, ctx.segment->new_column_iterator_or_default(column, nullptr));
+        ColumnIteratorOptions base_opts = iter_opts;
+        base_opts.read_file = base_segment_read_file;
+        RETURN_IF_ERROR(base_iter->init(base_opts));
+    }
+
+    // --- sparse overlay layers ---
+    std::vector<LayeredOverlayColumnIterator::SparseLayer> layers;
+    for (const auto& hit : hits) {
+        if (hit.kind != DeltaColumnFileKind::SPARSE_PERCOL) {
+            continue;
+        }
+        LayeredOverlayColumnIterator::SparseLayer layer;
+        ASSIGN_OR_RETURN(layer.spcols_segment,
+                         ctx.segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, read_tablet_schema));
+        layer.value_column = column;
+        layer.version = hit.dcg->version();
+        layer.row_count = hit.dcg->sparse_row_count(hit.file_idx);
+        layer.source_segment_num_rows = hit.dcg->source_segment_num_rows();
+
+        RandomAccessFileOptions ropts;
+        if (!layer.spcols_segment->file_info().encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(
+                                                layer.spcols_segment->file_info().encryption_meta));
+            ropts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto spcols_file,
+                         fs->new_random_access_file_with_bundling(ropts, layer.spcols_segment->file_info()));
+        layer.read_file = std::move(spcols_file);
+        layers.push_back(std::move(layer));
+    }
+    // hits newest -> oldest => reverse to version-ASCENDING (oldest applied first, newest last).
+    std::reverse(layers.begin(), layers.end());
+
+    *out = std::make_unique<LayeredOverlayColumnIterator>(std::move(base_iter), std::move(layers),
+                                                          /*base_initialized=*/true);
+    return Status::OK();
+}
+
 Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
                                         bool with_default,
                                         const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
@@ -1699,15 +1805,37 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
 
             // try dcg read only if dcg context exists
             if (dcg_ctx != nullptr) {
-                auto dcg_col_iter_result = new_lake_dcg_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema);
-                if (dcg_col_iter_result.ok()) {
-                    col_iter = std::move(dcg_col_iter_result.value());
-                } else if (!dcg_col_iter_result.status().is_not_found()) {
-                    // NotFound is expected when column doesn't exist in DCG, other errors are real issues
-                    return Status::InternalError(fmt::format("Failed to create DCG column iterator for column {}: {}",
-                                                             col.name(), dcg_col_iter_result.status().to_string()));
+                // SDCG (gated): if the column's DCG layer stack contains any SPARSE `.spcols` file,
+                // assemble a LayeredOverlayColumnIterator. When all hits are DENSE, the overlay
+                // builder returns OK with a nullptr iterator and we fall through to the legacy
+                // first-hit path below — identical behavior for legacy/local (always DENSE).
+                if (config::enable_sparse_dcg) {
+                    std::unique_ptr<ColumnIterator> overlay_iter;
+                    Status ov_st = new_lake_overlay_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema,
+                                                                    read_file.get(), &overlay_iter);
+                    if (ov_st.ok() && overlay_iter != nullptr) {
+                        col_iter = std::move(overlay_iter);
+                    } else if (!ov_st.ok() && !ov_st.is_not_found()) {
+                        return Status::InternalError(
+                                fmt::format("Failed to create SDCG overlay iterator for column {}: {}", col.name(),
+                                            ov_st.to_string()));
+                    }
+                    // ov_st NotFound (column absent from DCG) or OK+nullptr (all dense) => fall through.
                 }
-                // If status is NotFound, col_iter remains nullptr and we'll read from original segment
+
+                if (col_iter == nullptr) {
+                    auto dcg_col_iter_result =
+                            new_lake_dcg_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema);
+                    if (dcg_col_iter_result.ok()) {
+                        col_iter = std::move(dcg_col_iter_result.value());
+                    } else if (!dcg_col_iter_result.status().is_not_found()) {
+                        // NotFound is expected when column doesn't exist in DCG, other errors are real issues
+                        return Status::InternalError(
+                                fmt::format("Failed to create DCG column iterator for column {}: {}", col.name(),
+                                            dcg_col_iter_result.status().to_string()));
+                    }
+                    // If status is NotFound, col_iter remains nullptr and we'll read from original segment
+                }
             }
 
             // read from original segment if no dcg data available

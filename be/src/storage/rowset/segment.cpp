@@ -663,6 +663,54 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
 }
 
+StatusOr<std::shared_ptr<Segment>> Segment::new_sparse_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                                   const TabletSchemaCSPtr& read_tablet_schema) {
+    const TabletSchemaCSPtr& src_schema =
+            (read_tablet_schema != nullptr) ? read_tablet_schema : _tablet_schema.schema();
+
+    // Build a read schema PB = the dcg entry's update columns + a synthetic reserved-uid
+    // source_rowid column, so the opened Segment exposes a ColumnReader for kSDCGSourceRowidUid.
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(src_schema->keys_type());
+    schema_pb.set_next_column_unique_id(src_schema->next_column_unique_id());
+    schema_pb.set_num_short_key_columns(0);
+    schema_pb.set_num_rows_per_row_block(src_schema->num_rows_per_row_block());
+
+    // The update value columns referenced by this dcg entry (by uid), preserving schema order.
+    const auto& wanted_uids = dcg.column_ids()[idx];
+    std::unordered_set<int32_t> uid_filter(wanted_uids.begin(), wanted_uids.end());
+    for (size_t cid = 0; cid < src_schema->num_columns(); ++cid) {
+        const auto& column = src_schema->column(cid);
+        if (uid_filter.count(column.unique_id()) > 0) {
+            column.to_schema_pb(schema_pb.add_column());
+        }
+    }
+
+    // Synthetic source_rowid column: uid == kSDCGSourceRowidUid, u32, non-nullable, not a key.
+    // Its physical layout in the `.spcols` footer is matched by type; we read it positionally.
+    auto* rowid_pb = schema_pb.add_column();
+    rowid_pb->set_name("__sdcg_source_rowid__");
+    rowid_pb->set_unique_id(kSDCGSourceRowidUid);
+    rowid_pb->set_type(logical_type_to_string(TYPE_UNSIGNED_INT));
+    rowid_pb->set_is_key(false);
+    rowid_pb->set_is_nullable(false);
+    rowid_pb->set_length(sizeof(uint32_t));
+    rowid_pb->set_index_length(sizeof(uint32_t));
+    rowid_pb->set_aggregation(get_string_by_aggregation_type(STORAGE_AGGREGATE_NONE));
+
+    auto sparse_schema = std::make_shared<TabletSchema>(schema_pb);
+
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
+    if (idx < dcg.column_file_sizes().size() && dcg.column_file_sizes()[idx] > 0) {
+        info.size = dcg.column_file_sizes()[idx];
+    }
+    if (idx < dcg.encryption_metas().size()) {
+        info.encryption_meta = dcg.encryption_metas()[idx];
+    }
+    return Segment::open(_fs, info, 0, sparse_schema, nullptr);
+}
+
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
     LakeIOOptions lakeIoOptions{.fill_data_cache = false, .buffer_size = -1};
     RETURN_IF_ERROR(load_index(lakeIoOptions));

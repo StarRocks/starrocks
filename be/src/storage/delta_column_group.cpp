@@ -151,6 +151,28 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
             _column_uids.back().push_back(cid);
         }
     }
+    // === SDCG === Fill kinds/counts in lockstep with column_files, normalizing an
+    // absent (legacy) array to all-DENSE / 0 so downstream readers see a strictly
+    // 1:1 view. We only materialize the vectors when the PB actually carries sparse
+    // metadata; otherwise file_kind()/sparse_row_count() fall back to DENSE/0 and
+    // local-engine behavior stays byte-identical.
+    if (dcg_ver_pb.file_kinds_size() > 0 || dcg_ver_pb.sparse_row_counts_size() > 0 ||
+        dcg_ver_pb.has_source_segment_num_rows()) {
+        std::vector<DeltaColumnFileKind> kinds;
+        std::vector<int64_t> counts;
+        kinds.reserve(_column_files.size());
+        counts.reserve(_column_files.size());
+        for (size_t i = 0; i < _column_files.size(); ++i) {
+            kinds.push_back(i < static_cast<size_t>(dcg_ver_pb.file_kinds_size()) &&
+                                            dcg_ver_pb.file_kinds(static_cast<int>(i)) == SPARSE_PERCOL
+                                    ? DeltaColumnFileKind::SPARSE_PERCOL
+                                    : DeltaColumnFileKind::DENSE_COLS);
+            counts.push_back(i < static_cast<size_t>(dcg_ver_pb.sparse_row_counts_size())
+                                     ? dcg_ver_pb.sparse_row_counts(static_cast<int>(i))
+                                     : 0);
+        }
+        set_sdcg_meta(std::move(kinds), std::move(counts), dcg_ver_pb.source_segment_num_rows());
+    }
     _calc_memory_usage();
     return Status::OK();
 }

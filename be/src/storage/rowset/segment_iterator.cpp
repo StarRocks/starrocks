@@ -33,6 +33,7 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_starlet_fwd.h"
@@ -72,6 +73,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
+#include "storage/rowset/layered_overlay_column_iterator.h"
 #include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
@@ -313,7 +315,9 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -364,8 +368,12 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -472,6 +480,28 @@ private:
 
     //  This function will search and build the segment from delta column group.
     StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid);
+
+    // SDCG: per-column DCG layer-stack resolution (newest -> oldest). See §4.3/§6 of the design.
+    // A resolved hit references one DCG file containing |ucid| together with the file's kind.
+    struct DcgLayerHit {
+        DeltaColumnGroupPtr dcg; // owning dcg entry (for column_file_by_idx / metas / counts)
+        int32_t file_idx = -1;   // index into the dcg's parallel column_files array
+        int32_t col_idx = -1;    // index of |ucid| within that file's unique_column_ids
+        DeltaColumnFileKind kind = DeltaColumnFileKind::DENSE_COLS;
+    };
+    // Walk _dcgs newest -> oldest collecting files that contain |ucid|. Stop after the first DENSE
+    // file (it is row-complete and becomes the base). Returns hits in newest -> oldest order.
+    // |has_sparse| is set true iff any collected hit is SPARSE.
+    StatusOr<std::vector<DcgLayerHit>> _collect_dcg_layers(uint32_t ucid, bool* has_sparse);
+
+    // Build a LayeredOverlayColumnIterator from resolved layer hits when at least one is SPARSE.
+    // |dense_base_hit| (if non-null) is the bottom DENSE file the walk ended at; otherwise the base
+    // is the original segment column. Opens the base and each `.spcols` file, wiring their read
+    // files into the SegmentIterator-owned holders so they outlive the overlay iterator.
+    StatusOr<std::unique_ptr<ColumnIterator>> _build_overlay_column_iterator(
+            const ColumnId cid, const TabletColumn& column, ColumnAccessPath* path,
+            const std::vector<DcgLayerHit>& hits, const ColumnIteratorOptions& iter_opts,
+            const RandomAccessFileOptions& base_raf_opts);
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
@@ -1284,6 +1314,111 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
     return nullptr;
 }
 
+StatusOr<std::vector<SegmentIterator::DcgLayerHit>> SegmentIterator::_collect_dcg_layers(uint32_t ucid,
+                                                                                         bool* has_sparse) {
+    std::vector<DcgLayerHit> hits;
+    *has_sparse = false;
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : _dcgs) {
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first < 0) {
+            continue;
+        }
+        DcgLayerHit hit;
+        hit.dcg = dcg;
+        hit.file_idx = idx.first;
+        hit.col_idx = idx.second;
+        hit.kind = dcg->file_kind(idx.first);
+        hits.push_back(std::move(hit));
+        if (hits.back().kind == DeltaColumnFileKind::SPARSE_PERCOL) {
+            *has_sparse = true;
+        } else {
+            // First DENSE file is row-complete: it becomes the base, stop walking older entries.
+            break;
+        }
+    }
+    return hits;
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column_iterator(
+        const ColumnId cid, const TabletColumn& column, ColumnAccessPath* path, const std::vector<DcgLayerHit>& hits,
+        const ColumnIteratorOptions& iter_opts, const RandomAccessFileOptions& base_raf_opts) {
+    // hits are newest -> oldest. The walk stopped either at the first DENSE file (last element) or
+    // ran off the end (no dense in the stack). Determine the base.
+    const DcgLayerHit* dense_base_hit = nullptr;
+    if (!hits.empty() && hits.back().kind == DeltaColumnFileKind::DENSE_COLS) {
+        dense_base_hit = &hits.back();
+    }
+
+    // --- Build the base column iterator + wire its read file into _column_files[cid] ---
+    std::unique_ptr<ColumnIterator> base_iter;
+    if (dense_base_hit != nullptr) {
+        // Base = the bottom DENSE `.cols` file (today's positional whole-column replacement).
+        ASSIGN_OR_RETURN(auto dense_seg, _segment->new_dcg_segment(*dense_base_hit->dcg, dense_base_hit->file_idx,
+                                                                   _opts.tablet_schema));
+        ASSIGN_OR_RETURN(base_iter, dense_seg->new_column_iterator(column, path));
+        RandomAccessFileOptions opts = base_raf_opts;
+        if (dense_seg->encryption_info()) {
+            opts.encryption_info = *dense_seg->encryption_info();
+        }
+        ASSIGN_OR_RETURN(auto dense_file, _opts.fs->new_random_access_file(opts, dense_seg->file_name()));
+        ColumnIteratorOptions base_opts = iter_opts;
+        base_opts.read_file = dense_file.get();
+        _column_files[cid] = std::move(dense_file);
+        RETURN_IF_ERROR(base_iter->init(base_opts));
+        // Keep the dense `.cols` Segment cached just like the legacy path.
+        ASSIGN_OR_RETURN(auto dense_file_key, dense_base_hit->dcg->column_file_by_idx(
+                                                      parent_name(_segment->file_name()), dense_base_hit->file_idx));
+        _dcg_segments[dense_file_key] = dense_seg;
+    } else {
+        // Base = the original segment column (unchanged rows fall back to base).
+        ASSIGN_OR_RETURN(base_iter, _segment->new_column_iterator_or_default(column, path));
+        RandomAccessFileOptions opts = base_raf_opts;
+        const auto encryption_info = _segment->encryption_info();
+        if (encryption_info) {
+            opts.encryption_info = *encryption_info;
+        }
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
+        ColumnIteratorOptions base_opts = iter_opts;
+        base_opts.read_file = rfile.get();
+        _column_files[cid] = std::move(rfile);
+        RETURN_IF_ERROR(base_iter->init(base_opts));
+    }
+
+    // --- Build the SPARSE overlay layers (collect newest -> oldest, then reverse to ASCENDING) ---
+    std::vector<LayeredOverlayColumnIterator::SparseLayer> layers;
+    for (const auto& hit : hits) {
+        if (hit.kind != DeltaColumnFileKind::SPARSE_PERCOL) {
+            continue; // skip the trailing dense base (already consumed) — only sparse become layers
+        }
+        LayeredOverlayColumnIterator::SparseLayer layer;
+        ASSIGN_OR_RETURN(layer.spcols_segment,
+                         _segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, _opts.tablet_schema));
+        layer.value_column = column;
+        layer.version = hit.dcg->version();
+        layer.row_count = hit.dcg->sparse_row_count(hit.file_idx);
+        layer.source_segment_num_rows = hit.dcg->source_segment_num_rows();
+
+        RandomAccessFileOptions opts = base_raf_opts;
+        if (layer.spcols_segment->encryption_info()) {
+            opts.encryption_info = *layer.spcols_segment->encryption_info();
+        }
+        ASSIGN_OR_RETURN(auto spcols_file, _opts.fs->new_random_access_file(opts, layer.spcols_segment->file_name()));
+        layer.read_file = std::move(spcols_file);
+        layers.push_back(std::move(layer));
+    }
+    // hits were newest -> oldest, so `layers` is newest -> oldest. Reverse to version-ASCENDING
+    // (oldest first) so the overlay applies oldest first and newest last (last-write-wins).
+    std::reverse(layers.begin(), layers.end());
+
+    auto overlay = std::make_unique<LayeredOverlayColumnIterator>(std::move(base_iter), std::move(layers),
+                                                                  /*base_initialized=*/true);
+    // init records iter_opts (for the lazily-opened layer iterators' stats); it does NOT re-init
+    // the base, which was already wired to its own read file above.
+    RETURN_IF_ERROR(overlay->init(iter_opts));
+    return overlay;
+}
+
 StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(const TabletColumn& column,
                                                                                     std::string* filename,
                                                                                     FileEncryptionInfo* encryption_info,
@@ -1403,6 +1538,19 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
     const auto& col = tablet_schema->column(cid);
     ColumnAccessPath* access_path = _lookup_access_path(cid, col);
+
+    // SDCG (lake-only, gated): resolve the per-column DCG layer stack. When all hits are DENSE (or
+    // there are none), `has_sparse` is false and we fall through to the legacy first-hit path below
+    // — byte-identical behavior for legacy/local tablets whose file kinds are always DENSE.
+    if (config::enable_sparse_dcg && !_dcgs.empty()) {
+        bool has_sparse = false;
+        ASSIGN_OR_RETURN(auto hits, _collect_dcg_layers(static_cast<uint32_t>(ucid), &has_sparse));
+        if (has_sparse) {
+            ASSIGN_OR_RETURN(_column_iterators[cid],
+                             _build_overlay_column_iterator(cid, col, access_path, hits, iter_opts, opts));
+            return Status::OK();
+        }
+    }
 
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
     if (col_iter == nullptr) {
@@ -3651,6 +3799,18 @@ Status SegmentIterator::_apply_bitmap_index() {
         RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
                                                       this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
             const ColumnUID ucid = cid_2_ucid[cid];
+            // SDCG: a column with any SPARSE overlay layer must NOT be bitmap-pruned. The base
+            // segment's bitmap reflects stale (pre-overlay) values and a sparse `.spcols` bitmap
+            // lives in the layer's own K-row ordinal space (not the base space). Either would
+            // prune overlay-covered rows incorrectly. Report "no bitmap index" (nullptr) so the
+            // evaluator skips this column entirely (conservative no-prune, PoC accepted).
+            if (config::enable_sparse_dcg && !_dcgs.empty()) {
+                bool has_sparse = false;
+                ASSIGN_OR_RETURN(auto hits, _collect_dcg_layers(static_cast<uint32_t>(ucid), &has_sparse));
+                if (has_sparse) {
+                    return nullptr;
+                }
+            }
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
             if (segment_ptr == nullptr) {

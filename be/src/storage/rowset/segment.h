@@ -112,6 +112,18 @@ public:
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                        const TabletSchemaCSPtr& read_tablet_schema);
 
+    // SDCG sparse overlay variant of new_dcg_segment (lake-only, gated by enable_sparse_dcg).
+    //
+    // A `.spcols` file is a standard Segment v2 file whose column0 is the reserved-uid source_rowid
+    // column (uid == kSDCGSourceRowidUid, u32, non-nullable) followed by the real update value
+    // columns. The DCG entry's unique_column_ids hold only the UPDATE column uids (NOT the reserved
+    // uid), so the legacy `new_dcg_segment` would build a read schema that lacks a ColumnReader for
+    // the source_rowid column. This variant builds a read schema = update columns + a synthetic
+    // source_rowid column so the opened Segment exposes a ColumnReader keyed by kSDCGSourceRowidUid,
+    // which LayeredOverlayColumnIterator reads to translate base rowid -> local ordinal.
+    StatusOr<std::shared_ptr<Segment>> new_sparse_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                              const TabletSchemaCSPtr& read_tablet_schema);
+
     uint64_t id() const { return _segment_id; }
 
     // Creates a new iterator for a specific column in a segment.
@@ -241,10 +253,14 @@ public:
     DISALLOW_COPY_AND_MOVE(Segment);
 
     // for ut test
-    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+    void set_num_rows(uint32_t num_rows) {
+        _num_rows = num_rows;
+    }
 
 #ifdef BE_TEST
-    static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
+    static void toggle_batch_update_cache_mode(bool enabled) {
+        _s_allow_batch_update_mode = enabled;
+    }
 #endif
 
 private:
@@ -281,7 +297,9 @@ private:
 
     void _reset();
 
-    size_t _basic_info_mem_usage() const { return sizeof(Segment) + _segment_file_info.path.size(); }
+    size_t _basic_info_mem_usage() const {
+        return sizeof(Segment) + _segment_file_info.path.size();
+    }
 
     size_t _short_key_index_mem_usage() const {
         size_t size = _sk_index_handle.mem_usage();

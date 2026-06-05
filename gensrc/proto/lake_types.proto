@@ -92,6 +92,19 @@ message DelvecMetadataPB {
     map<uint32, DelvecPagePB> delvecs = 2;
 }
 
+// Physical layout of a delta-column-group file (parallel to column_files).
+// DENSE_COLS  : the historical `.cols` file — one rewritten column per uid,
+//               row-complete against the source segment (ordinal == base rowid).
+// SPARSE_PERCOL: a `.spcols` Sparse Delta Column Group file — a standard
+//               Segment v2 carrying a leading source_rowid column plus the
+//               update value columns, covering only K updated rows. Read as an
+//               overlay layer (version-ascending, last-write-wins).
+// Default 0 == DENSE_COLS so legacy metadata (no file_kinds) reads as all-dense.
+enum DeltaColumnFileKindPB {
+    DENSE_COLS = 0;
+    SPARSE_PERCOL = 1;
+}
+
 message DeltaColumnGroupVerPB {
     repeated DeltaColumnGroupColumnIdsPB unique_column_ids = 1;
     repeated string column_files = 2;
@@ -104,6 +117,22 @@ message DeltaColumnGroupVerPB {
     // 0 means unknown (data written before this field existed); readers then
     // fall back to stat/HeadObject to discover the file size.
     repeated int64 column_file_sizes = 6 [packed = true];
+    // === SDCG (Sparse Delta Column Group) ===
+    // Per-file kind, parallel to column_files. Empty (legacy) => every entry is
+    // DENSE_COLS. Readers treat an out-of-range index as DENSE_COLS, so the
+    // array is only emitted when at least one SPARSE_PERCOL file exists.
+    repeated DeltaColumnFileKindPB file_kinds = 7;
+    // Reserved for per-column presence bitmaps in a future iteration. The PoC
+    // loads the .spcols source_rowid column at layer init instead, so this stays
+    // unused. NEVER reuse this ordinal for anything else.
+    reserved 8;
+    // Number of rows stored in each SPARSE_PERCOL file (== footer.num_rows == K),
+    // parallel to column_files. 0 for DENSE_COLS entries / when unknown.
+    repeated int64 sparse_row_counts = 9 [packed = true];
+    // Row count (M) of the base segment that the sparse files in this entry list
+    // were derived from. Used as a fingerprint guard (max(source_rowid) < M).
+    // 0 / absent == unknown (legacy or dense-only metadata).
+    optional int64 source_segment_num_rows = 10;
 }
 
 message DeltaColumnGroupMetadataPB {

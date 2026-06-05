@@ -48,6 +48,35 @@ private:
                                        ChunkPtr* source_chunk, int32_t condition_idx_in_partial_schema);
     StatusOr<ChunkPtr> _read_from_source_segment(const RowsetUpdateStateParams& params, const Schema& schema,
                                                  uint32_t rssid);
+
+    // SDCG sparse write path (lake only, gated by config::enable_sparse_dcg).
+    //
+    // Resolve the base segment row count M for |rssid| WITHOUT a footer GET when possible: scan
+    // params.metadata rowsets' segment_metas (rssid -> rowset+segment via get_rssid) and read
+    // SegmentMetadataPB.num_rows; fall back to load_segment(...)->num_rows() for legacy segments that
+    // don't carry num_rows. Returns 0 when M cannot be determined (callers then skip the sparse path).
+    StatusOr<int64_t> _resolve_source_segment_num_rows(const RowsetUpdateStateParams& params, uint32_t rssid);
+
+    // Build a K-row sparse overlay chunk for one (column-batch, rssid): column 0 is the synthetic
+    // source_rowid column (sorted ascending, uid=kSDCGSourceRowidUid), followed by the update value
+    // columns gathered from the `.upt` payload by upt_rowid. K = number of distinct source_rowids across
+    // all upt_ids for this rssid; later upt_ids win per source_rowid (last-write-wins), matching the
+    // dense path's ascending-upt_id overwrite. |out_num_rows| receives K. |value_schema| is the partial
+    // schema of the update columns (NOT including source_rowid); |sparse_schema| is value_schema with the
+    // source_rowid column prepended. No source-segment read is performed.
+    StatusOr<ChunkPtr> _build_sparse_chunk_from_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
+                                                    const Schema& value_schema, const Schema& sparse_schema,
+                                                    int64_t source_segment_num_rows, int64_t* out_num_rows);
+
+    // Prepare a SegmentWriter for a sparse `.spcols` file. Identical construction to the dense `.cols`
+    // writer (options/encryption/init(false)) except the filename is a `.spcols` name and the schema is
+    // |sparse_tschema| (source_rowid + value columns).
+    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_sparse_delta_column_group_writer(
+            const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& sparse_tschema);
+
+    // Build the synthetic [source_rowid] + value-columns TabletSchema for a sparse `.spcols` file.
+    static std::shared_ptr<TabletSchema> _build_sparse_tablet_schema(
+            const TabletSchemaCSPtr& base_tablet_schema, const std::shared_ptr<TabletSchema>& value_tschema);
     // Resolve txn_meta.merge_condition() to a column id in `tschema`.
     // Returns -1 when no condition is set, or an error when the named column is missing from the schema.
     static StatusOr<int32_t> _resolve_condition_cid(const RowsetTxnMetaPB& txn_meta, const TabletSchema& tschema);

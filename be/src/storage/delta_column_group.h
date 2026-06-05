@@ -23,11 +23,33 @@
 
 namespace starrocks {
 
+// Physical layout of one delta-column-group file. Mirrors DeltaColumnFileKindPB
+// in lake_types.proto. DENSE_COLS is the historical `.cols` file (one rewritten,
+// row-complete column per uid). SPARSE_PERCOL is a `.spcols` Sparse Delta Column
+// Group file covering only K updated rows, applied as an overlay layer.
+enum class DeltaColumnFileKind : uint8_t {
+    DENSE_COLS = 0,
+    SPARSE_PERCOL = 1,
+};
+
+// Reserved column unique id for the leading `source_rowid` column inside every
+// `.spcols` file. ColumnUID is the FE-assigned int32 (be/src/common/column_id.h):
+// real columns count up from small positive ints toward next_column_unique_id,
+// and there is no hardcoded sentinel uid in BE today (FULL_ROW_COLUMN/`__row`
+// is matched by name, not by a reserved uid — see tablet_schema.cpp:633). We pick
+// a value near INT32_MAX, far above any plausible next_column_unique_id, so it can
+// never collide with a real column uid. This uid is internal to the .spcols
+// container: it is the value-bearing column for base rowid <-> local ordinal
+// translation and MUST NEVER appear in DeltaColumnGroup::column_ids() (the
+// uid->file mapping); SegmentWriter::_verify_footer uid-uniqueness check backstops
+// any accidental collision.
+constexpr uint32_t kSDCGSourceRowidUid = 0x7FFFFFF0u; // 2147483632
+
 // `DeltaColumnGroup` is used for record the new update columns data
 // It is generated when column mode partial update happen.
 // `_column_ids` record the columns which have been updated, and `_column_file` points to the data file
 // which contains update columns.
-// Column data file end as `.cols`.
+// Column data file end as `.cols` (dense) or `.spcols` (sparse, SDCG).
 class DeltaColumnGroup;
 using DeltaColumnGroupPtr = std::shared_ptr<DeltaColumnGroup>;
 using DeltaColumnGroupList = std::vector<DeltaColumnGroupPtr>;
@@ -111,6 +133,31 @@ public:
 
     int64_t file_size() const { return _file_size; }
 
+    // === SDCG (Sparse Delta Column Group) ===
+    // Per-file kind. `idx` indexes into relative_column_files(). When `idx` is
+    // out of range (legacy metadata that never carried _file_kinds), the file is
+    // DENSE_COLS — this is the zero-regression hinge: absent kinds == all dense.
+    DeltaColumnFileKind file_kind(size_t idx) const {
+        return idx < _file_kinds.size() ? _file_kinds[idx] : DeltaColumnFileKind::DENSE_COLS;
+    }
+    bool is_file_dense(size_t idx) const { return file_kind(idx) == DeltaColumnFileKind::DENSE_COLS; }
+    // Row count (K) stored in a SPARSE_PERCOL file; 0 for dense entries / unknown.
+    int64_t sparse_row_count(size_t idx) const { return idx < _sparse_row_counts.size() ? _sparse_row_counts[idx] : 0; }
+    // Base segment row count (M) that this entry's sparse files were derived from.
+    // 0 == unknown (legacy / dense-only metadata).
+    int64_t source_segment_num_rows() const { return _source_segment_num_rows; }
+    const std::vector<DeltaColumnFileKind>& file_kinds() const { return _file_kinds; }
+    const std::vector<int64_t>& sparse_row_counts() const { return _sparse_row_counts; }
+    // Install SDCG metadata. `kinds`/`counts` are parallel to column_files (either
+    // empty == legacy all-dense, or strictly 1:1 with column_files). `source_rows`
+    // is M (0 == unknown). Lake-only path: local-engine serializers never call this,
+    // so local behavior stays byte-identical.
+    void set_sdcg_meta(std::vector<DeltaColumnFileKind> kinds, std::vector<int64_t> counts, int64_t source_rows) {
+        _file_kinds = std::move(kinds);
+        _sparse_row_counts = std::move(counts);
+        _source_segment_num_rows = source_rows;
+    }
+
 private:
     void _calc_memory_usage();
 
@@ -120,6 +167,10 @@ private:
     std::vector<std::string> _column_files;
     std::vector<std::string> _encryption_metas;
     std::vector<int64_t> _column_file_sizes; // per-file size, 1:1 with _column_files; 0/empty = unknown
+    // === SDCG === parallel to _column_files; empty == legacy all-dense (see file_kind()).
+    std::vector<DeltaColumnFileKind> _file_kinds;
+    std::vector<int64_t> _sparse_row_counts; // K per sparse file; 0 for dense / unknown
+    int64_t _source_segment_num_rows = 0;    // M of the source segment; 0 == unknown
     size_t _memory_usage = 0;
     int64_t _file_size = 0; // file size of all column files
 };

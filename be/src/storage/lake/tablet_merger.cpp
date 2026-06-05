@@ -580,6 +580,12 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
     return Status::OK();
 }
 
+// Per-entry kind, with the legacy hinge: an absent file_kinds array (or an index past its end)
+// means DENSE_COLS. Mirrors DeltaColumnGroup::file_kind(idx).
+static DeltaColumnFileKindPB dcg_entry_kind(const DeltaColumnGroupVerPB& dcg, int idx) {
+    return idx < dcg.file_kinds_size() ? dcg.file_kinds(idx) : DENSE_COLS;
+}
+
 Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
     // Required fields must be equal length
     if (dcg.unique_column_ids_size() != dcg.column_files_size() || dcg.versions_size() != dcg.column_files_size()) {
@@ -590,12 +596,27 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
         dcg.column_file_sizes_size() > dcg.column_files_size()) {
         return Status::Corruption("DCG shape invalid: optional fields exceed column_files size");
     }
-    // No duplicate column UIDs across entries
-    std::unordered_set<uint32_t> all_cids;
-    for (const auto& unique_column_ids : dcg.unique_column_ids()) {
-        for (auto cid : unique_column_ids.column_ids()) {
-            if (!all_cids.insert(cid).second) {
-                return Status::Corruption("DCG contains duplicate column UID across entries");
+    // SDCG parallel arrays must be either empty (legacy: all DENSE / unknown K) or exactly 1:1 with
+    // column_files. Anything in between would break positional indexing.
+    if (dcg.file_kinds_size() != 0 && dcg.file_kinds_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: file_kinds size neither 0 nor column_files size");
+    }
+    if (dcg.sparse_row_counts_size() != 0 && dcg.sparse_row_counts_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: sparse_row_counts size neither 0 nor column_files size");
+    }
+    // Duplicate column UID across entries: legal for sparse chains (col_a sparse at v2, v3, ...), where
+    // at least one involved entry's file (for that uid) is SPARSE. Two DENSE entries sharing a uid is a
+    // genuine conflict (two independent full rewrites of the same column) and stays Corruption.
+    std::unordered_map<uint32_t, bool> uid_has_dense_entry; // uid -> seen a DENSE entry claiming it
+    for (int idx = 0; idx < dcg.unique_column_ids_size(); ++idx) {
+        const bool entry_is_dense = dcg_entry_kind(dcg, idx) == DENSE_COLS;
+        for (auto cid : dcg.unique_column_ids(idx).column_ids()) {
+            auto [it, inserted] = uid_has_dense_entry.try_emplace(cid, entry_is_dense);
+            if (!inserted) {
+                if (it->second && entry_is_dense) {
+                    return Status::Corruption("DCG contains duplicate column UID across two DENSE entries");
+                }
+                it->second = it->second || entry_is_dense;
             }
         }
     }
@@ -613,6 +634,14 @@ void normalize_dcg_optional_fields(DeltaColumnGroupVerPB* dcg) {
     // treat 0 as "size unknown" and fall back to stat/HeadObject.
     while (dcg->column_file_sizes_size() < dcg->column_files_size()) {
         dcg->add_column_file_sizes(0);
+    }
+    // SDCG: pad file_kinds to DENSE_COLS and sparse_row_counts to 0 so downstream index access is
+    // uniform. Legacy metas (no kinds) normalize to all-DENSE, preserving today's semantics.
+    while (dcg->file_kinds_size() < dcg->column_files_size()) {
+        dcg->add_file_kinds(DENSE_COLS);
+    }
+    while (dcg->sparse_row_counts_size() < dcg->column_files_size()) {
+        dcg->add_sparse_row_counts(0);
     }
 }
 
@@ -640,6 +669,16 @@ Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j
     // shared_files (normalized)
     if (existing.shared_files(j) != incoming.shared_files(i)) {
         return Status::Corruption("DCG same column_file but shared_files differ");
+    }
+    // SDCG: the same physical file must have the same kind and (for sparse) the same K across metas.
+    // Use the legacy hinge so a normalized side and a not-yet-normalized side still compare correctly.
+    if (dcg_entry_kind(existing, j) != dcg_entry_kind(incoming, i)) {
+        return Status::Corruption("DCG same column_file but file_kinds differ");
+    }
+    const int64_t e_k = j < existing.sparse_row_counts_size() ? existing.sparse_row_counts(j) : 0;
+    const int64_t i_k = i < incoming.sparse_row_counts_size() ? incoming.sparse_row_counts(i) : 0;
+    if (e_k != i_k) {
+        return Status::Corruption("DCG same column_file but sparse_row_counts differ");
     }
     return Status::OK();
 }
@@ -728,9 +767,23 @@ DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source,
     out.add_versions(source.versions(entry_index));
     out.add_encryption_metas(source.encryption_metas(entry_index));
     out.add_shared_files(source.shared_files(entry_index));
-    // source is normalized before this call, so column_file_sizes is 1:1 with column_files.
+    // source is normalized before this call, so column_file_sizes / file_kinds / sparse_row_counts
+    // are all 1:1 with column_files. Carry the SDCG arrays so the single-entry copy keeps its kind/K.
     out.add_column_file_sizes(source.column_file_sizes(entry_index));
+    out.add_file_kinds(source.file_kinds(entry_index));
+    out.add_sparse_row_counts(source.sparse_row_counts(entry_index));
+    // source_segment_num_rows is a per-segment scalar; preserve it on the single-entry copy so the
+    // merge can reconcile it across siblings of the same target rssid.
+    if (source.has_source_segment_num_rows()) {
+        out.set_source_segment_num_rows(source.source_segment_num_rows());
+    }
     return out;
+}
+
+// True iff this surviving entry's single file is a sparse `.spcols` overlay.
+inline bool entry_is_sparse(const DcgSurvivingEntry& entry) {
+    const auto& e = entry.single_entry;
+    return e.file_kinds_size() > 0 && e.file_kinds(0) == SPARSE_PERCOL;
 }
 
 // Pass 1 — walk each old tablet's dcg_meta and rowsets, dedup by filename across
@@ -1239,6 +1292,12 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
         const std::vector<bool> entry_is_conflicting = mark_conflicting_dcg_entries(target_work.entries);
 
         DeltaColumnGroupVerPB final_dcg;
+        // Accumulate SDCG kinds/counts in emission order; attach to final_dcg only if this target carries
+        // sparse content (zero-regression: dense-only split merge keeps absent arrays => byte-identical).
+        std::vector<DeltaColumnFileKindPB> emitted_kinds;
+        std::vector<int64_t> emitted_sparse_counts;
+        bool sdcg_active = false;
+        int64_t target_source_num_rows = 0;
 
         // Emit non-conflicting entries unchanged.
         for (size_t entry_index = 0; entry_index < target_work.entries.size(); ++entry_index) {
@@ -1250,12 +1309,39 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             final_dcg.add_encryption_metas(entry.single_entry.encryption_metas(0));
             final_dcg.add_shared_files(entry.single_entry.shared_files(0));
             final_dcg.add_column_file_sizes(entry.single_entry.column_file_sizes(0));
+            // SDCG: carry kind/K so a non-conflicting `.spcols` keeps its sparse identity through the
+            // merge. make_single_entry_dcg populated these 1:1, so index 0 is always present here.
+            const DeltaColumnFileKindPB kind = entry.single_entry.file_kinds(0);
+            emitted_kinds.push_back(kind);
+            emitted_sparse_counts.push_back(entry.single_entry.sparse_row_counts(0));
+            if (kind == SPARSE_PERCOL) {
+                sdcg_active = true;
+            }
+            // Reconcile the per-segment base row count across siblings of the same target rssid.
+            if (entry.single_entry.has_source_segment_num_rows()) {
+                target_source_num_rows = entry.single_entry.source_segment_num_rows();
+                sdcg_active = true;
+            }
         }
 
         bool any_entry_is_conflicting = false;
         for (bool conflicting : entry_is_conflicting) any_entry_is_conflicting |= conflicting;
 
         if (any_entry_is_conflicting) {
+            // SDCG PoC limitation: the rebuild path folds conflicting entries into one dense `.cols`
+            // by reading donor files positionally (base rowid == ordinal). That contract holds only for
+            // dense files; a `.spcols` overlay stores values at local ordinals 0..K-1 keyed by a
+            // source_rowid column, so folding it positionally would silently corrupt data. When any
+            // conflicting (overlapping-uid) entry is sparse, refuse to chain-merge in this split path.
+            for (size_t entry_index = 0; entry_index < target_work.entries.size(); ++entry_index) {
+                if (entry_is_conflicting[entry_index] && entry_is_sparse(target_work.entries[entry_index])) {
+                    cleanup_on_failure();
+                    return Status::NotSupported(
+                            "tablet split merge of overlapping sparse delta column group (.spcols) layers is "
+                            "not supported in this build; this is a known limitation of the enable_sparse_dcg "
+                            "PoC path");
+                }
+            }
             // Fold ALL columns of every conflicting entry into rebuild_columns
             // so the reader's first-entry-wins rule can't leak stale values.
             std::vector<uint32_t> rebuild_columns;
@@ -1290,10 +1376,25 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             final_dcg.add_encryption_metas(rebuilt_entry.encryption_metas(0));
             final_dcg.add_shared_files(rebuilt_entry.shared_files(0));
             final_dcg.add_column_file_sizes(rebuilt_entry.column_file_sizes(0));
+            // The rebuild materializes a brand-new row-complete dense `.cols` file (sparse inputs were
+            // already rejected above), so it is always DENSE with no sparse row count.
+            emitted_kinds.push_back(DENSE_COLS);
+            emitted_sparse_counts.push_back(0);
             g_tablet_merge_dcg_rebuild_total << 1;
         }
 
         if (final_dcg.column_files_size() == 0) continue;
+        // Attach SDCG arrays only when sparse content is present; keep dense-only merges byte-identical.
+        if (sdcg_active) {
+            DCHECK_EQ(static_cast<int>(emitted_kinds.size()), final_dcg.column_files_size());
+            for (size_t i = 0; i < emitted_kinds.size(); ++i) {
+                final_dcg.add_file_kinds(emitted_kinds[i]);
+                final_dcg.add_sparse_row_counts(emitted_sparse_counts[i]);
+            }
+            if (target_source_num_rows > 0) {
+                final_dcg.set_source_segment_num_rows(target_source_num_rows);
+            }
+        }
         auto shape_status = validate_dcg_shape(final_dcg);
         if (!shape_status.ok()) {
             cleanup_on_failure();

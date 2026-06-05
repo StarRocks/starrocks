@@ -464,6 +464,7 @@ SET(DW_TEST_FILES
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp
+    ./storage/lake/sparse_dcg_test.cpp
     ./storage/lake/persistent_index_memtable_test.cpp
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp

@@ -129,6 +129,7 @@ set(STORAGE_FILES
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
     rowset/fill_subfield_iterator.cpp
+    rowset/layered_overlay_column_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp

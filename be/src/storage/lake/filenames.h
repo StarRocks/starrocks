@@ -74,8 +74,22 @@ inline bool is_sst(std::string_view file_name) {
     return HasSuffixString(file_name, ".sst");
 }
 
+inline bool is_spcols(std::string_view file_name);
+
 inline bool is_cols(std::string_view file_name) {
-    return HasSuffixString(file_name, ".cols");
+    // Guard against the ".spcols" suffix collision: ".spcols" ends with ".cols",
+    // so a naive HasSuffixString would classify a sparse file as dense. is_cols()
+    // must mean "dense .cols only".
+    return HasSuffixString(file_name, ".cols") && !is_spcols(file_name);
+}
+
+// Sparse Delta Column Group (SDCG) payload file. A standard Segment v2 carrying a
+// leading source_rowid column plus update value columns for K updated rows; read as
+// an overlay layer. Referenced from DeltaColumnGroupVerPB.column_files just like a
+// dense `.cols` file, so its lifecycle (kept live by DCG metadata / explicitly
+// orphaned via MetaFileBuilder::append_dcg) matches `.cols`.
+inline bool is_spcols(std::string_view file_name) {
+    return HasSuffixString(file_name, ".spcols");
 }
 
 // Index Delta Group payload file produced by ADD INDEX fast-path schema change.
@@ -232,7 +246,7 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 
     // check extension
     if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols" &&
-        extension != ".idx") {
+        extension != ".spcols" && extension != ".idx") {
         return {};
     }
 
@@ -256,7 +270,7 @@ inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_n
     }
 
     if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name) &&
-                 !is_cols(old_file_name) && !is_idx(old_file_name))) {
+                 !is_cols(old_file_name) && !is_spcols(old_file_name) && !is_idx(old_file_name))) {
         // not a valid file
         return {};
     }
@@ -273,6 +287,12 @@ inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_n
 
 inline std::string gen_cols_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
+}
+
+// Generate a filename for a Sparse Delta Column Group payload file (`.spcols`).
+// Mirrors gen_cols_filename: {txn_id}_{uuid}.spcols.
+inline std::string gen_spcols_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.spcols", txn_id, generate_uuid_string());
 }
 
 inline std::string gen_del_filename(int64_t txn_id) {

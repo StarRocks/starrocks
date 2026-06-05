@@ -233,4 +233,88 @@ TEST(TestDeltaColumnGroup, testDeltaColumnGroupVerPBLoad) {
     ASSERT_FALSE(dcg.column_file_by_idx("tmp", 100).ok());
 }
 
+// SDCG: a DeltaColumnGroupVerPB that carries NO file_kinds / sparse_row_counts /
+// source_segment_num_rows (legacy / dense-only metadata) must read back as all-dense via the
+// file_kind() out-of-range hinge, and set_sdcg_meta must never be triggered.
+TEST(TestDeltaColumnGroup, testSDCGLegacyHingeAllDense) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(10);
+    dcg_ver.add_versions(11);
+    dcg_ver.add_column_files("aaa.cols");
+    dcg_ver.add_column_files("bbb.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(11, dcg_ver).ok());
+    // No SDCG arrays installed: vectors stay empty, file_kind() OOR hinge => DENSE.
+    ASSERT_TRUE(dcg.file_kinds().empty());
+    ASSERT_TRUE(dcg.sparse_row_counts().empty());
+    ASSERT_EQ(0, dcg.source_segment_num_rows());
+    for (size_t i = 0; i < 3; ++i) {
+        EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(i));
+        EXPECT_TRUE(dcg.is_file_dense(i));
+        EXPECT_EQ(0, dcg.sparse_row_count(i));
+    }
+}
+
+// SDCG: a DeltaColumnGroupVerPB that carries file_kinds / sparse_row_counts /
+// source_segment_num_rows must be loaded into a strictly-1:1 view, normalizing any absent
+// trailing entries to DENSE / 0.
+TEST(TestDeltaColumnGroup, testSDCGLoadKindsAndCounts) {
+    DeltaColumnGroupVerPB dcg_ver;
+    // entry 0: sparse .spcols K=7 ; entry 1: dense .cols
+    dcg_ver.add_versions(20);
+    dcg_ver.add_versions(21);
+    dcg_ver.add_column_files("sp0.spcols");
+    dcg_ver.add_column_files("d1.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_file_kinds(DENSE_COLS);
+    dcg_ver.add_sparse_row_counts(7);
+    dcg_ver.add_sparse_row_counts(0);
+    dcg_ver.set_source_segment_num_rows(1000);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(21, dcg_ver).ok());
+    ASSERT_EQ(2u, dcg.file_kinds().size());
+    EXPECT_EQ(DeltaColumnFileKind::SPARSE_PERCOL, dcg.file_kind(0));
+    EXPECT_FALSE(dcg.is_file_dense(0));
+    EXPECT_EQ(7, dcg.sparse_row_count(0));
+    EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(1));
+    EXPECT_TRUE(dcg.is_file_dense(1));
+    EXPECT_EQ(0, dcg.sparse_row_count(1));
+    EXPECT_EQ(1000, dcg.source_segment_num_rows());
+    // Out-of-range index still hinges to DENSE.
+    EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(2));
+}
+
+// SDCG: only source_segment_num_rows present (no kinds/counts) still materializes a 1:1 all-DENSE
+// view so downstream positional access is uniform.
+TEST(TestDeltaColumnGroup, testSDCGLoadOnlySourceRows) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(30);
+    dcg_ver.add_column_files("d0.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.set_source_segment_num_rows(512);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(30, dcg_ver).ok());
+    ASSERT_EQ(1u, dcg.file_kinds().size());
+    EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(0));
+    EXPECT_EQ(0, dcg.sparse_row_count(0));
+    EXPECT_EQ(512, dcg.source_segment_num_rows());
+}
+
 } // namespace starrocks
