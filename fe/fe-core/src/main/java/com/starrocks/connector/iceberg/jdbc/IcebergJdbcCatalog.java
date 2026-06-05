@@ -169,7 +169,7 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
     public Database getDB(ConnectContext context, String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
-        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
