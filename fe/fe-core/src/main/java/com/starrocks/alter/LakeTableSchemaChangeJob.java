@@ -1297,22 +1297,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
 
-        // Evict shadow tablets from VectorIndexBuildScheduler so it stops trying to build
-        // .vi files for tablets that are about to be discarded.
-        // Unconditional: removeTablets() is idempotent and safe for unknown ids, so this
-        // is a no-op for non-vector-index ALTER jobs whose shadow tablets were never enqueued.
-        VectorIndexBuildScheduler viScheduler =
-                GlobalStateMgr.getCurrentState().getVectorIndexBuildScheduler();
-        if (viScheduler != null && physicalPartitionIndexMap != null) {
-            List<Long> shadowTabletIds = new ArrayList<>();
-            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.values()) {
-                for (Tablet t : shadowIdx.getTablets()) {
-                    shadowTabletIds.add(t.getId());
-                }
-            }
-            viScheduler.removeTablets(shadowTabletIds);
-        }
-
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
 

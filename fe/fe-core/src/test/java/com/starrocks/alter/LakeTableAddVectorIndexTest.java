@@ -43,9 +43,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class LakeTableAddVectorIndexTest {
     private static ConnectContext connectContext;
@@ -384,65 +382,6 @@ public class LakeTableAddVectorIndexTest {
                         "sort-key-change shadow tablet vibv must equal V_snap=" + vSnap +
                                 " (indexes==null → fallback to table.getIndexes()), got " + vibv);
             }
-        }
-    }
-
-    /**
-     * Verify that cancelling a vector-ADD ALTER TABLE schema-change job evicts its shadow
-     * tablets from {@link VectorIndexBuildScheduler}.
-     *
-     * <p>Steps:
-     * <ol>
-     *   <li>Create a lake table and issue a vector ADD ALTER (creates a LakeTableSchemaChangeJob in PENDING state).
-     *   <li>Collect the shadow tablet ids from the job's {@code physicalPartitionIndexMap}.
-     *   <li>Manually register those ids in the scheduler (simulating what recoveryScan would do during RUNNING).
-     *   <li>Cancel the job via {@code job.cancel("test")}.
-     *   <li>Assert all shadow ids have been removed from the scheduler's {@code pendingTablets} map.
-     * </ol>
-     */
-    @Test
-    public void testCancelJobEvictsShadowTabletsFromScheduler() throws Exception {
-        LakeTable table = createVectorTable("t_cancel_vi");
-        addVectorIndex("t_cancel_vi");
-
-        LakeTableSchemaChangeJob job = getSinglePendingJob(table);
-
-        // Collect shadow tablet ids from physicalPartitionIndexMap.
-        Table<Long, Long, MaterializedIndex> partitionIndexMap = getPartitionIndexMap(job);
-
-        List<Long> shadowTabletIds = new ArrayList<>();
-        for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
-            for (Tablet shadowTablet : cell.getValue().getTablets()) {
-                shadowTabletIds.add(shadowTablet.getId());
-            }
-        }
-        Assertions.assertFalse(shadowTabletIds.isEmpty(),
-                "Expected at least one shadow tablet in the job");
-
-        // Simulate what recoveryScan / publish would do: register the shadow tablets in the scheduler.
-        VectorIndexBuildScheduler scheduler =
-                GlobalStateMgr.getCurrentState().getVectorIndexBuildScheduler();
-        Assertions.assertNotNull(scheduler, "VectorIndexBuildScheduler must be registered in GlobalStateMgr");
-        for (long id : shadowTabletIds) {
-            scheduler.addPendingTablet(id, 1L, false);
-        }
-
-        // Live reference to the scheduler's private pending map, so the asserts below observe eviction.
-        Map<Long, ?> pendingTablets = Deencapsulation.getField(scheduler, "pendingTablets");
-
-        // Verify they are now pending.
-        for (long id : shadowTabletIds) {
-            Assertions.assertTrue(pendingTablets.containsKey(id),
-                    "Shadow tablet " + id + " must be pending before cancel");
-        }
-
-        // Cancel the job — this must evict the shadow tablets from the scheduler.
-        job.cancel("test cancel");
-
-        // All shadow ids must have been removed from the scheduler.
-        for (long id : shadowTabletIds) {
-            Assertions.assertFalse(pendingTablets.containsKey(id),
-                    "Shadow tablet " + id + " must be evicted from scheduler after ALTER cancel");
         }
     }
 
