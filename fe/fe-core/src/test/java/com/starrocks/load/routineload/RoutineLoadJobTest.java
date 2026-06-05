@@ -1287,9 +1287,9 @@ public class RoutineLoadJobTest {
         String originStmt = "CREATE ROUTINE LOAD job ON `order` " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
-        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
+        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
 
-        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
                 "ALTER ROUTINE LOAD FOR job COLUMNS(`a`, `b`, `c` = 1)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
 
