@@ -16,17 +16,16 @@ class unique_function;
 
 namespace detail::uf {
 
-inline constexpr std::size_t inline_size  = sizeof(void*) * 3;
+inline constexpr std::size_t inline_size = sizeof(void*) * 3;
 inline constexpr std::size_t inline_align = alignof(void*);
 
 template <class T>
-inline constexpr bool fits_inline_v =
-        sizeof(T) <= inline_size && alignof(T) <= inline_align &&
-        std::is_nothrow_move_constructible_v<T>;
+inline constexpr bool fits_inline_v = sizeof(T) <= inline_size &&
+                                      alignof(T) <= inline_align&& std::is_nothrow_move_constructible_v<T>;
 
 template <class R, class... Args>
 struct vtable {
-    R    (*invoke)(void*, Args&&...);
+    R (*invoke)(void*, Args&&...);
     void (*relocate)(void* src, void* dst) noexcept;
     void (*destroy)(void* self, void* alloc) noexcept;
 };
@@ -35,8 +34,8 @@ template <class F, class Alloc, class R, class... Args>
 struct ops {
     static constexpr bool inlined = fits_inline_v<F>;
 
-    using AT  = std::allocator_traits<Alloc>;
-    using FA  = typename AT::template rebind_alloc<F>;
+    using AT = std::allocator_traits<Alloc>;
+    using FA = typename AT::template rebind_alloc<F>;
     using FAT = std::allocator_traits<FA>;
 
     static R invoke(void* self, Args&&... args) {
@@ -76,22 +75,19 @@ class unique_function<R(Args...), Alloc> {
     using vt_t = detail::uf::vtable<R, Args...>;
 
 public:
-    using result_type    = R;
+    using result_type = R;
     using allocator_type = Alloc;
 
     unique_function() noexcept = default;
     explicit unique_function(const Alloc& a) noexcept : _alloc(a) {}
 
     template <class F, class DF = std::decay_t<F>,
-              std::enable_if_t<!std::is_same_v<DF, unique_function> &&
-                                       std::is_invocable_r_v<R, DF&, Args...>,
-                               int> = 0>
+              std::enable_if_t<!std::is_same_v<DF, unique_function> && std::is_invocable_r_v<R, DF&, Args...>, int> = 0>
     unique_function(F&& f, const Alloc& a = Alloc{}) : _alloc(a) {
         _emplace<DF>(std::forward<F>(f));
     }
 
-    unique_function(unique_function&& other) noexcept
-            : _alloc(std::move(other._alloc)), _vt(other._vt) {
+    unique_function(unique_function&& other) noexcept : _alloc(std::move(other._alloc)), _vt(other._vt) {
         if (_vt) {
             _vt->relocate(&other._storage, &_storage);
             other._vt = nullptr;
@@ -102,7 +98,7 @@ public:
         if (this != &other) {
             reset();
             _alloc = std::move(other._alloc);
-            _vt    = other._vt;
+            _vt = other._vt;
             if (_vt) {
                 _vt->relocate(&other._storage, &_storage);
                 other._vt = nullptr;
@@ -111,7 +107,7 @@ public:
         return *this;
     }
 
-    unique_function(const unique_function&)            = delete;
+    unique_function(const unique_function&) = delete;
     unique_function& operator=(const unique_function&) = delete;
 
     ~unique_function() { reset(); }
@@ -126,8 +122,7 @@ public:
     explicit operator bool() const noexcept { return _vt != nullptr; }
 
     R operator()(Args... args) const {
-        return _vt->invoke(const_cast<void*>(static_cast<const void*>(&_storage)),
-                           std::forward<Args>(args)...);
+        return _vt->invoke(const_cast<void*>(static_cast<const void*>(&_storage)), std::forward<Args>(args)...);
     }
 
     allocator_type get_allocator() const noexcept { return _alloc; }
@@ -139,7 +134,7 @@ private:
         if constexpr (Ops::inlined) {
             ::new (&_storage) DF(std::forward<F>(f));
         } else {
-            using FA  = typename std::allocator_traits<Alloc>::template rebind_alloc<DF>;
+            using FA = typename std::allocator_traits<Alloc>::template rebind_alloc<DF>;
             using FAT = std::allocator_traits<FA>;
             FA a(_alloc);
             DF* p = FAT::allocate(a, 1);
@@ -161,7 +156,6 @@ private:
 
 // Convenience alias for std::pmr.
 template <class Sig>
-using pmr_unique_function =
-        unique_function<Sig, std::pmr::polymorphic_allocator<std::byte>>;
+using pmr_unique_function = unique_function<Sig, std::pmr::polymorphic_allocator<std::byte>>;
 
 } // namespace starrocks
