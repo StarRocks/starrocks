@@ -150,7 +150,7 @@ t2	1	100	2222
 drop database db_${uuid0};
 -- result:
 -- !result
--- name: test_full_inserts_same_table_in_txn_ok
+-- name: test_full_inserts_same_table_in_txn_ok @cloud
 create database db_${uuid0};
 -- result:
 -- !result

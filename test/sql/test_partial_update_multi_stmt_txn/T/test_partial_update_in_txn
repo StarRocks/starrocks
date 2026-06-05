@@ -64,9 +64,11 @@ select 't2' tbl, k, v1, v2 from t2 order by k;
 drop database db_${uuid0};
 
 
--- name: test_full_inserts_same_table_in_txn_ok
--- Multiple FULL inserts (no partial column list) on the same table in one transaction are fine
--- (this is the supported multi-statement transaction case).
+-- name: test_full_inserts_same_table_in_txn_ok @cloud
+-- Multiple FULL inserts (no partial column list) on the same table in one transaction are fine on
+-- shared-data (this is the supported multi-statement transaction case). Tagged @cloud because on
+-- shared-nothing a second write to a table already written in the transaction is rejected by a
+-- separate rule (ERR_TXN_IMPORT_SAME_TABLE, 5303), so the expected result differs by storage mode.
 create database db_${uuid0};
 use db_${uuid0};
 CREATE TABLE t1 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
