@@ -534,12 +534,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testGroupByDistinctColumnOptimization() throws Exception {
+    public void testGroupByDistinctColumnOptimizationNotTriggeredOnHighDistinctColNDV() throws Exception {
+        // Rationale for the negative assertion: in #17643 (Mar 2023) the salt rewrite was strictly
+        // better than the only available alternative (3-stage shuffle-by groups). After
+        // #39556 (Feb 2024) introduced the 4-stage shuffle-by (groups, distinct col) alternative, that alternative now
+        // covers the same distribution case with one fewer shuffle meaning in this case the rewrite should not be applied.
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
                         TExplainLevel.NORMAL);
-        Assertions.assertTrue(
+        Assertions.assertFalse(
                 replayPair.second.contains("CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"),
+                replayPair.second);
+        // Since we shuffle by (year, case) and case has a high NDV, we get uniformly distributed partitions
+        Assertions.assertTrue(
+                replayPair.second.contains("HASH_PARTITIONED: 39: year, 42: case"),
                 replayPair.second);
     }
 
