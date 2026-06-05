@@ -120,6 +120,16 @@ public:
 
     const ChunkPtr& back() { return _chunks.back(); }
 
+    void append_selective_to_back(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+        auto& chunk = _chunks.back();
+        const size_t prev_bytes = chunk->memory_usage();
+
+        chunk->append_selective(src, indexes, from, size);
+        const size_t new_bytes = chunk->memory_usage();
+
+        _tracker->consume(new_bytes - prev_bytes);
+    }
+
     bool is_full() const {
         return _chunks.size() >= 4 || _tracker->consumption() > config::partition_hash_join_probe_limit_size;
     }
