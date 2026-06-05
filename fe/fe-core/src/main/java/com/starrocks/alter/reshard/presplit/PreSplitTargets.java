@@ -32,22 +32,27 @@ import java.util.List;
  * that contract in one place so every hook (and any future caller) checks the
  * same shape.
  *
- * <p>Each helper returns a sentinel ({@code null} or {@code -1}) for "no
- * match" so callers can chain early returns without intermediate booleans.
- * The eligibility gate inside {@link TabletPreSplitCoordinator#maybeAct}
+ * <p>The eligibility gate inside {@link TabletPreSplitCoordinator#maybeAct}
  * re-runs equivalent checks against the resolved {@code physicalPartitionId};
- * the helpers here only let the hook skip the pipeline construction.
+ * the helpers here only let the hook skip the pipeline construction. Because
+ * the single-partition hook flow short-circuits before {@code maybeAct}, the
+ * skip must still be attributed to a {@link SkipReason} so operators can see
+ * why pre-split did not run.
  *
  * <p><b>Two slices</b>:
  * <ul>
  *   <li>{@link #findEligibleTable} — table-only structural gate (range
  *       distribution, NORMAL state, no MV/rollup, supported sort key) used
- *       by the multi-partition coordinator's defensive re-check. The
- *       multi-partition coordinator does per-partition checks on its own
- *       under a short READ lock after pre-create.</li>
+ *       by the multi-partition coordinator's defensive re-check. Returns the
+ *       failing {@link SkipReason}, or {@code null} when the table is eligible;
+ *       the caller records it. The multi-partition coordinator does
+ *       per-partition checks on its own under a short READ lock after
+ *       pre-create.</li>
  *   <li>{@link #findEligibleTarget} — single-partition gate; performs the
  *       per-partition slice (single physical partition, single base tablet)
- *       and continues to gate the existing single-partition hooks unchanged.</li>
+ *       and gates the single-partition hooks. Returns the resolved
+ *       {@link EligibleTarget}, or {@code null} after recording the failing
+ *       {@link SkipReason} itself.</li>
  * </ul>
  */
 final class PreSplitTargets {
@@ -108,25 +113,43 @@ final class PreSplitTargets {
     }
 
     /**
-     * Chain {@link #findUniquePhysicalPartition} + {@link #findSingleBaseTabletId}
-     * into a single eligibility resolve. Used by every load-path hook so all
-     * callers produce the same {@link EligibleTarget} shape.
+     * Resolve the single-partition, single-tablet target for a load-path hook,
+     * recording the eligibility-skip counter when no eligible target is found.
      *
-     * @return the resolved {@link EligibleTarget}, or {@code null} when the
-     *         table has zero or multiple partitions, the base index lookup
-     *         fails (e.g. an alter raced the load), or the partition has
-     *         zero or multiple base-index tablets.
+     * <p>The recording is centralized here, rather than left to each caller,
+     * because the single-partition hook flows are the only callers and they all
+     * short-circuit before {@link TabletPreSplitCoordinator#maybeAct} — the gate
+     * that would otherwise record the skip. Folding it in means neither hook can
+     * forget it, and mirrors {@link TabletPreSplitCoordinator}'s own
+     * {@code skipEligibility}. (Contrast {@link #findEligibleTable}, which stays
+     * pure because its multi-partition caller needs the reason for its own
+     * {@code Skipped} outcome and records it itself.)
+     *
+     * @return the resolved {@link EligibleTarget}, or {@code null} when the table
+     *         does not have a single physical partition or its base index is
+     *         missing — records {@link SkipReason#METADATA_NOT_RESOLVED} (e.g. an
+     *         alter raced the load); or when the partition has zero or multiple
+     *         base-index tablets — records {@link SkipReason#MULTIPLE_BASE_INDEX_TABLETS}
+     *         (the common case on a re-load against an already-split partition).
      */
     static EligibleTarget findEligibleTarget(Database database, OlapTable olapTable) {
         PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
         if (uniquePartition == null) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
         }
-        long oldTabletId = findSingleBaseTabletId(olapTable, uniquePartition);
-        if (oldTabletId < 0) {
+        MaterializedIndex baseIndex = uniquePartition.getIndex(olapTable.getBaseIndexMetaId());
+        if (baseIndex == null) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
         }
-        return new EligibleTarget(database, olapTable, uniquePartition.getId(), oldTabletId);
+        List<Tablet> baseTablets = baseIndex.getTablets();
+        if (baseTablets.size() != 1) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
+            return null;
+        }
+        long baseTabletId = baseTablets.get(0).getId();
+        return new EligibleTarget(database, olapTable, uniquePartition.getId(), baseTabletId);
     }
 
     /**
@@ -141,21 +164,5 @@ final class PreSplitTargets {
             return null;
         }
         return partitions.iterator().next();
-    }
-
-    /**
-     * @return the single base-index tablet's id, or {@code -1} when the
-     *         partition has zero or multiple base-index tablets.
-     */
-    static long findSingleBaseTabletId(OlapTable table, PhysicalPartition partition) {
-        MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
-        if (baseIndex == null) {
-            return -1L;
-        }
-        List<Tablet> tablets = baseIndex.getTablets();
-        if (tablets.size() != 1) {
-            return -1L;
-        }
-        return tablets.get(0).getId();
     }
 }
