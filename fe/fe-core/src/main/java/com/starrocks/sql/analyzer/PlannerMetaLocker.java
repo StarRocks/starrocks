@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -37,8 +36,13 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.AbstractMap;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +61,8 @@ import java.util.stream.Collectors;
  * and obtain the db-read-lock of all dbs involved in the query.
  */
 public class PlannerMetaLocker implements AutoCloseable {
+    private static final Logger LOG = LogManager.getLogger(PlannerMetaLocker.class);
+
     // Map database id -> database
     private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
@@ -68,6 +74,25 @@ public class PlannerMetaLocker implements AutoCloseable {
      * so the table ids do not need to be ordered here.
      */
     private Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
+
+    /**
+     * Stack of acquisitions that are currently held but not yet released.
+     *
+     * <p>Each successful {@link #lock()} / {@link #tryLock} pushes a snapshot of the
+     * {@code (db-id, table-ids)} entries it actually acquired; the matching {@link #unlock()}
+     * pops the top snapshot and releases exactly those entries in reverse order. The underlying
+     * {@code LockManager} is reentrant, so nested acquisitions simply bump the per-rid refCount
+     * and each symmetric unlock pops one level and decrements it again.
+     *
+     * <p>Recording a per-acquisition snapshot (instead of re-deriving the entries from
+     * {@link #tables} at release time) keeps {@code unlock()} correct no matter how deeply
+     * lock/unlock are nested, and never tries to release an rid that this acquisition did not
+     * take — which is exactly the asymmetry that previously surfaced as
+     * {@code IllegalMonitorStateException} (see POST-1561). An empty stack means nothing is held,
+     * so {@code unlock()} called without a matching {@code lock()} (or after a failed lock() that
+     * already rolled itself back) is a safe no-op.
+     */
+    private final Deque<List<Map.Entry<Long, List<Long>>>> heldStack = new ArrayDeque<>();
 
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
@@ -82,23 +107,23 @@ public class PlannerMetaLocker implements AutoCloseable {
         Locker locker = new Locker(queryId);
 
         boolean isLockSuccess = false;
-        List<Database> lockedDbs = Lists.newArrayList();
+        List<Map.Entry<Long, List<Long>>> acquired = new ArrayList<>(tables.size());
         try {
             for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
-                Database database = dbs.get(entry.getKey());
-                if (!locker.tryLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(entry.getValue()),
-                        LockType.READ, timeout, unit)) {
+                long dbId = entry.getKey();
+                List<Long> tableIds = new ArrayList<>(entry.getValue());
+                if (!locker.tryLockTablesWithIntensiveDbLock(dbId, tableIds, LockType.READ, timeout, unit)) {
                     return false;
                 }
-                lockedDbs.add(database);
+                acquired.add(new AbstractMap.SimpleImmutableEntry<>(dbId, tableIds));
             }
             isLockSuccess = true;
+            // Only a fully-successful acquisition is pushed; a partial one is rolled back below
+            // and leaves the stack (and any outer acquisition) untouched.
+            heldStack.push(acquired);
         } finally {
             if (!isLockSuccess) {
-                for (Database database : lockedDbs) {
-                    locker.unLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(tables.get(database.getId())),
-                            LockType.READ);
-                }
+                releaseInReverse(locker, acquired, "tryLock partial rollback");
             }
         }
         return true;
@@ -110,26 +135,64 @@ public class PlannerMetaLocker implements AutoCloseable {
 
     public void lock() {
         Locker locker = new Locker(queryId);
-        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
-            Database database = dbs.get(entry.getKey());
-            List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.lockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
+        List<Map.Entry<Long, List<Long>>> acquired = new ArrayList<>(tables.size());
+        try {
+            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+                long dbId = entry.getKey();
+                List<Long> tableIds = new ArrayList<>(entry.getValue());
+                locker.lockTablesWithIntensiveDbLock(dbId, tableIds, LockType.READ);
+                acquired.add(new AbstractMap.SimpleImmutableEntry<>(dbId, tableIds));
+            }
+            heldStack.push(acquired);
+        } catch (Throwable t) {
+            // Partial-acquire rollback at the multi-db level. Inner
+            // lockTablesWithIntensiveDbLock is atomic per-db (it rolls itself back on failure),
+            // so a throw here means the entries already in `acquired` are fully held while the
+            // current and later ones are not. Release the held ones (reverse order) and re-throw.
+            // The stack is NOT touched: we never pushed, so any outer acquisition stays intact.
+            releaseInReverse(locker, acquired, "lock partial rollback");
+            throw t;
         }
     }
 
     public void unlock() {
-        Locker locker = new Locker();
-        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
-            Database database = dbs.get(entry.getKey());
-            List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.unLockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
+        List<Map.Entry<Long, List<Long>>> acquired = heldStack.poll();
+        if (acquired == null) {
+            // Nothing currently held: lock()/tryLock() was never called successfully on this
+            // instance, or every acquisition has already been released. This is what lets callers
+            // pair lock() with unlock() in a finally block without a spurious
+            // "Attempt to unlock lock" when lock() failed partway and rolled itself back.
+            return;
         }
+        releaseInReverse(new Locker(), acquired, "unlock");
     }
 
     @Override
     public void close() {
-        unlock();
+        // AutoCloseable contract: release every acquisition this instance still holds, regardless
+        // of how many lock()/tryLock() calls have not yet been matched by an explicit unlock().
+        while (!heldStack.isEmpty()) {
+            unlock();
+        }
     }
+
+    /**
+     * Release the given acquisition snapshot in reverse acquisition order, best-effort: a failure
+     * on one entry is logged and the remaining entries are still released. A fully-balanced lock
+     * state never triggers a release failure; logging instead of throwing keeps a single bad rid
+     * from leaking the rest of the held locks.
+     */
+    private static void releaseInReverse(Locker locker, List<Map.Entry<Long, List<Long>>> acquired, String context) {
+        for (int i = acquired.size() - 1; i >= 0; i--) {
+            Map.Entry<Long, List<Long>> entry = acquired.get(i);
+            try {
+                locker.unLockTablesWithIntensiveDbLock(entry.getKey(), entry.getValue(), LockType.READ);
+            } catch (Throwable t) {
+                LOG.warn("PlannerMetaLocker.{}: db {} release failed, continuing", context, entry.getKey(), t);
+            }
+        }
+    }
+
     /**
      * Collect tables that need to be protected by the PlannerMetaLock
      */
