@@ -84,6 +84,7 @@ using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 class QueryRuntimeState;
+class FragmentRuntimeState;
 class FragmentContext;
 } // namespace pipeline
 
@@ -144,6 +145,11 @@ public:
     }
     pipeline::QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
     const pipeline::QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
+    void set_fragment_runtime_state(pipeline::FragmentRuntimeState* fragment_runtime_state) {
+        _fragment_runtime_state = fragment_runtime_state;
+    }
+    pipeline::FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
+    const pipeline::FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
     void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
     QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
@@ -784,6 +790,7 @@ private:
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::QueryRuntimeState* _query_runtime_state = nullptr;
+    pipeline::FragmentRuntimeState* _fragment_runtime_state = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;

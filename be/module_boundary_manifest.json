@@ -479,6 +479,7 @@
         "be/src/exec/runtime_filter/**",
         "be/src/exec/pipeline/primitives/driver_executor.h",
         "be/src/exec/pipeline/primitives/driver_observer.h",
+        "be/src/exec/pipeline/primitives/fragment_runtime_state.h",
         "be/src/exec/pipeline/primitives/operator_exec_stats.h",
         "be/src/exec/pipeline/primitives/operator_runtime_access.h",
         "be/src/exec/pipeline/primitives/query_runtime_state.h",

@@ -51,6 +51,20 @@ TEST(RuntimeStateCoreTest, SetFragmentCtxKeepsFragmentDictStateExplicit) {
             ::testing::ExitedWithCode(0), "");
 }
 
+TEST(RuntimeStateCoreTest, FragmentRuntimeStateDefaultNull) {
+    RuntimeState state;
+    EXPECT_EQ(nullptr, state.fragment_runtime_state());
+}
+
+TEST(RuntimeStateCoreTest, FragmentRuntimeStateSetGet) {
+    RuntimeState state;
+    auto* ptr = reinterpret_cast<pipeline::FragmentRuntimeState*>(static_cast<uintptr_t>(0x1234));
+    state.set_fragment_runtime_state(ptr);
+    EXPECT_EQ(ptr, state.fragment_runtime_state());
+    const auto& const_state = state;
+    EXPECT_EQ(ptr, const_state.fragment_runtime_state());
+}
+
 TEST(RuntimeStateCoreTest, QueryExecutionServicesCanBeInjectedAlongsideExecEnv) {
     auto* query_execution_services = reinterpret_cast<const QueryExecutionServices*>(static_cast<uintptr_t>(0x1234));
     auto* exec_env = reinterpret_cast<ExecEnv*>(static_cast<uintptr_t>(0x5678));

@@ -37,6 +37,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/event.h"
+#include "exec/pipeline/primitives/fragment_runtime_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/query_context.h"
@@ -111,6 +112,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
           _operators(operators),
           _query_ctx(query_ctx),
           _query_runtime_state(query_ctx == nullptr ? nullptr : &query_ctx->query_runtime_state()),
+          _fragment_runtime_state(fragment_ctx == nullptr ? nullptr : &fragment_ctx->fragment_runtime_state()),
           _fragment_ctx(fragment_ctx),
           _pipeline(pipeline),
           _driver_observer(driver_observer),
@@ -134,6 +136,7 @@ PipelineDriver::PipelineDriver()
           _operators(),
           _query_ctx(nullptr),
           _query_runtime_state(nullptr),
+          _fragment_runtime_state(nullptr),
           _fragment_ctx(nullptr),
           _pipeline(nullptr),
           _driver_observer(nullptr),
@@ -158,7 +161,9 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
             ss << "query_id="
                << (this->_query_runtime_state == nullptr ? "None" : print_id(this->query_runtime_state()->query_id()))
                << " fragment_id="
-               << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
+               << (this->_fragment_runtime_state == nullptr
+                           ? "None"
+                           : print_id(this->fragment_runtime_state()->fragment_instance_id()));
             auto msg = fmt::format(
                     "{} close operator {}-{} failed, may leak resources when {}, please report an issue at "
                     "https://github.com/StarRocks/starrocks/issues/new/choose.",
@@ -945,7 +950,8 @@ std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
     ss << "query_id="
        << (this->_query_runtime_state == nullptr ? "None" : print_id(this->query_runtime_state()->query_id()))
        << " fragment_id="
-       << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
+       << (this->_fragment_runtime_state == nullptr ? "None"
+                                                    : print_id(this->fragment_runtime_state()->fragment_instance_id()))
        << " driver=" << _driver_name << " addr=" << this << ", status=" << ds_to_string(this->driver_state())
        << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {

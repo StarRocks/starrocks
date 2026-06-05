@@ -126,6 +126,12 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
+void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
+    DCHECK(state != nullptr);
+    state->set_fragment_ctx(this);
+    state->set_fragment_runtime_state(&fragment_runtime_state());
+}
+
 void FragmentContext::count_down_execution_group(size_t val) {
     // Note that _pipelines may be destructed after fetch_add
     // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
@@ -277,7 +283,7 @@ void FragmentContext::set_final_status(const Status& status) {
         if (_s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
-                                print_id(_fragment_instance_id), detailed_message);
+                                print_id(fragment_instance_id()), detailed_message);
             if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
                 detailed_message == "UserCancel" || is_timeout) {
                 LOG(INFO) << cancel_msg;
@@ -352,7 +358,7 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         runtime_services(_runtime_state.get())
-                .profile_report_worker->unregister_pipeline_load(_query_id, _fragment_instance_id);
+                .profile_report_worker->unregister_pipeline_load(_query_id, fragment_instance_id());
     }
 }
 
