@@ -24,6 +24,76 @@ description: "StarRocks 4.0 release notes: DECIMAL256 type, File Bundling for sh
 
 :::
 
+## 4.0.11
+
+Release Date: June 5, 2026
+
+### Behavior Changes
+
+- `get_json_string` and the other `get_json_*` functions now return the JSON parse error instead of NULL when implicit VARCHAR-to-JSON parsing fails under `ALLOW_THROW_EXCEPTION`. The default behavior (returning NULL when the mode is disabled) is unchanged. [#73199](https://github.com/StarRocks/starrocks/pull/73199)
+- `pipeline_enable_large_column_checker` is now enabled by default. [#72798](https://github.com/StarRocks/starrocks/pull/72798)
+
+### Improvements
+
+- Lake write-path load spill files now use a flat, single-level directory layout with the transaction ID baked into each filename, and are reclaimed by a txn-id-based vacuum pass. This moves bulk deletes off the write hot path and lets vacuum clean up spill files leaked by BE crashes. [#73064](https://github.com/StarRocks/starrocks/pull/73064)
+- SHOW statements (such as `SHOW GRANTS` and `SHOW WAREHOUSES`) are now allowed inside an explicit transaction, so BI/JDBC clients that automatically issue SHOW no longer break the transaction flow. [#72954](https://github.com/StarRocks/starrocks/pull/72954)
+- Java UDAF and UDTF now support STRUCT arguments and return types. [#72911](https://github.com/StarRocks/starrocks/pull/72911)
+- Scalar Java UDF now supports STRUCT arguments. [#72620](https://github.com/StarRocks/starrocks/pull/72620)
+- Java UDF now supports DATE and DATETIME types. [#72337](https://github.com/StarRocks/starrocks/pull/72337)
+- Java UDF now supports nested ARRAY/MAP types. [#72283](https://github.com/StarRocks/starrocks/pull/72283)
+- Added the FE configuration `deploy_serialization_min_thread_pool_size`. [#72274](https://github.com/StarRocks/starrocks/pull/72274)
+- Skipped redundant partition key expression building when an `add_partition_value` deduplication hit occurs. [#73156](https://github.com/StarRocks/starrocks/pull/73156)
+- Avoided a redundant `latestSnapshot()` call in `PaimonMetadata#getTableVersionRange`. [#72892](https://github.com/StarRocks/starrocks/pull/72892)
+- Deduplicated commutative AND/OR expressions in scalar operator common subexpression elimination. [#72823](https://github.com/StarRocks/starrocks/pull/72823)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- A memory leak introduced by the UDAF cache. [#74025](https://github.com/StarRocks/starrocks/pull/74025)
+- An incorrect implementation in aggregate combined functions. [#74169](https://github.com/StarRocks/starrocks/pull/74169)
+- An issue in shared-data combined txn log mode where the per-partition coordinator claim was not re-recorded on every sender's open, which could drop txn logs. [#73962](https://github.com/StarRocks/starrocks/pull/73962)
+- A read failure on Iceberg tables that use a custom `LocationProvider`, fixed by lazily initializing the `LocationProvider` in `SerializableTable`. [#73482](https://github.com/StarRocks/starrocks/pull/73482)
+- A serialization failure caused by the `de.javakaffee` `UnmodifiableCollectionsSerializer`, now replaced with a Java 17-compatible version. [#73458](https://github.com/StarRocks/starrocks/pull/73458)
+- `HdfsFsManager` copy error messages now include the underlying cause. [#73414](https://github.com/StarRocks/starrocks/pull/73414)
+- A concurrent `SegmentFlushTask` race in `DeltaWriter::commit()`. [#73371](https://github.com/StarRocks/starrocks/pull/73371)
+- Sort merge provider errors are now propagated to the fragment context instead of being lost. [#73337](https://github.com/StarRocks/starrocks/pull/73337)
+- An issue where Ranger row-filter/masking policies on Hive views were skipped, so policies on the view or its base tables were not applied. [#73265](https://github.com/StarRocks/starrocks/pull/73265)
+- Upgraded libthrift to 0.23.0 to address a security vulnerability (CVE). [#73243](https://github.com/StarRocks/starrocks/pull/73243)
+- An FE file-descriptor leak, fixed by reusing `HttpClient` instances. [#73239](https://github.com/StarRocks/starrocks/pull/73239)
+- Parquet broker load errors now include file/column/row context. [#73236](https://github.com/StarRocks/starrocks/pull/73236)
+- A slot lookup failure for output slots with an empty `col_name` in the Spark connector external scan. [#73225](https://github.com/StarRocks/starrocks/pull/73225)
+- A crash in `SinkBuffer` during graceful exit. [#73202](https://github.com/StarRocks/starrocks/pull/73202)
+- Query cache conflicts with local shuffle aggregation. [#73194](https://github.com/StarRocks/starrocks/pull/73194)
+- A use-after-free of the Hive partition descriptor across fragment teardown. [#73176](https://github.com/StarRocks/starrocks/pull/73176)
+- A thread-safety issue in lake vacuum, fixed by using `localtime_r`. [#73088](https://github.com/StarRocks/starrocks/pull/73088)
+- A race condition between `PipelineTimerTask` `doRun` and unscheduling during query context destruction. [#73082](https://github.com/StarRocks/starrocks/pull/73082)
+- Lock contention on read-only query-engine paths, reduced by relaxing DB locks. [#73067](https://github.com/StarRocks/starrocks/pull/73067)
+- An MV refresh failure with SQL Server tables in a JDBC catalog. [#72962](https://github.com/StarRocks/starrocks/pull/72962)
+- A JNI local-reference leak in `JDBCScanner::_init_jdbc_scanner`. [#72913](https://github.com/StarRocks/starrocks/pull/72913)
+- An issue where partition TopN could lose a child's output column. [#72848](https://github.com/StarRocks/starrocks/pull/72848)
+- An incorrect plan caused by not clearing `LambdaArgument.transformedOp` before INSERT OVERWRITE re-planning. [#72832](https://github.com/StarRocks/starrocks/pull/72832)
+- The coordinator lock was held during external resource cleanup. [#72830](https://github.com/StarRocks/starrocks/pull/72830)
+- `Locker` rollback is now exception-safe and the unlock order is fixed. [#72789](https://github.com/StarRocks/starrocks/pull/72789)
+- An incorrect byte order in `ColumnDict.merge`, now using unsigned byte order. [#72778](https://github.com/StarRocks/starrocks/pull/72778)
+- A stack-buffer-overflow when formatting into a temporary `std::string`. [#72728](https://github.com/StarRocks/starrocks/pull/72728)
+- The HAVING clause is now checked when disabling aggregation spill on a small LIMIT. [#72705](https://github.com/StarRocks/starrocks/pull/72705)
+- A hang caused by joining forwarded RPCs when draining the runtime_filter worker. [#72626](https://github.com/StarRocks/starrocks/pull/72626)
+- Incorrect lazy-materialization slot nullability for a materialized view over an outer join. [#72621](https://github.com/StarRocks/starrocks/pull/72621)
+- `merge_condition` was not preserved when applying a normal rowset commit. [#72542](https://github.com/StarRocks/starrocks/pull/72542)
+- Lock contention in `TabletScheduler` / `TabletSchedCtx` hot paths during clone, reduced by relaxing DB locks. [#72475](https://github.com/StarRocks/starrocks/pull/72475)
+- `Locker` did not roll back a partial intensive-lock acquisition. [#72423](https://github.com/StarRocks/starrocks/pull/72423)
+- A spillable hash join probe crash. [#72397](https://github.com/StarRocks/starrocks/pull/72397)
+- COALESCE children are now cast to a common type in the JOIN USING transformer. [#72338](https://github.com/StarRocks/starrocks/pull/72338)
+- DB READ lock was held too broadly for single-table proc directories, now relaxed to per-table. [#72334](https://github.com/StarRocks/starrocks/pull/72334)
+- A memory leak when caching the materialized view plan context. [#72300](https://github.com/StarRocks/starrocks/pull/72300)
+- FSE-v2 did not set the schema for shared-data sorted schema change. [#72235](https://github.com/StarRocks/starrocks/pull/72235)
+- `ConsistencyChecker` held a DB READ lock too broadly in periodic scans, now relaxed to per-table READ. [#72218](https://github.com/StarRocks/starrocks/pull/72218)
+- A BE crash when querying `information_schema.warehouse_queries`. [#72019](https://github.com/StarRocks/starrocks/pull/72019)
+- A trailing `\r` was not stripped before the closing enclose in CRLF CSV inputs. [#71866](https://github.com/StarRocks/starrocks/pull/71866)
+- Paimon primary key columns were incorrectly marked as non-nullable when querying an external catalog. [#71660](https://github.com/StarRocks/starrocks/pull/71660)
+- A redundant double slash was created when constructing the JDBC URL if the URI already ended with a trailing slash, breaking strict drivers such as ClickHouse. [#70992](https://github.com/StarRocks/starrocks/pull/70992)
+
 ## 4.0.10
 
 Release Date: May 9, 2026
