@@ -41,6 +41,7 @@ import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.profiles.ProfileFile;
 import software.amazon.awssdk.profiles.ProfileFileSystemSetting;
 import software.amazon.awssdk.regions.Region;
@@ -48,7 +49,6 @@ import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
 import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
-import software.amazon.awssdk.services.sts.auth.StsWebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
 import java.util.Map;
@@ -203,18 +203,7 @@ public class AwsCloudCredential implements CloudCredential {
         } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (useWebIdentityProfile) {
-            // stsRegion takes precedence; fall back to region so STS client has a region when
-            // aws.s3.sts.region is not set but aws.s3.region is — avoids eager DefaultAwsRegionProviderChain
-            String effectiveStsRegion = !stsRegion.isEmpty() ? stsRegion : region;
-            StsClientBuilder stsClientBuilder = StsClient.builder();
-            if (!effectiveStsRegion.isEmpty()) {
-                stsClientBuilder.region(Region.of(effectiveStsRegion));
-            }
-            if (!stsEndpoint.isEmpty()) {
-                stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(stsEndpoint));
-            }
-            return StsWebIdentityTokenFileCredentialsProvider.builder()
-                    .stsClient(stsClientBuilder.build())
+            return WebIdentityTokenFileCredentialsProvider.builder()
                     .asyncCredentialUpdateEnabled(true)
                     .build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {

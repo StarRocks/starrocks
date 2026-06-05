@@ -28,8 +28,8 @@ import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
-import software.amazon.awssdk.services.sts.auth.StsWebIdentityTokenFileCredentialsProvider;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -121,12 +121,11 @@ public class AwsCloudConfigurationTest {
     public void testWebIdentityGenerateCredentialsProvider() {
         Map<String, String> properties = new HashMap<>();
         properties.put("aws.s3.use_web_identity_token_file", "true");
-        properties.put("aws.s3.region", "us-east-1");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         Assertions.assertNotNull(cloudConfiguration);
         AwsCredentialsProvider provider =
                 ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential().generateAWSCredentialsProvider();
-        Assertions.assertInstanceOf(StsWebIdentityTokenFileCredentialsProvider.class, provider);
+        Assertions.assertInstanceOf(WebIdentityTokenFileCredentialsProvider.class, provider);
     }
 
     @Test
