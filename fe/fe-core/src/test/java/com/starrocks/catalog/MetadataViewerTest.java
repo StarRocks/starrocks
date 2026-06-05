@@ -39,6 +39,7 @@ import com.starrocks.backup.CatalogMocker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -282,10 +283,12 @@ public class MetadataViewerTest {
         // length-encoded row stream and hangs/disconnects the client.
 
         // Force replicationNum (3 replicas exist) to 4 so the MISSING branch produces one phantom row.
-        new MockUp<PartitionInfo>() {
-            @Mock
-            public short getReplicationNum(long partitionId) {
-                return 4;
+        PartitionInfo partitionInfo =
+                ((OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME)).getPartitionInfo();
+        new Expectations(partitionInfo) {
+            {
+                partitionInfo.getReplicationNum(anyLong);
+                result = (short) 4;
             }
         };
 
@@ -296,8 +299,9 @@ public class MetadataViewerTest {
 
         List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
 
-        int expectedColumnCount =
-                new ShowResultMetaFactory().getMetadata(stmt).getColumnCount();
+        ShowResultSetMetaData meta = new ShowResultMetaFactory().getMetadata(stmt);
+        int expectedColumnCount = meta.getColumnCount();
+        int statusIdx = meta.getColumnIdx("Status");
 
         // 3 existing replicas + 1 missing replica.
         Assertions.assertEquals(4, result.size());
@@ -305,7 +309,7 @@ public class MetadataViewerTest {
         for (List<String> row : result) {
             Assertions.assertEquals(expectedColumnCount, row.size(),
                     "every row must have the same cell count as the declared metadata; row=" + row);
-            if (ReplicaStatus.MISSING.name().equals(row.get(row.size() - 1))) {
+            if (ReplicaStatus.MISSING.name().equals(row.get(statusIdx))) {
                 sawMissing = true;
             }
         }
