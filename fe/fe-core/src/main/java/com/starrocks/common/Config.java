@@ -2501,6 +2501,11 @@ public class Config extends ConfigBase {
     public static String statistics_sample_ndv_estimator =
             NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
+    @ConfField(mutable = true, comment = "Declared-length threshold above which a string column " +
+            "is collected by its own dedicated statistics SQL during statistics collection. " +
+            "Disabled by default (0); set a positive value to enable the isolation.")
+    public static long statistics_large_string_column_merge_threshold = 0;
+
     /**
      * The partition size of sample collect, default 300 partitions
      */
