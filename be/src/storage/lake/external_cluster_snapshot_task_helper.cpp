@@ -140,13 +140,11 @@ void collect_unused_files(const TabletFileCollections& collections, FileSet& unu
             continue;
         }
 
-        if (rowset->bundle_file_offsets_size() > 0) {
-            for (const auto& segment : rowset->segments()) {
-                pre_bundle_data_files.insert(segment);
-            }
-        } else {
-            for (const auto& segment : rowset->segments()) {
-                unused_data_files.insert(segment);
+        for (const auto& segment_meta : rowset->segment_metas()) {
+            if (segment_meta.has_bundle_file_offset()) {
+                pre_bundle_data_files.insert(segment_meta.filename());
+            } else {
+                unused_data_files.insert(segment_meta.filename());
             }
         }
     }
@@ -185,13 +183,12 @@ TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFi
         if (collections.pre_rowsets.contains(rowset_id)) {
             continue;
         }
-        for (const auto& segment : rowset->segments()) {
-            if (pre_bundle_data_files.contains(segment)) {
-                pre_bundle_data_files.erase(segment);
-            }
-            auto [it, inserted] = globally_bound_segments.emplace(segment);
+        for (const auto& segment_meta : rowset->segment_metas()) {
+            const auto& segment_filename = segment_meta.filename();
+            pre_bundle_data_files.erase(segment_filename);
+            auto [it, inserted] = globally_bound_segments.emplace(segment_filename);
             if (inserted) {
-                tablet_pb->add_new_data_files(segment);
+                tablet_pb->add_new_data_files(segment_filename);
             }
         }
     }

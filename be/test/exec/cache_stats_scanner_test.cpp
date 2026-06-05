@@ -104,8 +104,9 @@ protected:
         auto metadata = create_base_metadata(version);
 
         auto rowset = metadata->add_rowsets();
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
 
         CHECK(_tablet_mgr->put_tablet_metadata(*metadata).ok());
 
@@ -213,16 +214,18 @@ TEST_F(CacheStatsScannerTest, test_basic) {
     auto metadata = create_base_metadata(version);
 
     auto rowset1 = metadata->add_rowsets();
-    rowset1->add_segments("seg_001.dat");
-    rowset1->add_segment_size(seg_size);
+    auto* segment_with_size = rowset1->add_segment_metas();
+    segment_with_size->set_filename("seg_001.dat");
+    segment_with_size->set_size(seg_size);
 
     auto rowset2 = metadata->add_rowsets();
-    rowset2->add_segments("seg_without_size.dat");
+    rowset2->add_segment_metas()->set_filename("seg_without_size.dat");
 
     auto rowset3 = metadata->add_rowsets();
-    rowset3->add_segments("seg_with_offset.dat");
-    rowset3->add_segment_size(seg_with_offset);
-    rowset3->add_bundle_file_offsets(64);
+    auto* segment_with_offset = rowset3->add_segment_metas();
+    segment_with_offset->set_filename("seg_with_offset.dat");
+    segment_with_offset->set_size(seg_with_offset);
+    segment_with_offset->set_bundle_file_offset(64);
 
     auto delvec_meta = metadata->mutable_delvec_meta();
     auto& file_meta = (*delvec_meta->mutable_version_to_file())[1];

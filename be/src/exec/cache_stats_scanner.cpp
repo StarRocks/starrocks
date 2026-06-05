@@ -114,13 +114,10 @@ Status CacheStatsScanner::_get_tablet_cache_stats(int64_t* cached_bytes, int64_t
     };
 
     for (const auto& rowset : metadata->rowsets()) {
-        const auto segment_cnt = rowset.segments_size();
-        const bool has_segment_size = (segment_cnt == rowset.segment_size_size());
-        const bool is_bundled_file = (segment_cnt == rowset.bundle_file_offsets_size());
-        for (size_t i = 0; i < segment_cnt; ++i) {
-            std::string segment_path = tablet_mgr->segment_location(_tablet_id, rowset.segments().Get(i));
-            int64_t offset = is_bundled_file ? rowset.bundle_file_offsets().Get(i) : 0;
-            int64_t size = has_segment_size ? rowset.segment_size().Get(i) : -1;
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            std::string segment_path = tablet_mgr->segment_location(_tablet_id, segment_meta.filename());
+            int64_t offset = segment_meta.has_bundle_file_offset() ? segment_meta.bundle_file_offset() : 0;
+            int64_t size = segment_meta.has_size() ? segment_meta.size() : -1;
             RETURN_IF_ERROR(collect_file_cache_stats(segment_path, offset, size));
         }
     }
