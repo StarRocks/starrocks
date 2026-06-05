@@ -33,6 +33,14 @@ public class AuthorizationMgrEPack extends AuthorizationMgr {
 
     @Override
     protected void invalidateRolesInCacheRoleUnlocked(long roleId) throws PrivilegeException {
+        // The `public` role is implicitly granted to every user and role, so it never
+        // appears in any cached entry's roleIds and the per-role reverse lookup below
+        // would match nothing. A change to it can affect every cached merged collection,
+        // so drop the whole cache instead.
+        if (roleId == PrivilegeBuiltinConstants.PUBLIC_ROLE_ID) {
+            ctxToMergedPrivilegeCollections.invalidateAll();
+            return;
+        }
         Set<Long> badRoles = getAllDescendantsUnlocked(roleId);
         List<UserPrivKey> badKeys = new ArrayList<>();
         for (UserPrivKey userPrivKey : ctxToMergedPrivilegeCollections.asMap().keySet()) {
