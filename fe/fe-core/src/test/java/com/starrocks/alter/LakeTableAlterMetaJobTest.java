@@ -24,14 +24,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -129,6 +133,179 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         Assertions.assertTrue(table.enablePersistentIndex());
+    }
+
+    @Test
+    public void testForceCancelAtFinishedRewriting() throws Exception {
+        // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
+        // guard. Lake AlterMeta has no shadow tablets to clean up — pure state
+        // transition + persisted edit log.
+        //
+        // Stub the no-op publish RPC so this unit test does not need a live
+        // BE. Production force-cancel sends publish_version(no_op=true) to
+        // advance the partition version chain past the cancelled alter; the
+        // BE-side short-circuit behaviour is exercised by integration tests.
+        new MockUp<LakeTableAlterMetaJobBase>() {
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
+        };
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // Non-force cancel is a no-op in FINISHED_REWRITING (existing behavior).
+        Assertions.assertFalse(job.cancel("non-force-cancel"));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+
+        // Capture each partition's commitVersion as (VisibleVersion + 1).
+        Map<Long, Long> expectedCommitVersion = new HashMap<>();
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            expectedCommitVersion.put(pp.getId(), pp.getVisibleVersion() + 1);
+        }
+
+        // Force cancel succeeds; catalog reverts so the alter property does NOT
+        // take effect (operator opted-in to discard the half-applied change).
+        Assertions.assertTrue(job.cancel("force-cancel-from-stuck-publish", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.isForceSkippedAtCommitted(),
+                "forceSkippedAtCommitted must record the force-cancel for audit");
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        // copyForPersist must propagate the marker so the edit log records it.
+        AlterJobV2 persistCopy = job.copyForPersist();
+        Assertions.assertTrue(persistCopy.isForceSkippedAtCommitted(),
+                "copyForPersist must propagate forceSkippedAtCommitted");
+
+        // Replay regression: simulate FE recovering from a pre-cancel image
+        // by replaying the persisted CANCELLED entry onto a SEPARATE in-memory
+        // job that still looks pre-cancel (state=FINISHED_REWRITING, marker
+        // cleared, VisibleVersion reset to commitVersion-1). The copy-block in
+        // replay() must propagate forceSkippedAtCommitted from the persisted
+        // entry onto `this` before the CANCELLED branch reads it — otherwise
+        // the version bump is silently skipped and FE stays stuck at
+        // commitVersion-1 against BE metadata already advanced by the no-op
+        // publish. (staleInMemory must NOT be the same object as persistCopy,
+        // else replay's `this != other` copy-block is skipped.)
+        LakeTableAlterMetaJob staleInMemory = (LakeTableAlterMetaJob) job.copyForPersist();
+        staleInMemory.forceSkippedAtCommitted = false;
+        staleInMemory.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            pp.setVisibleVersion(expectedCommitVersion.get(pp.getId()) - 1, 0);
+        }
+        staleInMemory.replay(persistCopy);
+        Assertions.assertTrue(staleInMemory.isForceSkippedAtCommitted(),
+                "replay must copy forceSkippedAtCommitted from the persisted entry");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            Assertions.assertEquals(expectedCommitVersion.get(pp.getId()).longValue(),
+                    pp.getVisibleVersion(),
+                    "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
+        }
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipSingleDispatch() throws Exception {
+        // Current (pre-alter) format is per-tablet (file_bundling=false), so the
+        // no-op publish must use the per-tablet (non-aggregate) publish_version
+        // path — dispatch keys off the table's CURRENT format, not the alter's
+        // target.
+        LakeTable single = createTable(connectContext,
+                "CREATE TABLE t_single(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), single.getId(), single.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        runForceCancelNoOpPublishBody(job, /*expectAggregate=*/ false);
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipAggregateDispatch() throws Exception {
+        // Current (pre-alter) format is bundled (file_bundling=true), so the
+        // no-op publish must use the aggregate publish_version path (BE expects
+        // one bundle file per partition) — again keyed off the table's CURRENT
+        // format.
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_bundled(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='true')");
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        runForceCancelNoOpPublishBody(job, /*expectAggregate=*/ true);
+    }
+
+    @Test
+    public void testForceCancelFileBundlingAlterDoesNotSetMetadataSwitchVersion() throws Exception {
+        // Regression for the leader/replay divergence: force-cancelling a
+        // file_bundling alter must NOT record a metadataSwitchVersion. The alter
+        // is discarded (no-op publish writes V-1 content as V), so no format
+        // switch happened at commitVersion; recording one would diverge from the
+        // replay path (which never sets it) and needlessly pin vacuum's retain
+        // version.
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_switch(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        // ENABLE_FILE_BUNDLING alter (enable): updateVisibleVersion's old code
+        // would have set metadataSwitchVersion for exactly this metaType.
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_FILE_BUNDLING,
+                true, "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT");
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+            }
+        };
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        Assertions.assertTrue(job.cancel("force-cancel-switch-version", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        for (PhysicalPartition pp : bundled.getPhysicalPartitions()) {
+            Assertions.assertEquals(0L, pp.getMetadataSwitchVersion(),
+                    "force-cancel must not record a metadataSwitchVersion");
+        }
+    }
+
+    // Runs the REAL lakePublishVersionWithSkip body (the other force-cancel
+    // tests stub it out) by intercepting Utils.publishVersion, and asserts the
+    // helper builds a TxnInfoPB with noOpPublish=true and dispatches via the
+    // expected single-vs-aggregate path so BE's transactions.cpp short-circuit
+    // fires and writes V-1 content as V.
+    private void runForceCancelNoOpPublishBody(LakeTableAlterMetaJob localJob, boolean expectAggregate)
+            throws Exception {
+        java.util.concurrent.atomic.AtomicInteger publishCalls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean lastNoOp = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicBoolean lastAggregate = new java.util.concurrent.atomic.AtomicBoolean();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+                publishCalls.incrementAndGet();
+                lastNoOp.set(txnInfo.noOpPublish);
+                lastAggregate.set(useAggregatePublish);
+            }
+        };
+
+        localJob.runPendingJob();
+        localJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, localJob.getJobState());
+
+        Assertions.assertTrue(localJob.cancel("force-cancel-meta-publish-body", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, localJob.getJobState());
+        Assertions.assertTrue(publishCalls.get() > 0,
+                "lakePublishVersionWithSkip must invoke Utils.publishVersion at least once");
+        Assertions.assertTrue(lastNoOp.get(),
+                "TxnInfoPB.noOpPublish must be set so BE short-circuits the txn-log apply");
+        Assertions.assertEquals(expectAggregate, lastAggregate.get(),
+                "no-op publish must follow the expected single-vs-aggregate dispatch");
+        Assertions.assertTrue(localJob.isForceSkippedAtCommitted(),
+                "marker must be set after the no-op publish actually ran");
     }
 
     @Test
@@ -593,5 +770,48 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+    }
+
+    @Test
+    public void testGetInfo() {
+        // The meta job is in PENDING right after setUp().
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+
+        // Exactly one row, matching the shared-data SHOW ALTER TABLE COLUMN schema (the 13 common
+        // columns plus the trailing Warehouse column present in shared-data mode).
+        Assertions.assertEquals(1, infos.size());
+        List<Comparable> row = infos.get(0);
+        Assertions.assertEquals(14, row.size());
+
+        // Key fields are populated (column order matches SchemaChangeProcDir.TITLE_NAMES).
+        Assertions.assertEquals(job.getJobId(), row.get(0));                        // JobId
+        Assertions.assertEquals(table.getName(), row.get(1));                       // TableName
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING.name(), row.get(9));    // State
+        Assertions.assertEquals(job.getTimeoutMs() / 1000, row.get(12));            // Timeout
+
+        // A meta-only change has no shadow index / schema version, so the numeric index columns
+        // use placeholders. They MUST stay numeric (Long), not NULL_STRING, otherwise the cross-job
+        // sort in SchemaChangeHandler.getAlterJobInfosByDb mixes String and Long comparables.
+        Assertions.assertTrue(row.get(0) instanceof Long);    // JobId
+        Assertions.assertTrue(row.get(5) instanceof Long);    // IndexId
+        Assertions.assertTrue(row.get(6) instanceof Long);    // OriginIndexId
+        Assertions.assertTrue(row.get(8) instanceof Long);    // TransactionId
+        Assertions.assertTrue(row.get(12) instanceof Long);   // Timeout
+        Assertions.assertEquals(-1L, row.get(5));
+        Assertions.assertEquals(-1L, row.get(6));
+
+        // Regression guard: the meta-job row must sort together with a regular schema-change row
+        // (which carries real Long IndexId / OriginIndexId and a String SchemaVersion) without
+        // throwing. Keep columns 0-4 equal so the comparator actually reaches the IndexId column.
+        List<Comparable> schemaChangeRow = new ArrayList<>(row);
+        schemaChangeRow.set(5, 10001L);   // real IndexId, like SchemaChangeJobV2
+        schemaChangeRow.set(6, 10001L);   // real OriginIndexId
+        schemaChangeRow.set(7, "1:0");    // real SchemaVersion
+        List<List<Comparable>> combined = new ArrayList<>();
+        combined.add(schemaChangeRow);
+        combined.add(row);
+        combined.sort(new ListComparator<>(0, 1, 2, 3, 4, 5));
+        Assertions.assertEquals(2, combined.size());
     }
 }

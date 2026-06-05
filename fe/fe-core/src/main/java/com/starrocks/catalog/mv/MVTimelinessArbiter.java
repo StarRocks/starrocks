@@ -231,7 +231,7 @@ public abstract class MVTimelinessArbiter {
     /**
      * Collect ref base table's update partition infos
      * @param refBaseTableAndColumns ref base table and columns of mv
-     * @return ref base table's changed partition names
+     * @return ref base table's changed partition names, or null if the partial refresh info cannot be collected safely
      */
     protected Map<Table, PCellSortedSet> collectBaseTableUpdatePartitionNames(Map<Table, List<Column>> refBaseTableAndColumns,
                                                                               MvUpdateInfo mvUpdateInfo) {
@@ -239,6 +239,11 @@ public abstract class MVTimelinessArbiter {
         for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
                     true, queryRewriteParams);
+            if (mvBaseTableUpdateInfo == null) {
+                logMVPrepare(mv, "Failed to collect update info for ref base table {}, fallback to full refresh",
+                        baseTable.getName());
+                return null;
+            }
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
             // If base table is a mv, its to-update partitions may not be created yet, skip it
             baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPCells());
@@ -352,7 +357,9 @@ public abstract class MVTimelinessArbiter {
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
-            collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+            if (!collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo)) {
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
         try (Timer ignored = Tracers.watchScope("CollectMVToBaseTablePartitionNames")) {
             collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
@@ -379,10 +386,10 @@ public abstract class MVTimelinessArbiter {
      * TODO: Optimize performance in loos/force_mv mode
      * TODO: in loose mode, ignore partition that both exists in baseTable and mv
      */
-    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+    protected boolean collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
         Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         // collect & update mv's to refresh partitions based on base table's partition changes
-        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+        return collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo) != null;
     }
 
     /**

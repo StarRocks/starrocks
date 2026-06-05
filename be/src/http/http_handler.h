@@ -38,6 +38,22 @@ public:
 
     virtual void on_chunk_data(HttpRequest* req) {}
     virtual void free_handler_ctx(void* handler_ctx) {}
+
+    // Whether this handler requires Basic Auth when `config::enable_http_auth` is on.
+    // Default true. Internal endpoints (BE-to-BE clone, internal load download,
+    // health probe, Prometheus metrics) should override and return false.
+    virtual bool need_auth() const { return true; }
+
+    // Additional role/privilege required on top of identity AuthN, evaluated by FE
+    // via the `required_privilege` field of the checkAuth RPC. Mirrors the thrift
+    // `TPrivilegeRequirement` enum without dragging the thrift header into this base.
+    // Default NONE: identity-only auth.
+    enum class RequiredPrivilege {
+        NONE,
+        OPERATE, // user must hold System OPERATE privilege
+        NODE,    // user must hold System NODE privilege
+    };
+    virtual RequiredPrivilege required_privilege() const { return RequiredPrivilege::NONE; }
 };
 
 } // namespace starrocks

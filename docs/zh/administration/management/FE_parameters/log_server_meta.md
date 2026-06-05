@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 ---
 
@@ -247,12 +248,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，FE 审计子系统会将 ConnectProcessor 处理的 SQL 语句文本记录到 FE 审计日志 (`fe.audit.log`) 中。存储的语句遵循其他控制：加密语句将被 redacted (`AuditEncryptionChecker`)，如果设置了 `enable_sql_desensitize_in_log`，敏感凭据可能会被 redacted 或脱敏，并且 digest 记录由 `enable_sql_digest` 控制。当设置为 `false` 时，ConnectProcessor 会在审计事件中将语句文本替换为 "?" — 其他审计字段（用户、主机、持续时间、状态、通过 `qe_slow_log_ms` 进行的慢查询检测以及指标）仍会记录。启用 SQL 审计会增加取证和故障排除的可见性，但可能会暴露敏感的 SQL 内容并增加日志量和 I/O；禁用它会提高隐私性，但代价是审计日志中会丢失完整的语句可见性。
 - 引入版本: -
 
+### `enable_print_load_profile_to_log`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，导入 profile（如 Stream Load、Routine Load、Broker Load、Merge Commit 等）在被推送到 `ProfileManager` 时，会额外以 INFO 级别写入 profile 日志 (`fe.profile.log`)，格式为单行 JSON，与 query profile log 一致。这样即使导入 profile 因 `profile_info_reserved_num` 限制而从 `ProfileManager` 中被淘汰，仍可从日志中找回。之所以写入 profile 日志而非 `fe.log`，是因为其 JSON layout 的字符串上限是 `sys_log_json_profile_max_string_length`，而非小得多的 `sys_log_json_max_string_length`，因此较大的导入 profile 不会被截断；该文件的轮转与保留由 `profile_log_*` 系列参数控制。仅打印查询类型为 `Load` 的 profile，查询 profile 不受影响。只有在导入 profile 实际被收集时（例如启用了 `enable_profile`，或导入耗时超过大导入 profile 阈值）才会打印。
+- 引入版本: -
+
 ### `enable_profile_log`
 
 - 默认值: true
 - 类型: Boolean
 - 单位: -
-- 是否可变: No
+- 是否可变: Yes
 - 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
@@ -766,6 +776,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 HTTP 服务器监听的端口。
 - 引入版本: -
 
+### `enable_http_auth`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 引入版本: v4.2.0
+- 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
+  - 公开探针 / 可观测性: `/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+
+  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
 ### `http_web_page_display_hardware`
 
 - 默认值: true
@@ -837,6 +860,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 节点中 MySQL 服务器持有的 backlog 队列的长度。
 - 引入版本: -
+
+### `mysql_send_packet_timeout_ms`
+
+- 默认值: 60000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: MySQL 协议通道单次写包的超时时间。限制 FE worker 在发送结果行时等待慢客户端 TCP 接收缓冲区排空的时长。不限制的话 worker 可能在 `Selector.select()` 上无限阻塞，且查询无法被 `KILL QUERY` 终止。设置为 `0` 禁用（旧版无限等待行为）。
+- 引入版本: v4.1
 
 ### `mysql_server_version`
 
@@ -1247,6 +1279,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否启用周期性 Hive 元数据缓存刷新。启用后，StarRocks 会轮询 Hive 集群的 metastore（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Hive Catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。
 - 引入版本: v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局 RPC 线程池中的线程数，用于执行 “refresh other FE” 的 fan-out 调用。该线程池限制同步和异步外表刷新流程中，向其他 FE 并发发送刷新 RPC 的数量。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
 
 ### `enable_collect_query_detail_info`
 

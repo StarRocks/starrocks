@@ -228,12 +228,24 @@ public:
     // size used by object may change, this method
     // track size changes and evict objects accordingly
     // return false if actual memory usage is larger than capacity
+    //
+    // Defers `delete entry` to AFTER releasing _lock so a cached value whose
+    // destructor re-enters the cache (e.g. VectorIndexCache entries holding
+    // tenann handles back into the same cache) cannot self-deadlock on _lock.
     bool update_object_size(Entry* entry, size_t new_size) {
-        std::lock_guard<Lock> lg(_lock);
-        _size += new_size - entry->_size;
-        if (_mem_tracker) _mem_tracker->consume(new_size - entry->_size);
-        entry->_size = new_size;
-        return _evict();
+        std::vector<Entry*> entry_list;
+        bool ret;
+        {
+            std::lock_guard<Lock> lg(_lock);
+            _size += new_size - entry->_size;
+            if (_mem_tracker) _mem_tracker->consume(new_size - entry->_size);
+            entry->_size = new_size;
+            ret = _evict(_capacity, &entry_list);
+        }
+        for (Entry* e : entry_list) {
+            delete e;
+        }
+        return ret;
     }
 
     // clear all unused *and* expired objects
@@ -296,10 +308,22 @@ public:
 
     // adjust capacity
     // return false if actual memory usage is larger than capacity
+    //
+    // Same deferred-delete rationale as update_object_size: keep entry
+    // destructors out from under _lock to avoid self-deadlock when an
+    // entry's value chain re-enters the cache on release.
     bool set_capacity(size_t capacity) {
-        std::lock_guard<Lock> lg(_lock);
-        _capacity = capacity;
-        return _evict();
+        std::vector<Entry*> entry_list;
+        bool ret;
+        {
+            std::lock_guard<Lock> lg(_lock);
+            _capacity = capacity;
+            ret = _evict(_capacity, &entry_list);
+        }
+        for (Entry* e : entry_list) {
+            delete e;
+        }
+        return ret;
     }
 
     std::vector<std::pair<Key, size_t>> get_entry_sizes() const {

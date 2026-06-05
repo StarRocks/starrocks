@@ -16,10 +16,12 @@
 #include <random>
 
 #include "base/testutil/assert.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -333,6 +335,22 @@ TEST(QueryContextManagerTest, testReadStats) {
     ctx.incr_read_stats(100, 200);
     ASSERT_EQ(100, ctx.get_read_local_cnt());
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
+}
+
+TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
+    auto query_ctx = std::make_shared<QueryContext>();
+    TUniqueId query_id;
+    query_id.hi = 3;
+    query_id.lo = 4;
+    query_ctx->set_query_id(query_id);
+
+    RuntimeState runtime_state;
+    query_ctx->attach_to_runtime_state(&runtime_state);
+
+    ASSERT_EQ(query_ctx.get(), runtime_state.query_ctx());
+    ASSERT_EQ(&query_ctx->query_runtime_state(), runtime_state.query_runtime_state());
+    EXPECT_EQ(3, runtime_state.query_runtime_state()->query_id().hi);
+    EXPECT_EQ(4, runtime_state.query_runtime_state()->query_id().lo);
 }
 
 } // namespace starrocks::pipeline

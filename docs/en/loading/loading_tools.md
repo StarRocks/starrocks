@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Overview of third-party tools for loading data into StarRocks: SMT, DataX, DBT, CloudCanal, and other ecosystem integrations."
 ---
 
 # Load data using tools

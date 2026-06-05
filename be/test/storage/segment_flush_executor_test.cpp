@@ -27,6 +27,7 @@
 #include "common/config_exec_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -165,7 +166,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema(), column_indexes);
         auto chunk = ChunkFactory::new_chunk(schema, num_rows);
         for (auto i = 0; i < num_rows; ++i) {
-            chunk->mutable_columns()[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
         }
         ASSERT_OK(rowset_writer->flush_chunk(*chunk, segment_pb));
         rowset = rowset_writer->build().value();

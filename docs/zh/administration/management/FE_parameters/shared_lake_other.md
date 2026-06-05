@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 ---
 
@@ -272,6 +273,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 您使用的对象存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（v3.1.1 起支持）、Azure Data Lake Storage Gen2（v3.4.1 起支持）、Google Storage（带原生 SDK，v3.5.1 起支持）以及与 S3 协议兼容的对象存储系统（如 AWS S3 和 MinIO）中。有效值：`S3`（默认）、`HDFS`、`AZBLOB`、`ADLS2` 和 `GS`。如果您将此参数指定为 `S3`，则必须添加以 `aws_s3` 为前缀的参数。如果您将此参数指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的参数。如果您将此参数指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的参数。如果您将此参数指定为 `GS`，则必须添加以 `gcp_gcs` 为前缀的参数。如果您将此参数指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
 - 引入版本: -
 
+### `enable_admin_skip_committed_txn`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用 `ADMIN SKIP COMMITTED TRANSACTION` 语句。值为 `false` 时该语句会被拒绝并报错。这是面向运维的应急通道，用于解除存算分离（lake）表上某个已 `COMMITTED` 但 publish 卡死的事务的阻塞；卡死事务的数据贡献会被丢弃，但分区可见版本仍会通过一次"no-op publish"（写出一份不含该事务数据变更的新元数据文件）正常推进。仅支持 `file_bundling=true` 的 lake 表；仅支持导入和 lake-compaction 类型事务（alter / schema change 暂不支持）。仅在运维需要手动解除卡死事务时打开，使用完毕后请重新关闭，避免被误用。
+- 引入版本: -
+
 ### `enable_load_volume_from_conf`
 
 - 默认值: false
@@ -486,6 +496,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
+
+### `slow_publish_partition_log_threshold_ms`
+
+- 默认值: 3000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 该阈值用于控制 `PublishVersionDaemon` 在分区发布耗时超过此值时，以 WARN 级别打印各阶段耗时明细（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）。在线上集群排查发布延迟时，可调小该值以捕获亚秒级抖动；可调大该值以屏蔽常规的、可接受的慢发布。在默认值下行为无变化。
+- 引入版本: v4.2
 
 ### `meta_sync_force_delete_shard_meta`
 

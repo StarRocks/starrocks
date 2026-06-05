@@ -246,7 +246,7 @@ public class ArrayAggOverWindowTest extends PlanTestBase {
         String sql2 =
                 "select v1, array_agg(v3) " +
                         "over(partition by v1 order by v2 range between 2 preceding and 2 following) from t0;";
-        Assertions.assertThrows(SemanticException.class, () -> getCostExplain(sql2));
+        assertPlanContains(sql2, "array_agg", "PARTITION", "RANGE", "ANALYTIC");
     }
 
     // Test array_agg with NULL value handling
@@ -343,7 +343,7 @@ public class ArrayAggOverWindowTest extends PlanTestBase {
         String sql4 =
                 "select v1, array_agg(v3 order by v2) " +
                         "over(partition by v1 order by v2 range between 2 preceding and 2 following) from t0;";
-        Assertions.assertThrows(SemanticException.class, () -> getCostExplain(sql4));
+        assertPlanContains(sql4, "array_agg", "ORDER BY", "RANGE", "ANALYTIC");
     }
 
     // Test array_agg with different numeric type conversions

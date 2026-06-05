@@ -25,8 +25,10 @@
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -36,7 +38,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -73,12 +74,12 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkFactory::new_chunk(schema, data.size());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int pos = start_pos; pos < end_pos; pos++) {
             const DatumTuple& row = data[pos];
             DatumTuple tmp_row;
             for (size_t i = 0; i < row.size(); i++) {
-                cols[i]->append_datum(row.get(i));
+                cols[i]->as_mutable_ptr()->append_datum(row.get(i));
             }
         }
         CHECK_OK(writer->flush_chunk(*chunk));

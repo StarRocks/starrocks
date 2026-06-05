@@ -15,8 +15,10 @@
 #pragma once
 
 #include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exec/pipeline/scan/split_morsel_queue.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"

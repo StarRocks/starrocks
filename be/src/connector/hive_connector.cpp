@@ -675,6 +675,9 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
     }
+    if (hdfs_scan_node.__isset.database_name) {
+        _runtime_profile->add_info_string("Database", hdfs_scan_node.database_name);
+    }
     if (hdfs_scan_node.__isset.sql_predicates) {
         _runtime_profile->add_info_string("Predicates", hdfs_scan_node.sql_predicates);
     }
@@ -886,7 +889,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
-    bool use_avro_jni_reader = false;
+    bool use_avro_jni_reader = true;
     if (scan_range.__isset.use_avro_jni_reader) {
         use_avro_jni_reader = scan_range.use_avro_jni_reader;
     }

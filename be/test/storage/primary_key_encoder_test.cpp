@@ -56,7 +56,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int32(i * 2343);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
     }
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     auto dchunk = pchunk->clone_empty_with_schema();
@@ -77,7 +77,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int128(i * 2343);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
     }
     vector<uint32_t> indexes;
     for (int i = 0; i < n; i++) {
@@ -103,18 +103,18 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int32(i * 2343);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         string tmpstr = StringPrintf("slice000%d", i * 17);
         if (i % 5 == 0) {
             // set some '\0'
             tmpstr[rand() % tmpstr.size()] = '\0';
         }
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[1]->append_datum(tmp);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_int16(i);
-        pchunk->mutable_columns()[2]->append_datum(tmp);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_uint8(i % 2);
-        pchunk->mutable_columns()[3]->append_datum(tmp);
+        pchunk->columns()[3]->as_mutable_ptr()->append_datum(tmp);
     }
     vector<uint32_t> indexes;
     for (int i = 0; i < n; i++) {
@@ -144,15 +144,15 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto pchunk = ChunkFactory::new_chunk(*sc, n);
         Datum tmp;
         tmp.set_int32(42);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         string tmpstr("slice0000");
         tmpstr[tmpstr.size() - 1] = '\0';
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[1]->append_datum(tmp);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_int16(10);
-        pchunk->mutable_columns()[2]->append_datum(tmp);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_uint8(1);
-        pchunk->mutable_columns()[3]->append_datum(tmp);
+        pchunk->columns()[3]->as_mutable_ptr()->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10,
                                                            PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
         EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
@@ -165,15 +165,15 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto pchunk = ChunkFactory::new_chunk(*sc, n);
         Datum tmp;
         tmp.set_int32(42);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         string tmpstr(128, 's');
         tmpstr[tmpstr.size() - 1] = '\0';
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[1]->append_datum(tmp);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_int16(10);
-        pchunk->mutable_columns()[2]->append_datum(tmp);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_uint8(1);
-        pchunk->mutable_columns()[3]->append_datum(tmp);
+        pchunk->columns()[3]->as_mutable_ptr()->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
                                                            PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
@@ -187,12 +187,12 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         tmpstr = "slice000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
                  "0000"
                  "00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
                                                            PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
@@ -201,10 +201,10 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         tmpstr = "slice00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
-        pchunk->mutable_columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
                                                             PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
@@ -225,7 +225,7 @@ TEST(PrimaryKeyEncoderTest, testSingleIntV2EncodingRoundTripAndColumnType) {
     for (int32_t v : values) {
         Datum d;
         d.set_int32(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
 
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, pchunk->num_rows(), v2_dest.get(),
@@ -268,7 +268,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForInt) {
     for (int32_t v : sorted_values) {
         Datum d;
         d.set_int32(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, pchunk->num_rows(), dest.get(),
                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
@@ -295,7 +295,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForBigint) {
     for (int64_t v : sorted_values) {
         Datum d;
         d.set_int64(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, pchunk->num_rows(), dest.get(),
                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
@@ -361,7 +361,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForBoolean) {
     for (uint8_t v : {(uint8_t)0, (uint8_t)1}) {
         Datum d;
         d.set_uint8(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, 2);
     verify_v2_round_trip(*sc, *pchunk);
@@ -375,7 +375,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForTinyint) {
     for (int8_t v : sorted_values) {
         Datum d;
         d.set_int8(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, sorted_values.size());
     verify_v2_round_trip(*sc, *pchunk);
@@ -389,7 +389,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSmallint) {
     for (int16_t v : sorted_values) {
         Datum d;
         d.set_int16(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, sorted_values.size());
     verify_v2_round_trip(*sc, *pchunk);
@@ -404,7 +404,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForLargeint) {
     for (int128_t v : sorted_values) {
         Datum d;
         d.set_int128(v);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, sorted_values.size());
     verify_v2_round_trip(*sc, *pchunk);
@@ -421,7 +421,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForDate) {
         dv.from_string(s.c_str(), s.size());
         Datum d;
         d.set_date(dv);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, 3);
     verify_v2_round_trip(*sc, *pchunk);
@@ -437,7 +437,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForDatetime) {
         tv.from_string(s.c_str(), s.size());
         Datum d;
         d.set_timestamp(tv);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, 3);
     verify_v2_round_trip(*sc, *pchunk);
@@ -450,7 +450,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForSingleVarchar) {
     for (const auto& s : values) {
         Datum d;
         d.set_slice(Slice(s));
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_round_trip(*sc, *pchunk);
 }
@@ -463,7 +463,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSingleVarchar) {
     for (const auto& s : sorted_values) {
         Datum d;
         d.set_slice(Slice(s));
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, sorted_values.size());
 }
@@ -475,7 +475,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeIntVarchar) {
     for (int i = 0; i < n; i++) {
         Datum d_int;
         d_int.set_int32(i * 100 - 500);
-        pchunk->mutable_columns()[0]->append_datum(d_int);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d_int);
 
         Datum d_str;
         std::string s = StringPrintf("key_%04d", i);
@@ -484,7 +484,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeIntVarchar) {
             s[2] = '\0';
         }
         d_str.set_slice(Slice(s));
-        pchunk->mutable_columns()[1]->append_datum(d_str);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d_str);
     }
     verify_v2_round_trip(*sc, *pchunk);
 }
@@ -498,8 +498,8 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeIntInt) 
         Datum d1, d2;
         d1.set_int32(v1);
         d2.set_int64(v2);
-        pchunk->mutable_columns()[0]->append_datum(d1);
-        pchunk->mutable_columns()[1]->append_datum(d2);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d1);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d2);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, sorted_pairs.size());
     verify_v2_round_trip(*sc, *pchunk);
@@ -514,8 +514,8 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeVarcharI
         Datum d_str, d_int;
         d_str.set_slice(Slice(s));
         d_int.set_int32(v);
-        pchunk->mutable_columns()[0]->append_datum(d_str);
-        pchunk->mutable_columns()[1]->append_datum(d_int);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d_str);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d_int);
     }
     verify_v2_sort_order_preserved(*sc, *pchunk, sorted_pairs.size());
     verify_v2_round_trip(*sc, *pchunk);
@@ -528,23 +528,23 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingRoundTripForCompositeAllTypes) {
     for (int i = 0; i < n; i++) {
         Datum d;
         d.set_uint8(i % 2);
-        pchunk->mutable_columns()[0]->append_datum(d);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
 
         d.set_int8(static_cast<int8_t>(i * 10 - 20));
-        pchunk->mutable_columns()[1]->append_datum(d);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d);
 
         d.set_int16(static_cast<int16_t>(i * 100 - 200));
-        pchunk->mutable_columns()[2]->append_datum(d);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(d);
 
         d.set_int32(i * 1000 - 2000);
-        pchunk->mutable_columns()[3]->append_datum(d);
+        pchunk->columns()[3]->as_mutable_ptr()->append_datum(d);
 
         d.set_int64(static_cast<int64_t>(i) * 10000 - 20000);
-        pchunk->mutable_columns()[4]->append_datum(d);
+        pchunk->columns()[4]->as_mutable_ptr()->append_datum(d);
 
         std::string s = StringPrintf("val_%d", i);
         d.set_slice(Slice(s));
-        pchunk->mutable_columns()[5]->append_datum(d);
+        pchunk->columns()[5]->as_mutable_ptr()->append_datum(d);
     }
     verify_v2_round_trip(*sc, *pchunk);
 }
@@ -556,11 +556,11 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeSelectiveRoundTrip) {
     for (int i = 0; i < n; i++) {
         Datum d_int;
         d_int.set_int32(i * 111);
-        pchunk->mutable_columns()[0]->append_datum(d_int);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d_int);
         Datum d_str;
         std::string s = StringPrintf("s%d", i);
         d_str.set_slice(Slice(s));
-        pchunk->mutable_columns()[1]->append_datum(d_str);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d_str);
     }
 
     // Select only even indices: 0, 2, 4
@@ -589,14 +589,14 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeExceedLimitForComposite) {
     auto pchunk = ChunkFactory::new_chunk(*sc, n);
     Datum d;
     d.set_int32(42);
-    pchunk->mutable_columns()[0]->append_datum(d);
+    pchunk->columns()[0]->as_mutable_ptr()->append_datum(d);
     // VARCHAR with \0 byte to test escape overhead calculation
     std::string s(100, 'x');
     s[50] = '\0';
     d.set_slice(Slice(s));
-    pchunk->mutable_columns()[1]->append_datum(d);
+    pchunk->columns()[1]->as_mutable_ptr()->append_datum(d);
     d.set_int16(10);
-    pchunk->mutable_columns()[2]->append_datum(d);
+    pchunk->columns()[2]->as_mutable_ptr()->append_datum(d);
 
     // 4 (int) + 100 (varchar) + 1 (escape for \0) + 2 (separator) + 2 (smallint) = 109
     EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,

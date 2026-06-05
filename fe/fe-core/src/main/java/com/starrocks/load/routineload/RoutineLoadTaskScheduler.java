@@ -43,7 +43,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -73,7 +74,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * The scheduler will be blocked in step3 till the queue receive a new task
  */
-public class RoutineLoadTaskScheduler extends FrontendDaemon {
+public class RoutineLoadTaskScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadTaskScheduler.class);
 
@@ -83,8 +84,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
-    private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
-    private final ExecutorService threadPool = Executors.newCachedThreadPool();
+    // Not final: shutdownNow() in onStopped() interrupts the delay-scheduler / dispatch pool
+    // so their worker threads exit promptly on demotion; both are rebuilt by start() on
+    // re-election.
+    private volatile ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+    private volatile ExecutorService threadPool = Executors.newCachedThreadPool();
 
     private long lastBackendSlotUpdateTime = -1;
 
@@ -100,11 +104,70 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    public synchronized void start() {
+        // Refuse to overlap with a previous worker that did not drain. The previous {@link
+        // #onStopped()} both shutdownNow()s and awaitTermination()s; if a pool is shutdown but
+        // not terminated we still have live workers from the previous leader session.
+        if (scheduledExecutorService.isShutdown() && !scheduledExecutorService.isTerminated()) {
+            throw new IllegalStateException(
+                    "RoutineLoadTaskScheduler scheduledExecutorService has not terminated; refuse to restart");
+        }
+        if (threadPool.isShutdown() && !threadPool.isTerminated()) {
+            throw new IllegalStateException(
+                    "RoutineLoadTaskScheduler threadPool has not terminated; refuse to restart");
+        }
+        if (scheduledExecutorService.isShutdown()) {
+            scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+        }
+        if (threadPool.isShutdown()) {
+            threadPool = Executors.newCachedThreadPool();
+        }
+        super.start();
+    }
+
+    @Override
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of RoutineLoadTaskScheduler", e);
+        }
+    }
+
+    @Override
+    protected void onStopped() {
+        // shutdownNow() interrupts the delay-scheduler / dispatch workers so they exit even
+        // if blocked on metadata locks. Wait boundedly for both pools to actually terminate so
+        // a subsequent start() does not rebuild and run new workers in parallel with the old
+        // ones - that would race on routineLoadManager state and BE slot accounting. If a pool
+        // does not terminate within the timeout, start() will refuse to restart this scheduler.
+        scheduledExecutorService.shutdownNow();
+        threadPool.shutdownNow();
+        long timeoutMs = Config.leader_demotion_drain_timeout_sec * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        awaitTermination("scheduledExecutorService", scheduledExecutorService, deadline);
+        awaitTermination("threadPool", threadPool, deadline);
+        // Clear AFTER both pools have terminated: a delay-runnable scheduled by the previous
+        // leader can fire mid-onStopped() and call needScheduleTasksQueue.put() before the
+        // interrupt from shutdownNow() lands. Clearing before the pools drain would leave any
+        // such stale put in the queue, where the next leader would poll it as if it were its
+        // own work.
+        // The task queue holds RoutineLoadTaskInfo refs that are leader-session bookkeeping;
+        // RoutineLoadMgr re-divides routine load jobs into tasks when the next leader activates.
+        // The slot watermark is reset so the next leader re-queries BE slot capacity.
+        needScheduleTasksQueue.clear();
+        lastBackendSlotUpdateTime = -1;
+    }
+
+    private static void awaitTermination(String name, java.util.concurrent.ExecutorService pool, long deadlineMs) {
+        long remainingMs = Math.max(1L, deadlineMs - System.currentTimeMillis());
+        try {
+            if (!pool.awaitTermination(remainingMs, TimeUnit.MILLISECONDS)) {
+                LOG.error("RoutineLoadTaskScheduler {} did not terminate within drain timeout", name);
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while waiting for RoutineLoadTaskScheduler {} to terminate", name);
         }
     }
 
@@ -153,23 +216,47 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         if (msg != null) {
             routineLoadTaskInfo.setMsg(msg, true);
         }
-        scheduledExecutorService.schedule(() -> {
-            try {
-                needScheduleTasksQueue.put(routineLoadTaskInfo);
-            } catch (InterruptedException exception) {
-                LOG.warn("put task to queue failed", exception);
-            }
-        }, 1L, TimeUnit.SECONDS);
+        if (isStopped() || scheduledExecutorService.isShutdown()) {
+            LOG.info("RoutineLoadTaskScheduler is stopped, skip delayPutToQueue for task {}",
+                    routineLoadTaskInfo.getId());
+            return;
+        }
+        try {
+            scheduledExecutorService.schedule(() -> {
+                try {
+                    needScheduleTasksQueue.put(routineLoadTaskInfo);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    LOG.warn("put task to queue failed", exception);
+                }
+            }, 1L, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException e) {
+            // Race with onStopped(): scheduler was shut down between the guard above and
+            // schedule(). Safe to drop - the next leader will re-divide the routine load.
+            LOG.info("RoutineLoadTaskScheduler scheduler shut down, drop delayPutToQueue for task {}",
+                    routineLoadTaskInfo.getId());
+        }
     }
 
     private void submitToSchedule(RoutineLoadTaskInfo routineLoadTaskInfo) {
-        threadPool.submit(() -> {
-            try {
-                scheduleOneTask(routineLoadTaskInfo);
-            } catch (Exception e) {
-                LOG.warn("schedule routine load task failed", e);
-            }
-        });
+        if (isStopped() || threadPool.isShutdown()) {
+            LOG.info("RoutineLoadTaskScheduler is stopped, skip submitToSchedule for task {}",
+                    routineLoadTaskInfo.getId());
+            return;
+        }
+        try {
+            threadPool.submit(() -> {
+                try {
+                    scheduleOneTask(routineLoadTaskInfo);
+                } catch (Exception e) {
+                    LOG.warn("schedule routine load task failed", e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // Race with onStopped(): pool was shut down between the guard above and submit().
+            LOG.info("RoutineLoadTaskScheduler threadPool shut down, drop submitToSchedule for task {}",
+                    routineLoadTaskInfo.getId());
+        }
     }
 
     void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to secure Iceberg REST Catalog access in StarRocks using JWT authentication and Vended Credentials."
 ---
 
 # Security Setup for Iceberg REST Catalog

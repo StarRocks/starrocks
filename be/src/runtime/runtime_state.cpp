@@ -133,10 +133,9 @@ RuntimeState::~RuntimeState() {
         delete _error_log_file;
         _error_log_file = nullptr;
     }
-    // close rejected record file
-    if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
-        _rejected_record_file->close();
-    }
+    // The legacy tab-delimited rejected-record file was removed; the
+    // Phase 2 RejectedRecordWriter owns its own file handle and closes
+    // it via its destructor when `_rejected_record_writer` is released.
 }
 
 void RuntimeState::init_fragment_mem_pool() {

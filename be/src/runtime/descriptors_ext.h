@@ -274,27 +274,6 @@ public:
     std::string debug_string() const override;
 };
 
-class MySQLTableDescriptor : public TableDescriptor {
-public:
-    MySQLTableDescriptor(const TTableDescriptor& tdesc,
-                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
-    std::string debug_string() const override;
-    std::string_view mysql_db() const { return _mysql_db; }
-    std::string_view mysql_table() const { return _mysql_table; }
-    std::string_view host() const { return _host; }
-    std::string_view port() const { return _port; }
-    std::string_view user() const { return _user; }
-    std::string_view passwd() const { return _passwd; }
-
-private:
-    std::pmr::string _mysql_db;
-    std::pmr::string _mysql_table;
-    std::pmr::string _host;
-    std::pmr::string _port;
-    std::pmr::string _user;
-    std::pmr::string _passwd;
-};
-
 class JDBCTableDescriptor : public TableDescriptor {
 public:
     JDBCTableDescriptor(const TTableDescriptor& tdesc,

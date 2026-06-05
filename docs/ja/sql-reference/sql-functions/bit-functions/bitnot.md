@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値式のビット単位の否定を返します。"
 ---
 
 # bitnot

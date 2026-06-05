@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "カスタムコレクションタスクを削除します。"
 ---
 
 # DROP ANALYZE

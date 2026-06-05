@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HLL is used for approximate count distinct."
 ---
 
 # HLL (HyperLogLog)

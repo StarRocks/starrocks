@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
+#include <fmt/printf.h>
+
 #include "base/concurrency/race_detect.h"
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
@@ -22,16 +24,19 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/work_group.h"
 #include "exprs/expr_executor.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
@@ -131,7 +136,8 @@ void ScanOperator::close(RuntimeState* state) {
 
     _tablets_counter =
             ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
-    COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
+    COUNTER_SET(_tablets_counter,
+                static_cast<int64_t>(_source_factory()->morsel_queue_factory()->num_original_morsels()));
 
     _merge_chunk_source_profiles(state);
 

@@ -22,6 +22,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/push_utils.h"
 #include "storage/storage_engine.h"
@@ -119,18 +120,14 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
     txn_log->set_txn_id(_request.transaction_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
-        op_write->mutable_rowset()->add_segments(f.path);
-        op_write->mutable_rowset()->add_segment_size(f.size.value());
-        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = op_write->mutable_rowset()->segment_metas_size();
+        f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
     op_write->mutable_rowset()->set_overlapped(false);
+    // Fresh uid for the (newly built) bulk-load rowset.
+    tablet_reshard_helper::set_rowset_uid(op_write->mutable_rowset());
     RETURN_IF_ERROR(cur_tablet.tablet_manager()->put_txn_log(std::move(txn_log)));
 
     _write_bytes += static_cast<int64_t>(writer->data_size());

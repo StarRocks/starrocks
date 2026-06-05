@@ -28,14 +28,14 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "io/core/input_stream.h"
-#include "io/core/seekable_input_stream.h"
-#include "io/shared_buffered_input_stream.h"
+#include "io/input_stream.h"
+#include "io/seekable_input_stream.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -1281,9 +1281,9 @@ public:
 // `get_io_stats_snapshot()` straight through to the wrapped stream — they are
 // 1-line forwarders and easy to break silently. This test wraps a sentinel-
 // emitting stream in each of:
-//   - io::InputStreamWrapper         (be/src/io/core/input_stream.h)
-//   - io::SeekableInputStreamWrapper (be/src/io/core/seekable_input_stream.h)
-//   - io::SharedBufferedInputStream  (be/src/io/shared_buffered_input_stream.h)
+//   - io::InputStreamWrapper         (be/src/io/input_stream.h)
+//   - io::SeekableInputStreamWrapper (be/src/io/seekable_input_stream.h)
+//   - SharedBufferedInputStream  (be/src/cache/scan/shared_buffered_input_stream.h)
 //   - BundleSeekableInputStream      (be/src/fs/bundle_file.h)
 // and asserts the sentinel byte count survives the forward. CompressedInputStream
 // is left out because its constructor needs a real StreamDecompressor and the
@@ -1304,7 +1304,7 @@ TEST_F(PersistentIndexSstableTest, test_io_stats_snapshot_wrapper_forwarding) {
     // SharedBufferedInputStream
     {
         auto sentinel = std::make_shared<SentinelSeekableStream>();
-        io::SharedBufferedInputStream w(sentinel, "" /*filename*/, 1 /*file_size*/);
+        SharedBufferedInputStream w(sentinel, "" /*filename*/, 1 /*file_size*/);
         EXPECT_EQ(SentinelSeekableStream::kSentinel, w.get_io_stats_snapshot().bytes_read_local_disk);
     }
     // BundleSeekableInputStream

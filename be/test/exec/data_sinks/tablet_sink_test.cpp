@@ -103,7 +103,7 @@ protected:
         table_sink.db_id = _db_id;
         table_sink.db_name = "test";
         table_sink.table_id = _table_id;
-        table_sink.table_name = "test";
+        table_sink.__set_table_name("test");
         table_sink.txn_id = _txn_id;
         table_sink.num_replicas = 1;
         table_sink.keys_type = TKeysType::DUP_KEYS;

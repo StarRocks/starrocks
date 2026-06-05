@@ -2184,12 +2184,13 @@ PARALLEL_TEST(ArrowConverterTest, test_arrow_convert_context_uses_single_error_r
     std::string reported_reason;
     std::string reported_raw_data;
     std::string reported_column;
-    ctx.report_error_message = [&](const std::string& reason, const std::string& raw_data) {
+    ctx.report_error_message = [&](const std::string& reason, const std::string& raw_data,
+                                   int64_t /*row_offset_in_array*/) {
         reported_reason = reason;
         reported_raw_data = raw_data;
         reported_column = ctx.current_column_name;
     };
-    ctx.report_error_message("too long", "abcdef");
+    ctx.report_error_message("too long", "abcdef", -1);
 
     ASSERT_EQ(reported_reason, "too long");
     ASSERT_EQ(reported_raw_data, "abcdef");
@@ -2228,5 +2229,11 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     ASSERT_EQ(filter[1], 0);
     ASSERT_EQ(filter[3], 0);
 }
+
+// Coverage for the Parquet rejected-record anchor lambda (the consumer of
+// ArrowConvertContext::report_error_message wired up by ParquetScanner) moved
+// to a parquet-scanner level test as a follow-up after upstream
+// (#73460/#73463) decoupled ArrowConvertContext from RuntimeState and the
+// rejected-records writer call site moved out of this translation unit.
 
 } // namespace starrocks

@@ -383,7 +383,7 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
     }
     // we need to start tiny stripe optimization if all stripe's size smaller than config::orc_tiny_stripe_threshold_size
     if (tiny_stripe_read) {
-        std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+        std::vector<SharedBufferedInputStream::IORange> io_ranges{};
         std::vector<DiskRange> merged_disk_ranges{};
         DiskRangeHelper::merge_adjacent_disk_ranges(stripes, config::io_coalesce_read_max_distance_size,
                                                     config::orc_tiny_stripe_threshold_size, merged_disk_ranges);

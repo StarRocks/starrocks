@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to add or remove nodes to scale a StarRocks cluster up or down."
 ---
 
 # 扩容缩容 StarRocks

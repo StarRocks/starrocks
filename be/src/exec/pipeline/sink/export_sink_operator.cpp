@@ -15,19 +15,20 @@
 #include "exec/pipeline/sink/export_sink_operator.h"
 
 #include "base/uid_util.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
-#include "exec/workgroup/work_group.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
+#include "formats/io/formatted_output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
-#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

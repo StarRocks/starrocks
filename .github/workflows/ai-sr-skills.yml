@@ -27,60 +27,7 @@ jobs:
       !startsWith(github.head_ref, 'mergify/') &&
       !contains(github.head_ref, '-sync-pr-')
     steps:
-      - name: Compute skip rule
-        id: gate
-        env:
-          PR: ${{ github.event.number }}
-          REPO: ${{ github.repository }}
-          TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          set -x
-          # Skip AI reviewer assignment for small/test-only PRs to reduce noise.
-          # Adjust BUGFIX_LINE_THRESHOLD as needed (non-test add+del lines).
-          BUGFIX_LINE_THRESHOLD=30
-          TEST_PATTERN='(Test\.(java|kt)$|_test\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)'
-
-          skip=false
-          reason=""
-
-          # Rule 1: [UT] / [Doc] title prefix
-          if echo "$TITLE" | grep -qE '^\[(UT|Doc)\]'; then
-            skip=true
-            reason="title prefix [UT] or [Doc]"
-          fi
-
-          # Rule 2: all changed files match test pattern
-          if [ "$skip" = "false" ]; then
-            files=$(gh pr diff "$PR" -R "$REPO" --name-only 2>/dev/null || true)
-            total=$(echo "$files" | grep -cv '^$' || true)
-            non_test=$(echo "$files" | grep -v '^$' | grep -cvE "$TEST_PATTERN" || true)
-            if [ "$total" -gt 0 ] && [ "$non_test" -eq 0 ]; then
-              skip=true
-              reason="all $total changed files are tests"
-            fi
-          fi
-
-          # Rule 3: [BugFix] with non-test add+del < threshold
-          # NOTE: jq's regex needs \\. for a literal dot (the pattern must match TEST_PATTERN above).
-          if [ "$skip" = "false" ] && echo "$TITLE" | grep -qE '^\[BugFix\]'; then
-            non_test_lines=$(gh pr view "$PR" -R "$REPO" --json files --jq '
-              [.files[]
-               | select(.path | test("(Test\\.(java|kt)$|_test\\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)") | not)
-               | (.additions + .deletions)]
-              | add // 0
-            ' 2>/dev/null || echo 0)
-            if [ "${non_test_lines:-0}" -lt "$BUGFIX_LINE_THRESHOLD" ]; then
-              skip=true
-              reason="[BugFix] non-test lines=$non_test_lines < $BUGFIX_LINE_THRESHOLD"
-            fi
-          fi
-
-          echo "skip=$skip"     >> "$GITHUB_OUTPUT"
-          echo "reason=$reason" >> "$GITHUB_OUTPUT"
-          echo "=== gate result: skip=$skip, reason='$reason' ==="
-
       - name: Sync skills to latest
-        if: steps.gate.outputs.skip != 'true'
         run: |
           set -e
           SKILL_REPO="$HOME/starrocks-skills"
@@ -103,8 +50,7 @@ jobs:
           echo "Skills synced to $SKILL_DEST:"
           ls -1 "$SKILL_DEST"
 
-      - name: Assign PR Reviewer
-        if: steps.gate.outputs.skip != 'true'
+      - name: Recommend Reviewer (AI)
         run: |
           echo "=== DEBUG ==="
           echo "PR: ${{ github.event.number }}"
@@ -114,7 +60,10 @@ jobs:
           echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
           echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
           echo "=== RUN ==="
-          # tee captures the skill's stdout for the Notify Slack step to parse
+          # Runs inside claude-cli docker; produces only "Recommended reviewer: <login>"
+          # output. The host-side "Apply Reviewer" step below actually attaches it
+          # (gh is not available inside the container).
+          # tee captures the skill's stdout for the downstream steps to parse.
           docker exec -i -u claudeuser \
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
@@ -122,8 +71,39 @@ jobs:
             -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" \
             2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
 
+      - name: Apply Reviewer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The skill runs inside claude-cli docker where `gh` is unavailable,
+          # so it can only print "Recommended reviewer: <login>" and asks for
+          # manual assignment. Host runner has `gh` + GITHUB_TOKEN, so attach
+          # the reviewer here instead. Idempotent: gh ignores duplicates.
+          ai_output="${RUNNER_TEMP}/ai_output.txt"
+          if [ ! -f "$ai_output" ]; then
+            echo "no ai_output, skip"
+            exit 0
+          fi
+          reviewer=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
+            | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
+            | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
+          if [ -z "$reviewer" ] || [ "$reviewer" = "none" ]; then
+            echo "no reviewer extracted, skip"
+            exit 0
+          fi
+          # Self-review guard: GitHub rejects request-review from the PR author.
+          author=$(gh pr view "$PR" -R "$REPO" --json author -q '.author.login' 2>/dev/null || true)
+          if [ -n "$author" ] && [ "$reviewer" = "$author" ]; then
+            echo "skip: recommended reviewer ($reviewer) is the PR author"
+            exit 0
+          fi
+          echo "Assigning reviewer: $reviewer"
+          gh pr edit "$PR" -R "$REPO" --add-reviewer "$reviewer" \
+            || echo "WARN: gh pr edit --add-reviewer failed (permissions, already a reviewer, or transient API error)"
+
       - name: Notify Slack
-        if: steps.gate.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}

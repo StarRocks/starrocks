@@ -15,13 +15,12 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <sys/types.h>
 
 #include <atomic>
-#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -30,11 +29,6 @@
 #include "common/statusor.h"
 
 namespace starrocks {
-
-struct PythonEnv {
-    std::string home;
-    std::string get_python_path() const { return fmt::format("{}/bin/python3", home); }
-};
 
 class ArrowFlightWithRW;
 class PyFunctionDescriptor;
@@ -120,34 +114,9 @@ class PythonEnvManager {
 public:
     ~PythonEnvManager() { close(); }
 
-    Status init(const std::vector<std::string>& envs) {
-        for (const auto& env : envs) {
-            std::filesystem::path path = env;
-            if (!std::filesystem::is_directory(path)) {
-                return Status::InvalidArgument(fmt::format("unsupported python env: {} not a directory", env));
-            }
-
-            if (!std::filesystem::exists(path / "bin/python3")) {
-                return Status::InvalidArgument(fmt::format("unsupported python env: {} not found python", env));
-            }
-
-            PythonEnv python_env;
-            python_env.home = env;
-            _envs[env] = python_env;
-        }
-        return Status::OK();
-    }
-
     static PythonEnvManager& getInstance() {
         static PythonEnvManager instance;
         return instance;
-    }
-
-    StatusOr<PythonEnv> getDefault() {
-        if (_envs.empty()) {
-            return Status::InternalError("not found avaliable env");
-        }
-        return _envs.begin()->second;
     }
 
     void start_background_cleanup_thread();
@@ -156,7 +125,5 @@ public:
 private:
     bool _running = false;
     std::unique_ptr<std::thread> _cleanup_thread;
-    // readyonly after init
-    std::unordered_map<std::string, PythonEnv> _envs;
 };
 } // namespace starrocks

@@ -26,11 +26,12 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/primitive/empty_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -68,11 +69,11 @@ public:
         for (size_t i = 0; i < segments.size(); i++) {
             auto& segment = segments[i];
             auto chunk = ChunkFactory::new_chunk(schema, segment.size());
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto& row : segment) {
                 CHECK(cols.size() == row.size());
                 for (size_t j = 0; j < row.size(); j++) {
-                    cols[j]->append_datum(row[j]);
+                    cols[j]->as_mutable_ptr()->append_datum(row[j]);
                 }
             }
             CHECK_OK(writer->flush_chunk(*chunk));

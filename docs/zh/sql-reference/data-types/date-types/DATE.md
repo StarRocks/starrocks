@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DATE 类型用于存储日期，取值范围为 ['0000-01-01', '9999-12-31']，格式为 YYYY-MM-DD。"
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

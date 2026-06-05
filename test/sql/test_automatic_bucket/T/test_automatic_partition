@@ -64,12 +64,16 @@ PROPERTIES (
 
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-01', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-03', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-05', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-01', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 select * from t;
 

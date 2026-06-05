@@ -37,7 +37,7 @@ Filter& ColumnHelper::merge_nullable_filter(Column* column) {
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
         auto selected = sel_vec.data();
         size_t num_rows = sel_vec.size();
-        // we treat null(1) as false(0)
+        // we treat null(1) as false(0); compiler auto-vectorises this loop.
         for (size_t i = 0; i < num_rows; ++i) {
             selected[i] = static_cast<uint8_t>(selected[i] & !nulls[i]);
         }
@@ -83,15 +83,13 @@ void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& nul
     if (column->is_nullable()) {
         const auto* nullable_column = as_raw_const_column<NullableColumn>(column);
         const auto nulls = nullable_column->null_column_data().data();
-        for (size_t i = 0; i < num_rows; ++i) {
-            null_data[i] |= nulls[i];
-        }
+        // Use SIMD OR for null data merge
+        or_two_filters(num_rows, null_data.data(), nulls);
     }
 
     const auto* datas = get_cpp_data<TYPE_BOOLEAN>(data_column);
-    for (size_t j = 0; j < num_rows; ++j) {
-        (*filter)[j] &= datas[j];
-    }
+    // Use SIMD AND for filter merge
+    merge_two_filters(filter, datas, nullptr);
 }
 
 void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filter) {
@@ -150,6 +148,7 @@ void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescri
 void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
+    // Compiler auto-vectorises this bytewise AND.
     for (size_t i = 0; i < num_rows; i++) {
         data[i] = data[i] & selected[i];
     }
@@ -163,6 +162,7 @@ void ColumnHelper::or_two_filters(Filter* __restrict filter, const uint8_t* __re
 }
 
 void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const uint8_t* __restrict selected) {
+    // Compiler auto-vectorises this bytewise OR.
     for (size_t i = 0; i < count; i++) {
         data[i] |= selected[i];
     }

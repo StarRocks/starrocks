@@ -35,12 +35,13 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/disk_info.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "http/http_metrics.h"
-#include "io/core/io_profiler_metrics.h"
+#include "io/io_profiler_metrics.h"
+#include "platform/platform_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "service/service_metrics.h"
@@ -49,10 +50,10 @@
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
+#include "compute_env/spill/spill_metrics.h"
 #include "connector/file_scan_metrics.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/query_scan_metrics.h"
-#include "exec/spill/spill_metrics.h"
 #include "storage/flat_json_metrics.h"
 #include "util/logging.h"
 #include "util/system_metrics.h"
@@ -266,7 +267,8 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     agent_metrics->install_disk_path_metrics(registry, options.storage_paths);
 
     if (options.init_system_metrics) {
-        SystemMetrics::instance()->install(registry, disk_devices, network_interfaces);
+        PlatformMetrics::instance()->install(registry, disk_devices, network_interfaces);
+        SystemMetrics::instance()->install(registry);
         IOProfilerMetrics::instance()->install(registry);
     }
 

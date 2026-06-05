@@ -92,7 +92,7 @@ public:
 
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
@@ -156,7 +156,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override {}
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
@@ -193,7 +193,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override {}
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
@@ -203,7 +203,7 @@ private:
 
 class MockIORangeColumnReader : public ColumnReader {
 public:
-    explicit MockIORangeColumnReader(std::vector<io::SharedBufferedInputStream::IORange> ranges)
+    explicit MockIORangeColumnReader(std::vector<SharedBufferedInputStream::IORange> ranges)
             : ColumnReader(nullptr), _ranges(std::move(ranges)) {}
     ~MockIORangeColumnReader() override = default;
 
@@ -218,7 +218,7 @@ public:
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
         if (ranges == nullptr) {
             return;
@@ -232,7 +232,7 @@ public:
     }
 
 private:
-    std::vector<io::SharedBufferedInputStream::IORange> _ranges;
+    std::vector<SharedBufferedInputStream::IORange> _ranges;
 };
 
 class GroupReaderTest : public ::testing::Test {
@@ -624,7 +624,7 @@ void GroupReaderTest::_check_double_column(Column* column, size_t start, size_t 
 void GroupReaderTest::_check_chunk(GroupReaderParam* param, const ChunkPtr& chunk, size_t start, size_t count) {
     ASSERT_EQ(param->read_cols.size(), chunk->num_columns());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
-        auto column = chunk->mutable_columns()[i].get();
+        auto column = chunk->columns()[i]->as_mutable_ptr().get();
         auto _type = param->read_cols[i].type_in_parquet;
         size_t num_rows = count;
 
@@ -3072,13 +3072,13 @@ TEST_F(GroupReaderTest, CollectIORangesDeduplicatesIdenticalRangesAcrossReaders)
     group_reader->_column_readers.clear();
     group_reader->_active_column_indices = {0};
     group_reader->_lazy_column_indices = {1};
-    group_reader->_column_readers.emplace(0, std::make_unique<MockIORangeColumnReader>(
-                                                     std::vector<io::SharedBufferedInputStream::IORange>{{100, 20}}));
+    group_reader->_column_readers.emplace(
+            0, std::make_unique<MockIORangeColumnReader>(std::vector<SharedBufferedInputStream::IORange>{{100, 20}}));
     group_reader->_column_readers.emplace(
             1, std::make_unique<MockIORangeColumnReader>(
-                       std::vector<io::SharedBufferedInputStream::IORange>{{100, 20}, {200, 10}}));
+                       std::vector<SharedBufferedInputStream::IORange>{{100, 20}, {200, 10}}));
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     group_reader->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
 

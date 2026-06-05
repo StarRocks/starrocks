@@ -136,17 +136,8 @@ static std::pair<CppType, CppType> calc_min_max_from_columns(const Columns& colu
 struct TryCreateRuntimeBitsetFilter {
     template <LogicalType LT>
     RuntimeFilter* operator()(const Columns& columns, size_t column_offset, size_t row_count) {
-        static auto cache_sizes = [] {
-            static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
-            static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
-
-            const auto& cache_sizes = CpuInfo::get_cache_sizes();
-            const auto cur_l2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
-            const auto cur_l3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
-            return std::pair{cur_l2_cache_size ? cur_l2_cache_size : DEFAULT_L2_CACHE_SIZE,
-                             cur_l3_cache_size ? cur_l3_cache_size : DEFAULT_L3_CACHE_SIZE};
-        }();
-        const auto& [l2_cache_size, l3_cache_size] = cache_sizes;
+        const size_t l2_cache_size = CpuInfo::get_l2_cache_size();
+        const size_t l3_cache_size = CpuInfo::get_l3_cache_size();
 
         const auto [min_value, max_value] = calc_min_max_from_columns<LT>(columns, column_offset);
         const size_t value_interval = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -

@@ -36,6 +36,7 @@ set(BASE_TEST_FILES
     concurrency/concurrent_limiter_test.cpp
     concurrency/limit_setter_test.cpp
     concurrency/countdown_latch_test.cpp
+    concurrency/multi_level_concurrent_queue_test.cpp
     concurrency/once_test.cpp
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
@@ -71,6 +72,8 @@ set(BASE_TEST_FILES
     simd/batch_run_counter_test.cpp
     simd/simd_expand_test.cpp
     simd/simd_test.cpp
+    simd/rle_simd_test.cpp
+    simd/string_length_filter_test.cpp
     stats/ndv_estimator_test.cpp
     string/base85_test.cpp
     string/c_string_test.cpp

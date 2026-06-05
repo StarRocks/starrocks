@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP ANALYZE deletes a custom collection task."
 ---
 
 # DROP ANALYZE

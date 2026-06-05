@@ -104,9 +104,13 @@ build/
 cmake-build-debug/
 CMakeLists.txt
 .claude
+!docs/.claude/
+!docs/.claude/**
+docs/.claude/settings.local.json
 .clangd
 .cursor/
 .codex/
+.codex
 .worktrees/
 handbook/plans/local/
 
@@ -114,3 +118,4 @@ _codeql_detected_source_root
 test/.venv
 
 .lycheecache
+memory/

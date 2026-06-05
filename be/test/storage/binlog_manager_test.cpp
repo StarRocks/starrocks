@@ -20,6 +20,7 @@
 #include "column/chunk_factory.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/binlog_test_base.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -92,8 +93,8 @@ protected:
             std::unique_ptr<SegmentPB> segment;
             auto chunk = ChunkFactory::new_chunk(_schema, num_rows);
             for (int i = total_rows; i < num_rows + total_rows; i++) {
-                auto cols = chunk->mutable_columns();
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+                auto cols = chunk->columns();
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             }
             ASSERT_OK(rowset_writer->flush_chunk(*chunk, segment.get()));
             total_rows += num_rows;

@@ -83,6 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
@@ -105,6 +106,7 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_endpoint = "endpoint";
         Config.aws_s3_path = "default-bucket/1";
         Config.enable_load_volume_from_conf = true;
+        Config.enable_storage_volume_access_check = true;
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -169,6 +171,7 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_endpoint = "";
         Config.aws_s3_path = "";
         Config.enable_load_volume_from_conf = false;
+        Config.enable_storage_volume_access_check = true;
     }
 
     @Test
@@ -943,6 +946,435 @@ public class SharedDataStorageVolumeMgrTest {
             Assertions.assertThrows(DdlException.class,
                     () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
         }
+    }
+
+    @Test
+    public void testCreateStorageVolumeAccessCheckFailureInSharedDataMode() {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params)
+                    throws DdlException {
+                throw new DdlException("mock access check error");
+            }
+        };
+
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), ""));
+        Assertions.assertEquals("mock access check error", ex.getMessage());
+    }
+
+    @Test
+    public void testCreateStorageVolumeSkipsAccessCheckWhenAlreadyExists()
+            throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        AtomicInteger checkCallCount = new AtomicInteger(0);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                checkCallCount.incrementAndGet();
+            }
+        };
+
+        // First create succeeds and invokes the access check exactly once.
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(1, checkCallCount.get());
+
+        // Re-creating the same name must throw AlreadyExistsException without invoking the
+        // access check again — this preserves `CREATE STORAGE VOLUME IF NOT EXISTS` semantics
+        // (DDLStmtExecutor suppresses AlreadyExistsException, but would propagate a DdlException).
+        Assertions.assertThrows(AlreadyExistsException.class,
+                () -> svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), ""));
+        Assertions.assertEquals(1, checkCallCount.get());
+    }
+
+    @Test
+    public void testUpdateStorageVolumeAccessCheckFailureInSharedDataMode() throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params)
+                    throws DdlException {
+                if ("test".equals(name) && "region1".equals(params.get(AWS_S3_REGION))) {
+                    throw new DdlException("mock access check error on update");
+                }
+            }
+        };
+
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Map<String, String> updateParams = new HashMap<>();
+        updateParams.put(AWS_S3_REGION, "region1");
+        updateParams.put(AWS_S3_ENDPOINT, "endpoint");
+        updateParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, null, updateParams, Optional.of(true), ""));
+        Assertions.assertEquals("mock access check error on update", ex.getMessage());
+        Assertions.assertEquals("region",
+                svm.getStorageVolumeByName(svName).getProperties().get(AWS_S3_REGION));
+    }
+
+    @Test
+    public void testStorageVolumeAccessCheckSkippedInSharedNothingMode() throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        AtomicInteger callCount = new AtomicInteger(0);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return false;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                callCount.incrementAndGet();
+            }
+        };
+
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(0, callCount.get());
+    }
+
+    @Test
+    public void testStorageVolumeAccessCheckSkippedWhenConfigDisabled() throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        AtomicInteger callCount = new AtomicInteger(0);
+        Config.enable_storage_volume_access_check = false;
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                callCount.incrementAndGet();
+            }
+        };
+
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(0, callCount.get());
+    }
+
+    @Test
+    public void testUpdateMetadataOnlySkipsAccessCheck() throws DdlException, AlreadyExistsException,
+            MetaNotFoundException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params)
+                    throws DdlException {
+                throw new DdlException("access check should not be called for metadata-only update");
+            }
+        };
+
+        // Create with access check mocked to fail - need to bypass for creation
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                // allow creation
+            }
+        };
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+
+        // Now mock access check to throw - metadata-only updates should NOT trigger it
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params)
+                    throws DdlException {
+                throw new DdlException("access check should not be called for metadata-only update");
+            }
+        };
+
+        // Update only comment - should succeed without access check
+        svm.updateStorageVolume(svName, null, null, new HashMap<>(), Optional.empty(), "new comment");
+        Assertions.assertEquals("new comment", svm.getStorageVolumeByName(svName).getComment());
+
+        // Update only enabled - should succeed without access check
+        svm.updateStorageVolume(svName, null, null, new HashMap<>(), Optional.of(true), "");
+
+        // Update with params - should trigger access check and fail
+        Map<String, String> updateParams = new HashMap<>();
+        updateParams.put(AWS_S3_REGION, "region2");
+        updateParams.put(AWS_S3_ENDPOINT, "endpoint");
+        updateParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, null, updateParams, Optional.empty(), ""));
+        Assertions.assertEquals("access check should not be called for metadata-only update", ex.getMessage());
+    }
+
+    @Test
+    public void testUpdateLocationsRejected() throws DdlException, AlreadyExistsException, MetaNotFoundException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+            }
+        };
+
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+
+        // ALTER with locations should be rejected — locations are immutable after creation
+        List<String> newLocations = Arrays.asList("s3://abc", "s3://def");
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, newLocations, new HashMap<>(), Optional.empty(), ""));
+        Assertions.assertTrue(ex.getMessage().contains("locations cannot be changed after creation"));
+
+        // Empty (but non-null) locations list must also be rejected to prevent clearing LOCATIONS.
+        DdlException emptyEx = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, new ArrayList<>(), new HashMap<>(), Optional.empty(), ""));
+        Assertions.assertTrue(emptyEx.getMessage().contains("locations cannot be changed after creation"));
+    }
+
+    @Test
+    public void testUpdateStorageVolumeAccessCheckPassInSharedDataMode()
+            throws DdlException, AlreadyExistsException, MetaNotFoundException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        AtomicInteger callCount = new AtomicInteger(0);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                callCount.incrementAndGet();
+            }
+        };
+
+        // Create succeeds with mocked access check (1 call).
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(1, callCount.get());
+
+        // Update with new connectivity-affecting params and the access check passing exercises the
+        // full Step 2 (candidate copy + access check) and Step 3 (re-locked write + persist) paths.
+        Map<String, String> updateParams = new HashMap<>();
+        updateParams.put(AWS_S3_REGION, "region2");
+        updateParams.put(AWS_S3_ENDPOINT, "endpoint2");
+        updateParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        svm.updateStorageVolume(svName, null, null, updateParams, Optional.of(true), "updated");
+        Assertions.assertEquals(2, callCount.get());
+
+        StorageVolume sv = svm.getStorageVolumeByName(svName);
+        Assertions.assertEquals("region2", sv.getProperties().get(AWS_S3_REGION));
+        Assertions.assertEquals("endpoint2", sv.getProperties().get(AWS_S3_ENDPOINT));
+        Assertions.assertEquals("updated", sv.getComment());
+        Assertions.assertTrue(sv.getEnabled());
+    }
+
+    @Test
+    public void testUpdateStorageVolumeDisableNonDefaultInSharedDataMode()
+            throws DdlException, AlreadyExistsException, MetaNotFoundException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+            }
+        };
+
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+
+        // Disabling a non-default volume exercises the !enabledValue Precondition path in
+        // applyChangesToVolume without rejecting the request.
+        svm.updateStorageVolume(svName, null, null, new HashMap<>(), Optional.of(false), "");
+        Assertions.assertFalse(svm.getStorageVolumeByName(svName).getEnabled());
+    }
+
+    @Test
+    public void testApplyChangesToVolumeAllBranches() throws Exception {
+        String svName = "test";
+        SharedDataStorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svId = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+
+        StorageVolume original = svm.getStorageVolumeByName(svName);
+
+        // applyChangesToVolume is a private helper. Some of its branches (svType, locations) are
+        // unreachable through the public ALTER path because the early-return guards reject those
+        // mutations. Drive every branch directly so the helper is fully covered for line coverage.
+        java.lang.reflect.Method apply = StorageVolumeMgr.class.getDeclaredMethod(
+                "applyChangesToVolume", StorageVolume.class, String.class, String.class,
+                List.class, String.class, Map.class, Optional.class);
+        apply.setAccessible(true);
+
+        // Branch coverage: enabled present + svType + locations + comment + params all set.
+        {
+            StorageVolume target = new StorageVolume(original);
+            Map<String, String> newParams = new HashMap<>();
+            newParams.put(AWS_S3_REGION, "region-new");
+            newParams.put(AWS_S3_ENDPOINT, "endpoint-new");
+            newParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+            List<String> newLocations = Arrays.asList("s3://abc", "s3://def");
+            apply.invoke(svm, target, svId, "S3", newLocations, "new comment", newParams, Optional.of(true));
+            Assertions.assertEquals("S3", target.getType());
+            Assertions.assertEquals(newLocations, target.getLocations());
+            Assertions.assertEquals("new comment", target.getComment());
+            Assertions.assertTrue(target.getEnabled());
+            Assertions.assertEquals("region-new", target.getProperties().get(AWS_S3_REGION));
+        }
+
+        // Branch coverage: every Optional / Strings.isNullOrEmpty guard taking the SKIP path.
+        {
+            StorageVolume target = new StorageVolume(original);
+            String previousComment = target.getComment();
+            Boolean previousEnabled = target.getEnabled();
+            apply.invoke(svm, target, svId, null, null, null, new HashMap<String, String>(), Optional.empty());
+            Assertions.assertEquals(previousComment, target.getComment());
+            Assertions.assertEquals(previousEnabled, target.getEnabled());
+        }
+
+        // Branch coverage: enabled present + false on a non-default volume — the inner !enabledValue
+        // Preconditions check passes because currentId differs from defaultStorageVolumeId.
+        {
+            StorageVolume target = new StorageVolume(original);
+            apply.invoke(svm, target, svId, null, null, null, new HashMap<String, String>(), Optional.of(false));
+            Assertions.assertFalse(target.getEnabled());
+        }
+    }
+
+    @Test
+    public void testApplyChangesToVolumeRejectsDisablingDefault() throws Exception {
+        String svName = "test";
+        SharedDataStorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svId = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        svm.setDefaultStorageVolume(svName);
+
+        StorageVolume target = new StorageVolume(svm.getStorageVolumeByName(svName));
+
+        java.lang.reflect.Method apply = StorageVolumeMgr.class.getDeclaredMethod(
+                "applyChangesToVolume", StorageVolume.class, String.class, String.class,
+                List.class, String.class, Map.class, Optional.class);
+        apply.setAccessible(true);
+
+        // Disabling the default volume must trip the Preconditions guard inside applyChangesToVolume.
+        java.lang.reflect.InvocationTargetException ex = Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> apply.invoke(svm, target, svId, null, null, null, new HashMap<String, String>(),
+                        Optional.of(false)));
+        Assertions.assertTrue(ex.getCause() instanceof IllegalStateException);
+        Assertions.assertEquals("Default volume can not be disabled", ex.getCause().getMessage());
     }
 
     @Test

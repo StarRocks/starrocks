@@ -55,10 +55,10 @@ static bool has_arrow_convert_error_reporter(const ArrowConvertContext* ctx) {
     return ctx != nullptr && ctx->report_error_message != nullptr;
 }
 
-static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason,
-                                       const std::string& raw_data) {
+static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason, const std::string& raw_data,
+                                       int64_t row_offset_in_array = -1) {
     if (has_arrow_convert_error_reporter(ctx)) {
-        ctx->report_error_message(reason, raw_data);
+        ctx->report_error_message(reason, raw_data, row_offset_in_array);
     }
 }
 
@@ -383,7 +383,13 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                             std::string raw_data = std::string(s_data, s_size);
                             std::string reason =
                                     strings::Substitute("string length $0 exceeds max length $1", s_size, max_length);
-                            report_arrow_convert_error(ctx, reason, raw_data);
+                            // `i` indexes into the Arrow array; subtract
+                            // array_start_idx so the anchor's row offset
+                            // is relative to the RecordBatch start (which
+                            // is what ctx->current_batch_first_row_in_file
+                            // tracks).
+                            report_arrow_convert_error(ctx, reason, raw_data,
+                                                       static_cast<int64_t>(i - array_start_idx));
                         }
                     }
                 }
@@ -1108,6 +1114,16 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
 #define STRICT_ARROW_CONV_ENTRY_R(a, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STRICT_ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
+// Fallback "raw type" picker used by build_arrow_column_convert_plan when the user's
+// target LogicalType has no direct converter in global_optimized_arrow_conv_table.
+// The chosen raw LT becomes the Phase-1 destination; a SQL CAST then bridges raw -> user LT.
+//
+// Note: this is an unordered_map keyed by ArrowTypeId, so each Arrow type maps to exactly
+// ONE LogicalType (initializer-list duplicates keep the first insertion). All nested Arrow
+// types (LIST/LARGE_LIST/FIXED_SIZE_LIST/MAP/STRUCT) intentionally fall back to TYPE_JSON
+// here because JSON has the widest set of outgoing SQL casts. Strong-typed targets
+// (ARRAY/MAP/STRUCT) are handled in their own switch cases in build_arrow_column_convert_plan
+// and never read this table.
 static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_conv_table{
         STRICT_ARROW_CONV_ENTRY_R(TYPE_BOOLEAN, ArrowTypeId::BOOL),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_TINYINT, ArrowTypeId::INT8, ArrowTypeId::UINT8),
@@ -1125,10 +1141,8 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
                                   ArrowTypeId::DECIMAL64),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL256, ArrowTypeId::DECIMAL256),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_ARRAY, ArrowTypeId::LIST, ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_STRUCT, ArrowTypeId::STRUCT),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST,
+                                  ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
 };
 
 static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_conv_table{

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "内置外部 catalog，为 TPC-H、TPC-DS 和 SSB 基准测试套件动态生成数据而无需加载。"
 toc_max_heading_level: 4
 ---
 

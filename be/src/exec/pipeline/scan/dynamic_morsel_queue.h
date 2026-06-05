@@ -20,10 +20,11 @@
 #include <utility>
 
 #include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
-class DynamicMorselQueue final : public MorselQueue {
+class DynamicMorselQueue final : public MorselQueue, public TicketedMorselQueue {
 public:
     explicit DynamicMorselQueue(Morsels&& morsels, bool has_more) {
         (void)append_morsels(std::move(morsels));
@@ -54,7 +55,5 @@ private:
     query_cache::TicketCheckerPtr _ticket_checker;
     size_t _degree_of_parallelism;
 };
-
-MorselQueuePtr create_empty_morsel_queue();
 
 } // namespace starrocks::pipeline

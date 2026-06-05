@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
@@ -125,9 +126,8 @@ public:
             rowset->set_overlapped(true);
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
-            auto* segs = rowset->mutable_segments();
             for (auto& file : writer->segments()) {
-                segs->Add()->assign(file.path);
+                rowset->add_segment_metas()->set_filename(file.path);
             }
 
             writer->close();

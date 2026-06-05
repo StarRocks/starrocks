@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
+import mockit.Delegate;
 import mockit.Expectations;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
@@ -42,8 +43,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
@@ -546,6 +551,134 @@ public class CachingHiveMetastoreTest {
                 HivePartitionName.of("db1", "table1", "col1=2"));
 
         Assertions.assertEquals(2, cachingHiveMetastore.getPresentPartitionsStatistics(partitionNames).size());
+    }
+
+    @Test
+    public void testPartitionStatsCacheHasNoAutoRefresh() throws Exception {
+        // Even though refreshIntervalSec=1s elapses between two gets, partitionStatsCache
+        // must not register a refreshAfterWrite policy. If it did, the second get would
+        // schedule an async reload triggering a second metastore.getPartitionStatistics
+        // call; JMockit's strict maxTimes=1 asserts this does not happen.
+        new Expectations(metastore) {
+            {
+                metastore.getPartitionStatistics(
+                        (com.starrocks.catalog.Table) any, (List<String>) any);
+                result = Map.of(
+                        "col1=1", HivePartitionStats.empty(),
+                        "col1=2", HivePartitionStats.empty());
+                maxTimes = 1;
+            }
+        };
+
+        CachingHiveMetastore cache = new CachingHiveMetastore(
+                metastore, executor, executor,
+                expireAfterWriteSec, /*refreshIntervalSec*/ 1L, 1000, false);
+
+        com.starrocks.catalog.Table table = cache.getTable("db1", "table1");
+        List<String> parts = Lists.newArrayList("col1=1", "col1=2");
+
+        cache.getPartitionStatistics(table, parts);
+        Thread.sleep(1500L);
+        cache.getPartitionStatistics(table, parts);
+        // Allow any (incorrect) async reload to run before JMockit verifies expectations.
+        Thread.sleep(500L);
+    }
+
+    @Test
+    public void testRefreshTableKeepsPartitionStatsDuringAsyncRefresh() throws Exception {
+        boolean previousRefreshPartitionStats = Config.enable_refresh_hive_partitions_statistics;
+        CountDownLatch refreshStarted = new CountDownLatch(1);
+        CountDownLatch allowRefreshComplete = new CountDownLatch(1);
+        AtomicInteger loadCount = new AtomicInteger(0);
+        HivePartitionStats cachedStats = HivePartitionStats.fromCommonStats(10, 100, 1);
+        HivePartitionStats refreshedStats = HivePartitionStats.fromCommonStats(20, 200, 2);
+        List<String> parts = Lists.newArrayList("col1=1", "col1=2");
+
+        try {
+            Config.enable_refresh_hive_partitions_statistics = true;
+            new Expectations(metastore) {
+                {
+                    metastore.getPartitionKeysByValue(anyString, "table1", (List<Optional<String>>) any);
+                    result = parts;
+                    minTimes = 0;
+
+                    metastore.getPartitionStatistics(
+                            (com.starrocks.catalog.Table) any, (List<String>) any);
+                    result = new Delegate() {
+                        Map<String, HivePartitionStats> getPartitionStatistics(
+                                com.starrocks.catalog.Table table, List<String> partitions) {
+                            int call = loadCount.incrementAndGet();
+                            if (call == 1) {
+                                return Map.of(
+                                        "col1=1", cachedStats,
+                                        "col1=2", cachedStats);
+                            }
+
+                            refreshStarted.countDown();
+                            try {
+                                if (!allowRefreshComplete.await(5, TimeUnit.SECONDS)) {
+                                    throw new IllegalStateException("timed out waiting to complete partition stats refresh");
+                                }
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                throw new RuntimeException(e);
+                            }
+                            return Map.of(
+                                    "col1=1", refreshedStats,
+                                    "col1=2", refreshedStats);
+                        }
+                    };
+                    minTimes = 0;
+                }
+            };
+
+            CachingHiveMetastore cache = new CachingHiveMetastore(
+                    metastore, executor, executor,
+                    expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+            com.starrocks.catalog.Table table = cache.getTable("db1", "table1");
+            cache.getPartitionStatistics(table, parts);
+
+            cache.refreshTable("db1", "table1", true);
+            Assertions.assertTrue(refreshStarted.await(5, TimeUnit.SECONDS));
+
+            for (String part : parts) {
+                HivePartitionName name = HivePartitionName.of("db1", "table1", part);
+                Assertions.assertTrue(cache.partitionStatsCache.asMap().containsKey(name));
+                Assertions.assertTrue(cache.partitionStatsCache.asMap().get(name).isDone());
+                Assertions.assertEquals(10,
+                        cache.partitionStatsCache.asMap().get(name).join().getCommonStats().getRowNums());
+            }
+
+            cache.refreshTable("db1", "table1", true);
+            Thread.sleep(100L);
+            Assertions.assertEquals(2, loadCount.get());
+
+            allowRefreshComplete.countDown();
+            boolean refreshCompleted = false;
+            long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadlineNanos) {
+                refreshCompleted = true;
+                for (String part : parts) {
+                    HivePartitionName name = HivePartitionName.of("db1", "table1", part);
+                    CompletableFuture<HivePartitionStats> future = cache.partitionStatsCache.asMap().get(name);
+                    if (future == null || !future.isDone()
+                            || future.join().getCommonStats().getRowNums() != 20) {
+                        refreshCompleted = false;
+                        break;
+                    }
+                }
+                if (refreshCompleted) {
+                    break;
+                }
+                Thread.sleep(10L);
+            }
+            Assertions.assertTrue(refreshCompleted);
+            Assertions.assertEquals(2, loadCount.get());
+        } finally {
+            allowRefreshComplete.countDown();
+            Config.enable_refresh_hive_partitions_statistics = previousRefreshPartitionStats;
+        }
     }
 
     @Test

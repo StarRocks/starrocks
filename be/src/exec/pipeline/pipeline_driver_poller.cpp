@@ -17,9 +17,14 @@
 #include <chrono>
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
+#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec/pipeline/primitives/driver_state.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

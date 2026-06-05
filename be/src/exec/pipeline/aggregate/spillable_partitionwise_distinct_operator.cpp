@@ -16,6 +16,8 @@
 #include "exec/pipeline/aggregate/spillable_partitionwise_distinct_operator.h"
 
 #include "base/failpoint/fail_point.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -93,12 +95,6 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
-    }
-    if (state->enable_spill_partitionwise_agg_skew_elimination()) {
-        auto* distinct_op_factory =
-                dynamic_cast<AggregateDistinctBlockingSinkOperatorFactory*>(_distinct_op->get_factory());
-        _distinct_op->aggregator()->spiller()->options().opt_aggregator_params =
-                convert_to_aggregator_params(distinct_op_factory->aggregator_factory()->t_node());
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
@@ -196,6 +192,10 @@ Status SpillablePartitionWiseDistinctSinkOperatorFactory::prepare(RuntimeState* 
     _spill_options->wg = state->fragment_ctx()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+    if (state->enable_spill_partitionwise_agg_skew_elimination()) {
+        _spill_options->skew_chunk_compactor = make_spill_aggregate_skew_compactor(
+                convert_to_aggregator_params(_distinct_op_factory->aggregator_factory()->t_node()));
+    }
 
     return Status::OK();
 }

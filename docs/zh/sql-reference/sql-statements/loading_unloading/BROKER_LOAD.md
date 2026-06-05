@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Broker Load is an asynchronous MySQL-based loading method for importing data into StarRocks."
 toc_max_heading_level: 5
 ---
 

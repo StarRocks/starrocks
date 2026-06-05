@@ -14,12 +14,16 @@
 
 #include "exec/pipeline/pipeline.h"
 
-#include "exec/pipeline/adaptive/event.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/event.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "runtime/runtime_state.h"
 
@@ -38,7 +42,7 @@ size_t Pipeline::degree_of_parallelism() const {
     return source_operator_factory()->degree_of_parallelism();
 }
 
-void Pipeline::count_down_driver(RuntimeState* state) {
+void Pipeline::on_driver_finished(RuntimeState* state) {
     size_t num_drivers = _drivers.size();
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
@@ -73,7 +77,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     _drivers.reserve(dop);
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
-        DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
+        DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this, this,
                                                             fragment_ctx->next_driver_id());
 
         if (state->enable_event_scheduler()) {

@@ -1,0 +1,49 @@
+-- name: test_files_schema_csv
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Case A: basic1.csv has 4 fields per row; schema declares 2 → extras dropped on every row.
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/wide/ | grep -Pv "(average|elapsed)"
+select a, b from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/wide/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "a BIGINT, b VARCHAR(64)")
+order by a limit 3;
+
+-- Case B: basic0_column_mismatch.csv rows have varying field counts (3 and 5).
+-- schema declares 5 + fill=null → row 1 fills tail 2 positions with NULL;
+-- row 2 fills all 5 cleanly. Covers row-level short-row NULL fill per the
+-- PRD "With fill_mismatch_column_with" section.
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic0_column_mismatch.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/narrow/ | grep -Pv "(average|elapsed)"
+select a, b, c, d, e from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/narrow/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null",
+    "schema" = "a BIGINT, b VARCHAR(32), c DOUBLE, d VARCHAR(32), e VARCHAR(32)")
+order by a;
+
+-- Case C: Parquet case-sensitivity. `basic_type.parquet` has lowercase k1..k8.
+-- Declaring uppercase K2 (backticked to defeat SQL identifier case-folding)
+-- should be treated as missing → NULL under fill=null.
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select `K2` from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null",
+    "schema" = "`K2` BIGINT")
+limit 3;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

@@ -43,18 +43,19 @@
 #include <cstring>
 
 #include "base/concurrency/concurrent_limiter.h"
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
-#include "common/brpc/brpc_stub_cache.h"
+#include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -94,11 +95,13 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
-        _pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
-        ASSERT_OK(_pipeline_timer->start());
-        _env._pipeline_timer = _pipeline_timer.get();
+        auto* platform_env = PlatformEnv::GetInstance();
+        if (platform_env->brpc_stub_cache() == nullptr) {
+            ASSERT_OK(platform_env->init(&_metrics));
+            _owns_platform_env = true;
+        }
+        _env._refresh_service_contexts();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(_pipeline_timer.get());
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
@@ -106,14 +109,14 @@ public:
         _limiter.reset(new ConcurrentLimiter(1000));
     }
     void TearDown() override {
-        delete _env._brpc_stub_cache;
-        _env._brpc_stub_cache = nullptr;
-        _env._pipeline_timer = nullptr;
-        _pipeline_timer.reset();
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        if (_owns_platform_env) {
+            PlatformEnv::GetInstance()->destroy();
+            _owns_platform_env = false;
+        }
 
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
@@ -124,7 +127,8 @@ private:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
     std::unique_ptr<ConcurrentLimiter> _limiter;
-    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
+    MetricRegistry _metrics{"stream_load_action_test"};
+    bool _owns_platform_env = false;
 };
 
 TEST_F(StreamLoadActionTest, no_auth) {
@@ -658,6 +662,44 @@ TEST_F(StreamLoadActionTest, invalid_envelope) {
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Fail", doc["Status"].GetString());
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
+}
+
+TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
+    struct TestCase {
+        const char* timeout_header;
+        int32_t expected_timeout_ms;
+    };
+    TestCase test_cases[] = {
+            {nullptr, config::stream_load_thrift_rpc_timeout_ms}, // default timeout
+            {"30", 15000},                                        // custom timeout: 30s -> 15000ms
+    };
+
+    for (const auto& tc : test_cases) {
+        StreamLoadAction action(&_env, _limiter.get());
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        int32_t captured_timeout = -1;
+        SyncPoint::GetInstance()->SetCallBack("StreamLoadAction::_process_put::rpc_timeout", [&](void* arg) {
+            auto* request = static_cast<TStreamLoadPutRequest*>(arg);
+            captured_timeout = request->thrift_rpc_timeout_ms;
+        });
+
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        if (tc.timeout_header != nullptr) {
+            request._headers.emplace(HTTP_TIMEOUT, tc.timeout_header);
+        }
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        EXPECT_EQ(tc.expected_timeout_ms, captured_timeout);
+    }
 }
 
 } // namespace starrocks

@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+description: "在 StarRocks 中创建新表，支持指定引擎和分区分桶策略。"
+keywords: ['chuang jian']
 ---
 
 # 创建表

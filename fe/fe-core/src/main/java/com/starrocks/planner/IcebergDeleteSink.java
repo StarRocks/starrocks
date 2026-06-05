@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
@@ -139,6 +140,8 @@ public class IcebergDeleteSink extends DataSink {
         // DeleteSink only emits position-delete files; the codec belongs in the
         // delete-file slot. `compression_type` is reserved for data files now.
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
+        Preconditions.checkState(compression != null,
+                "delete file compression type not supported: " + compressionType);
         tIcebergTableSink.setDelete_compression_type(compression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();

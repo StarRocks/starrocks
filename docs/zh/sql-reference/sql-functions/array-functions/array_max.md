@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回ARRAY中所有元素的最大值。"
 ---
 
 # array_max

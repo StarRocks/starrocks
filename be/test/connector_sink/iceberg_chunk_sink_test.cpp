@@ -39,7 +39,7 @@ namespace {
 
 using CommitResult = formats::FileWriter::CommitResult;
 using WriterAndStream = formats::WriterAndStream;
-using Stream = io::AsyncFlushOutputStream;
+using Stream = formats::AsyncFlushOutputStream;
 using ::testing::Return;
 using ::testing::ByMove;
 using ::testing::_;

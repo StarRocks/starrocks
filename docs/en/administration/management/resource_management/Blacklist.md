@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 80
+description: "In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries."
 ---
 
 # Blacklist Management

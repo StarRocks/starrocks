@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -160,8 +161,46 @@ public class ColocateTableIndex implements Writable {
 
     }
 
+    @VisibleForTesting
     public ColocateRangeMgr getColocateRangeMgr() {
         return colocateRangeMgr;
+    }
+
+    /**
+     * Returns the colocate ranges of the given range-colocate group.
+     *
+     * <p>Delegates to {@link ColocateRangeMgr} under this index's read lock and returns an
+     * immutable snapshot, so callers cannot mutate the range list or read it without holding
+     * the lock. {@link ColocateRangeMgr} itself is not synchronized; all access goes through
+     * this index, which owns the lock.
+     *
+     * @return an immutable copy of the colocate ranges (empty if the group is unknown)
+     */
+    public List<ColocateRange> getColocateRanges(long colocateGroupId) {
+        readLock();
+        try {
+            return List.copyOf(colocateRangeMgr.getColocateRanges(colocateGroupId));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Returns all PACK shard group ids tracked by the range-colocate metadata.
+     *
+     * <p>PACK shard groups are created by FE but not attached to any {@code PhysicalPartition},
+     * so {@code StarMgrMetaSyncer} must union these into its FE-known shard group set to avoid
+     * reaping live PACK shard groups as orphans.
+     *
+     * @return a new set of PACK shard group ids (empty if none); never null
+     */
+    public Set<Long> getAllPackShardGroupIds() {
+        readLock();
+        try {
+            return colocateRangeMgr.getAllPackShardGroupIds();
+        } finally {
+            readUnlock();
+        }
     }
 
     public static String getFullGroupName(long dbId, String colocateGroup) {
@@ -290,7 +329,7 @@ public class ColocateTableIndex implements Writable {
                     if (!(tbl instanceof ExternalOlapTable)) {
                         // Colocate table should keep the same bucket number across the partitions
                         if (hashDistInfo.getBucketNum() == 0) {
-                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends(tbl.isLightWeightTabletCreation());
                             hashDistInfo.setBucketNum(bucketNum);
                         }
                     }

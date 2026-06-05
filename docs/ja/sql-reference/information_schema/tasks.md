@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "tasksは非同期タスクに関する情報を提供します。"
 ---
 
 # tasks

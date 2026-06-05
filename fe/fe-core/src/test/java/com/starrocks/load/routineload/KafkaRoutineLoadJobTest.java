@@ -55,10 +55,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
@@ -850,6 +852,30 @@ public class KafkaRoutineLoadJobTest {
         
         // Verify: Should return empty map as fallback
         Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testJobPropertiesColumnToColumnExpr() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "test_job", 1L, 1L, "127.0.0.1:9020", "topic1");
+
+        List<ImportColumnDesc> columnDescs = Lists.newArrayList();
+        // plain column without expr
+        columnDescs.add(new ImportColumnDesc("col1"));
+        // mapping column with expr
+        Expr expr = SqlParser.parseSqlToExpr("col1 + 1", 0);
+        columnDescs.add(new ImportColumnDesc("col2", expr));
+        // column whose name needs quoting (contains the separator), must be backtick-wrapped
+        // so the rendered SQL stays unambiguous
+        columnDescs.add(new ImportColumnDesc("a,b"));
+        Deencapsulation.setField(job, "columnDescs", columnDescs);
+
+        String jobProperties = Deencapsulation.invoke(job, "jobPropertiesToJsonString");
+        // The expr must be rendered as readable SQL, not a Java object reference like
+        // com.starrocks.sql.ast.ImportColumnDesc@19e02a72
+        Assertions.assertFalse(jobProperties.contains("ImportColumnDesc@"), jobProperties);
+        // column names are backtick-wrapped, mapping column rendered as "`name`=<exprSql>"
+        Assertions.assertTrue(
+                jobProperties.contains("\"columnToColumnExpr\":\"`col1`,`col2`=col1 + 1,`a,b`\""), jobProperties);
     }
 
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "materialized_views provides information about all materialized views."
 ---
 
 # materialized_views
@@ -13,7 +14,7 @@ The following fields are provided in `materialized_views`:
 | MATERIALIZED_VIEW_ID                 | ID of the materialized view.                                 |
 | TABLE_SCHEMA                         | Database in which the materialized view resides.             |
 | TABLE_NAME                           | Name of the materialized view.                               |
-| REFRESH_TYPE                         | Refresh type of the materialized view. Valid values: `ROLLUP` (synchronous materialized view), `ASYNC` (asynchronous refresh materialized view), and `MANUAL` (manual refresh materialized view). When the value is `ROLLUP`, all fields related to activation status and refresh are empry.  |
+| REFRESH_TYPE                         | Refresh type of the materialized view. Valid values: `SYNC` (synchronous materialized view) and `ASYNC` (asynchronous materialized view, regardless of how the refresh is triggered). When the value is `SYNC`, all fields related to activation status and refresh are empty. See `REFRESH_TRIGGER` and `REFRESH_POLICY` for how an asynchronous materialized view is refreshed.  |
 | IS_ACTIVE                            | Indicates whether the materialized view is active. Inactive materialized views cannot be refreshed or queried. |
 | INACTIVE_REASON                      | The reason that the materialized view is inactive.           |
 | PARTITION_TYPE                       | Type of partitioning strategy for the materialized view.     |
@@ -38,3 +39,8 @@ The following fields are provided in `materialized_views`:
 | LAST_REFRESH_PROCESS_TIME            | Process time of the most recent refresh task.                |
 | LAST_REFRESH_JOB_ID                  | Job ID of the most recent refresh task.                      |
 | LAST_REFRESH_TIME                    | Time up to which base table updates are reflected in the materialized view. |
+| WAREHOUSE                            | Name of the warehouse that the asynchronous materialized view uses for its refresh tasks. Empty in shared-nothing mode, or for synchronous (rollup) materialized views. |
+| REFRESH_MODE                         | Configured refresh mode of the asynchronous materialized view. Valid values: `PCT` (partition change tracking, where only changed partitions are refreshed), `INCREMENTAL` (incremental view maintenance), and `AUTO`. Empty for synchronous materialized views. |
+| REFRESH_TRIGGER                      | How a refresh is triggered. Valid values: `NONE` (synchronous materialized view), `MANUAL` (only via REFRESH MATERIALIZED VIEW), `SCHEDULED` (periodic, via an EVERY interval), and `ON_BASE_TABLE_CHANGE` (automatically when a base table loads or changes). |
+| REFRESH_POLICY                       | Human-readable refresh policy. Valid values: `NONE`, `MANUAL`, `ON_BASE_TABLE_CHANGE`, or a schedule such as `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` (the `START` clause is present only if a start time was defined). |
+| RESOURCE_GROUP                       | Resource group used for the materialized view's refresh tasks (from the materialized view's `resource_group` property). Defaults to `default_mv_wg` when not set. |

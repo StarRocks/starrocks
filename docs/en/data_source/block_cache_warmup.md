@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Block Cache Warmup in StarRocks to proactively load remote storage data into local cache before queries."
 ---
 
 # Block cache warmup

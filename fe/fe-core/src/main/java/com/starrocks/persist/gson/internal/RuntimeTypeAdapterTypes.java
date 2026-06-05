@@ -20,8 +20,10 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeRollupJob;
+import com.starrocks.alter.LakeTableAddIndexJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
+import com.starrocks.alter.LakeTableDropIndexJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.MergePartitionJob;
 import com.starrocks.alter.OnlineOptimizeJobV2;
@@ -242,7 +244,9 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                         .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                         .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
-                        .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
+                        .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")
+                        .registerSubtype(LakeTableAddIndexJob.class, "LakeTableAddIndexJob")
+                        .registerSubtype(LakeTableDropIndexJob.class, "LakeTableDropIndexJob");
 
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(AlterJobV2.class, alter_job_v2_type_adapter_factory);
 

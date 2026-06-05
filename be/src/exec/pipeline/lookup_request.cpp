@@ -27,57 +27,23 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks::pipeline {
 
 DEFINE_FAIL_POINT(lookup_request_failed);
-
-// Copy the prepared request columns into the execution chunk so the local
-// lookup operator can execute without additional marshaling.
-Status LocalLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
-    // put all related columns into chunk, include source_id column and other related columns
-    size_t num_rows = fetch_ctx->request_chunk->num_rows();
-    for (const auto& [slot_id, idx] : fetch_ctx->request_chunk->get_slot_id_to_index_map()) {
-        auto src_col = fetch_ctx->request_chunk->get_column_by_index(idx);
-        auto dst_col = chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
-        dst_col->append(*src_col, 0, num_rows);
-    }
-    chunk->check_or_die();
-    return Status::OK();
-}
-StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result_chunk,
-                                                          const std::vector<SlotDescriptor*>& slots,
-                                                          size_t start_offset) {
-    size_t num_rows = fetch_ctx->request_chunk->num_rows();
-    for (const auto& slot : slots) {
-        auto src_col = result_chunk->get_column_by_slot_id(slot->id());
-        auto dst_col = src_col->clone_empty();
-        dst_col->append(*src_col, start_offset, num_rows);
-        DCHECK(!fetch_ctx->response_columns.contains(slot->id()))
-                << "slot id: " << slot->id() << " already exists in response columns";
-        fetch_ctx->response_columns[slot->id()] = std::move(dst_col);
-    }
-    return num_rows;
-}
-
-void LocalLookUpRequestContext::callback(const Status& status) {
-    if (auto unit = fetch_ctx->unit.lock(); unit != nullptr) {
-        unit->finished_request_num++;
-    }
-}
 
 // Deserialize remote request payload into a reusable chunk for processing.
 Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {

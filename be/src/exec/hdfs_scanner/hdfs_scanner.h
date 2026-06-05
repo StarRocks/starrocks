@@ -18,6 +18,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "cache/cache_options.h"
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
@@ -28,8 +30,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
-#include "io/cache_input_stream.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -123,6 +123,18 @@ struct HdfsScanStats {
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
+
+    // Parquet global-dict opt application — populated by parquet::GroupReader as
+    // it wraps column readers with dict-aware adapters.  These counters answer
+    // "did the FE global-dict optimization actually reach Parquet column readers
+    // on this scan instance, and through which wrapper path?" for Hive/Iceberg
+    // workloads where the connector-level dict map can otherwise lie about
+    // schema-evolved files.
+    int64_t global_dict_total_row_groups = 0;       // selected row groups this scanner read
+    int64_t global_dict_applied_row_groups = 0;     // row groups with >=1 dict-wrapped slot
+    int64_t global_dict_applied_slots = 0;          // sum of wrapped slots across row groups
+    int64_t global_dict_dict_code_reader_slots = 0; // wrapped via LowCardColumnReader
+    int64_t global_dict_encode_reader_slots = 0;    // wrapped via LowRowsColumnReader
 
     // orc stripe information
     std::vector<int64_t> orc_stripe_sizes{};
@@ -498,8 +510,8 @@ public:
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
-            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
 
 protected:
     Status open_random_access_file();
@@ -524,8 +536,8 @@ protected:
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
-    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
 
 public:

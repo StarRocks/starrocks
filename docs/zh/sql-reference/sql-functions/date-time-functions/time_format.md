@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "按指定格式格式化TIME类型时间值。"
 ---
 
 # time_format

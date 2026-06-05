@@ -20,8 +20,9 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// Used by vector query cache, 500MB in default
-CONF_Int64(vector_query_cache_capacity, "536870912");
+// Vector index cache total capacity (HNSW whole-index + IVF-PQ blocks share
+// the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
+CONF_mString(vector_query_cache_capacity, "20%");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes

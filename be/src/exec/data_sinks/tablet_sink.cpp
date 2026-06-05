@@ -66,13 +66,13 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -127,6 +127,14 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     if (table_sink.__isset.db_name) {
         state->set_db(table_sink.db_name);
+    }
+    if (table_sink.__isset.table_name) {
+        // Stash destination table on RuntimeState so RejectedRecordWriter
+        // can stamp rows with the correct target_table. Must happen before
+        // any rejection site fires; OlapTableSink::init() runs during
+        // fragment init so both this and the scanner's subsequent
+        // rejections see the populated value.
+        state->set_table_name(table_sink.table_name);
     }
     state->set_txn_id(table_sink.txn_id);
     if (table_sink.__isset.label) {
@@ -997,6 +1005,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         // because in previous run, some validation selection value could
         // already be changed to VALID_SEL_OK_AND_NULL, and if we don't change back
         // to OK/FAILED, some rows can not be discarded any more.
+        // Compiler auto-vectorises this bytewise AND.
         for (size_t j = 0; j < num_rows; j++) {
             _validate_selection[j] &= 0x1;
         }
@@ -1158,6 +1167,31 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     }
 }
 
+namespace {
+// Pad each CHAR value to a fixed `len`, writing into the pre-zeroed `new_bytes`.
+// When the null ratio is high enough to pay for the per-row branch, null rows skip
+// the memcpy entirely: their padding is already correct because the buffer is zeroed.
+void pad_char_values(const Offsets& offset, const Bytes& bytes, uint32_t len, size_t num_rows, const uint8_t* null_data,
+                     Bytes& new_bytes) {
+    uint32_t from = 0;
+    if (null_data != nullptr && SIMD::count_nonzero(null_data, num_rows) > num_rows / 8) {
+        for (size_t j = 0; j < num_rows; ++j) {
+            if (!null_data[j]) {
+                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+            }
+            from += len;
+        }
+    } else {
+        for (size_t j = 0; j < num_rows; ++j) {
+            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+            from += len;
+        }
+    }
+}
+} // namespace
+
 void OlapTableSink::_padding_char_column(Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto desc : _output_tuple_desc->slots()) {
@@ -1171,19 +1205,17 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
             Bytes& bytes = binary->get_bytes();
 
             // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-            // TODO(kks): we could improve this if there are many null values
             auto new_binary = BinaryColumn::create();
             Offsets& new_offset = new_binary->get_offset();
             Bytes& new_bytes = new_binary->get_bytes();
             new_offset.resize(num_rows + 1);
             new_bytes.assign(num_rows * len, 0); // padding 0
 
-            uint32_t from = 0;
-            for (size_t j = 0; j < num_rows; ++j) {
-                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                from += len; // no copy data will be 0
+            const uint8_t* null_data = nullptr;
+            if (desc->is_nullable()) {
+                null_data = down_cast<NullableColumn*>(column)->null_column()->get_data().data();
             }
+            pad_char_values(offset, bytes, len, num_rows, null_data, new_bytes);
 
             for (size_t j = 1; j <= num_rows; ++j) {
                 new_offset[j] = len * j;
