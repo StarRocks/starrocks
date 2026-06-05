@@ -867,15 +867,20 @@ public class KafkaRoutineLoadJobTest {
         // column whose name needs quoting (contains the separator), must be backtick-wrapped
         // so the rendered SQL stays unambiguous
         columnDescs.add(new ImportColumnDesc("a,b"));
+        // column whose name itself contains a backtick: the embedded backtick must be doubled
+        // (a`b -> `a``b`), otherwise the rendered SQL is malformed.
+        columnDescs.add(new ImportColumnDesc("a`b"));
         Deencapsulation.setField(job, "columnDescs", columnDescs);
 
         String jobProperties = Deencapsulation.invoke(job, "jobPropertiesToJsonString");
         // The expr must be rendered as readable SQL, not a Java object reference like
         // com.starrocks.sql.ast.ImportColumnDesc@19e02a72
         Assertions.assertFalse(jobProperties.contains("ImportColumnDesc@"), jobProperties);
-        // column names are backtick-wrapped, mapping column rendered as "`name`=<exprSql>"
+        // column names are backtick-wrapped (embedded backticks doubled), mapping column rendered
+        // as "`name`=<exprSql>"
         Assertions.assertTrue(
-                jobProperties.contains("\"columnToColumnExpr\":\"`col1`,`col2`=col1 + 1,`a,b`\""), jobProperties);
+                jobProperties.contains("\"columnToColumnExpr\":\"`col1`,`col2`=col1 + 1,`a,b`,`a``b`\""),
+                jobProperties);
     }
 
 
