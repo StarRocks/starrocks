@@ -488,7 +488,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 毫秒
 - 是否可变: Yes
 - 别名: `slow_lock_log_every_ms`（原名,为向后兼容保留——两个名字指向同一参数）。
-- 描述: **L2** 慢锁日志档位的最小时间间隔——一条不含堆栈的完整 lock-info JSON。慢锁日志按三档逐级降级、节流由严到松：**L1** = 完整信息 + 堆栈（`slow_lock_log_l1_stack_interval_ms`），**L2** = 完整信息、无堆栈（本参数），**L3** = 纯文本面包屑（`slow_lock_log_l3_brief_interval_ms`）。对一次慢锁事件,输出当前节流允许的最高档;选中较高档会同时消耗较低档的窗口,因此总日志量不会超过最松那一档被允许的速率。节流作用域随发射所在的锁层不同:在 `LockManager.logSlowLockTrace` 中是**全局**(一个 static 门控覆盖所有 rid);在 `QueryableReentrantReadWriteLock` 中是**per-instance**(每个锁对象——例如每个 `RoutineLoadJob`——各有一份门控);在老 `LockUtils` 路径中是**per-Database**。设置为 `0`(或负数)可禁用 L2 门控(总是放行)。值越大日志越稀,值越小完整信息诊断越密。
+- 描述: **L2** 慢锁日志档位的最小时间间隔——一条不含堆栈的完整 lock-info JSON。慢锁日志按三档逐级降级、节流由严到松：**L1** = 完整信息 + 堆栈（`slow_lock_log_l1_stack_interval_ms`），**L2** = 完整信息、无堆栈（本参数），**L3** = 纯文本最简信息（`slow_lock_log_l3_brief_interval_ms`）。对一次慢锁事件,输出当前节流允许的最高档;选中较高档会同时消耗较低档的窗口,因此总日志量不会超过最松那一档被允许的速率。节流作用域随发射所在的锁层不同:在 `LockManager.logSlowLockTrace` 中是**全局**(一个 static 门控覆盖所有 rid);在 `QueryableReentrantReadWriteLock` 中是**per-instance**(每个锁对象——例如每个 `RoutineLoadJob`——各有一份门控);在老 `LockUtils` 路径中是**per-Database**。设置为 `0`(或负数)可禁用 L2 门控(总是放行)。值越大日志越稀,值越小完整信息诊断越密。
 - 引入版本: v3.2.0（原名 `slow_lock_log_every_ms`）;v4.1 重命名为 `slow_lock_log_l2_info_interval_ms`。
 
 ### `slow_lock_print_stack`
@@ -524,7 +524,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: **L3** 慢锁日志档位的最小时间间隔——当更丰富的档位(L1 的 `slow_lock_log_l1_stack_interval_ms`、L2 的 `slow_lock_log_l2_info_interval_ms`)都被节流时,输出一条纯文本 warn(无 JSON、无堆栈)。这是三档中最松的一档。面包屑**每间隔至多输出一条**:在 L3 门控仍关闭的窗口内到达的慢锁事件会被抑制(不打)。它**不保证**每个事件都留痕——只是把持续竞争下的最长静默时间限制在一个面包屑间隔以内。应调得比另两档更小:`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。设置为 `0`(或负数)会让面包屑不限速——此时每个被节流的事件都留一行(开销可预测,但 storm 下可能每秒很多条)。作用域规则与其他慢锁节流一致(`LockManager` 全局,`QueryableReentrantReadWriteLock` per-instance)。
+- 描述: **L3** 慢锁日志档位的最小时间间隔——当更丰富的档位(L1 的 `slow_lock_log_l1_stack_interval_ms`、L2 的 `slow_lock_log_l2_info_interval_ms`)都被节流时,输出一条纯文本 warn(无 JSON、无堆栈)。这是三档中最松的一档。最简信息**每间隔至多输出一条**:在 L3 门控仍关闭的窗口内到达的慢锁事件会被抑制(不打)。它**不保证**每个事件都留痕——只是把持续竞争下的最长静默时间限制在一个最简信息间隔以内。应调得比另两档更小:`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。设置为 `0`(或负数)会让最简信息不限速——此时每个被节流的事件都留一行(开销可预测,但 storm 下可能每秒很多条)。作用域规则与其他慢锁节流一致(`LockManager` 全局,`QueryableReentrantReadWriteLock` per-instance)。
 - 引入版本: v4.1
 
 ### `slow_lock_threshold_ms`

@@ -55,7 +55,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     // first event always wins regardless of where System.nanoTime() anchors its origin.
     private final AtomicLong lastStackPrintMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL); // L1
     private final AtomicLong lastSlowLogMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);    // L2
-    private final AtomicLong lastBreadcrumbMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL); // L3
+    private final AtomicLong lastBriefMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL); // L3
 
     public QueryableReentrantReadWriteLock() {
         super();
@@ -110,10 +110,10 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
             // per-instance throttle gates are touched), then render accordingly:
             //   L1/L2 -> capture a lock-info snapshot now (state may shift slightly before we
             //            re-acquire; acceptable for diagnostics),
-            //   L3    -> emit only a plain-text breadcrumb (built below, no snapshot),
+            //   L3    -> emit only a plain-text brief (built below, no snapshot),
             //   SUPPRESS -> stay silent.
             decision = decideSlowLockLog(hasHolder());
-            if (decision.shouldLog() && !decision.isBreadcrumb()) {
+            if (decision.shouldLog() && !decision.isBrief()) {
                 currentLockInfo = this.getLockInfoToJson(null, decision);
             }
         } catch (InterruptedException exception) {
@@ -127,7 +127,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
             }
             if (decision.shouldLog()) {
                 long waitTime = System.currentTimeMillis() - startTime;
-                if (decision.isBreadcrumb()) {
+                if (decision.isBrief()) {
                     // Floor tier: leave evidence that a slow lock happened without the expensive
                     // JSON/stack payload.
                     LOG.warn("slow lock (throttled detail) detected on lock (isExclusive={}). waitTime: {}ms",
@@ -156,7 +156,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
      */
     SlowLockLogDecision decideSlowLockLog(boolean hasHolder) {
         long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-        return SlowLockLogDecision.decide(hasHolder, lastStackPrintMs, lastSlowLogMs, lastBreadcrumbMs, monoNowMs);
+        return SlowLockLogDecision.decide(hasHolder, lastStackPrintMs, lastSlowLogMs, lastBriefMs, monoNowMs);
     }
 
     public void exclusiveLock() {
@@ -242,9 +242,9 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
         int waiterCap = Config.slow_lock_max_waiter_count_to_log;
 
         // The stack-capture decision was made once by the caller (decideSlowLockLog) and is read
-        // here as decision.captureStack — this method never touches the throttle gates itself, so
-        // callers (e.g. LockUtils building "beforeLockInfo" on every acquire) can pass SUPPRESS to
-        // get a cheap, stack-less structural snapshot without consuming any quota.
+        // here as decision.captureStack — this method never touches the throttle gates itself, so a
+        // caller can pass SUPPRESS to get a cheap, stack-less structural snapshot without consuming
+        // any quota.
         boolean captureStack = decision.captureStack;
         if (currThread == null) {
             lockInfoJsonObj.addProperty("isFairLock", isFair());

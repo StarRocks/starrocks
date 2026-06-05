@@ -480,7 +480,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Milliseconds
 - 変更可能：Yes
 - エイリアス：`slow_lock_log_every_ms`（元の名前。後方互換性のため保持されており、両方の名前は同じパラメータを指します）。
-- 説明：**L2** 低速ロックログ層（スタックを含まない完全なロック情報 JSON 行）の最小間隔。低速ロックログは 3 つの層に段階的に低下し、コストの高い順に厳しく絞られます：**L1** = 完全情報 + スタック（`slow_lock_log_l1_stack_interval_ms`）、**L2** = 完全情報、スタックなし（本パラメータ）、**L3** = プレーンテキストのパンくず（`slow_lock_log_l3_brief_interval_ms`）。1 回の低速ロックイベントでは、現在スロットルが許可する最も詳細な層が出力されます。上位層を選ぶと下位層のウィンドウも消費されるため、総ログ量が最も緩い許可層のレートを超えることはありません。スコープは発信層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**。`0`（または負の値）に設定すると L2 ゲートが無効になります（常に許可）。長期的な競合中にログ量を減らすには値を大きく、完全情報の診断頻度を上げるには小さく設定します。
+- 説明：**L2** 低速ロックログ層（スタックを含まない完全なロック情報 JSON 行）の最小間隔。低速ロックログは 3 つの層に段階的に低下し、コストの高い順に厳しく絞られます：**L1** = 完全情報 + スタック（`slow_lock_log_l1_stack_interval_ms`）、**L2** = 完全情報、スタックなし（本パラメータ）、**L3** = プレーンテキストの簡易情報（`slow_lock_log_l3_brief_interval_ms`）。1 回の低速ロックイベントでは、現在スロットルが許可する最も詳細な層が出力されます。上位層を選ぶと下位層のウィンドウも消費されるため、総ログ量が最も緩い許可層のレートを超えることはありません。スコープは発信層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**。`0`（または負の値）に設定すると L2 ゲートが無効になります（常に許可）。長期的な競合中にログ量を減らすには値を大きく、完全情報の診断頻度を上げるには小さく設定します。
 - 導入時期：v3.2.0（`slow_lock_log_every_ms` として）。v4.1 で `slow_lock_log_l2_info_interval_ms` に改名。
 
 ### `slow_lock_print_stack`
@@ -516,7 +516,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：**L3** 低速ロックログ層（より詳細な層 — L1 の `slow_lock_log_l1_stack_interval_ms`、L2 の `slow_lock_log_l2_info_interval_ms` — がスロットルされたときに出力される、単一のプレーンテキスト warn 行。JSON もスタックもなし）の最小間隔。3 層の中で最も緩い層です。パンくずは**この間隔ごとに最大 1 回**出力されます：L3 ゲートがまだ閉じているウィンドウ内に到着した低速ロックイベントは抑制されます（行なし）。イベントごとに 1 行を保証するものではなく、持続的な競合下での最大の無音時間を 1 パンくず間隔以内に抑えるだけです。他の 2 つより小さく設定してください：`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。`0`（または負の値）に設定するとパンくずは無制限になり、スロットルされたすべてのイベントが行を残します（オーバーヘッドは予測可能ですが、ストーム時には毎秒多数になる可能性があります）。スコープ規則は他の低速ロックスロットルと同じです（`LockManager` はグローバル、`QueryableReentrantReadWriteLock` は per-instance）。
+- 説明：**L3** 低速ロックログ層（より詳細な層 — L1 の `slow_lock_log_l1_stack_interval_ms`、L2 の `slow_lock_log_l2_info_interval_ms` — がスロットルされたときに出力される、単一のプレーンテキスト warn 行。JSON もスタックもなし）の最小間隔。3 層の中で最も緩い層です。簡易情報は**この間隔ごとに最大 1 回**出力されます：L3 ゲートがまだ閉じているウィンドウ内に到着した低速ロックイベントは抑制されます（行なし）。イベントごとに 1 行を保証するものではなく、持続的な競合下での最大の無音時間を 1 簡易情報間隔以内に抑えるだけです。他の 2 つより小さく設定してください：`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。`0`（または負の値）に設定すると簡易情報は無制限になり、スロットルされたすべてのイベントが行を残します（オーバーヘッドは予測可能ですが、ストーム時には毎秒多数になる可能性があります）。スコープ規則は他の低速ロックスロットルと同じです（`LockManager` はグローバル、`QueryableReentrantReadWriteLock` は per-instance）。
 - 導入時期：v4.1
 
 ### `slow_lock_threshold_ms`

@@ -17,9 +17,9 @@ package com.starrocks.common.util.concurrent;
 /**
  * Verbosity tier for a single slow-lock log event. Higher tiers carry more diagnostic detail and
  * cost more to produce, so they are throttled more strictly; when a tier is throttled the decision
- * degrades to the next cheaper tier. If every tier (including the L3 breadcrumb) is still within
+ * degrades to the next cheaper tier. If every tier (including the L3 brief) is still within
  * its interval the event is suppressed — degradation bounds the worst-case silence to one
- * breadcrumb interval during sustained contention, it does not guarantee a line per event.
+ * brief interval during sustained contention, it does not guarantee a line per event.
  */
 public enum SlowLockTier {
     /** Full lock info JSON plus owner / current-thread stack traces. Strictest throttle. */
@@ -27,5 +27,5 @@ public enum SlowLockTier {
     /** Full lock info JSON, no stack traces. Looser throttle. */
     L2_INFO,
     /** A single plain-text warn line, no JSON and no stack. Loosest throttle — the floor. */
-    L3_BREADCRUMB
+    L3_BRIEF
 }

@@ -38,13 +38,13 @@ public class LockManager {
     // signal from other rids). The three tiers are decided once per event by SlowLockLogDecision:
     //   LAST_STACK_PRINT_MS  -> L1 (full info + stacks), Config.slow_lock_log_l1_stack_interval_ms
     //   LAST_EVENT_LOG_MS    -> L2 (full info, no stacks), Config.slow_lock_log_l2_info_interval_ms
-    //   LAST_BREADCRUMB_MS   -> L3 (plain-text breadcrumb), Config.slow_lock_log_l3_brief_interval_ms
+    //   LAST_BRIEF_MS   -> L3 (plain-text brief), Config.slow_lock_log_l3_brief_interval_ms
     // Stack capture (Thread.getStackTrace) triggers a JVM safepoint that is expensive when
     // slow-lock events fire frequently, which is why L1 is throttled most strictly. All gates
     // init to GATE_INIT_SENTINEL so the first event always wins regardless of nanoTime origin.
     private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
     private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
-    private static final AtomicLong LAST_BREADCRUMB_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
+    private static final AtomicLong LAST_BRIEF_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
 
     private final int lockTablesSize;
     private final Object[] lockTableMutexes;
@@ -435,11 +435,11 @@ public class LockManager {
         // stretch or short-circuit the intervals.
         long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         SlowLockLogDecision decision = SlowLockLogDecision.decide(
-                !owners.isEmpty(), LAST_STACK_PRINT_MS, LAST_EVENT_LOG_MS, LAST_BREADCRUMB_MS, monoNowMs);
+                !owners.isEmpty(), LAST_STACK_PRINT_MS, LAST_EVENT_LOG_MS, LAST_BRIEF_MS, monoNowMs);
         if (!decision.shouldLog()) {
             return;
         }
-        if (decision.isBreadcrumb()) {
+        if (decision.isBrief()) {
             // Floor tier: leave evidence cheaply — no JSON, no stacks. (The held-time metric was
             // already recorded above, independent of the tier.)
             LOG.warn("LockManager detects slow lock (throttled detail): rid={}, owners={}, waiters={}",

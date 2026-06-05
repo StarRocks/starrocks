@@ -191,7 +191,7 @@ public class Config extends ConfigBase {
      * Minimum interval in milliseconds for the L2 slow-lock log tier — a full lock-info JSON line
      * without stack traces. The three slow-lock log tiers are throttled progressively (strictest
      * first): L1 full info + stacks ({@link #slow_lock_log_l1_stack_interval_ms}), L2 full info no
-     * stacks (this), L3 plain-text breadcrumb ({@link #slow_lock_log_l3_brief_interval_ms}). Tune
+     * stacks (this), L3 plain-text brief ({@link #slow_lock_log_l3_brief_interval_ms}). Tune
      * {@code slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms}.
      * Set to 0 or negative to disable the L2 gate (always admit a full-info line).
      *
@@ -229,15 +229,15 @@ public class Config extends ConfigBase {
     public static int slow_lock_max_waiter_count_to_log = 30;
 
     /**
-     * Floor interval in milliseconds for the L3 slow-lock breadcrumb — a single plain-text warn
-     * line (no JSON, no stack) emitted when the richer L1/L2 tiers are throttled. The breadcrumb is
+     * Floor interval in milliseconds for the L3 slow-lock brief — a single plain-text warn
+     * line (no JSON, no stack) emitted when the richer L1/L2 tiers are throttled. The brief is
      * emitted at most once per this interval: events arriving while the L3 gate is still closed are
      * suppressed, so this does NOT guarantee a line per event — it bounds the worst-case silence to
-     * one breadcrumb interval during sustained contention. This is the loosest of the three
+     * one brief interval during sustained contention. This is the loosest of the three
      * slow-lock log throttles and should be tuned smaller than {@link #slow_lock_log_l2_info_interval_ms}
      * (L2) which in turn is smaller than {@link #slow_lock_log_l1_stack_interval_ms} (L1):
      * {@code slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms}.
-     * Set to 0 or negative to make the breadcrumb unthrottled — then every otherwise-throttled
+     * Set to 0 or negative to make the brief unthrottled — then every otherwise-throttled
      * event leaves a line (predictable but potentially many per second under a storm).
      */
     @ConfField(mutable = true)
