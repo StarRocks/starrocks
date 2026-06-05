@@ -148,7 +148,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     EXPECT_EQ(_runtime_state, observer.last_state);
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _exec_env->query_context_mgr()->count_down_fragments(_query_ctx);
 }
 
 } // namespace starrocks::pipeline

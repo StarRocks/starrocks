@@ -44,6 +44,7 @@ public:
     Status init(MetricRegistry* metrics = nullptr);
     StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
+    void count_down_fragments(QueryContext* query_ctx);
     size_t size();
     bool remove(const TUniqueId& query_id);
     // used for graceful exit

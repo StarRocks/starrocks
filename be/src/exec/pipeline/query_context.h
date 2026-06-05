@@ -75,8 +75,10 @@ public:
         _num_active_fragments.fetch_sub(1);
     }
 
-    void count_down_fragments();
-    void count_down_fragments(QueryContextManager* query_context_mgr);
+    // Decrements the query-local active fragment counter.
+    // Returns true only when the caller just finished the last active fragment; the caller owns any manager-level
+    // lifecycle transition such as removal from QueryContextManager or moving the context to second-chance storage.
+    bool decrement_num_active_fragments();
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 

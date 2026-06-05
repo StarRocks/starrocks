@@ -116,7 +116,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
 
-    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
+    _query_ctx_mgr = exec_env->query_context_mgr();
+
+    auto&& existing_query_ctx = _query_ctx_mgr->get(query_id);
     if (existing_query_ctx) {
         auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existingfragment_ctx) {
@@ -125,7 +127,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
-    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
+    ASSIGN_OR_RETURN(_query_ctx, _query_ctx_mgr->get_or_register(query_id, query_ctx_should_exist));
     _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -873,9 +875,9 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     // make sure query context can be released
     // if _prepare_query_ctx return error, query context doesn't exist
     // so it's safe to put this DeferOp below _prepare_query_ctx
-    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx, query_ctx_mgr = _query_ctx_mgr] {
         if (!prepare_success) {
-            query_ctx->count_down_fragments();
+            query_ctx_mgr->count_down_fragments(query_ctx);
         }
     });
 
@@ -1038,7 +1040,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
-        _query_ctx->count_down_fragments();
+        DCHECK(_query_ctx_mgr != nullptr);
+        _query_ctx_mgr->count_down_fragments(_query_ctx);
     }
 }
 
