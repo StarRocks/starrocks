@@ -403,8 +403,8 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     {
         auto& rowid_column = sparse_chunk->get_column_by_index(0);
         std::vector<uint32_t> sorted_rowids(distinct_source_rowids.begin(), distinct_source_rowids.end());
-        TRY_CATCH_BAD_ALLOC(
-                (void)rowid_column->append_numbers(sorted_rowids.data(), sorted_rowids.size() * sizeof(uint32_t)));
+        TRY_CATCH_BAD_ALLOC((void)rowid_column->as_mutable_raw_ptr()->append_numbers(
+                sorted_rowids.data(), sorted_rowids.size() * sizeof(uint32_t)));
     }
 
     // 3. The value columns are a separate K-row chunk that mirrors sparse_chunk's value columns by
@@ -415,7 +415,7 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     {
         // Default-fill K rows so update_rows has valid destination positions for every local ordinal.
         for (size_t c = 0; c < value_chunk->num_columns(); ++c) {
-            value_chunk->get_column_by_index(c)->append_default(K);
+            value_chunk->get_column_by_index(c)->as_mutable_raw_ptr()->append_default(K);
         }
     }
 
@@ -461,7 +461,8 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     // 4. Splice the K-row value columns into the sparse chunk after the source_rowid column. Both have K
     //    rows in the same local-ordinal order, so source_rowid[i] <-> value[i] alignment is preserved.
     for (size_t c = 0; c < value_chunk->num_columns(); ++c) {
-        sparse_chunk->get_column_by_index(c + 1)->swap_column(*value_chunk->get_column_by_index(c));
+        sparse_chunk->get_column_by_index(c + 1)->as_mutable_raw_ptr()->swap_column(
+                *value_chunk->get_column_by_index(c)->as_mutable_raw_ptr());
     }
     return sparse_chunk;
 }
