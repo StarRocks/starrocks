@@ -47,6 +47,7 @@ import com.starrocks.type.Type;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.metrics.ScanReportParser;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -173,6 +174,15 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
+        Set<String> nativeColumnNames = icebergTable.getNativeTable().schema().columns().stream()
+                .map(Types.NestedField::name)
+                .collect(Collectors.toSet());
+        List<String> requiredColumnNames = desc.getSlots().stream()
+                .map(slot -> slot.getColumn().getName())
+                .filter(nativeColumnNames::contains)
+                .distinct()
+                .collect(Collectors.toList());
+
         GetRemoteFilesParams params =
                 IcebergGetRemoteFilesParams.newBuilder()
                         .setAllParams(tableFullMORParams)
@@ -181,6 +191,7 @@ public class IcebergScanNode extends ScanNode {
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
                         .setUsedForDelete(usedForDelete)
+                        .setFieldNames(requiredColumnNames)
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
