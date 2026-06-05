@@ -1055,7 +1055,7 @@ vectorized_functions = [
 
     [150000, 'array_length', True, False, 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
     [150001, 'array_append', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_append'],
-    [150002, 'array_contains', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_contains_generic'],
+    [150002, 'array_contains', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_contains_generic', 'ArrayFunctions::array_contains_generic_prepare', 'ArrayFunctions::array_contains_generic_close'],
     [15000201, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN', 'BOOLEAN'], 'ArrayFunctions::array_contains_specific<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_specific_close<TYPE_BOOLEAN>'],
     [15000202, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_TINYINT', 'TINYINT'], 'ArrayFunctions::array_contains_specific<TYPE_TINYINT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_TINYINT>', 'ArrayFunctions::array_contains_specific_close<TYPE_TINYINT>'],
     [15000203, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_SMALLINT', 'SMALLINT'], 'ArrayFunctions::array_contains_specific<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_specific_close<TYPE_SMALLINT>'],

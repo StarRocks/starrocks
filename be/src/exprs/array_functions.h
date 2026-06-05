@@ -28,6 +28,11 @@ public:
     DEFINE_VECTORIZED_FN(array_remove);
 
     DEFINE_VECTORIZED_FN(array_contains_generic);
+    // Dict-aware prepare/close for array_contains(dict_encoded_array, const_element): when the
+    // FE marks the array argument as global-dict-encoded (TExprNode.dict_slot_ids), resolves
+    // the constant element's dictionary code once so the per-row check can compare codes.
+    static Status array_contains_generic_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status array_contains_generic_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     template <LogicalType LT>
     static StatusOr<ColumnPtr> array_contains_specific(FunctionContext* context, const Columns& columns) {

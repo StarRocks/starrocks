@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
+#include "column/datum.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -34,6 +35,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/global_dict/types.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -1100,11 +1104,94 @@ private:
     }
 };
 
+// State for the dict-aware path of array_contains(dict_encoded_array, const_element).
+// Only active when the FE marked the array argument as global-dict-encoded and the element
+// argument is a non-null constant: then target_code is the constant's dictionary code, or a
+// guaranteed-absent sentinel code when the constant is not present in the dictionary (so no
+// encoded element can ever equal it).
+struct ArrayContainsDictState {
+    bool active = false;
+    int32_t target_code = 0;
+};
+
+Status ArrayFunctions::array_contains_generic_prepare(FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
+    // Resolve once per fragment, before any evaluate; the global-dict map is stable here and
+    // VectorizedFunctionCallExpr::open has already materialized it.
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    auto* state = new ArrayContainsDictState();
+    context->set_function_state(scope, state);
+
+    // arg0 is the array; its element global-dict slot id was provided by the FE.
+    const std::vector<int32_t>& dict_slots = context->dict_slots();
+    if (dict_slots.empty() || dict_slots[0] < 0) {
+        return Status::OK(); // array is not dict-encoded -> generic (decoded) path
+    }
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::OK(); // element is not a constant -> generic path
+    }
+
+    RuntimeState* runtime_state = context->state();
+    if (runtime_state == nullptr) {
+        return Status::OK();
+    }
+    const FragmentDictState* dict_state = runtime_state->fragment_dict_state();
+    if (dict_state == nullptr) {
+        return Status::OK();
+    }
+    const GlobalDictMaps& dicts = dict_state->query_global_dicts();
+    auto it = dicts.find(static_cast<uint32_t>(dict_slots[0]));
+    if (it == dicts.end()) {
+        return Status::OK(); // dict not available -> generic path
+    }
+    const GlobalDictMap& forward = it->second.first; // element string -> code
+
+    const Slice key = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
+    if (auto f = forward.find(key); f != forward.end()) {
+        state->target_code = static_cast<int32_t>(f->second);
+    } else {
+        // Constant absent from the dictionary: use a code larger than any existing one so the
+        // membership test below is correct (always false) while keeping null semantics.
+        int32_t max_code = 0;
+        for (const auto& entry : forward) {
+            max_code = std::max<int32_t>(max_code, static_cast<int32_t>(entry.second));
+        }
+        state->target_code = max_code + 1;
+    }
+    state->active = true;
+    return Status::OK();
+}
+
+Status ArrayFunctions::array_contains_generic_close(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<ArrayContainsDictState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
 StatusOr<ColumnPtr> ArrayFunctions::array_contains_generic([[maybe_unused]] FunctionContext* context,
                                                            const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
     const ColumnPtr& arg0 = columns[0];
     const ColumnPtr& arg1 = columns[1]; // element
+
+    // Dict-aware fast path: the array argument arrives still encoded (integer codes), so compare
+    // against the constant element's resolved code instead of its string value. This only fires
+    // when the dict-passthrough optimization delivers an encoded array; otherwise state->active is
+    // false and the generic decoded path below runs unchanged.
+    if (auto* state = reinterpret_cast<ArrayContainsDictState*>(
+                context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        state != nullptr && state->active) {
+        const auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg0.get()));
+        MutableColumnPtr code_holder = array->elements_column()->clone_empty();
+        code_holder->append_datum(Datum(state->target_code));
+        auto code_target = ConstColumn::create(std::move(code_holder), arg0->size());
+        return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *code_target);
+    }
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
