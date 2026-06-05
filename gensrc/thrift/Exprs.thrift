@@ -260,6 +260,12 @@ struct TExprNode {
   // When true, STRUCT cast matches fields by name instead of by position.
   // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
   59: optional bool cast_struct_by_name
+
+  // For dict-aware scalar function calls: the global-dict column (slot) id backing each
+  // argument, parallel to the argument list. -1 means the argument is not dict-encoded.
+  // Populated by the FE from the low-cardinality optimization so the BE can fetch the
+  // corresponding global dictionary from runtime state in the function's prepare callback.
+  60: optional list<i32> dict_slot_ids
 }
 
 struct TPartitionLiteral {

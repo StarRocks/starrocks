@@ -63,6 +63,10 @@ private:
 
     bool _is_returning_random_value = false;
 
+    // Per-argument global-dict slot id (-1 if not dict-encoded), taken from the thrift
+    // node. Empty for non-dict-aware functions. See FunctionContext::dict_slots().
+    std::vector<int32_t> _dict_slots;
+
     // only set when it's a agg state combinator function to track its lifecycle be with the expr
     StateCombinatorPtr _agg_state_func = nullptr;
     // only set when it's a agg state combinator function to track its lifecycle be with the expr

@@ -137,6 +137,14 @@ public:
 
     void set_constant_columns(Columns columns) { _constant_columns = std::move(columns); }
 
+    // For dict-aware functions: the global-dict column (slot) id backing each argument,
+    // parallel to the argument list (-1 if the argument is not dict-encoded). Populated by
+    // VectorizedFunctionCallExpr::open from the thrift node before the prepare callback runs,
+    // so a function's prepare callback can fetch the dictionary from runtime state via
+    // state()->fragment_dict_state()->query_global_dicts().
+    const std::vector<int32_t>& dict_slots() const { return _dict_slots; }
+    void set_dict_slots(std::vector<int32_t> dict_slots) { _dict_slots = std::move(dict_slots); }
+
     MemPool* mem_pool() { return _mem_pool; }
 
     void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage_counter = mem_usage_counter; }
@@ -192,6 +200,9 @@ private:
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
     Columns _constant_columns;
+
+    // Per-argument global-dict slot id (-1 if not dict-encoded). See dict_slots().
+    std::vector<int32_t> _dict_slots;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;

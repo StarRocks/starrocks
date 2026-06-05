@@ -71,6 +71,7 @@ FunctionContext* FunctionContext::clone(MemPool* pool) {
     FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types);
 
     new_context->_constant_columns = _constant_columns;
+    new_context->_dict_slots = _dict_slots;
     new_context->_fragment_local_fn_state = _fragment_local_fn_state;
     return new_context;
 }

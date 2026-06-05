@@ -30,6 +30,9 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -38,7 +41,11 @@ DEFINE_FAIL_POINT(expr_prepare_failed);
 DEFINE_FAIL_POINT(expr_prepare_fragment_local_call_failed);
 DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
 
-VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
+VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {
+    if (node.__isset.dict_slot_ids) {
+        _dict_slots = node.dict_slot_ids;
+    }
+}
 
 const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const TFunction& fn) {
     // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
@@ -141,6 +148,26 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
             const_columns.emplace_back(std::move(child_col));
         }
         fn_ctx->set_constant_columns(std::move(const_columns));
+
+        // Dict-aware functions: make sure every referenced global dictionary is materialized
+        // before the prepare callback runs, then hand the slot ids to the FunctionContext so
+        // the callback can fetch the dicts from runtime state. Materialization mutates the
+        // unlocked global-dict map and must only happen in the single-threaded FRAGMENT_LOCAL
+        // setup phase, never in the per-thread THREAD_LOCAL clone path.
+        if (!_dict_slots.empty()) {
+            if (auto* dict_state = state->fragment_dict_state(); dict_state != nullptr) {
+                const auto& dicts = dict_state->query_global_dicts();
+                auto* parser = dict_state->mutable_dict_optimize_parser();
+                for (int32_t slot_id : _dict_slots) {
+                    if (slot_id >= 0 && !dicts.contains(static_cast<uint32_t>(slot_id))) {
+                        // A derived (expression-backed) dict is materialized lazily; ignore
+                        // the error so a missing dict simply degrades to no-dict behavior.
+                        (void)parser->eval_dict_expr(state, slot_id);
+                    }
+                }
+                fn_ctx->set_dict_slots(_dict_slots);
+            }
+        }
     }
 
     if (_fn_desc->prepare_function != nullptr) {
