@@ -344,11 +344,14 @@ StatusOr<int64_t> ColumnModePartialUpdateHandler::_resolve_source_segment_num_ro
 
 std::shared_ptr<TabletSchema> ColumnModePartialUpdateHandler::_build_sparse_tablet_schema(
         const TabletSchemaCSPtr& base_tablet_schema, const std::shared_ptr<TabletSchema>& value_tschema) {
-    // Synthetic source_rowid column: matches rowid_t (uint32), non-nullable, ascending. Its reserved
-    // uid (kSDCGSourceRowidUid) never appears in DeltaColumnGroup::column_ids(), so the read layer never
-    // resolves a real column to it. It is column 0 so the file's first column is the rowid->ordinal key.
-    TabletColumn source_rowid_col(STORAGE_AGGREGATE_NONE, TYPE_UNSIGNED_INT, /*is_nullable=*/false,
-                                  static_cast<int32_t>(kSDCGSourceRowidUid), sizeof(uint32_t));
+    // Synthetic source_rowid column. Values are rowid_t (uint32) widened to BIGINT: the segment
+    // writer's EncodingInfo has no encoding registered for unsigned integer logical types (TYPE_UNSIGNED_*
+    // would hit "fail to find valid type encoding" in ScalarColumnWriter::init), and int64 holds the full
+    // uint32 range. Its reserved uid (kSDCGSourceRowidUid) never appears in
+    // DeltaColumnGroup::column_ids(), so the read layer never resolves a real column to it. It is column 0
+    // so the file's first column is the rowid->ordinal key.
+    TabletColumn source_rowid_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false,
+                                  static_cast<int32_t>(kSDCGSourceRowidUid), sizeof(int64_t));
     source_rowid_col.set_name("__sdcg_source_rowid");
     source_rowid_col.set_is_key(false);
 
@@ -402,9 +405,9 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     auto sparse_chunk = ChunkFactory::new_chunk(sparse_schema, K);
     {
         auto& rowid_column = sparse_chunk->get_column_by_index(0);
-        std::vector<uint32_t> sorted_rowids(distinct_source_rowids.begin(), distinct_source_rowids.end());
+        std::vector<int64_t> sorted_rowids(distinct_source_rowids.begin(), distinct_source_rowids.end());
         TRY_CATCH_BAD_ALLOC((void)rowid_column->as_mutable_raw_ptr()->append_numbers(
-                sorted_rowids.data(), sorted_rowids.size() * sizeof(uint32_t)));
+                sorted_rowids.data(), sorted_rowids.size() * sizeof(int64_t)));
     }
 
     // 3. The value columns are a separate K-row chunk that mirrors sparse_chunk's value columns by

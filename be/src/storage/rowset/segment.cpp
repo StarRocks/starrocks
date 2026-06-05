@@ -691,11 +691,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_sparse_dcg_segment(const DeltaCo
     auto* rowid_pb = schema_pb.add_column();
     rowid_pb->set_name("__sdcg_source_rowid__");
     rowid_pb->set_unique_id(kSDCGSourceRowidUid);
-    rowid_pb->set_type(logical_type_to_string(TYPE_UNSIGNED_INT));
+    rowid_pb->set_type(logical_type_to_string(TYPE_BIGINT));
     rowid_pb->set_is_key(false);
     rowid_pb->set_is_nullable(false);
-    rowid_pb->set_length(sizeof(uint32_t));
-    rowid_pb->set_index_length(sizeof(uint32_t));
+    rowid_pb->set_length(sizeof(int64_t));
+    rowid_pb->set_index_length(sizeof(int64_t));
     rowid_pb->set_aggregation(get_string_by_aggregation_type(STORAGE_AGGREGATE_NONE));
 
     auto sparse_schema = std::make_shared<TabletSchema>(schema_pb);

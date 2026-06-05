@@ -76,14 +76,14 @@ Status LayeredOverlayColumnIterator::_ensure_layer_loaded(SparseLayer& l) {
     TabletColumn rowid_col;
     rowid_col.set_unique_id(kSDCGSourceRowidUid);
     rowid_col.set_name("__sdcg_source_rowid__");
-    rowid_col.set_type(TYPE_UNSIGNED_INT);
+    rowid_col.set_type(TYPE_BIGINT); // see writer: u32 rowids widened to BIGINT for encoding support
     rowid_col.set_is_nullable(false);
-    rowid_col.set_length(sizeof(uint32_t));
+    rowid_col.set_length(sizeof(int64_t));
 
     ASSIGN_OR_RETURN(auto rowid_iter, l.spcols_segment->new_column_iterator(rowid_col, nullptr));
     RETURN_IF_ERROR(rowid_iter->init(layer_opts));
     RETURN_IF_ERROR(rowid_iter->seek_to_first());
-    auto rowid_holder = UInt32Column::create();
+    auto rowid_holder = Int64Column::create();
     {
         auto remaining = static_cast<size_t>(k);
         while (remaining > 0) {
@@ -102,7 +102,7 @@ Status LayeredOverlayColumnIterator::_ensure_layer_loaded(SparseLayer& l) {
     l.source_rowids.resize(k);
     const auto& rowid_data = rowid_holder->immutable_data();
     for (int64_t i = 0; i < k; ++i) {
-        l.source_rowids[i] = rowid_data[i];
+        l.source_rowids[i] = static_cast<uint32_t>(rowid_data[i]);
     }
 
     // Fingerprint guard (§4.3 / §8): max(source_rowid) must address a row that exists in the base
