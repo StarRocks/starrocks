@@ -125,13 +125,49 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.creator AS creator, " +
                         "information_schema.materialized_views.last_refresh_process_time AS last_refresh_process_time, " +
                         "information_schema.materialized_views.last_refresh_job_id AS last_refresh_job_id, " +
-                        "information_schema.materialized_views.last_refresh_time AS last_refresh_time" +
+                        "information_schema.materialized_views.last_refresh_time AS last_refresh_time, " +
+                        "information_schema.materialized_views.warehouse AS warehouse, " +
+                        "information_schema.materialized_views.refresh_mode AS refresh_mode, " +
+                        "information_schema.materialized_views.refresh_trigger AS refresh_trigger, " +
+                        "information_schema.materialized_views.refresh_policy AS refresh_policy, " +
+                        "information_schema.materialized_views.resource_group AS resource_group" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
                         "(information_schema.materialized_views.TABLE_NAME = 'mv1')",
                 AstToStringBuilder.toString(queryStatement));
         checkShowMaterializedViewsStmt(stmt);
+    }
+
+    @Test
+    public void testWarehouseColumn() {
+        List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
+        Assertions.assertTrue(schema.stream().anyMatch(c -> c.getName().equalsIgnoreCase("WAREHOUSE")));
+    }
+
+    @Test
+    public void testRefreshModeColumn() {
+        List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
+        Assertions.assertTrue(schema.stream().anyMatch(c -> c.getName().equalsIgnoreCase("REFRESH_MODE")));
+    }
+
+    @Test
+    public void testRefreshTriggerColumn() {
+        List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
+        Assertions.assertTrue(schema.stream().anyMatch(c -> c.getName().equalsIgnoreCase("REFRESH_TRIGGER")));
+    }
+
+    @Test
+    public void testRefreshPolicyColumn() {
+        List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
+        Assertions.assertTrue(schema.stream().anyMatch(c -> c.getName().equalsIgnoreCase("REFRESH_POLICY")));
+    }
+
+    @Test
+    public void testResourceGroupColumn() {
+        List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
+        Assertions.assertTrue(schema.stream().anyMatch(c -> c.getName().equalsIgnoreCase("RESOURCE_GROUP")));
+        Assertions.assertEquals("RESOURCE_GROUP", schema.get(schema.size() - 1).getName());
     }
 
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {

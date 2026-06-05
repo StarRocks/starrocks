@@ -54,7 +54,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
 
     // Test that scanner has the correct number of columns
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(28, slot_descs.size());
+    EXPECT_EQ(33, slot_descs.size());
 
     // Test column names and types
     EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[0]->col_name());
@@ -85,6 +85,11 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
     EXPECT_EQ("LAST_REFRESH_PROCESS_TIME", slot_descs[25]->col_name());
     EXPECT_EQ("LAST_REFRESH_JOB_ID", slot_descs[26]->col_name());
     EXPECT_EQ("LAST_REFRESH_TIME", slot_descs[27]->col_name());
+    EXPECT_EQ("WAREHOUSE", slot_descs[28]->col_name());
+    EXPECT_EQ("REFRESH_MODE", slot_descs[29]->col_name());
+    EXPECT_EQ("REFRESH_TRIGGER", slot_descs[30]->col_name());
+    EXPECT_EQ("REFRESH_POLICY", slot_descs[31]->col_name());
+    EXPECT_EQ("RESOURCE_GROUP", slot_descs[32]->col_name());
 }
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_uninitialized_scanner) {
