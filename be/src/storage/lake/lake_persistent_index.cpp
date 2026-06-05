@@ -1202,10 +1202,6 @@ struct RebuildScanContext {
     bool need_encode; // build a per-row pk-encoder column (multi-column PK or V2 encoding)
     size_t key_size;  // fixed encoded key size, used by the non-binary key path
     uint64_t rebuild_rss_rowid_point;
-    OlapReaderStatistics* stats;
-    std::atomic<int64_t>* get_next_cost_us;
-    std::atomic<int64_t>* pk_encode_cost_us;
-    std::atomic<int64_t>* build_values_cost_us;
     std::mutex* err_mutex;
     Status* scan_status;
 };
@@ -1359,18 +1355,10 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         ctx.scan_status->update(s);
     };
 
-    int64_t local_get_next = 0;
-    int64_t local_pk_encode = 0;
-    int64_t local_build_values = 0;
     // Worker-local scratch: the pk-encoder column is NOT thread-safe, so each task gets its own
-    // chunk/rowids/pk-encoder column. The read `stats`, by contrast, was bound into every segment's
-    // SegmentReadOptions at iterator-creation time, so the iterator's column readers captured that
-    // exact pointer and there is no in-iterator hook to redirect IO accounting to a task-local
-    // object. Tasks therefore accumulate directly into the shared `stats`. These are diagnostic TRACE
-    // counters (io_count_*/io_ns_*); a concurrent `+=` may tear an increment but cannot corrupt the
-    // index, matching the existing accepted behavior in the same creation path
-    // (get_delvec_ns/get_delta_column_group_ns are already written to this shared `stats` from worker
-    // threads). All writes complete before the post-`wait()` trace read.
+    // chunk/rowids/pk-encoder column. IO accounting is task-local too: each unit's iterator was created
+    // with its own OlapReaderStatistics (see build_one_rowset_scan), merged into the aggregate after
+    // token->wait(), so concurrent get_next() calls never race on a shared stats object.
     std::vector<uint32_t> local_rowids;
     local_rowids.reserve(config::vector_chunk_size);
     // The scan chunk is reused across iterations on the encoded path (keys live in a per-batch encoded
@@ -1386,9 +1374,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         }
         auto* local_chunk = local_chunk_sp.get();
         local_rowids.clear();
-        int64_t t1 = GetCurrentTimeMicros();
         auto st = itr->get_next(local_chunk, &local_rowids);
-        local_get_next += GetCurrentTimeMicros() - t1;
         if (st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
@@ -1403,15 +1389,12 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
             if (!PrimaryKeyEncoder::create_column(ctx.pkey_schema, &encoded_keys, ctx.pk_encoding_type).ok()) {
                 CHECK(false) << "create column for primary key encoder failed";
             }
-            int64_t t2 = GetCurrentTimeMicros();
             PrimaryKeyEncoder::encode(ctx.pkey_schema, *local_chunk, 0, local_chunk->num_rows(), encoded_keys.get(),
                                       ctx.pk_encoding_type);
-            local_pk_encode += GetCurrentTimeMicros() - t2;
             pkc = encoded_keys.get();
         } else {
             pkc = const_cast<Column*>(local_chunk->columns()[0].get());
         }
-        int64_t t3 = GetCurrentTimeMicros();
         uint64_t base = ((uint64_t)rssid) << 32;
         std::vector<IndexValue> values;
         values.reserve(pkc->size());
@@ -1419,7 +1402,6 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         for (uint32_t r = 0; r < pkc->size(); r++) {
             values.emplace_back(base + local_rowids[r]);
         }
-        local_build_values += GetCurrentTimeMicros() - t3;
         if (values.back().get_value() <= ctx.rebuild_rss_rowid_point) {
             // lower AND equal than rebuild point, skip
             continue;
@@ -1456,9 +1438,6 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
             break;
         }
     }
-    *ctx.get_next_cost_us += local_get_next;
-    *ctx.pk_encode_cost_us += local_pk_encode;
-    *ctx.build_values_cost_us += local_build_values;
 }
 
 } // namespace
@@ -1489,10 +1468,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     OlapReaderStatistics stats;
     const bool need_encode = pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
 
-    // Per-cost atomics + a mutex-guarded status sink so workers accumulate/report without serializing.
-    std::atomic<int64_t> get_next_cost_us{0};
-    std::atomic<int64_t> pk_encode_cost_us{0};
-    std::atomic<int64_t> build_values_cost_us{0};
+    // Mutex-guarded status sink so parallel workers can report the first scan error without serializing.
     std::mutex scan_err_mutex;
     Status scan_status;
     const RebuildScanContext ctx{.pkey_schema = pkey_schema,
@@ -1500,10 +1476,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                                  .need_encode = need_encode,
                                  .key_size = static_cast<size_t>(_key_size),
                                  .rebuild_rss_rowid_point = rebuild_rss_rowid_point,
-                                 .stats = &stats,
-                                 .get_next_cost_us = &get_next_cost_us,
-                                 .pk_encode_cost_us = &pk_encode_cost_us,
-                                 .build_values_cost_us = &build_values_cost_us,
                                  .err_mutex = &scan_err_mutex,
                                  .scan_status = &scan_status};
 
@@ -1616,9 +1588,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
         }
     }
-    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us.load());
-    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us.load());
-    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us.load());
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
