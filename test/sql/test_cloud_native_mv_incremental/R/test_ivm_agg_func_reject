@@ -1,0 +1,32 @@
+-- name: test_ivm_bitmap_union_rejected @cloud
+CREATE TABLE bmr (k INT, uid INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO bmr VALUES (1,100),(1,101),(2,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_bmr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(to_bitmap(uid)) AS b FROM bmr GROUP BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: bitmap_agg. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv].')
+-- !result
+-- name: test_ivm_hll_union_rejected @cloud
+CREATE TABLE hlr (k INT, uid INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO hlr VALUES (1,100),(1,101),(2,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_hlr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, hll_union(hll_hash(uid)) AS h FROM hlr GROUP BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: hll_union. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv].')
+-- !result

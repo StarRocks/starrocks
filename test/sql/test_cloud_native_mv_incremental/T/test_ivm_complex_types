@@ -1,0 +1,93 @@
+-- name: test_ivm_array_col @cloud
+CREATE TABLE ct_arr (k INT, arr ARRAY<INT>) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ct_arr VALUES (1,[1,2]),(2,[3]);
+CREATE MATERIALIZED VIEW mv_ct_arr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, arr FROM ct_arr;
+REFRESH MATERIALIZED VIEW mv_ct_arr WITH SYNC MODE;
+SELECT k, arr FROM mv_ct_arr ORDER BY k;
+INSERT INTO ct_arr VALUES (3,[4,5,6]);
+REFRESH MATERIALIZED VIEW mv_ct_arr WITH SYNC MODE;
+SELECT k, arr FROM mv_ct_arr ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_ct_arr;
+SELECT COUNT(*) AS base_rows FROM ct_arr;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ct_arr%' OR DEFINITION LIKE '%mv_ct_arr%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_json_col @cloud
+CREATE TABLE ct_json (k INT, j JSON) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ct_json VALUES (1, parse_json('{"a":1}')),(2, parse_json('{"a":2}'));
+CREATE MATERIALIZED VIEW mv_ct_json
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, j FROM ct_json;
+REFRESH MATERIALIZED VIEW mv_ct_json WITH SYNC MODE;
+SELECT k, get_json_int(j, '$.a') AS a FROM mv_ct_json ORDER BY k;
+INSERT INTO ct_json VALUES (3, parse_json('{"a":3}'));
+REFRESH MATERIALIZED VIEW mv_ct_json WITH SYNC MODE;
+SELECT k, get_json_int(j, '$.a') AS a FROM mv_ct_json ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_ct_json;
+SELECT COUNT(*) AS base_rows FROM ct_json;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, get_json_int(j, '$.a') AS a FROM mv_ct_json
+    EXCEPT SELECT k, get_json_int(j, '$.a') AS a FROM ct_json) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, get_json_int(j, '$.a') AS a FROM ct_json
+    EXCEPT SELECT k, get_json_int(j, '$.a') AS a FROM mv_ct_json) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ct_json%' OR DEFINITION LIKE '%mv_ct_json%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_map_col @cloud
+CREATE TABLE ct_map (k INT, m MAP<INT,INT>) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ct_map VALUES (1, map{1:10}),(2, map{2:20});
+CREATE MATERIALIZED VIEW mv_ct_map
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, m FROM ct_map;
+REFRESH MATERIALIZED VIEW mv_ct_map WITH SYNC MODE;
+SELECT k, m FROM mv_ct_map ORDER BY k;
+INSERT INTO ct_map VALUES (3, map{3:30});
+REFRESH MATERIALIZED VIEW mv_ct_map WITH SYNC MODE;
+SELECT k, m FROM mv_ct_map ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_ct_map;
+SELECT COUNT(*) AS base_rows FROM ct_map;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ct_map%' OR DEFINITION LIKE '%mv_ct_map%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_struct_col @cloud
+CREATE TABLE ct_struct (k INT, s STRUCT<a INT, b INT>) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ct_struct VALUES (1, row(1,2)),(2, row(3,4));
+CREATE MATERIALIZED VIEW mv_ct_struct
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, s FROM ct_struct;
+REFRESH MATERIALIZED VIEW mv_ct_struct WITH SYNC MODE;
+SELECT k, s FROM mv_ct_struct ORDER BY k;
+INSERT INTO ct_struct VALUES (3, row(5,6));
+REFRESH MATERIALIZED VIEW mv_ct_struct WITH SYNC MODE;
+SELECT k, s FROM mv_ct_struct ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_ct_struct;
+SELECT COUNT(*) AS base_rows FROM ct_struct;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ct_struct%' OR DEFINITION LIKE '%mv_ct_struct%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

@@ -1,0 +1,140 @@
+-- name: test_ivm_drop_recreate_mv @cloud
+CREATE TABLE dr_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dr_base VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM dr_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dr WITH SYNC MODE;
+INSERT INTO dr_base VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dr WITH SYNC MODE;
+SELECT k, v FROM mv_dr ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+DROP MATERIALIZED VIEW mv_dr;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM dr_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dr WITH SYNC MODE;
+SELECT k, v FROM mv_dr ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+INSERT INTO dr_base VALUES (4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dr WITH SYNC MODE;
+SELECT k, v FROM mv_dr ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_dr;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS base_rows FROM dr_base;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_dr EXCEPT SELECT k, v FROM dr_base) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM dr_base EXCEPT SELECT k, v FROM mv_dr) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_dr%' OR DEFINITION LIKE '%mv_dr%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_async_incremental @cloud
+CREATE TABLE aa_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO aa_base VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_aa
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH ASYNC
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM aa_base;
+-- result:
+-- !result
+SELECT REFRESH_TYPE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_aa';
+-- result:
+ASYNC
+-- !result
+REFRESH MATERIALIZED VIEW mv_aa WITH SYNC MODE;
+SELECT k, v FROM mv_aa ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+INSERT INTO aa_base VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_aa WITH SYNC MODE;
+SELECT k, v FROM mv_aa ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_aa;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM aa_base;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_aa EXCEPT SELECT k, v FROM aa_base) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM aa_base EXCEPT SELECT k, v FROM mv_aa) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_aa%' OR DEFINITION LIKE '%mv_aa%')
+  AND STATE = 'SUCCESS' AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1;
+-- result:
+INCREMENTAL
+PCT
+-- !result

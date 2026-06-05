@@ -1,0 +1,19 @@
+-- name: test_ivm_bitmap_union_rejected @cloud
+CREATE TABLE bmr (k INT, uid INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO bmr VALUES (1,100),(1,101),(2,200);
+CREATE MATERIALIZED VIEW mv_bmr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(to_bitmap(uid)) AS b FROM bmr GROUP BY k;
+
+-- name: test_ivm_hll_union_rejected @cloud
+CREATE TABLE hlr (k INT, uid INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO hlr VALUES (1,100),(1,101),(2,200);
+CREATE MATERIALIZED VIEW mv_hlr
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, hll_union(hll_hash(uid)) AS h FROM hlr GROUP BY k;
