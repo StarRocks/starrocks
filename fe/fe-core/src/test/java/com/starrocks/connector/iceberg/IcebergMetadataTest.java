@@ -1637,6 +1637,24 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testPredicateSearchKeyIgnoresFieldNames() {
+        GetRemoteFilesParams leftParams = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
+                .setFieldNames(Lists.newArrayList("c1"))
+                .build();
+        GetRemoteFilesParams rightParams = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
+                .setFieldNames(Lists.newArrayList("c2"))
+                .build();
+
+        PredicateSearchKey leftKey = PredicateSearchKey.of("db", "table", leftParams);
+        PredicateSearchKey rightKey = PredicateSearchKey.of("db", "table", rightParams);
+
+        Assertions.assertEquals(leftKey, rightKey);
+        Assertions.assertEquals(leftKey.hashCode(), rightKey.hashCode());
+    }
+
+    @Test
     public void testListPartitionNames() {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).appendFile(FILE_B_3).commit();
         new MockUp<IcebergHiveCatalog>() {
