@@ -14,7 +14,9 @@
 
 #include "exec/pipeline/query_context_manager.h"
 
+#include <chrono>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "base/hash/hash.h"
@@ -61,7 +63,8 @@ void QueryContextManager::_clean_slot_unlocked(size_t i, std::vector<QueryContex
     auto& sc_map = _second_chance_maps[i];
     auto sc_it = sc_map.begin();
     while (sc_it != sc_map.end()) {
-        if (sc_it->second->has_no_active_instances() && sc_it->second->is_delivery_expired()) {
+        if (sc_it->second->has_no_active_instances() &&
+            (sc_it->second->query_runtime_state().is_delivery_expired() || sc_it->second->is_cancelled_by_fe())) {
             del.emplace_back(std::move(sc_it->second));
             sc_it = sc_map.erase(sc_it);
         } else {
@@ -82,7 +85,7 @@ void QueryContextManager::_clean_query_contexts() {
 void QueryContextManager::_clean_func(QueryContextManager* manager) {
     while (!manager->_is_stopped()) {
         manager->_clean_query_contexts();
-        std::this_thread::sleep_for(milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
@@ -245,7 +248,7 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
         // vanished
         auto ctx = std::move(it->second);
-        ctx->extend_delivery_lifetime();
+        ctx->query_runtime_state().extend_delivery_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
         return false;
