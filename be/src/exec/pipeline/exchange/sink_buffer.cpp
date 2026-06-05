@@ -247,7 +247,7 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
-    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "

@@ -723,7 +723,7 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
-    if (this->query_ctx()->is_query_expired()) {
+    if (this->query_runtime_state()->is_query_expired()) {
         if (_has_log_cancelled.exchange(true) == false) {
             VLOG_ROW << "begin to cancel operators for " << to_readable_string();
         }

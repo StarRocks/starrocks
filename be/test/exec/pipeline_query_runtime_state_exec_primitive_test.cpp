@@ -14,6 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <thread>
+
 #include "exec/pipeline/primitives/query_runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -28,6 +31,42 @@ TEST(QueryRuntimeStateTest, StoresQueryId) {
 
     EXPECT_EQ(1, state.query_id().hi);
     EXPECT_EQ(2, state.query_id().lo);
+}
+
+TEST(QueryRuntimeStateTest, TracksQueryAndDeliveryExpiry) {
+    QueryRuntimeState state;
+
+    EXPECT_EQ(QueryRuntimeState::DEFAULT_EXPIRE_SECONDS, state.get_query_expire_seconds());
+
+    state.set_delivery_expire_seconds(1);
+    state.set_query_expire_seconds(1);
+    state.extend_delivery_lifetime();
+    state.extend_query_lifetime();
+
+    EXPECT_FALSE(state.is_delivery_expired());
+    EXPECT_FALSE(state.is_query_expired());
+}
+
+TEST(QueryRuntimeStateTest, ExpiresDeliveryAndQueryIndependently) {
+    QueryRuntimeState state;
+
+    state.set_delivery_expire_seconds(0);
+    state.set_query_expire_seconds(1);
+    state.extend_delivery_lifetime();
+    state.extend_query_lifetime();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+    EXPECT_TRUE(state.is_delivery_expired());
+    EXPECT_FALSE(state.is_query_expired());
+
+    state.set_delivery_expire_seconds(1);
+    state.set_query_expire_seconds(0);
+    state.extend_delivery_lifetime();
+    state.extend_query_lifetime();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+    EXPECT_FALSE(state.is_delivery_expired());
+    EXPECT_TRUE(state.is_query_expired());
 }
 
 } // namespace starrocks::pipeline

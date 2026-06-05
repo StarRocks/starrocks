@@ -15,7 +15,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -47,11 +46,6 @@ namespace starrocks {
 class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
-
-using std::chrono::seconds;
-using std::chrono::milliseconds;
-using std::chrono::steady_clock;
-using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
 
@@ -86,20 +80,8 @@ public:
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
-    void set_delivery_expire_seconds(int expire_seconds) { _delivery_expire_seconds = seconds(expire_seconds); }
-    void set_query_expire_seconds(int expire_seconds) { _query_expire_seconds = seconds(expire_seconds); }
-    inline int get_query_expire_seconds() const { return _query_expire_seconds.count(); }
-    // now time point pass by deadline point.
-    bool is_delivery_expired() const {
-        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline || _cancelled_by_fe;
-    }
-    bool is_query_expired() const {
-        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _query_deadline;
-    }
-
     bool is_cancelled() const { return _is_cancelled; }
+    bool is_cancelled_by_fe() const { return _cancelled_by_fe; }
 
     Status get_cancelled_status() const {
         auto* status = _cancelled_status.load();
@@ -108,15 +90,6 @@ public:
 
     bool is_dead() const {
         return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _cancelled_by_fe);
-    }
-    // add expired seconds to deadline
-    void extend_delivery_lifetime() {
-        _delivery_deadline =
-                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _delivery_expire_seconds).count();
-    }
-    void extend_query_lifetime() {
-        _query_deadline =
-                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
     void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
     bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
@@ -321,9 +294,6 @@ public:
         return _global_late_materialization_ctx_mgr;
     }
 
-public:
-    static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
-
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
     QueryRuntimeState _query_runtime_state;
@@ -333,10 +303,6 @@ private:
     size_t _total_fragments{0};
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
-    int64_t _delivery_deadline = 0;
-    int64_t _query_deadline = 0;
-    seconds _delivery_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
-    seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     bool _enable_pipeline_level_shuffle = true;

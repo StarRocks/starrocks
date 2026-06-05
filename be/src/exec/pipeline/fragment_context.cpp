@@ -265,7 +265,7 @@ void FragmentContext::set_final_status(const Status& status) {
         auto detailed_message = _s_status.detailed_message();
         bool is_timeout = detailed_message == "TimeOut";
         if (is_timeout) {
-            hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
+            hook_on_query_timeout(_query_id, _runtime_state->query_runtime_state()->get_query_expire_seconds());
         }
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
@@ -373,7 +373,7 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
     _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
-    timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
+    timespec tm = butil::seconds_from_now(runtime_state()->query_runtime_state()->get_query_expire_seconds());
     RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task.get(), tm));
     return Status::OK();
 }

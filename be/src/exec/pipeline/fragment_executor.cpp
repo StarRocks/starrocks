@@ -131,11 +131,12 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_total_fragments(params.instances_number);
     }
 
-    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
-    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
+    auto& query_runtime_state = _query_ctx->query_runtime_state();
+    query_runtime_state.set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    query_runtime_state.set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    query_runtime_state.extend_delivery_lifetime();
+    query_runtime_state.extend_query_lifetime();
 
     if (query_options.__isset.enable_pipeline_level_shuffle) {
         _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
@@ -344,7 +345,7 @@ uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPl
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
     const auto& query_options = request.common().query_options;
 
-    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    int expired_seconds = QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
     if (query_options.__isset.query_delivery_timeout) {
         if (query_options.__isset.query_timeout) {
             expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
@@ -365,7 +366,7 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
         return std::max<int>(1, query_options.query_timeout);
     }
 
-    return QueryContext::DEFAULT_EXPIRE_SECONDS;
+    return QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
 }
 
 static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
