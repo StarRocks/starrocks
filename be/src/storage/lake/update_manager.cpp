@@ -1799,12 +1799,12 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         LakeIOOptions dcg_lake_io_opts;
         dcg_lake_io_opts.fill_data_cache = true;
         dcg_lake_io_opts.fill_metadata_cache = true;
-        // SDCG (gated): open the base segment through the tablet manager so it carries the metacache
-        // (`_tablet_manager`), letting its `.cols`/`.spcols` DCG opens be footer-parsed once and reused
-        // across apply. When the SDCG flag is off, keep the legacy direct Segment::open (byte-identical:
-        // the legacy dense-DCG apply path stays exactly as before, no metacache routing).
+        // SDCG: open the base segment through the tablet manager so it carries the metacache
+        // (`_tablet_manager`), letting its `.cols`/`.spcols` DCG opens be footer-parsed once and
+        // reused across apply. Topology-driven (lake has a tablet manager, local does not) rather
+        // than flag-driven, so reads work identically whenever sparse layers exist on disk.
         StatusOr<std::shared_ptr<Segment>> segment;
-        if (config::enable_sparse_dcg && params.tablet->tablet_mgr() != nullptr) {
+        if (params.tablet->tablet_mgr() != nullptr) {
             segment = params.tablet->tablet_mgr()->load_segment(file_info, segment_id, dcg_lake_io_opts,
                                                                 /*fill_meta_cache=*/true, tablet_schema);
         } else {
@@ -1842,11 +1842,11 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
 
             // try dcg read only if dcg context exists
             if (dcg_ctx != nullptr) {
-                // SDCG (gated): if the column's DCG layer stack contains any SPARSE `.spcols` file,
-                // assemble a LayeredOverlayColumnIterator. When all hits are DENSE, the overlay
-                // builder returns OK with a nullptr iterator and we fall through to the legacy
-                // first-hit path below — identical behavior for legacy/local (always DENSE).
-                if (config::enable_sparse_dcg) {
+                // SDCG: if the column's DCG layer stack contains any SPARSE `.spcols` file,
+                // assemble a LayeredOverlayColumnIterator. METADATA-DRIVEN, not flag-driven: sparse
+                // data on disk must always be read through the overlay even when the flag was later
+                // turned off. All-DENSE stacks return nullptr and fall through to the legacy path.
+                {
                     std::unique_ptr<ColumnIterator> overlay_iter;
                     Status ov_st = new_lake_overlay_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema,
                                                                     read_file.get(), dcg_lake_io_opts, &overlay_iter);

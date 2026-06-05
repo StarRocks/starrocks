@@ -475,6 +475,46 @@ TEST_F(LakeSparseDcgTest, test_sparse_then_dense_supersedes_and_orphans) {
     EXPECT_EQ(700 * 3, c1[700]) << "untouched key reverts to base";
 }
 
+// Reads must be METADATA-driven: sparse layers written while the flag was on must remain
+// readable after the flag is turned off (regression test for the bitshuffle "invalid pos"
+// crash where flag-off reads fell into the legacy first-hit dense path).
+TEST_F(LakeSparseDcgTest, test_flag_off_reads_existing_sparse) {
+    constexpr int M = 2000;
+    int64_t version = 1;
+    write_base(M, &version);
+
+    {
+        ConfigResetGuard<bool> g_enable(&config::enable_sparse_dcg, true);
+        std::vector<int> keys = {909};
+        column_update(
+                keys, [](int k) { return k * 2 + 7; }, &version);
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        ASSERT_EQ(1, collect_dcg_stats(metadata).sparse) << "precondition: a sparse layer exists";
+    }
+
+    // Flag is back to false here; the sparse layer must still be readable via the overlay.
+    ConfigResetGuard<bool> g_off(&config::enable_sparse_dcg, false);
+    {
+        std::map<int, int> c1, c2;
+        int rows = read_table(version, &c1, &c2);
+        ASSERT_EQ(M, rows);
+        ASSERT_EQ(909 * 2 + 7, c1[909]) << "sparse layer must be readable with the flag off";
+        ASSERT_EQ(5 * 3, c1[5]) << "untouched row keeps base value";
+    }
+
+    // And a flag-off (dense) write over the same column must succeed and supersede the chain
+    // (its source read goes through the overlay).
+    std::vector<int> keys2 = {909};
+    column_update(
+            keys2, [](int k) { return k * 5 + 1; }, &version);
+    std::map<int, int> c1b, c2b;
+    ASSERT_EQ(M, read_table(version, &c1b, &c2b));
+    ASSERT_EQ(909 * 5 + 1, c1b[909]);
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    auto stats2 = collect_dcg_stats(metadata2);
+    ASSERT_EQ(0, stats2.sparse) << "dense supersede collapses the sparse layer";
+}
+
 // (d) Flag off -> no .spcols ever (kinds empty), behavior == dense.
 TEST_F(LakeSparseDcgTest, test_flag_off_is_dense) {
     // Explicitly force the flag off (other tests may have mutated the global config;

@@ -315,7 +315,9 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -366,8 +368,12 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -1545,10 +1551,15 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     const auto& col = tablet_schema->column(cid);
     ColumnAccessPath* access_path = _lookup_access_path(cid, col);
 
-    // SDCG (lake-only, gated): resolve the per-column DCG layer stack. When all hits are DENSE (or
-    // there are none), `has_sparse` is false and we fall through to the legacy first-hit path below
-    // — byte-identical behavior for legacy/local tablets whose file kinds are always DENSE.
-    if (config::enable_sparse_dcg && !_dcgs.empty()) {
+    // SDCG: resolve the per-column DCG layer stack. READ BEHAVIOR IS METADATA-DRIVEN, NOT
+    // FLAG-DRIVEN: once sparse `.spcols` layers exist on disk they MUST be read through the
+    // overlay regardless of config::enable_sparse_dcg (the flag only governs whether the WRITER
+    // produces new sparse layers). Otherwise toggling the flag off with sparse data present would
+    // route reads into the legacy first-hit path, which treats the newest file as row-complete and
+    // seeks base rowids as ordinals into a K-row file (observed: bitshuffle "invalid pos" crash).
+    // When all hits are DENSE (or none), we fall through to the legacy path — byte-identical for
+    // legacy/local tablets whose file kinds are always DENSE.
+    if (!_dcgs.empty()) {
         bool has_sparse = false;
         ASSIGN_OR_RETURN(auto hits, _collect_dcg_layers(static_cast<uint32_t>(ucid), &has_sparse));
         if (has_sparse) {
@@ -3810,7 +3821,8 @@ Status SegmentIterator::_apply_bitmap_index() {
             // lives in the layer's own K-row ordinal space (not the base space). Either would
             // prune overlay-covered rows incorrectly. Report "no bitmap index" (nullptr) so the
             // evaluator skips this column entirely (conservative no-prune, PoC accepted).
-            if (config::enable_sparse_dcg && !_dcgs.empty()) {
+            // Metadata-driven (NOT flag-driven), same rationale as _init_column_iterator_by_cid.
+            if (!_dcgs.empty()) {
                 bool has_sparse = false;
                 ASSIGN_OR_RETURN(auto hits, _collect_dcg_layers(static_cast<uint32_t>(ucid), &has_sparse));
                 if (has_sparse) {
