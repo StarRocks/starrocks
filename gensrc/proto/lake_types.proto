@@ -105,6 +105,23 @@ enum DeltaColumnFileKindPB {
     SPARSE_PERCOL = 1;
 }
 
+// Per-file presence summary for a SPARSE_PERCOL `.spcols` overlay. Describes which
+// base segment rows the sparse file touches, as the [min, max] closed range of the
+// sorted source_rowid column plus the row count K. This is a coarse summary (range,
+// not a full bitmap): a reader can skip a sparse layer entirely when the rowid it is
+// resolving falls outside [min_source_rowid, max_source_rowid], without opening the
+// `.spcols` file. min/max are base-segment ordinals (0-based); row_count == K ==
+// footer.num_rows of the sparse file. For DENSE_COLS entries / legacy metadata the
+// parallel slot is padded with an empty SparsePresencePB (all fields absent ==
+// unknown), so the `presences` array stays strictly 1:1 with column_files (mirroring
+// the file_kinds normalization rule). An absent/empty message means "unknown": the
+// reader must fall back to opening the file (no skip).
+message SparsePresencePB {
+    optional int64 min_source_rowid = 1;
+    optional int64 max_source_rowid = 2;
+    optional int64 row_count = 3;
+}
+
 message DeltaColumnGroupVerPB {
     repeated DeltaColumnGroupColumnIdsPB unique_column_ids = 1;
     repeated string column_files = 2;
@@ -122,10 +139,17 @@ message DeltaColumnGroupVerPB {
     // DENSE_COLS. Readers treat an out-of-range index as DENSE_COLS, so the
     // array is only emitted when at least one SPARSE_PERCOL file exists.
     repeated DeltaColumnFileKindPB file_kinds = 7;
-    // Tag 8 is reserved (by convention, NOT via the `reserved` keyword -- the
-    // FE's jprotobuf proto parser cannot parse `reserved`) for per-column
-    // presence bitmaps in a future iteration. The PoC loads the .spcols
-    // source_rowid column at layer init instead. NEVER reuse ordinal 8.
+    // Per-file presence summary, parallel to column_files (1:1 when present). Each
+    // SPARSE_PERCOL entry carries the [min, max] source_rowid range and K of its
+    // `.spcols` file so a reader can skip the layer when the requested rowid is out
+    // of range without opening the file. DENSE_COLS entries / legacy slots are padded
+    // with an empty SparsePresencePB (all fields absent == unknown), keeping the array
+    // strictly 1:1 with column_files (same normalization rule as file_kinds). The
+    // array is only emitted when at least one SPARSE_PERCOL file is present; otherwise
+    // it is absent and readers treat every entry as unknown (== legacy, no skip).
+    // NOTE: ordinal 8 was previously documented as "reserved by convention"; it is now
+    // claimed for this field. NEVER reuse it for anything else.
+    repeated SparsePresencePB presences = 8;
     // Number of rows stored in each SPARSE_PERCOL file (== footer.num_rows == K),
     // parallel to column_files. 0 for DENSE_COLS entries / when unknown.
     repeated int64 sparse_row_counts = 9 [packed = true];

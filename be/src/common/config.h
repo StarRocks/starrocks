@@ -450,6 +450,28 @@ CONF_mDouble(sdcg_dense_threshold, "0.3");
 // sdcg_dense_threshold (large K makes per-ordinal random seeks costlier than a full
 // sequential scan; lake/object-storage favors the conservative cap).
 CONF_mInt64(sdcg_sparse_max_rows, "50000");
+// In-place promotion (convergence) hard cap on sparse overlay depth. Before writing a new sparse
+// `.spcols` for a (column-batch, rssid), the writer counts the existing sparse files that cover any of
+// the batch's columns (chain_len). When chain_len + 1 would exceed this value, the writer forces the
+// dense path instead, which materializes the whole chain (read through the overlay) and lets the dense
+// supersede orphan every older sparse layer -- convergence without a background compaction worker.
+CONF_mInt32(sdcg_promotion_hard_count, "16");
+// In-place promotion threshold as a fraction of the base segment row count M. When the accumulated
+// touched rows across the existing sparse chain plus this batch (cum_K + K) reach
+// sdcg_promotion_threshold * M, the writer forces the dense path (a full rewrite is then no costlier to
+// read than walking the chain).
+CONF_mDouble(sdcg_promotion_threshold, "0.3");
+// Per-column segment-level zone-map gate refinement. Historically, when a segment has ANY delta
+// column group, segment-level zone-map pruning is disabled for ALL non-key columns, because a DCG
+// rewrites some columns and the base segment's zone maps are stale for them. That is overly broad:
+// a column NOT present in any DCG still has fully valid base zone maps and can be pruned safely.
+// When true, segment-level zone-map pruning is restored per-column for columns absent from every
+// DCG (and for columns whose DCG layer stack contains no SPARSE overlay -- the dense `.cols` file's
+// own zone map already governs page-level pruning, see SegmentZoneMapPruner). Columns covered by a
+// SPARSE overlay are never segment-pruned (the overlay carries newer values). This refinement also
+// benefits stock dense-DCG tables (flag enable_sparse_dcg off), so it is gated separately; set to
+// false to restore the historical all-or-nothing behavior.
+CONF_mBool(sdcg_enable_per_column_zone_map, "true");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");

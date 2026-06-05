@@ -1298,7 +1298,11 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         if (idx.first >= 0) {
             ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
+                // Route the dense `.cols` open through the lake metacache (footer parsed once) with
+                // the scan's cache options; local engine falls back to a direct open inside.
+                ASSIGN_OR_RETURN(auto dcg_segment,
+                                 _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema, _opts.lake_io_opts,
+                                                           _opts.lake_io_opts.fill_metadata_cache));
                 _dcg_segments[column_file] = dcg_segment;
             }
             return _dcg_segments[column_file];
@@ -1348,8 +1352,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
     std::unique_ptr<ColumnIterator> base_iter;
     if (dense_base_hit != nullptr) {
         // Base = the bottom DENSE `.cols` file (today's positional whole-column replacement).
-        ASSIGN_OR_RETURN(auto dense_seg, _segment->new_dcg_segment(*dense_base_hit->dcg, dense_base_hit->file_idx,
-                                                                   _opts.tablet_schema));
+        // Route through the lake metacache (footer parsed once) with the scan's cache options.
+        ASSIGN_OR_RETURN(auto dense_seg,
+                         _segment->new_dcg_segment(*dense_base_hit->dcg, dense_base_hit->file_idx, _opts.tablet_schema,
+                                                   _opts.lake_io_opts, _opts.lake_io_opts.fill_metadata_cache));
         ASSIGN_OR_RETURN(base_iter, dense_seg->new_column_iterator(column, path));
         RandomAccessFileOptions opts = base_raf_opts;
         if (dense_seg->encryption_info()) {
@@ -1387,11 +1393,18 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
         }
         LayeredOverlayColumnIterator::SparseLayer layer;
         ASSIGN_OR_RETURN(layer.spcols_segment,
-                         _segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, _opts.tablet_schema));
+                         _segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, _opts.tablet_schema,
+                                                          _opts.lake_io_opts,
+                                                          _opts.lake_io_opts.fill_metadata_cache));
         layer.value_column = column;
         layer.version = hit.dcg->version();
         layer.row_count = hit.dcg->sparse_row_count(hit.file_idx);
         layer.source_segment_num_rows = hit.dcg->source_segment_num_rows();
+        // Carry the meta-provided presence range for the zero-IO pre-filter (skip a disjoint layer
+        // without opening its `.spcols`). Unknown bounds (legacy/pre-presence writer) => no skip.
+        layer.presence_min = hit.dcg->presence_min(hit.file_idx);
+        layer.presence_max = hit.dcg->presence_max(hit.file_idx);
+        layer.presence_known = hit.dcg->presence_known(hit.file_idx);
 
         RandomAccessFileOptions opts = base_raf_opts;
         if (layer.spcols_segment->encryption_info()) {

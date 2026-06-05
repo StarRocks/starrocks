@@ -115,12 +115,13 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                                  const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                                  const std::vector<int64_t>& file_sizes) {
-    // Back-compat: dense-only callers get all-DENSE kinds and zero sparse counts. The density-aware form
-    // below detects this case and emits NO SDCG arrays, so the produced DeltaColumnGroupVerPB stays
-    // byte-identical to the pre-SDCG behavior (zero-regression hinge).
+    // Back-compat: dense-only callers get all-DENSE kinds, zero sparse counts and empty presences. The
+    // density-aware form below detects this case and emits NO SDCG arrays, so the produced
+    // DeltaColumnGroupVerPB stays byte-identical to the pre-SDCG behavior (zero-regression hinge).
     append_dcg(rssid, file_with_encryption_metas, unique_column_id_list, file_sizes,
                std::vector<DeltaColumnFileKindPB>(file_with_encryption_metas.size(), DENSE_COLS),
-               std::vector<int64_t>(file_with_encryption_metas.size(), 0), /*source_segment_num_rows=*/0);
+               std::vector<int64_t>(file_with_encryption_metas.size(), 0),
+               std::vector<SparsePresencePB>(file_with_encryption_metas.size()), /*source_segment_num_rows=*/0);
 }
 
 void MetaFileBuilder::append_dcg(uint32_t rssid,
@@ -128,7 +129,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                                  const std::vector<int64_t>& file_sizes,
                                  const std::vector<DeltaColumnFileKindPB>& file_kinds,
-                                 const std::vector<int64_t>& sparse_row_counts, int64_t source_segment_num_rows) {
+                                 const std::vector<int64_t>& sparse_row_counts,
+                                 const std::vector<SparsePresencePB>& presences, int64_t source_segment_num_rows) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     // SDCG semantics: only a DENSE new file supersedes (strips + orphans) older layers of its columns.
@@ -144,6 +146,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     // NOT byte-identical to an absent one.
     std::vector<DeltaColumnFileKindPB> emitted_kinds;
     std::vector<int64_t> emitted_sparse_counts;
+    // Presence summary per emitted entry, kept in lockstep with emitted_kinds. Dense / unknown entries
+    // get a default (empty) SparsePresencePB so the array stays 1:1 with column_files.
+    std::vector<SparsePresencePB> emitted_presences;
     bool sdcg_active = source_segment_num_rows > 0 || dcg_ver.has_source_segment_num_rows();
 
     // 1. append new dcgs
@@ -151,6 +156,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     DCHECK(file_with_encryption_metas.size() == file_sizes.size());
     DCHECK(file_with_encryption_metas.size() == file_kinds.size());
     DCHECK(file_with_encryption_metas.size() == sparse_row_counts.size());
+    DCHECK(file_with_encryption_metas.size() == presences.size());
     for (int i = 0; i < file_with_encryption_metas.size(); i++) {
         const DeltaColumnFileKindPB kind = file_kinds[i];
         new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
@@ -158,6 +164,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         new_dcg_ver.add_column_file_sizes(file_sizes[i]);
         emitted_kinds.push_back(kind);
         emitted_sparse_counts.push_back(kind == SPARSE_PERCOL ? sparse_row_counts[i] : 0);
+        // A presence summary only makes sense for a sparse overlay; dense entries pad with empty.
+        emitted_presences.push_back(kind == SPARSE_PERCOL ? presences[i] : SparsePresencePB());
         if (kind == SPARSE_PERCOL) {
             sdcg_active = true;
         }
@@ -190,11 +198,13 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Carry forward the old size, or 0 (unknown) for data written before this field existed,
             // so column_file_sizes stays aligned with column_files.
             new_dcg_ver.add_column_file_sizes(i < dcg_ver.column_file_sizes_size() ? dcg_ver.column_file_sizes(i) : 0);
-            // Carry forward the SDCG arrays in lockstep; normalize absent -> DENSE/0 (legacy entries).
+            // Carry forward the SDCG arrays in lockstep; normalize absent -> DENSE/0/empty (legacy entries).
             const DeltaColumnFileKindPB old_kind = i < dcg_ver.file_kinds_size() ? dcg_ver.file_kinds(i) : DENSE_COLS;
             const int64_t old_count = i < dcg_ver.sparse_row_counts_size() ? dcg_ver.sparse_row_counts(i) : 0;
             emitted_kinds.push_back(old_kind);
             emitted_sparse_counts.push_back(old_count);
+            // Carry the old presence summary (or empty if the old meta predates the presences field).
+            emitted_presences.push_back(i < dcg_ver.presences_size() ? dcg_ver.presences(i) : SparsePresencePB());
             if (old_kind == SPARSE_PERCOL) {
                 sdcg_active = true;
             }
@@ -219,9 +229,11 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     // count). Dense-only tablets keep absent arrays => byte-identical to pre-SDCG meta.
     if (sdcg_active) {
         DCHECK_EQ(static_cast<int>(emitted_kinds.size()), new_dcg_ver.column_files_size());
+        DCHECK_EQ(emitted_presences.size(), emitted_kinds.size());
         for (size_t i = 0; i < emitted_kinds.size(); ++i) {
             new_dcg_ver.add_file_kinds(emitted_kinds[i]);
             new_dcg_ver.add_sparse_row_counts(emitted_sparse_counts[i]);
+            new_dcg_ver.add_presences()->CopyFrom(emitted_presences[i]);
         }
         // Record the base segment row count (fingerprint) once. Carry forward any previously stored
         // value when this call doesn't supply one.

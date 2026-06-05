@@ -46,6 +46,7 @@
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
+#include "common/config_primary_key_fwd.h" // config::sdcg_enable_per_column_zone_map
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
@@ -287,7 +288,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     return Status::OK();
 }
 
-bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
+bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options, ColumnUID column_unique_id) {
     if (read_options.dcg_loader == nullptr) {
         return true;
     }
@@ -305,8 +306,27 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
         uint32_t segment_id = _segment_id;
         st = read_options.dcg_loader->load(tablet_id, rowsetid, segment_id, INT64_MAX, &dcgs);
     }
-
-    return st.ok() && dcgs.size() == 0;
+    if (!st.ok()) {
+        return false; // cannot determine DCG state safely => do not prune at segment level
+    }
+    if (dcgs.empty()) {
+        return true; // no DCG at all => base zone maps are authoritative for every column
+    }
+    if (!config::sdcg_enable_per_column_zone_map) {
+        // Legacy all-or-nothing: any DCG disables segment-level ZM for non-key columns.
+        return false;
+    }
+    // Per-column refinement: a column NOT present in any DCG still has fully valid base zone maps,
+    // so it may use segment-level pruning. A column present in any DCG (dense `.cols` rewrite or
+    // sparse `.spcols` overlay) keeps the conservative disabled behavior: its base segment zone map
+    // is stale for the rewritten/overlaid rows, and we do not redirect segment-level ZM to the
+    // dense file's reader (page-level pruning already reads the dense file's own zone map).
+    for (const auto& dcg : dcgs) {
+        if (dcg->get_column_idx(column_unique_id).first >= 0) {
+            return false; // column appears in this DCG => keep its segment-level ZM disabled
+        }
+    }
+    return true;
 }
 
 struct SegmentZoneMapPruner {
@@ -321,7 +341,8 @@ struct SegmentZoneMapPruner {
             return false;
         } else {
             return it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
-                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
+                   (tablet_column.is_key() ||
+                    parent->_use_segment_zone_map_filter(read_options, column_unique_id));
         }
     }
     bool operator()(const PredicateAndNode& node) const {
@@ -643,7 +664,8 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+                                                            const TabletSchemaCSPtr& read_tablet_schema,
+                                                            const LakeIOOptions& lake_io_opts, bool fill_meta_cache) {
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
@@ -660,11 +682,19 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
+    // Lake: route through the metacache so the `.cols` footer is parsed once and reused across
+    // scans (keyed by FileInfo::cache_key()). Local engine keeps the legacy direct open.
+    if (_tablet_manager != nullptr) {
+        return _tablet_manager->load_segment(info, /*segment_id=*/0, lake_io_opts, fill_meta_cache,
+                                             std::move(tablet_schema));
+    }
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_sparse_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                                   const TabletSchemaCSPtr& read_tablet_schema) {
+                                                                   const TabletSchemaCSPtr& read_tablet_schema,
+                                                                   const LakeIOOptions& lake_io_opts,
+                                                                   bool fill_meta_cache) {
     const TabletSchemaCSPtr& src_schema =
             (read_tablet_schema != nullptr) ? read_tablet_schema : _tablet_schema.schema();
 
@@ -707,6 +737,13 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_sparse_dcg_segment(const DeltaCo
     }
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
+    }
+    // Lake: route the `.spcols` open through the metacache so its footer is parsed once and reused
+    // across scans/apply (keyed by FileInfo::cache_key()). Local engine never produces `.spcols`,
+    // so this branch is lake-only; the fallback preserves the legacy direct open for safety.
+    if (_tablet_manager != nullptr) {
+        return _tablet_manager->load_segment(info, /*segment_id=*/0, lake_io_opts, fill_meta_cache,
+                                             std::move(sparse_schema));
     }
     return Segment::open(_fs, info, 0, sparse_schema, nullptr);
 }

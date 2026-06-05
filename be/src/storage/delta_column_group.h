@@ -45,6 +45,23 @@ enum class DeltaColumnFileKind : uint8_t {
 // any accidental collision.
 constexpr uint32_t kSDCGSourceRowidUid = 0x7FFFFFF0u; // 2147483632
 
+// Sentinel for an unknown presence bound (no SparsePresencePB recorded for this file,
+// e.g. a DENSE entry, legacy metadata, or a writer that predates the presences field).
+// Readers must treat an unknown bound as "no skip": fall back to opening the .spcols.
+constexpr int64_t kSDCGPresenceUnknown = -1;
+
+// Per-file presence summary for a SPARSE_PERCOL `.spcols` overlay, mirroring
+// SparsePresencePB in lake_types.proto. [min, max] is the closed range of base-segment
+// ordinals (source_rowid values) the sparse file touches; row_count is K. All three
+// default to kSDCGPresenceUnknown == "unknown" so DENSE / legacy slots normalize to a
+// no-skip presence and the parallel array stays 1:1 with column_files.
+struct SparsePresence {
+    int64_t min_source_rowid = kSDCGPresenceUnknown;
+    int64_t max_source_rowid = kSDCGPresenceUnknown;
+    int64_t row_count = kSDCGPresenceUnknown;
+    bool known() const { return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown; }
+};
+
 // `DeltaColumnGroup` is used for record the new update columns data
 // It is generated when column mode partial update happen.
 // `_column_ids` record the columns which have been updated, and `_column_file` points to the data file
@@ -148,13 +165,37 @@ public:
     int64_t source_segment_num_rows() const { return _source_segment_num_rows; }
     const std::vector<DeltaColumnFileKind>& file_kinds() const { return _file_kinds; }
     const std::vector<int64_t>& sparse_row_counts() const { return _sparse_row_counts; }
-    // Install SDCG metadata. `kinds`/`counts` are parallel to column_files (either
-    // empty == legacy all-dense, or strictly 1:1 with column_files). `source_rows`
+    // Per-file presence bounds for SPARSE_PERCOL overlays. `idx` indexes into
+    // relative_column_files(). Out-of-range / unrecorded => kSDCGPresenceUnknown
+    // (== "unknown", reader must not skip). DENSE entries are unknown by construction.
+    int64_t presence_min(size_t idx) const {
+        return idx < _presences.size() ? _presences[idx].min_source_rowid : kSDCGPresenceUnknown;
+    }
+    int64_t presence_max(size_t idx) const {
+        return idx < _presences.size() ? _presences[idx].max_source_rowid : kSDCGPresenceUnknown;
+    }
+    int64_t presence_row_count(size_t idx) const {
+        return idx < _presences.size() ? _presences[idx].row_count : kSDCGPresenceUnknown;
+    }
+    // True iff this file has a known [min,max] range. A reader may then skip the file
+    // when its requested base rowid falls outside [presence_min, presence_max].
+    bool presence_known(size_t idx) const { return idx < _presences.size() && _presences[idx].known(); }
+    const std::vector<SparsePresence>& presences() const { return _presences; }
+    // Install SDCG metadata. `kinds`/`counts`/`presences` are parallel to column_files
+    // (either empty == legacy all-dense, or strictly 1:1 with column_files). `source_rows`
     // is M (0 == unknown). Lake-only path: local-engine serializers never call this,
-    // so local behavior stays byte-identical.
+    // so local behavior stays byte-identical. The 3-arg overload keeps presences absent
+    // (every slot unknown) for callers that do not carry presence summaries.
     void set_sdcg_meta(std::vector<DeltaColumnFileKind> kinds, std::vector<int64_t> counts, int64_t source_rows) {
         _file_kinds = std::move(kinds);
         _sparse_row_counts = std::move(counts);
+        _source_segment_num_rows = source_rows;
+    }
+    void set_sdcg_meta(std::vector<DeltaColumnFileKind> kinds, std::vector<int64_t> counts,
+                       std::vector<SparsePresence> presences, int64_t source_rows) {
+        _file_kinds = std::move(kinds);
+        _sparse_row_counts = std::move(counts);
+        _presences = std::move(presences);
         _source_segment_num_rows = source_rows;
     }
 
@@ -170,7 +211,9 @@ private:
     // === SDCG === parallel to _column_files; empty == legacy all-dense (see file_kind()).
     std::vector<DeltaColumnFileKind> _file_kinds;
     std::vector<int64_t> _sparse_row_counts; // K per sparse file; 0 for dense / unknown
-    int64_t _source_segment_num_rows = 0;    // M of the source segment; 0 == unknown
+    // Per-file presence bounds; 1:1 with _column_files when present, else empty (all unknown).
+    std::vector<SparsePresence> _presences;
+    int64_t _source_segment_num_rows = 0; // M of the source segment; 0 == unknown
     size_t _memory_usage = 0;
     int64_t _file_size = 0; // file size of all column files
 };

@@ -173,8 +173,12 @@ Status LayeredOverlayColumnIterator::_apply_layers_contiguous(rowid_t base_begin
     const rowid_t base_end = base_begin + static_cast<rowid_t>(n); // exclusive
     // Layers are version-ASCENDING; apply oldest first so the newest wins per row.
     for (auto& l : _layers) {
-        // pre-filter: if the window does not intersect [min_rowid, max_rowid] of the layer, skip.
-        // (Cheap, but the in-memory source_rowids are needed for the binary search anyway.)
+        // Zero-IO pre-filter: when the meta-provided presence range is known and disjoint from the
+        // read window, skip this layer WITHOUT opening/loading its `.spcols` file. Unknown presence
+        // (DENSE/legacy/pre-presence writer) falls through to the load-then-filter path below.
+        if (l.presence_disjoint(base_begin, base_end)) {
+            continue;
+        }
         RETURN_IF_ERROR(_ensure_layer_loaded(l));
         if (l.source_rowids.empty()) {
             continue;
@@ -232,6 +236,12 @@ Status LayeredOverlayColumnIterator::_apply_layers_range(const SparseRange<>& ra
     const rowid_t range_lo = range.begin();
     const rowid_t range_hi = range.end(); // exclusive (end of last sub-range)
     for (auto& l : _layers) {
+        // Zero-IO pre-filter against the meta-provided presence range, spanning the whole
+        // [range_lo, range_hi) envelope. A layer disjoint from the envelope cannot cover any
+        // sub-range, so skip it without opening the `.spcols` file.
+        if (l.presence_disjoint(range_lo, range_hi)) {
+            continue;
+        }
         RETURN_IF_ERROR(_ensure_layer_loaded(l));
         if (l.source_rowids.empty()) {
             continue;
@@ -299,7 +309,14 @@ Status LayeredOverlayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids
     }
     // rowids are ascending (contract of fetch_values_by_rowid). The i-th requested rowid lands at
     // dst position dst_offset + i. For each layer, find the requested rowids covered by the layer.
+    const rowid_t req_lo = rowids[0];
+    const rowid_t req_hi = rowids[size - 1] + 1; // exclusive envelope of the requested rowids
     for (auto& l : _layers) {
+        // Zero-IO pre-filter: skip a layer whose meta-provided presence range is disjoint from the
+        // requested rowid envelope, without opening its `.spcols` file.
+        if (l.presence_disjoint(req_lo, req_hi)) {
+            continue;
+        }
         RETURN_IF_ERROR(_ensure_layer_loaded(l));
         if (l.source_rowids.empty()) {
             continue;

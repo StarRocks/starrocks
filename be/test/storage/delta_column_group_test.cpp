@@ -317,4 +317,91 @@ TEST(TestDeltaColumnGroup, testSDCGLoadOnlySourceRows) {
     EXPECT_EQ(512, dcg.source_segment_num_rows());
 }
 
+// SDCG: a DeltaColumnGroupVerPB that carries a `presences` array (the per-file [min,max]+K range
+// summary) loads back into a 1:1 SparsePresence view: a SPARSE entry with a recorded range is
+// `known()`, and a padded/empty SparsePresencePB (DENSE slot) resolves to kSDCGPresenceUnknown so
+// the reader never skips it.
+TEST(TestDeltaColumnGroup, testSDCGLoadPresences) {
+    DeltaColumnGroupVerPB dcg_ver;
+    // entry 0: sparse .spcols K=7, presence [min=3, max=998] ; entry 1: dense .cols, empty presence
+    dcg_ver.add_versions(40);
+    dcg_ver.add_versions(41);
+    dcg_ver.add_column_files("sp0.spcols");
+    dcg_ver.add_column_files("d1.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_file_kinds(DENSE_COLS);
+    dcg_ver.add_sparse_row_counts(7);
+    dcg_ver.add_sparse_row_counts(0);
+    dcg_ver.set_source_segment_num_rows(1000);
+    // presences strictly 1:1 with column_files: slot 0 carries the sparse range, slot 1 is empty.
+    auto* p0 = dcg_ver.add_presences();
+    p0->set_min_source_rowid(3);
+    p0->set_max_source_rowid(998);
+    p0->set_row_count(7);
+    dcg_ver.add_presences(); // slot 1: empty == unknown (dense)
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(41, dcg_ver).ok());
+    ASSERT_EQ(2u, dcg.presences().size());
+    // Slot 0: sparse, fully known.
+    EXPECT_EQ(3, dcg.presence_min(0));
+    EXPECT_EQ(998, dcg.presence_max(0));
+    EXPECT_EQ(7, dcg.presence_row_count(0));
+    EXPECT_TRUE(dcg.presence_known(0));
+    // Slot 1: dense, padded-empty => unknown, reader must not skip.
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_min(1));
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_max(1));
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_row_count(1));
+    EXPECT_FALSE(dcg.presence_known(1));
+    // Out-of-range index also resolves to unknown.
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_min(2));
+    EXPECT_FALSE(dcg.presence_known(2));
+}
+
+// SDCG: legacy / dense-only metadata that carries NO presences array must read back as every-slot
+// unknown (no skip), exactly like the file_kinds legacy hinge. A partially-recorded presence (only
+// min set, max absent) must also resolve to NOT known() so the reader stays on the safe always-open
+// fallback rather than skipping on a half-range.
+TEST(TestDeltaColumnGroup, testSDCGLegacyPresencesAbsentIsUnknown) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(50);
+    dcg_ver.add_versions(51);
+    dcg_ver.add_column_files("sp0.spcols");
+    dcg_ver.add_column_files("sp1.spcols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_sparse_row_counts(2);
+    dcg_ver.add_sparse_row_counts(3);
+    dcg_ver.set_source_segment_num_rows(1000);
+    // presences array intentionally absent (writer predates the field) for slot 0, and a half-set
+    // presence (only min) for slot 1: both must resolve to NOT known().
+    auto* p1 = dcg_ver.add_presences(); // index 0 in the array maps to file slot 0
+    (void)p1;                           // leave fully empty
+    auto* p2 = dcg_ver.add_presences(); // file slot 1
+    p2->set_min_source_rowid(5);        // max + row_count absent => half-range
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(51, dcg_ver).ok());
+    ASSERT_EQ(2u, dcg.presences().size());
+    // Slot 0: fully empty presence => unknown.
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_min(0));
+    EXPECT_FALSE(dcg.presence_known(0));
+    // Slot 1: only min recorded => still NOT known (must not skip on a half-range).
+    EXPECT_EQ(5, dcg.presence_min(1));
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_max(1));
+    EXPECT_FALSE(dcg.presence_known(1)) << "a presence with min but no max must not be skippable";
+}
+
 } // namespace starrocks

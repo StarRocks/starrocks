@@ -61,12 +61,15 @@ private:
     // source_rowid column (sorted ascending, uid=kSDCGSourceRowidUid), followed by the update value
     // columns gathered from the `.upt` payload by upt_rowid. K = number of distinct source_rowids across
     // all upt_ids for this rssid; later upt_ids win per source_rowid (last-write-wins), matching the
-    // dense path's ascending-upt_id overwrite. |out_num_rows| receives K. |value_schema| is the partial
-    // schema of the update columns (NOT including source_rowid); |sparse_schema| is value_schema with the
-    // source_rowid column prepended. No source-segment read is performed.
+    // dense path's ascending-upt_id overwrite. |out_num_rows| receives K. |out_min_source_rowid| /
+    // |out_max_source_rowid| receive the smallest / largest base-segment ordinal touched (the closed
+    // presence range emitted into SparsePresencePB); both are kSDCGPresenceUnknown when K == 0.
+    // |value_schema| is the partial schema of the update columns (NOT including source_rowid);
+    // |sparse_schema| is value_schema with the source_rowid column prepended. No source-segment read.
     StatusOr<ChunkPtr> _build_sparse_chunk_from_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                     const Schema& value_schema, const Schema& sparse_schema,
-                                                    int64_t source_segment_num_rows, int64_t* out_num_rows);
+                                                    int64_t source_segment_num_rows, int64_t* out_num_rows,
+                                                    int64_t* out_min_source_rowid, int64_t* out_max_source_rowid);
 
     // Prepare a SegmentWriter for a sparse `.spcols` file. Identical construction to the dense `.cols`
     // writer (options/encryption/init(false)) except the filename is a `.spcols` name and the schema is

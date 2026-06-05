@@ -109,8 +109,15 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
+    // Open (or fetch from the lake metacache) the Segment backing DCG file |idx|. When this Segment
+    // belongs to a lake tablet (lake_tablet_manager() != nullptr), the open is routed through
+    // TabletManager::load_segment so the footer is parsed once and reused across scans, and the read
+    // file fills the data/page cache per |lake_io_opts|. For the local engine (no tablet manager) the
+    // open falls back to the legacy direct Segment::open -- byte-identical to prior behavior.
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+                                                       const TabletSchemaCSPtr& read_tablet_schema,
+                                                       const LakeIOOptions& lake_io_opts = {},
+                                                       bool fill_meta_cache = false);
 
     // SDCG sparse overlay variant of new_dcg_segment (lake-only, gated by enable_sparse_dcg).
     //
@@ -122,7 +129,9 @@ public:
     // source_rowid column so the opened Segment exposes a ColumnReader keyed by kSDCGSourceRowidUid,
     // which LayeredOverlayColumnIterator reads to translate base rowid -> local ordinal.
     StatusOr<std::shared_ptr<Segment>> new_sparse_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                              const TabletSchemaCSPtr& read_tablet_schema);
+                                                              const TabletSchemaCSPtr& read_tablet_schema,
+                                                              const LakeIOOptions& lake_io_opts = {},
+                                                              bool fill_meta_cache = false);
 
     uint64_t id() const { return _segment_id; }
 
@@ -315,7 +324,14 @@ private:
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
+    // Whether segment-level zone-map pruning may be applied to the column identified by
+    // |column_unique_id|. Historically this returned a single segment-wide verdict (false whenever
+    // ANY delta column group exists), disabling segment-level ZM for all non-key columns. With
+    // config::sdcg_enable_per_column_zone_map enabled, the decision is refined per column: a column
+    // absent from every DCG keeps fully valid base zone maps and regains segment-level pruning;
+    // columns present in any DCG keep the conservative disabled behavior (their base zone maps are
+    // stale w.r.t. the DCG's rewritten/overlaid values). See the SegmentZoneMapPruner call site.
+    bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options, ColumnUID column_unique_id);
 
     // Create an iterator for extended column
     StatusOr<std::unique_ptr<ColumnIterator>> _new_extended_column_iterator(const TabletColumn& column,

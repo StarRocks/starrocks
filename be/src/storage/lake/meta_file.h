@@ -53,22 +53,24 @@ public:
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder.
     //
-    // SDCG (Sparse Delta Column Group): |file_kinds| and |sparse_row_counts| are parallel to
+    // SDCG (Sparse Delta Column Group): |file_kinds|, |sparse_row_counts| and |presences| are parallel to
     // |file_with_encryption_metas| / |unique_column_id_list| / |file_sizes|. They describe whether each
     // NEW file is a dense `.cols` (row-complete, supersedes older layers of its columns) or a sparse
-    // `.spcols` overlay (covers only K rows, must NOT strip/orphan older layers). |source_segment_num_rows|
-    // is the row count M of the base segment this DCG overlays (0 = unknown). See the SPARSE/DENSE rules
-    // implemented in append_dcg().
+    // `.spcols` overlay (covers only K rows, must NOT strip/orphan older layers). Each |presences| entry is
+    // the [min, max] source_rowid range + K of its sparse file (used by readers to skip out-of-range
+    // layers); dense slots carry an empty SparsePresencePB. |source_segment_num_rows| is the row count M of
+    // the base segment this DCG overlays (0 = unknown). See the SPARSE/DENSE rules in append_dcg().
     //
     // Back-compat overload: callers that only emit dense `.cols` use the 4-arg form, which forwards to the
-    // density-aware form with all-DENSE kinds and zero sparse counts (byte-identical behavior).
+    // density-aware form with all-DENSE kinds, zero sparse counts and empty presences (byte-identical).
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes);
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes, const std::vector<DeltaColumnFileKindPB>& file_kinds,
-                    const std::vector<int64_t>& sparse_row_counts, int64_t source_segment_num_rows);
+                    const std::vector<int64_t>& sparse_row_counts,
+                    const std::vector<SparsePresencePB>& presences, int64_t source_segment_num_rows);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);

@@ -86,6 +86,32 @@ public:
         // Source segment row count fingerprint (M). 0 means unknown (skip the guard).
         int64_t source_segment_num_rows = 0;
 
+        // === Presence pre-filter (meta-provided, zero-IO layer skip) ===
+        // Closed range [presence_min, presence_max] of base-segment ordinals (source_rowid values)
+        // this `.spcols` touches, carried from the DCG's SparsePresencePB. When `presence_known` is
+        // true the iterator may skip the layer for a read window disjoint from [min, max] WITHOUT
+        // opening/loading the file. When false (DENSE / legacy / pre-presence writer), the bounds are
+        // unknown and the layer must always be opened (the safe legacy behavior). Once a layer is
+        // loaded, the exact in-memory source_rowids supersede these coarse bounds for filtering.
+        int64_t presence_min = kSDCGPresenceUnknown;
+        int64_t presence_max = kSDCGPresenceUnknown;
+        bool presence_known = false;
+
+        // True iff the meta-provided presence range [presence_min, presence_max] is disjoint from
+        // the half-open base-ordinal window [win_begin, win_end). Only meaningful when presence_known.
+        bool presence_disjoint(rowid_t win_begin, rowid_t win_end) const {
+            if (!presence_known) {
+                return false; // unknown bounds => cannot skip
+            }
+            // window is empty => trivially disjoint
+            if (win_begin >= win_end) {
+                return true;
+            }
+            // [min,max] closed vs [win_begin, win_end) half-open.
+            return presence_max < static_cast<int64_t>(win_begin) ||
+                   presence_min >= static_cast<int64_t>(win_end);
+        }
+
         // Lazily-loaded full materialization (loaded on first use by load()):
         bool loaded = false;
         // The K source_rowids, ascending. Read from the reserved-uid column.

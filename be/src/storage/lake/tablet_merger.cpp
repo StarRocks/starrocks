@@ -604,6 +604,9 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
     if (dcg.sparse_row_counts_size() != 0 && dcg.sparse_row_counts_size() != dcg.column_files_size()) {
         return Status::Corruption("DCG shape invalid: sparse_row_counts size neither 0 nor column_files size");
     }
+    if (dcg.presences_size() != 0 && dcg.presences_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: presences size neither 0 nor column_files size");
+    }
     // Duplicate column UID across entries: legal for sparse chains (col_a sparse at v2, v3, ...), where
     // at least one involved entry's file (for that uid) is SPARSE. Two DENSE entries sharing a uid is a
     // genuine conflict (two independent full rewrites of the same column) and stays Corruption.
@@ -643,6 +646,10 @@ void normalize_dcg_optional_fields(DeltaColumnGroupVerPB* dcg) {
     while (dcg->sparse_row_counts_size() < dcg->column_files_size()) {
         dcg->add_sparse_row_counts(0);
     }
+    // Pad presences with empty (all-unknown) summaries so the array stays 1:1 with column_files.
+    while (dcg->presences_size() < dcg->column_files_size()) {
+        dcg->add_presences();
+    }
 }
 
 Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j, const DeltaColumnGroupVerPB& incoming,
@@ -679,6 +686,15 @@ Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j
     const int64_t i_k = i < incoming.sparse_row_counts_size() ? incoming.sparse_row_counts(i) : 0;
     if (e_k != i_k) {
         return Status::Corruption("DCG same column_file but sparse_row_counts differ");
+    }
+    // SDCG: the same physical file must carry the same presence summary. Compare with the legacy hinge so
+    // a side that predates the presences field (absent slot == empty/unknown) still matches an empty slot.
+    const SparsePresencePB e_p = j < existing.presences_size() ? existing.presences(j) : SparsePresencePB();
+    const SparsePresencePB i_p = i < incoming.presences_size() ? incoming.presences(i) : SparsePresencePB();
+    if (e_p.min_source_rowid() != i_p.min_source_rowid() || e_p.max_source_rowid() != i_p.max_source_rowid() ||
+        e_p.row_count() != i_p.row_count() || e_p.has_min_source_rowid() != i_p.has_min_source_rowid() ||
+        e_p.has_max_source_rowid() != i_p.has_max_source_rowid() || e_p.has_row_count() != i_p.has_row_count()) {
+        return Status::Corruption("DCG same column_file but presences differ");
     }
     return Status::OK();
 }
@@ -772,6 +788,8 @@ DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source,
     out.add_column_file_sizes(source.column_file_sizes(entry_index));
     out.add_file_kinds(source.file_kinds(entry_index));
     out.add_sparse_row_counts(source.sparse_row_counts(entry_index));
+    // source is normalized => presences is 1:1 with column_files; carry the per-file summary.
+    out.add_presences()->CopyFrom(source.presences(entry_index));
     // source_segment_num_rows is a per-segment scalar; preserve it on the single-entry copy so the
     // merge can reconcile it across siblings of the same target rssid.
     if (source.has_source_segment_num_rows()) {
@@ -1296,6 +1314,8 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
         // sparse content (zero-regression: dense-only split merge keeps absent arrays => byte-identical).
         std::vector<DeltaColumnFileKindPB> emitted_kinds;
         std::vector<int64_t> emitted_sparse_counts;
+        // Presence summary per emitted entry, kept in lockstep with emitted_kinds.
+        std::vector<SparsePresencePB> emitted_presences;
         bool sdcg_active = false;
         int64_t target_source_num_rows = 0;
 
@@ -1314,6 +1334,8 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             const DeltaColumnFileKindPB kind = entry.single_entry.file_kinds(0);
             emitted_kinds.push_back(kind);
             emitted_sparse_counts.push_back(entry.single_entry.sparse_row_counts(0));
+            // Carry the per-file presence summary; make_single_entry_dcg populated index 0.
+            emitted_presences.push_back(entry.single_entry.presences(0));
             if (kind == SPARSE_PERCOL) {
                 sdcg_active = true;
             }
@@ -1377,9 +1399,10 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             final_dcg.add_shared_files(rebuilt_entry.shared_files(0));
             final_dcg.add_column_file_sizes(rebuilt_entry.column_file_sizes(0));
             // The rebuild materializes a brand-new row-complete dense `.cols` file (sparse inputs were
-            // already rejected above), so it is always DENSE with no sparse row count.
+            // already rejected above), so it is always DENSE with no sparse row count / no presence.
             emitted_kinds.push_back(DENSE_COLS);
             emitted_sparse_counts.push_back(0);
+            emitted_presences.push_back(SparsePresencePB());
             g_tablet_merge_dcg_rebuild_total << 1;
         }
 
@@ -1387,9 +1410,11 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
         // Attach SDCG arrays only when sparse content is present; keep dense-only merges byte-identical.
         if (sdcg_active) {
             DCHECK_EQ(static_cast<int>(emitted_kinds.size()), final_dcg.column_files_size());
+            DCHECK_EQ(emitted_presences.size(), emitted_kinds.size());
             for (size_t i = 0; i < emitted_kinds.size(); ++i) {
                 final_dcg.add_file_kinds(emitted_kinds[i]);
                 final_dcg.add_sparse_row_counts(emitted_sparse_counts[i]);
+                final_dcg.add_presences()->CopyFrom(emitted_presences[i]);
             }
             if (target_source_num_rows > 0) {
                 final_dcg.set_source_segment_num_rows(target_source_num_rows);

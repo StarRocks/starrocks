@@ -157,11 +157,13 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
     // metadata; otherwise file_kind()/sparse_row_count() fall back to DENSE/0 and
     // local-engine behavior stays byte-identical.
     if (dcg_ver_pb.file_kinds_size() > 0 || dcg_ver_pb.sparse_row_counts_size() > 0 ||
-        dcg_ver_pb.has_source_segment_num_rows()) {
+        dcg_ver_pb.presences_size() > 0 || dcg_ver_pb.has_source_segment_num_rows()) {
         std::vector<DeltaColumnFileKind> kinds;
         std::vector<int64_t> counts;
+        std::vector<SparsePresence> presences;
         kinds.reserve(_column_files.size());
         counts.reserve(_column_files.size());
+        presences.reserve(_column_files.size());
         for (size_t i = 0; i < _column_files.size(); ++i) {
             kinds.push_back(i < static_cast<size_t>(dcg_ver_pb.file_kinds_size()) &&
                                             dcg_ver_pb.file_kinds(static_cast<int>(i)) == SPARSE_PERCOL
@@ -170,8 +172,22 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
             counts.push_back(i < static_cast<size_t>(dcg_ver_pb.sparse_row_counts_size())
                                      ? dcg_ver_pb.sparse_row_counts(static_cast<int>(i))
                                      : 0);
+            // Normalize presences to 1:1 with column_files. An absent slot (legacy / dense /
+            // a writer that predates the presences field) becomes an all-unknown SparsePresence
+            // (kSDCGPresenceUnknown), which readers treat as "no skip". A present-but-empty
+            // SparsePresencePB (a padded dense slot) also resolves to unknown because its
+            // unset fields default to 0 yet has_* is false -- guard each field with has_*.
+            SparsePresence p;
+            if (i < static_cast<size_t>(dcg_ver_pb.presences_size())) {
+                const auto& pb = dcg_ver_pb.presences(static_cast<int>(i));
+                if (pb.has_min_source_rowid()) p.min_source_rowid = pb.min_source_rowid();
+                if (pb.has_max_source_rowid()) p.max_source_rowid = pb.max_source_rowid();
+                if (pb.has_row_count()) p.row_count = pb.row_count();
+            }
+            presences.push_back(p);
         }
-        set_sdcg_meta(std::move(kinds), std::move(counts), dcg_ver_pb.source_segment_num_rows());
+        set_sdcg_meta(std::move(kinds), std::move(counts), std::move(presences),
+                      dcg_ver_pb.source_segment_num_rows());
     }
     _calc_memory_usage();
     return Status::OK();

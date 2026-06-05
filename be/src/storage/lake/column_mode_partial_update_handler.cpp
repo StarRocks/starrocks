@@ -368,8 +368,11 @@ std::shared_ptr<TabletSchema> ColumnModePartialUpdateHandler::_build_sparse_tabl
 
 StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
         const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& value_schema, const Schema& sparse_schema,
-        int64_t source_segment_num_rows, int64_t* out_num_rows) {
+        int64_t source_segment_num_rows, int64_t* out_num_rows, int64_t* out_min_source_rowid,
+        int64_t* out_max_source_rowid) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_build_sparse_chunk_us");
+    *out_min_source_rowid = kSDCGPresenceUnknown;
+    *out_max_source_rowid = kSDCGPresenceUnknown;
     // 1. Collect the union of distinct source_rowids across all upt_ids for this rssid. Sorted ascending
     //    gives both the source_rowid column values and a base_rowid -> local ordinal [0,K) map.
     std::set<uint32_t> distinct_source_rowids;
@@ -383,6 +386,9 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     if (K == 0) {
         return Status::InternalError("ColumnModePartialUpdateHandler: empty sparse equivalence class");
     }
+    // The set is sorted ascending, so begin()/rbegin() give the presence [min, max] range directly.
+    *out_min_source_rowid = static_cast<int64_t>(*distinct_source_rowids.begin());
+    *out_max_source_rowid = static_cast<int64_t>(*distinct_source_rowids.rbegin());
     // Fingerprint guard: every source_rowid must be a valid ordinal of the base segment.
     if (source_segment_num_rows > 0) {
         DCHECK_LT(static_cast<int64_t>(*distinct_source_rowids.rbegin()), source_segment_num_rows);
@@ -538,6 +544,47 @@ StatusOr<int32_t> ColumnModePartialUpdateHandler::_locate_condition_idx_in_parti
             "merge_condition column id $0 is missing from the partial column batch", condition_cid));
 }
 
+// SDCG convergence guard. Inspect the EXISTING delta column group chain already recorded for |rssid|
+// in |metadata| and measure, restricted to the columns this batch is about to update, how deep the
+// sparse overlay chain is. Returns the number of existing SPARSE_PERCOL files that cover ANY of
+// |batch_update_uids| (chain_len) and the sum of their stored row counts K (cum_K). DENSE entries and
+// entries that touch none of the batch's columns are ignored: a fresh dense rewrite of those columns
+// would supersede the sparse layers anyway, so they don't count toward the chain we must converge.
+//
+// This runs over the in-memory metadata the publish already loaded for reads (no extra I/O): the same
+// dcg_meta() that LakeDeltaColumnGroupLoader reads. When the writer's density decision sees the chain
+// growing past the configured limits it forces the dense path for this batch, which (because the dense
+// rewrite reads the source THROUGH the overlay readers) materializes the whole chain and lets
+// append_dcg's dense-supersede orphan it -- convergence with no background workers.
+static void inspect_existing_sparse_chain(const TabletMetadataPtr& metadata, uint32_t rssid,
+                                          const std::vector<ColumnUID>& batch_update_uids, int32_t* out_chain_len,
+                                          int64_t* out_cum_k) {
+    *out_chain_len = 0;
+    *out_cum_k = 0;
+    if (metadata == nullptr) return;
+    const auto& dcgs = metadata->dcg_meta().dcgs();
+    auto it = dcgs.find(rssid);
+    if (it == dcgs.end()) return;
+    const DeltaColumnGroupVerPB& dcg = it->second;
+    const std::unordered_set<ColumnUID> batch_uids(batch_update_uids.begin(), batch_update_uids.end());
+    for (int i = 0; i < dcg.column_files_size(); ++i) {
+        // Legacy hinge: an absent file_kinds slot is DENSE; only SPARSE entries form the chain.
+        const DeltaColumnFileKindPB kind = i < dcg.file_kinds_size() ? dcg.file_kinds(i) : DENSE_COLS;
+        if (kind != SPARSE_PERCOL) continue;
+        if (i >= dcg.unique_column_ids_size()) continue;
+        bool covers_batch_col = false;
+        for (auto uid : dcg.unique_column_ids(i).column_ids()) {
+            if (batch_uids.count(static_cast<ColumnUID>(uid)) > 0) {
+                covers_batch_col = true;
+                break;
+            }
+        }
+        if (!covers_batch_col) continue;
+        ++(*out_chain_len);
+        *out_cum_k += i < dcg.sparse_row_counts_size() ? dcg.sparse_row_counts(i) : 0;
+    }
+}
+
 Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
                                                std::vector<std::vector<uint32_t>>* insert_rowids_by_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_execute_us");
@@ -623,6 +670,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // the sparse path; otherwise stay all-DENSE (byte-identical to the pre-SDCG meta).
     std::map<uint32_t, std::vector<DeltaColumnFileKindPB>> dcg_column_file_kinds;
     std::map<uint32_t, std::vector<int64_t>> dcg_column_sparse_row_counts;
+    // Per-file presence summary (1:1 with the file lists above): the [min, max] source_rowid range + K of
+    // each sparse `.spcols` file; dense files carry an empty SparsePresencePB. Lets readers skip layers
+    // whose range excludes the requested rowid without opening the file.
+    std::map<uint32_t, std::vector<SparsePresencePB>> dcg_column_presences;
     // Per-rssid base segment row count M (fingerprint), recorded into the DCG meta. 0 = unknown.
     std::map<uint32_t, int64_t> dcg_source_segment_num_rows;
 
@@ -693,8 +744,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             auto func = [this, &params, &partial_schema, &partial_tschema, &sparse_tschema, &sparse_schema,
                          &selective_unique_update_column_ids, rssid, upt_pairs_ptr, condition_idx_in_partial_schema,
                          sdcg_enabled, source_num_rows, &dcg_column_ids, &dcg_column_file_with_encryption_metas,
-                         &dcg_column_file_sizes, &dcg_column_file_kinds, &dcg_column_sparse_row_counts, &result_mutex,
-                         &shared_status]() {
+                         &dcg_column_file_sizes, &dcg_column_file_kinds, &dcg_column_sparse_row_counts,
+                         &dcg_column_presences, &result_mutex, &shared_status]() {
                 // SDCG density decision (per (column_batch, rssid)): K = distinct source_rowids for this
                 // rssid; sparse iff K is small both absolutely (< sdcg_sparse_max_rows) and relative to M
                 // (K/M < sdcg_dense_threshold). M==0 (unknown) or no rows => dense fallback.
@@ -713,12 +764,46 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                                    config::sdcg_dense_threshold);
                 }
 
+                // SDCG convergence (in-place promotion): even when the density decision favors a new sparse
+                // layer, force the dense path when the EXISTING sparse chain for this rssid's batch columns
+                // is already deep. Two independent triggers:
+                //   (a) chain_len + 1 > sdcg_promotion_hard_count  -- a hard cap on overlay depth, and
+                //   (b) cum_K + K >= sdcg_promotion_threshold * M  -- the accumulated touched rows across
+                //       the chain plus this batch reach a fraction of the segment, at which point a full
+                //       rewrite is no costlier to read than walking the chain.
+                // The dense rewrite reads the source THROUGH the overlay readers, materializing the whole
+                // chain, and append_dcg's dense-supersede then orphans every superseded sparse layer --
+                // convergence without any background compaction worker.
+                if (take_sparse) {
+                    int32_t chain_len = 0;
+                    int64_t cum_k = 0;
+                    inspect_existing_sparse_chain(params.metadata, rssid, selective_unique_update_column_ids,
+                                                  &chain_len, &cum_k);
+                    const bool hit_hard_count = (chain_len + 1) > config::sdcg_promotion_hard_count;
+                    const bool hit_threshold =
+                            source_num_rows > 0 &&
+                            (static_cast<double>(cum_k + K) >=
+                             config::sdcg_promotion_threshold * static_cast<double>(source_num_rows));
+                    if (hit_hard_count || hit_threshold) {
+                        take_sparse = false;
+                        LOG(INFO) << fmt::format(
+                                "SDCG promotion: forcing dense rewrite to converge sparse chain, tablet_id: {} "
+                                "txn_id: {} rssid: {} chain_len: {} cum_K: {} K: {} M: {} trigger: {}",
+                                params.tablet->id(), _txn_id, rssid, chain_len, cum_k, K, source_num_rows,
+                                hit_hard_count ? "hard_count" : "threshold");
+                    }
+                }
+
                 if (take_sparse) {
                     // SPARSE path: build a K-row [source_rowid + values] chunk from the `.upt` payload
                     // (no source-segment read) and write it to a `.spcols` file.
                     int64_t sparse_rows = 0;
-                    auto sparse_chunk_or = _build_sparse_chunk_from_upt(*upt_pairs_ptr, partial_schema, *sparse_schema,
-                                                                        source_num_rows, &sparse_rows);
+                    int64_t min_source_rowid = kSDCGPresenceUnknown;
+                    int64_t max_source_rowid = kSDCGPresenceUnknown;
+                    auto sparse_chunk_or =
+                            _build_sparse_chunk_from_upt(*upt_pairs_ptr, partial_schema, *sparse_schema,
+                                                         source_num_rows, &sparse_rows, &min_source_rowid,
+                                                         &max_source_rowid);
                     if (!sparse_chunk_or.ok()) {
                         std::lock_guard<std::mutex> l(result_mutex);
                         shared_status.update(sparse_chunk_or.status());
@@ -752,11 +837,30 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     if (shared_status.ok()) {
                         // DCG entry carries the UPDATE column uids only (NOT the reserved source_rowid uid).
                         dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
-                        dcg_column_file_with_encryption_metas[rssid].emplace_back(
-                                file_name(sparse_writer->segment_path()), sparse_writer->encryption_meta());
+                        const std::string spcols_name = file_name(sparse_writer->segment_path());
+                        dcg_column_file_with_encryption_metas[rssid].emplace_back(spcols_name,
+                                                                                 sparse_writer->encryption_meta());
                         dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
                         dcg_column_file_kinds[rssid].push_back(SPARSE_PERCOL);
                         dcg_column_sparse_row_counts[rssid].push_back(sparse_rows);
+                        // Record the presence summary [min, max]+K so readers can skip out-of-range layers.
+                        SparsePresencePB presence;
+                        if (min_source_rowid != kSDCGPresenceUnknown) presence.set_min_source_rowid(min_source_rowid);
+                        if (max_source_rowid != kSDCGPresenceUnknown) presence.set_max_source_rowid(max_source_rowid);
+                        presence.set_row_count(sparse_rows);
+                        dcg_column_presences[rssid].push_back(std::move(presence));
+                        // Observability: the PoC logged nothing on a sparse write, which made cluster
+                        // verification hard. One INFO line per `.spcols` with filename, K, M and the column set.
+                        std::string cols_str;
+                        for (size_t c = 0; c < selective_unique_update_column_ids.size(); ++c) {
+                            if (c > 0) cols_str += ",";
+                            cols_str += std::to_string(selective_unique_update_column_ids[c]);
+                        }
+                        LOG(INFO) << fmt::format(
+                                "SDCG sparse write: tablet_id: {} txn_id: {} rssid: {} file: {} K: {} M: {} "
+                                "min_rowid: {} max_rowid: {} cols: {}",
+                                params.tablet->id(), _txn_id, rssid, spcols_name, sparse_rows, source_num_rows,
+                                min_source_rowid, max_source_rowid, cols_str);
                     }
                     TRACE_COUNTER_INCREMENT("pcu_sparse_handle_cnt", 1);
                     return;
@@ -815,6 +919,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
                     dcg_column_file_kinds[rssid].push_back(DENSE_COLS);
                     dcg_column_sparse_row_counts[rssid].push_back(0);
+                    // Dense entry: empty presence keeps the array 1:1 with the file list (unknown == no skip).
+                    dcg_column_presences[rssid].push_back(SparsePresencePB());
                 }
                 TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
             };
@@ -849,7 +955,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             // all-dense rssid even when the flag is on).
             builder->append_dcg(rssid, dcg_column_file_with_encryption_metas[rssid], dcg_column_ids[rssid],
                                 dcg_column_file_sizes[rssid], dcg_column_file_kinds[rssid],
-                                dcg_column_sparse_row_counts[rssid], dcg_source_segment_num_rows[rssid]);
+                                dcg_column_sparse_row_counts[rssid], dcg_column_presences[rssid],
+                                dcg_source_segment_num_rows[rssid]);
         } else {
             // No sparse file for this rssid: byte-identical to pre-SDCG behavior (all-DENSE, no sparse
             // counts, no source row count) regardless of the flag.
