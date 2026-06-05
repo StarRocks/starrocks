@@ -116,7 +116,7 @@ public:
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
-                             std::shared_ptr<const TabletSchema> tablet_schema)
+                             std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -137,7 +137,8 @@ public:
               _profile(profile),
               _bundle_writable_file_context(bundle_writable_file_context),
               _global_dicts(global_dicts),
-              _is_multi_statements_txn(is_multi_statements_txn) {}
+              _is_multi_statements_txn(is_multi_statements_txn),
+              _force_build_vector_index_inline(force_build_vector_index_inline) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -313,6 +314,10 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    // When true, the internal TabletWriter builds the vector index inline (overriding async
+    // index_build_mode). Set by lake schema-change conversions (SortedSchemaChange) so the
+    // shadow tablet's existing data is fully indexed during the ALTER, matching DirectSchemaChange.
+    bool _force_build_vector_index_inline = false;
 
     // Record the time when DeltaWriter is opened
     int64_t _begin_time_ms = 0;
@@ -405,6 +410,9 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
                     _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context,
                     _global_dicts);
+        }
+        if (_force_build_vector_index_inline) {
+            _tablet_writer->force_set_build_vector_index_inline();
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
@@ -1263,11 +1271,11 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
         return Status::InvalidArgument(
                 fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
     }
-    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size,
-                                    _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
-                                    _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
-                                    _global_dicts, _is_multi_statements_txn, _tablet_schema);
+    auto impl = new DeltaWriterImpl(
+            _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
+            _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+            _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
+            _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline);
     return std::make_unique<DeltaWriter>(impl);
 }
 
