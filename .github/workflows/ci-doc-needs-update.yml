@@ -118,10 +118,15 @@ jobs:
             echo "DOCS_ANTHROPIC_API_KEY not configured — skipping AI enrichment"
             exit 0
           fi
-          # Install only when actually needed; failure here is non-fatal
-          pip install anthropic || { echo "pip install failed — skipping AI enrichment"; exit 0; }
-          # Extract the trusted base-branch copy of the script
-          git show origin/main:build-support/extract_and_diff_params.py > /tmp/param_extractor_base.py
+          # Install only when actually needed; use python3 -m pip to target the
+          # same interpreter that will run the script; failure here is non-fatal
+          python3 -m pip install anthropic || { echo "pip install failed — skipping AI enrichment"; exit 0; }
+          # Extract the trusted base-branch copy of the script.
+          # origin/main should be present (fetch-depth: 0), but guard just in case.
+          if ! git show origin/main:build-support/extract_and_diff_params.py > /tmp/param_extractor_base.py 2>/dev/null; then
+            echo "Could not extract script from origin/main — skipping AI enrichment"
+            exit 0
+          fi
           set +e
           python3 /tmp/param_extractor_base.py \
             --new-params-only \
