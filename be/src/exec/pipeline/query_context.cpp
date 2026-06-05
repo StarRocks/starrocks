@@ -85,9 +85,9 @@ QueryContext::~QueryContext() noexcept {
     // in the mid of QueryContext destruction, so use process-level memory tracker
     if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
         if (_is_runtime_filter_coordinator) {
-            services->runtime_filter_worker->close_query(_query_id);
+            services->runtime_filter_worker->close_query(query_id());
         }
-        services->runtime_filter_cache->remove(_query_id);
+        services->runtime_filter_cache->remove(query_id());
     }
 
     // Make sure all bytes are released back to parent trackers.
@@ -106,7 +106,7 @@ void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) 
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = shared_query_trace();
-    query_context_mgr->remove(_query_id);
+    query_context_mgr->remove(query_id());
     // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
@@ -131,6 +131,7 @@ void QueryContext::attach_to_runtime_state(RuntimeState* state) {
     auto lifetime = weak_from_this();
     DCHECK(!lifetime.expired());
     state->set_query_ctx(this);
+    state->set_query_runtime_state(&query_runtime_state());
     state->set_query_ctx_lifetime(std::move(lifetime));
 }
 
@@ -154,7 +155,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
                                     RuntimeState* runtime_state, int connector_scan_node_number) {
     std::call_once(_init_mem_tracker_once, [=]() {
-        _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
+        _profile = std::make_shared<RuntimeProfile>("Query" + print_id(query_id()));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         COUNTER_SET(mem_tracker_counter, query_mem_limit);
@@ -219,7 +220,7 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
         if (spill_dir_mgr == nullptr && compute_env != nullptr) {
             spill_dir_mgr = compute_env->spill_dir_mgr();
         }
-        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager, spill_dir_mgr);
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(query_id(), g_spill_manager, spill_dir_mgr);
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;

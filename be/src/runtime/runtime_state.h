@@ -83,6 +83,7 @@ class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
+class QueryRuntimeState;
 class FragmentContext;
 } // namespace pipeline
 
@@ -138,6 +139,11 @@ public:
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    void set_query_runtime_state(pipeline::QueryRuntimeState* query_runtime_state) {
+        _query_runtime_state = query_runtime_state;
+    }
+    pipeline::QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
+    const pipeline::QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
     void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
     QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
@@ -777,6 +783,7 @@ private:
     FragmentDictState* _fragment_dict_state = nullptr;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+    pipeline::QueryRuntimeState* _query_runtime_state = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
