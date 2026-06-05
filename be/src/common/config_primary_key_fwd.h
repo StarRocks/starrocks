@@ -92,11 +92,12 @@ CONF_mInt32(lake_rows_mapper_read_parallelism, "32");
 // memcpy on consume. Defaults to 4 MiB (starcache disk-tier block-friendly).
 CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
 
-// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
-// mem tracker is already past this percent (0-100) of its limit. In that regime the function
-// falls back to a single-pass loop that holds only one decoded del-file column at a time,
-// trading the cold-start latency win for bounded peak memory.
-CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
+// Memory-pressure gate for the parallel prefetch paths used while rebuilding the shared-data
+// primary key index. When the update mem tracker is already past this percent (0-100) of its
+// limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a
+// time, trading the cold-start latency win for bounded peak memory. Gates parallel reads of
+// del, segment, and other files during the rebuild.
+CONF_mInt32(pk_index_parallel_rebuild_mem_ratio, "50");
 
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
