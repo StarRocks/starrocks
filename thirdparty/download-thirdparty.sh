@@ -455,6 +455,7 @@ cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14-extra.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -664,6 +665,7 @@ cd $TP_SOURCE_DIR/$SASL_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
     patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
     patch -p1 < $TP_PATCH_DIR/sasl2-gcc14.patch
+    patch -p1 < $TP_PATCH_DIR/sasl2-makemd5-prototypes.patch
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SASL_SOURCE"

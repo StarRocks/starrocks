@@ -12,16 +12,6 @@ index 46c628c..5341cbb 100644
  #include "saslint.h"
  #include <saslutil.h>
  
-diff --git a/include/makemd5.c b/include/makemd5.c
-index 07c318e..f7d1e58 100644
---- a/include/makemd5.c
-+++ b/include/makemd5.c
-@@ -158 +158 @@ static int print_pre(FILE *f)
--	  "The following makes PROTOTYPES default to 0 if it has not already\n"
-+	  "The following makes PROTOTYPES default to 1 if it has not already\n"
-@@ -162 +162 @@ static int print_pre(FILE *f)
--	  "#define PROTOTYPES 0\n"
-+	  "#define PROTOTYPES 1\n"
 diff --git a/plugins/cram.c b/plugins/cram.c
 index d02e9ba..89c9308 100644
 --- a/plugins/cram.c
