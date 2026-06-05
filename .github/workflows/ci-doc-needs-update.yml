@@ -99,8 +99,52 @@ jobs:
             --new-params-only \
             --diff-base HEAD^1 \
             --output json \
-            > /tmp/param_drift.json 2>&1
+            > /tmp/param_drift.json
           echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      # When new undocumented params were found, re-run with AI descriptions so the
+      # issue table includes a useful description draft rather than a blank cell.
+      # Skipped silently if DOCS_ANTHROPIC_API_KEY is not configured in repo secrets.
+      #
+      # Security: uses origin/main version of the script rather than the merged
+      # commit so a PR that also modifies extract_and_diff_params.py cannot
+      # exfiltrate the API key via pull_request_target.
+      - name: Enrich parameters with AI descriptions
+        if: steps.params.outputs.exitcode == '1'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.DOCS_ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "DOCS_ANTHROPIC_API_KEY not configured — skipping AI enrichment"
+            exit 0
+          fi
+          # Install only when actually needed; use python3 -m pip to target the
+          # same interpreter that will run the script; failure here is non-fatal
+          python3 -m pip install anthropic || { echo "pip install failed — skipping AI enrichment"; exit 0; }
+          # Extract the trusted base-branch copy of the script.
+          # origin/main should be present (fetch-depth: 0), but guard just in case.
+          if ! git show origin/main:build-support/extract_and_diff_params.py > /tmp/param_extractor_base.py 2>/dev/null; then
+            echo "Could not extract script from origin/main — skipping AI enrichment"
+            exit 0
+          fi
+          set +e
+          python3 /tmp/param_extractor_base.py \
+            --new-params-only \
+            --diff-base HEAD^1 \
+            --output json \
+            --with-ai-descriptions \
+            > /tmp/param_drift_ai.json
+          ec=$?
+          set -e
+          # Replace only if the output is non-empty valid JSON
+          if [ "$ec" -le 1 ] \
+              && [ -s /tmp/param_drift_ai.json ] \
+              && python3 -c "import json; json.load(open('/tmp/param_drift_ai.json'))" 2>/dev/null; then
+            mv /tmp/param_drift_ai.json /tmp/param_drift.json
+            echo "AI descriptions written to param_drift.json"
+          else
+            echo "AI enrichment did not produce valid JSON (exit $ec) — keeping original"
+          fi
 
       # Build the issue body from the collected data
       - name: Build issue body
