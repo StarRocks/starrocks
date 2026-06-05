@@ -724,8 +724,8 @@ CONF_mBool(enable_token_check, "true");
 
 // Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
 // (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
-// exempt. Default false for backward compatibility.
-CONF_mBool(enable_http_auth, "false");
+// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+CONF_Bool(enable_http_auth, "false");
 
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
