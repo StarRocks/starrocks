@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -100,6 +101,140 @@ public class ReduceCastRuleTest {
         assertTrue(child instanceof CastOperator);
         ScalarOperator grandChild = child.getChild(0);
         assertEquals(OperatorType.CONSTANT, grandChild.getOpType());
+    }
+
+    @Test
+    public void testFloatingPointToIntegerCastNotReduced() {
+        // see issue #51545: cast(cast(<double> as bigint) as string) returned the un-truncated
+        // double (e.g. "3.6666666666666665") because the intermediate bigint cast was dropped.
+        // The fractional part must be truncated by the bigint cast, so the chain cannot be reduced.
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator operator = new CastOperator(VarcharType.VARCHAR,
+                new CastOperator(IntegerType.BIGINT, ConstantOperator.createDouble(3.6666666666666665)));
+
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertTrue(result instanceof CastOperator);
+        assertTrue(result.getType().isVarchar());
+        // the intermediate cast(... as bigint) must be preserved
+        assertTrue(result.getChild(0) instanceof CastOperator);
+        assertTrue(result.getChild(0).getType().isBigint());
+        assertEquals(OperatorType.CONSTANT, result.getChild(0).getChild(0).getOpType());
+        assertTrue(result.getChild(0).getChild(0).getType().isFloatingPointType());
+    }
+
+    @Test
+    public void testFloatingPointToIntegerToNarrowerIntegerStillReduced() {
+        // when the outer cast is an integer no wider than the intermediate integer, the outer
+        // cast re-applies the truncation, so float -> integer -> integer is safe to reduce.
+        // cast(cast(<double> as bigint) as int) -> cast(<double> as int)
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator operator = new CastOperator(IntegerType.INT,
+                new CastOperator(IntegerType.BIGINT, ConstantOperator.createDouble(3.6666666666666665)));
+
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertTrue(result instanceof CastOperator);
+        assertTrue(result.getType().isInt());
+        // the intermediate cast(... as bigint) is removed, leaving cast(<double> as int)
+        assertEquals(OperatorType.CONSTANT, result.getChild(0).getOpType());
+        assertTrue(result.getChild(0).getType().isFloatingPointType());
+    }
+
+    @Test
+    public void testFloatingPointToIntegerToWiderIntegerNotReduced() {
+        // the outer integer is wider than the intermediate one, so dropping the intermediate cast
+        // would skip its overflow boundary, e.g. cast(cast(<double> as int) as bigint) differs from
+        // cast(<double> as bigint) for values outside the int range. The chain must not be reduced.
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator operator = new CastOperator(IntegerType.BIGINT,
+                new CastOperator(IntegerType.INT, ConstantOperator.createDouble(3.0e9)));
+
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertTrue(result instanceof CastOperator);
+        assertTrue(result.getType().isBigint());
+        assertTrue(result.getChild(0) instanceof CastOperator);
+        assertTrue(result.getChild(0).getType().isInt());
+    }
+
+    @Test
+    public void testLossyFloatingPointMiddleCastNotReduced() {
+        // a lossy floating-point intermediate cast must be preserved, otherwise the outer cast sees
+        // the un-narrowed value. double -> float and bigint -> float are both lossy at the same slot
+        // size, so neither the slot-size nor a type-shape check catches them - only the lossless gate.
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // cast(cast(16777217.5 as float) as int): float rounds to 16777218.0 then truncates to
+        // 16777218; dropping the float cast (cast(16777217.5 as int)) would wrongly give 16777217.
+        ScalarOperator doubleToFloatToInt = new CastOperator(IntegerType.INT,
+                new CastOperator(FloatType.FLOAT, ConstantOperator.createDouble(16777217.5)));
+        ScalarOperator r1 = rule.apply(doubleToFloatToInt, null);
+        assertTrue(r1.getChild(0) instanceof CastOperator);
+        assertTrue(r1.getChild(0).getType().isFloat());
+
+        // cast(cast(<bigint> as float) as int): bigint -> float loses precision for large values.
+        ScalarOperator bigintToFloatToInt = new CastOperator(IntegerType.INT,
+                new CastOperator(FloatType.FLOAT, ConstantOperator.createBigint(9007199254740993L)));
+        ScalarOperator r2 = rule.apply(bigintToFloatToInt, null);
+        assertTrue(r2.getChild(0) instanceof CastOperator);
+        assertTrue(r2.getChild(0).getType().isFloat());
+    }
+
+    @Test
+    public void testLosslessWideningMiddleCastStillReduced() {
+        // lossless widening intermediate casts can still be reduced: float -> double and int -> bigint.
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // cast(cast(<float> as double) as varchar) -> cast(<float> as varchar)
+        ScalarOperator floatToDoubleToVarchar = new CastOperator(VarcharType.VARCHAR,
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createFloat(1.5)));
+        ScalarOperator r1 = rule.apply(floatToDoubleToVarchar, null);
+        assertEquals(OperatorType.CONSTANT, r1.getChild(0).getOpType());
+        assertTrue(r1.getChild(0).getType().isFloat());
+
+        // cast(cast(<int> as bigint) as varchar) -> cast(<int> as varchar)
+        ScalarOperator intToBigintToVarchar = new CastOperator(VarcharType.VARCHAR,
+                new CastOperator(IntegerType.BIGINT, ConstantOperator.createInt(7)));
+        ScalarOperator r2 = rule.apply(intToBigintToVarchar, null);
+        assertEquals(OperatorType.CONSTANT, r2.getChild(0).getOpType());
+        assertTrue(r2.getChild(0).getType().isInt());
+    }
+
+    @Test
+    public void testWideIntegerToDoubleMiddleCastNotReduced() {
+        // BIGINT/LARGEINT -> DOUBLE loses integer precision beyond 2^53, but isImplicitlyCastable
+        // reports it as lossless because the compatibility matrix widens to DOUBLE. The middle cast
+        // must be preserved, otherwise cast(cast(9007199254740993 as double) as varchar) would print
+        // the exact integer instead of the rounded double 9007199254740992.
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator bigintToDoubleToVarchar = new CastOperator(VarcharType.VARCHAR,
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createBigint(9007199254740993L)));
+        ScalarOperator r1 = rule.apply(bigintToDoubleToVarchar, null);
+        assertTrue(r1.getChild(0) instanceof CastOperator);
+        assertTrue(r1.getChild(0).getType().isDouble());
+
+        ScalarOperator largeintToDoubleToVarchar = new CastOperator(VarcharType.VARCHAR,
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createLargeInt(new BigInteger("9007199254740993"))));
+        ScalarOperator r2 = rule.apply(largeintToDoubleToVarchar, null);
+        assertTrue(r2.getChild(0) instanceof CastOperator);
+        assertTrue(r2.getChild(0).getType().isDouble());
+    }
+
+    @Test
+    public void testNarrowIntegerToDoubleMiddleCastStillReduced() {
+        // INT -> DOUBLE is exact (int fits in the 53-bit significand), so the chain can be reduced.
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator intToDoubleToVarchar = new CastOperator(VarcharType.VARCHAR,
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createInt(123456789)));
+        ScalarOperator result = rule.apply(intToDoubleToVarchar, null);
+        assertEquals(OperatorType.CONSTANT, result.getChild(0).getOpType());
+        assertTrue(result.getChild(0).getType().isInt());
     }
 
     @Test
