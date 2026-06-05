@@ -312,7 +312,11 @@ public class RollupJobV2Test extends DDLTestBase {
 
     @Test
     public void testCancelPendingJobWithFlag() throws Exception {
-        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        // Use a standalone handler whose daemon thread is not started, so the job can never
+        // be picked up by the background alter scheduler. Using the global rollup handler is
+        // racy: its daemon may run the job to WAITING_TXN between process() and the explicit
+        // runPendingJob() call below, even if clearJobs() is called right after process().
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
 
         // add a rollup job
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
@@ -325,7 +329,6 @@ public class RollupJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
-        materializedViewHandler.clearJobs(); // Disable the execution of job in background thread
 
         rollupJob.setIsCancelling(true);
         rollupJob.runPendingJob();
