@@ -75,8 +75,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * </pre>
  *
  * Final states: CANCELLED, COMMITED, FINISHED.
- * COMMITING and ABORTING are intermediate; cancel is rejected in COMMITING.
+ * COMMITING and ABORTING are intermediate; cancel and new loads are rejected in COMMITING.
  * BEFORE_LOAD, LOADING, PREPARING, PREPARED are defined for compatibility but not used in this class.
+ *
+ * Sub-tasks in taskMaps are not registered as transaction state callbacks, so this task
+ * must propagate its final state to them: commit success and reconcile-found-committed call
+ * propagateCommitStateToSubTasks (COMMITED, or FINISHED when the txn is visible), and abort
+ * paths call cancelCoordinatorOnly (CANCELLED). Display outlets (information_schema.loads,
+ * SHOW STREAM LOAD) delegate to sub-tasks and rely on this propagation.
  */
 public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMultiStmtTask.class);
@@ -290,6 +296,10 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                         } finally {
                             writeUnlock();
                         }
+                        // Mark sub-tasks committed before tryRollbackNow invokes
+                        // cancelCoordinatorOnly on them; otherwise a committed
+                        // transaction would display CANCELLED sub-tasks.
+                        propagateCommitStateToSubTasks(status == TransactionStatus.VISIBLE);
                     }
                     return true;
                 }
@@ -450,6 +460,7 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 } finally {
                     writeUnlock();
                 }
+                propagateCommitStateToSubTasks();
             } else {
                 this.errorMsg = commitErrorMsg != null ? commitErrorMsg : "commit failed";
                 LOG.warn("Commit failed for transaction {}, label: {}, error: {}",
@@ -462,6 +473,42 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 }
                 tryRollbackNow();
             }
+        }
+    }
+
+    /**
+     * Propagate the committed transaction's final state to all sub-tasks, resolving the
+     * actual transaction status to decide between COMMITED and FINISHED.
+     * The explicit transaction created by TransactionStmtExecutor.beginStmt carries no
+     * callback id, so afterCommitted/afterVisible are never dispatched to this task.
+     * All display outlets (information_schema.loads, SHOW STREAM LOAD) delegate to the
+     * sub-tasks; without this propagation they would show PREPARING forever for
+     * committed transactions.
+     */
+    private void propagateCommitStateToSubTasks() {
+        if (taskMaps.isEmpty()) {
+            return;
+        }
+        boolean visible = false;
+        try {
+            TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionState(dbId, txnId);
+            visible = txnState != null && txnState.getTransactionStatus() == TransactionStatus.VISIBLE;
+        } catch (Exception e) {
+            LOG.warn("Failed to get transaction status when propagating commit state, label: {}, " +
+                    "txnId: {}, treating as committed", label, txnId, e);
+        }
+        propagateCommitStateToSubTasks(visible);
+    }
+
+    /**
+     * Propagate the committed transaction's final state to all sub-tasks.
+     * Sub-tasks already in an unreversible state are left untouched.
+     */
+    private void propagateCommitStateToSubTasks(boolean visible) {
+        long finishTimeMs = this.endTimeMs != -1 ? this.endTimeMs : System.currentTimeMillis();
+        for (StreamLoadTask task : taskMaps.values()) {
+            task.markCommittedByParent(visible, finishTimeMs);
         }
     }
 
@@ -511,6 +558,14 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         if (isFinalState()) {
             if (endTimeMs == -1) {
                 endTimeMs = currentMs;
+            }
+            // Opportunistically converge sub-task display state: no transaction callback
+            // ever fires for multi-statement transactions, so a sub-task left COMMITED
+            // (commit returned before publish finished) or missed by a racing load is
+            // upgraded here once the transaction becomes visible.
+            if (this.state == State.COMMITED
+                    && taskMaps.values().stream().anyMatch(task -> !task.isFinalState())) {
+                propagateCommitStateToSubTasks();
             }
             return isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L);
         }
@@ -713,6 +768,13 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
             return null;
         }
+        if (this.state == State.COMMITING) {
+            // Reject new loads while the commit is in progress: a sub-task created here
+            // would neither be included in the committing transaction nor be reached by
+            // propagateCommitStateToSubTasks, leaving it displayed as PREPARING forever.
+            resp.setErrorMsg(String.format("stream load task %s is committing, can not accept new loads", label));
+            return null;
+        }
 
         // For multi-statement tasks, delegate to specific table task if exists
         StreamLoadTask task = taskMaps.get(tableName);
@@ -748,6 +810,10 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         }
         if (this.state == State.COMMITED || this.state == State.FINISHED) {
             resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
+            return null;
+        }
+        if (this.state == State.COMMITING) {
+            resp.setErrorMsg(String.format("stream load task %s is committing, can not accept new loads", label));
             return null;
         }
 
