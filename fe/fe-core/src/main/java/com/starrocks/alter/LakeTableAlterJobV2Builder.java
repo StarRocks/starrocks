@@ -28,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -62,6 +63,18 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
+        // True when the post-alter table has a VECTOR index. Any shadow-tablet rewrite
+        // (DirectSchemaChange or SortedSchemaChange in be/src/storage/lake/schema_change.cpp)
+        // force-inline-builds the vector index over ALL existing data, so its shadow tablets are
+        // stamped with vibv=V_snap (below) to tell the async build scheduler that data is already
+        // built (no redundant rebuild). `indexes` is the post-alter index set: column/index changes
+        // supply it via withAlterIndexInfo, and the sort-key path now propagates it too
+        // (createJobForProcessModifySortKeyColumn), so it reliably reflects whether the table has a
+        // vector index. NOT gated on hasIndexChanged: a pure column/sort-key rewrite on a table that
+        // already has a vector index still inline-builds it during conversion — leaving vibv=0 there
+        // would make the scheduler redundantly rebuild the entire existing dataset after the ALTER.
+        boolean inlineBuildsVectorIndex = indexes != null &&
+                indexes.stream().anyMatch(i -> i.getIndexType() == IndexDef.IndexType.VECTOR);
         for (Map.Entry<Long, List<Column>> entry : newIndexMetaIdToSchema.entrySet()) {
             long originIndexMetaId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
@@ -97,11 +110,22 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+                // For vector-index ALTER jobs, stamp V_snap = partition visible version on every
+                // shadow tablet at creation time.  The async build scheduler uses this watermark
+                // to skip existing rowsets (version <= V_snap) that were force-inline-built by
+                // the conversion, avoiding redundant rebuild.  Setting it here — before the job
+                // is persisted via logAlterJob — makes it durable through GSON round-trips
+                // (LakeTablet.vibv is @SerializedName("vibv"); the enclosing
+                // physicalPartitionIndexMap is @SerializedName("partitionIndexMap")).
+                long vSnap = inlineBuildsVectorIndex ? physicalPartition.getVisibleVersion() : 0L;
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
-                    Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
+                    LakeTablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     if (table.isRangeDistribution()) {
                         shadowTablet.setRange(originTablet.getRange());
+                    }
+                    if (inlineBuildsVectorIndex) {
+                        shadowTablet.setVectorIndexBuiltVersion(vSnap);
                     }
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob

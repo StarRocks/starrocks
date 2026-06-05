@@ -1,0 +1,42 @@
+-- name: test_shared_data_add_vector_index_sync @cloud
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+create database db_sd_vidx_sync_${uuid0};
+use db_sd_vidx_sync_${uuid0};
+CREATE TABLE t_sync (id BIGINT NOT NULL, v ARRAY<FLOAT> NOT NULL) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t_sync values (1, [1,0,0,0]), (2, [0,1,0,0]), (3, [0,0,1,0]), (4, [0,0,0,1]);
+ALTER TABLE t_sync ADD INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "dim" = "4");
+function: wait_alter_table_finish()
+function: assert_explain_verbose_contains('select id from t_sync order by approx_l2_distance([1,0,0,0], v) limit 1', 'VECTORINDEX: ON')
+select id from t_sync order by approx_l2_distance([1,0,0,0], v) limit 1;
+insert into t_sync values (5, [0.9,0.1,0,0]);
+function: assert_explain_verbose_contains('select id from t_sync order by approx_l2_distance([0.9,0.1,0,0], v) limit 1', 'VECTORINDEX: ON')
+select id from t_sync order by approx_l2_distance([0.9,0.1,0,0], v) limit 1;
+drop database db_sd_vidx_sync_${uuid0} force;
+
+-- name: test_shared_data_add_vector_index_async @cloud
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+create database db_sd_vidx_async_${uuid0};
+use db_sd_vidx_async_${uuid0};
+CREATE TABLE t_async (id BIGINT NOT NULL, v ARRAY<FLOAT> NOT NULL) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t_async values (1, [1,0,0,0]), (2, [0,1,0,0]), (3, [0,0,1,0]);
+ALTER TABLE t_async ADD INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "dim" = "4", "index_build_mode" = "async");
+function: wait_alter_table_finish()
+function: assert_explain_verbose_contains('select id from t_async order by approx_l2_distance([1,0,0,0], v) limit 1', 'VECTORINDEX: ON')
+select id from t_async order by approx_l2_distance([1,0,0,0], v) limit 1;
+drop database db_sd_vidx_async_${uuid0} force;
+
+-- name: test_shared_data_add_vector_index_rollback @cloud
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+create database db_sd_vidx_rb_${uuid0};
+use db_sd_vidx_rb_${uuid0};
+CREATE TABLE t_rb (id BIGINT NOT NULL, v ARRAY<FLOAT> NOT NULL) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t_rb values (1, [1,0,0,0]), (2, [0,1,0,0]);
+ALTER TABLE t_rb ADD INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "dim" = "4");
+function: wait_alter_table_finish()
+ALTER TABLE t_rb DROP INDEX idx_v;
+function: wait_alter_table_finish()
+ALTER TABLE t_rb ADD INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "dim" = "4");
+function: wait_alter_table_finish()
+function: assert_explain_verbose_contains('select id from t_rb order by approx_l2_distance([1,0,0,0], v) limit 1', 'VECTORINDEX: ON')
+select id from t_rb order by approx_l2_distance([1,0,0,0], v) limit 1;
+drop database db_sd_vidx_rb_${uuid0} force;

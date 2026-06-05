@@ -176,6 +176,11 @@ public:
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
 
+    // Set only on the schema-change conversion writer for the ALTER's shadow tablet, so an
+    // async-mode ADD still builds existing data's .vi during the rewrite. Other writers: false.
+    bool force_build_vector_index_inline() const { return _force_build_vector_index_inline; }
+    void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
+
     void check_global_dict(SegmentWriter* segment_writer);
 
     const FileInfo& lcrm_file() const { return _lcrm_file; }
@@ -205,6 +210,7 @@ protected:
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
+    bool _force_build_vector_index_inline = false;
 };
 
 } // namespace lake
