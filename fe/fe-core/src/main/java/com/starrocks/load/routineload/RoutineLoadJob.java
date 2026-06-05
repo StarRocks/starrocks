@@ -1920,7 +1920,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
-        String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
+        // Backquote the table name so that reserved-keyword table names (e.g. `order`) can be
+        // re-parsed when the statement is deserialized on FE restart; otherwise getLoadDesc()
+        // fails to parse and routineLoadDesc is lost.
+        String sql = String.format("CREATE ROUTINE LOAD %s ON `%s` %s" +
                         " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
                         " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
                 name, tableName, originLoadDesc.toSql());
