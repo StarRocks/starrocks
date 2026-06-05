@@ -506,7 +506,11 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
      * Sub-tasks already in an unreversible state are left untouched.
      */
     private void propagateCommitStateToSubTasks(boolean visible) {
-        long finishTimeMs = this.endTimeMs != -1 ? this.endTimeMs : System.currentTimeMillis();
+        // For FINISHED sub-tasks use the time visibility was observed: convergence via
+        // checkNeedRemove may happen long after the parent's commit endTimeMs, and the
+        // single-table afterVisible path also stamps the observation time. COMMITED
+        // sub-tasks keep the commit completion time.
+        long finishTimeMs = !visible && this.endTimeMs != -1 ? this.endTimeMs : System.currentTimeMillis();
         for (StreamLoadTask task : taskMaps.values()) {
             task.markCommittedByParent(visible, finishTimeMs);
         }
@@ -754,33 +758,46 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         loadIdLo = loadId.getLo();
     }
 
-    @Override
-    public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+    /**
+     * Check whether the task can accept load requests in its current state, filling
+     * resp with the rejection reason otherwise. Reads {@code state} without the lock
+     * when used as a fast-fail pre-check; the sub-task creation path in tryLoad
+     * re-runs it under the write lock to serialize against commitTxn's
+     * COMMITING/COMMITED transitions.
+     */
+    private boolean checkLoadAllowed(TransactionResult resp) {
         if (this.state == State.CANCELLED) {
             resp.setErrorMsg(String.format("stream load task %s has already been cancelled: %s", label, errorMsg));
-            return null;
+            return false;
         }
         if (this.state == State.ABORTING) {
             resp.setErrorMsg(String.format("stream load task %s is aborting: %s", label, abortReason));
-            return null;
+            return false;
         }
         if (this.state == State.COMMITED || this.state == State.FINISHED) {
             resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
-            return null;
+            return false;
         }
         if (this.state == State.COMMITING) {
             // Reject new loads while the commit is in progress: a sub-task created here
             // would neither be included in the committing transaction nor be reached by
             // propagateCommitStateToSubTasks, leaving it displayed as PREPARING forever.
             resp.setErrorMsg(String.format("stream load task %s is committing, can not accept new loads", label));
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+        if (!checkLoadAllowed(resp)) {
             return null;
         }
 
         // For multi-statement tasks, delegate to specific table task if exists
         StreamLoadTask task = taskMaps.get(tableName);
-        if (task != null) {
-            return task.tryLoad(0, tableName, resp);
-        } else {
+        if (task == null) {
+            // Resolve metadata outside the lock to keep the critical section small.
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 throw new MetaNotFoundException("Database " + dbId + "has been deleted");
@@ -790,30 +807,33 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 throw new MetaNotFoundException("Failed to find table " + tableName + " in db " + dbName);
             }
             long id = GlobalStateMgr.getCurrentState().getNextId();
-            task = new StreamLoadTask(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
-            taskMaps.put(table.getName(), task);
-            LOG.info("Add stream load task {}", task.getShowInfo());
-            task.tryBegin(0, 1, txnId);
-            return task.tryLoad(0, tableName, resp);
+            StreamLoadTask newTask =
+                    new StreamLoadTask(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
+            // Registering a new sub-task must be serialized with commitTxn's COMMITING
+            // transition (taken under the same write lock): otherwise a load racing with
+            // commit could add a sub-task that neither joins the committing transaction
+            // nor is reached by propagateCommitStateToSubTasks.
+            writeLock();
+            try {
+                if (!checkLoadAllowed(resp)) {
+                    return null;
+                }
+                task = taskMaps.putIfAbsent(table.getName(), newTask);
+                if (task == null) {
+                    task = newTask;
+                    LOG.info("Add stream load task {}", task.getShowInfo());
+                    task.tryBegin(0, 1, txnId);
+                }
+            } finally {
+                writeUnlock();
+            }
         }
+        return task.tryLoad(0, tableName, resp);
     }
 
     @Override
     public TNetworkAddress executeTask(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
-        if (this.state == State.CANCELLED) {
-            resp.setErrorMsg(String.format("stream load task %s has already been cancelled: %s", label, errorMsg));
-            return null;
-        }
-        if (this.state == State.ABORTING) {
-            resp.setErrorMsg(String.format("stream load task %s is aborting: %s", label, abortReason));
-            return null;
-        }
-        if (this.state == State.COMMITED || this.state == State.FINISHED) {
-            resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
-            return null;
-        }
-        if (this.state == State.COMMITING) {
-            resp.setErrorMsg(String.format("stream load task %s is committing, can not accept new loads", label));
+        if (!checkLoadAllowed(resp)) {
             return null;
         }
 
