@@ -1308,6 +1308,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
 
 // Helper: build a tablet_metadata-like vector of rowset PBs with explicit num_dels set,
 // so pick_rowset_indexes does not need to consult UpdateManager for delete counts.
+// Each rowset carries one segment: real rowsets always have >= 1 segment, and the
+// v2 gate's benefit_cost_ratio counts input segments via segments_size() — leaving
+// the segment list empty would zero out the benefit term and silently disable bcr.
 static void build_rowsets_with_dels(const std::vector<std::pair<int64_t /*bytes*/, int64_t /*dels*/>>& specs,
                                     std::vector<RowsetMetadataPB>* rowset_metas) {
     uint32_t id = 0;
@@ -1318,6 +1321,7 @@ static void build_rowsets_with_dels(const std::vector<std::pair<int64_t /*bytes*
         rm.set_num_rows(1000);
         rm.set_data_size(spec.first);
         rm.set_num_dels(spec.second);
+        rm.add_segments("seg_" + std::to_string(rm.id()) + ".dat");
         rowset_metas->push_back(rm);
     }
 }
@@ -1331,10 +1335,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
 
     const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
     const double old_threshold = config::lake_pk_compaction_min_level_score;
+    const int64_t old_result_bytes = config::update_compaction_result_bytes;
     config::enable_pk_size_tiered_compaction_strategy = true;
+    // Raise the per-round result-bytes cap (default 1GB, or 0.5x tablet size) so the
+    // 4 x 700MB sparse level below is picked in full. This test exercises the
+    // min_level_score gate; the input-size cap is unrelated and would otherwise stop
+    // picking after 2 rowsets.
+    config::update_compaction_result_bytes = 8LL * 1024 * 1024 * 1024;
     DeferOp restore([&] {
         config::enable_pk_size_tiered_compaction_strategy = old_strategy;
         config::lake_pk_compaction_min_level_score = old_threshold;
+        config::update_compaction_result_bytes = old_result_bytes;
     });
 
     // Sparse mid-tier: 4 rowsets at ~700 MB each, no overlap, no deletes.
@@ -1415,16 +1426,22 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
         EXPECT_GE(picked.size(), 1);
     }
 
-    // (d) Sparse mid-tier WITH deletes bypasses the gate (delete vectors must compact).
+    // (d) Sparse mid-tier WITH a few deletes: under v2 semantics deletes no longer grant
+    // a binary gate bypass. With all override configs at their defaults (disabled), a
+    // below-threshold level is skipped even when it carries delete vectors — the v1
+    // "any delete forces compaction" collapse was the design hole v2 closes. The
+    // quantitative delete-pressure path (bcr override) is covered in
+    // test_pr1prime_v2_gate_overrides Cases 1-3.
     auto delete_md = build_metadata({{700LL * 1024 * 1024, 0},
                                      {700LL * 1024 * 1024, 0},
                                      {700LL * 1024 * 1024, 0},
-                                     {700LL * 1024 * 1024, 500 /* dels */}});
+                                     {700LL * 1024 * 1024, 100 /* dels */}});
     PrimaryCompactionPolicy delete_policy(_tablet_mgr.get(), delete_md, /*force_base_compaction=*/false);
     {
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, delete_policy.pick_rowset_indexes(delete_md, &has_dels));
-        EXPECT_GE(picked.size(), 1);
+        EXPECT_EQ(picked.size(), 0) << "v2: sparse below-threshold level with low delete density must still be "
+                                    << "skipped when bcr/size_overflow/emergency overrides are disabled";
     }
 }
 
@@ -1467,11 +1484,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
     };
 
     // ===== Case 1: Low delete_ratio (5%) — gate should still skip =====
-    // 8 mid-tier rowsets, each 500MB, 100 dels per 1000 rows → delete_ratio = 0.10.
-    // wait — let me make it 5%: 50 dels / 1000 rows = 5% delete_ratio per rowset.
+    // 8 mid-tier rowsets, each 500MB, 50 dels per 1000 rows → delete_ratio = 0.05.
     // benefit_score = real_benefit_segs (7) + 0.05 * 8 * 12 = 7 + 4.8 = 11.8
-    // io_mb = 4096
-    // bcr = 11.8 / 4096 ≈ 0.00288 < 0.005 default threshold → bcr should NOT fire
+    // io_mb = 4000
+    // bcr = 11.8 / 4000 ≈ 0.00295 < 0.005 threshold → bcr must NOT fire
     {
         config::lake_pk_compaction_min_level_score = 2.0;
         config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
@@ -1497,7 +1513,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
     // ===== Case 2: High delete_ratio (20%) — bcr should fire and ALLOW compaction =====
     // 8 mid-tier rowsets at 500MB, 200 dels per 1000 rows → delete_ratio = 0.20.
     // benefit_score = 7 + 0.20 * 8 * 12 = 7 + 19.2 = 26.2
-    // bcr = 26.2 / 4096 ≈ 0.0064 > 0.005 → bcr fires
+    // bcr = 26.2 / 4000 ≈ 0.00655 > 0.005 → bcr fires
     {
         config::lake_pk_compaction_min_level_score = 2.0;
         config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
@@ -1521,7 +1537,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
 
     // ===== Case 3: 1 single delete in 1 rowset out of 8 (binary-style collapse case) =====
     // delete_ratio = 1 / (8 * 1000) = 0.000125 (tiny)
-    // benefit_score = 7 + 0.000125 * 8 * 12 = 7.012, bcr = 0.00171 < 0.005 → skip
+    // benefit_score = 7 + 0.000125 * 8 * 12 = 7.012, bcr = 7.012 / 4000 ≈ 0.00175 < 0.005 → skip
     // (PR-1' v1 would have force-compacted on this; v2 correctly skips.)
     {
         config::lake_pk_compaction_min_level_score = 2.0;
@@ -1658,6 +1674,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
                     rm->set_data_size(std::get<0>(spec));
                     rm->set_num_dels(std::get<1>(spec));
                     rm->set_num_rows(std::get<2>(spec));
+                    rm->add_segments("seg_" + std::to_string(rm->id()) + ".dat");
                 }
                 return md;
             };
@@ -1721,7 +1738,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         config::lake_pk_compaction_emergency_score = 50.0;
 
         // 8 rowsets, each with num_dels=2000 and num_rows=1000 → delete_ratio = 2.0
-        // benefit_score = 7 + 2.0 * 8 * 12 = 199. bcr = 199/4096 = 0.0486 >> 0.005 → fire.
+        // benefit_score = 7 + 2.0 * 8 * 12 = 199. bcr = 199 / 4000 ≈ 0.0498 >> 0.005 → fire.
         // Even though delete_ratio exceeds 1.0 (a physically invalid input), the gate must
         // not produce undefined behavior and should err on the side of compacting.
         std::vector<std::tuple<int64_t, int64_t, int64_t>> specs;
