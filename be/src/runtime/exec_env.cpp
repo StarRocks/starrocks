@@ -46,6 +46,7 @@
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
+#include "common/system/cpu_info.h"
 #include "common/system/master_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
