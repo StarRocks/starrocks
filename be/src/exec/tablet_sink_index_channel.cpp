@@ -769,13 +769,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             ASSIGN_OR_RETURN(auto http_stub, HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr));
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
-<<<<<<< HEAD:be/src/exec/tablet_sink_index_channel.cpp
-            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
-=======
-            FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
-                                       TABLET_WRITER_ADD_CHUNKS_FP_ACTION(_node_info->host, closure, request));
             http_stub->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
->>>>>>> b06bf5f2ba ([BugFix] Fix memory accounting in OlapTableSink (#73807)):be/src/exec/data_sinks/tablet_sink_index_channel.cpp
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
@@ -794,13 +788,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunkRequest>(*request.mutable_requests(0),
                                                              &closure->cntl.request_attachment());
-<<<<<<< HEAD:be/src/exec/tablet_sink_index_channel.cpp
-            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
-=======
-            FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
-                                       TABLET_WRITER_ADD_CHUNKS_FP_ACTION(_node_info->host, closure, request));
             http_stub->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
->>>>>>> b06bf5f2ba ([BugFix] Fix memory accounting in OlapTableSink (#73807)):be/src/exec/data_sinks/tablet_sink_index_channel.cpp
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
