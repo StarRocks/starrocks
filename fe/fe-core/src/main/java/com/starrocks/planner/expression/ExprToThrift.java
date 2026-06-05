@@ -511,6 +511,9 @@ public final class ExprToThrift {
                     msg.setVararg_start_idx(fn.getNumArgs() - 1);
                 }
             }
+            if (!node.getDictSlotIds().isEmpty()) {
+                msg.setDict_slot_ids(node.getDictSlotIds());
+            }
             return null;
         }
 

@@ -36,6 +36,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
@@ -64,9 +65,22 @@ public class FunctionCallExpr extends Expr {
     // resetAnalysisState() which is used during expr substitution.
     private boolean isMergeAggFn;
 
+    // For dict-aware scalar functions: per-argument global-dict slot id (parallel to the
+    // argument list, -1 if the argument is not dict-encoded). Set at plan time and serialized
+    // to TExprNode.dict_slot_ids so the BE can fetch the dictionary in its prepare callback.
+    private List<Integer> dictSlotIds = ImmutableList.of();
+
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
             new ImmutableSet.Builder<String>().add(FunctionSet.YEAR).build();
+
+    public List<Integer> getDictSlotIds() {
+        return dictSlotIds;
+    }
+
+    public void setDictSlotIds(List<Integer> dictSlotIds) {
+        this.dictSlotIds = dictSlotIds;
+    }
 
     public boolean isAnalyticFnCall() {
         return isAnalyticFnCall;

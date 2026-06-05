@@ -55,6 +55,13 @@ public class CallOperator extends ArgsScalarOperator {
     // Ignore nulls.
     private boolean ignoreNulls = false;
 
+    // For dict-aware scalar functions: per-argument global-dict slot id (parallel to the
+    // argument list, -1 if not dict-encoded). Set late (after optimization, when a dict-encoded
+    // argument is kept encoded into this call) and carried to the AST FunctionCallExpr by
+    // ScalarOperatorToExpr, then serialized to TExprNode.dict_slot_ids. Intentionally excluded
+    // from equals()/hashCode() because it is metadata attached after operator deduplication.
+    private List<Integer> dictSlotIds = Lists.newArrayList();
+
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
     }
@@ -85,6 +92,14 @@ public class CallOperator extends ArgsScalarOperator {
 
     public boolean getIgnoreNulls() {
         return ignoreNulls;
+    }
+
+    public void setDictSlotIds(List<Integer> dictSlotIds) {
+        this.dictSlotIds = dictSlotIds;
+    }
+
+    public List<Integer> getDictSlotIds() {
+        return dictSlotIds;
     }
 
     public String getFnName() {

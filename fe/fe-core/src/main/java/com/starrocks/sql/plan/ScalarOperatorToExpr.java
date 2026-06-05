@@ -569,6 +569,11 @@ public class ScalarOperatorToExpr {
             }
             callExpr.setType(call.getType());
             hackTypeNull(callExpr);
+            // Carry dict-aware slot ids (set by the dict-passthrough rewrite) to the AST expr so
+            // they reach the BE via TExprNode.dict_slot_ids.
+            if (callExpr instanceof FunctionCallExpr && !call.getDictSlotIds().isEmpty()) {
+                ((FunctionCallExpr) callExpr).setDictSlotIds(call.getDictSlotIds());
+            }
             return callExpr;
         }
 
