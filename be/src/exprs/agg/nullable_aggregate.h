@@ -296,28 +296,8 @@ public:
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const Filter& filter) const override {
-        // Lazy-probe adaptive: see aggregate.h::update_batch_selectively for
-        // the rationale (avoid the up-front count_zero(n) that pessimises
-        // dense filters by ~100 ns per call).
-        constexpr size_t kProbe = 256;
-        const size_t probe_n = std::min(chunk_size, kProbe);
-        // See aggregate.h::update_batch_selectively for the threshold rationale.
-        const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 32;
-        if (!sparse) {
-            for (size_t i = 0; i < chunk_size; i++) {
-                if (filter[i] == 0) {
-                    merge(ctx, column, states[i] + state_offset, i);
-                }
-            }
-        } else {
-            size_t idx = 0;
-            while (idx < chunk_size) {
-                idx = SIMD::find_zero(filter, idx, chunk_size - idx);
-                if (idx >= chunk_size) break;
-                merge(ctx, column, states[idx] + state_offset, idx);
-                ++idx;
-            }
-        }
+        agg_selective::for_each_selected(filter, chunk_size,
+                                         [&](size_t i) { merge(ctx, column, states[i] + state_offset, i); });
     }
 
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
@@ -504,102 +484,133 @@ public:
             const auto* column = down_cast<const NullableColumn*>(columns[0]);
             const Column* data_column = &column->data_column_ref();
             const uint8_t* f_data = column->immutable_null_column_data().data();
-            int offset = 0;
-            auto for_each_selected = [&](size_t begin, size_t end, auto&& fn) {
-                size_t idx = begin;
-                while (idx < end) {
-                    idx = SIMD::find_zero(selection, idx, end - idx);
-                    if (idx >= end) break;
-                    fn(idx);
-                    ++idx;
-                }
-            };
-            enum class NullBatchKind { kAllNotNull, kAllNull, kMixed };
-            auto process_selected_range = [&](size_t begin, size_t end, NullBatchKind kind) {
-                for_each_selected(begin, end, [&](size_t i) {
-                    if constexpr (!IgnoreNull) {
-                        this->data(states[i] + state_offset).is_null = false;
-                        if (kind == NullBatchKind::kAllNotNull) {
-                            this->nested_function->update(ctx, &data_column,
-                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
-                            return;
-                        }
-                        if (kind == NullBatchKind::kAllNull) {
-                            this->nested_function->process_null(
-                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
-                            return;
-                        }
-                        if (!f_data[i]) {
-                            this->nested_function->update(ctx, &data_column,
-                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
-                        } else {
-                            this->nested_function->process_null(
-                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+            // The sparse/dense decision is probed once per chunk and the walk
+            // below is instantiated separately for each side: a runtime branch
+            // inside the per-window iteration degrades the codegen of the
+            // dense row loop (~1.5x at 10-30% selected in the microbench).
+            //
+            // Divisor 8: this path pays a virtual nested_function->update per
+            // selected row and iterates inside 32-byte windows, which puts the
+            // measured scalar/find_zero crossover at ~12% selected -- unlike
+            // the flat loops behind agg_selective::for_each_selected (~3%).
+            // No escape hatch here: with the heavy per-row payload a fooled
+            // probe costs ~3x the scalar walk (not 31x), and the escape
+            // bookkeeping would put a runtime branch back into the window
+            // iteration.
+            const bool sparse_selection = agg_selective::probe_filter_sparse(selection.data(), chunk_size, 8);
+            auto walk = [&](auto sparse_tag) {
+                constexpr bool kSparseSelection = decltype(sparse_tag)::value;
+                int offset = 0;
+                auto for_each_selected = [&](size_t begin, size_t end, auto&& fn) {
+                    if constexpr (kSparseSelection) {
+                        size_t idx = begin;
+                        while (idx < end) {
+                            idx = SIMD::find_zero(selection, idx, end - idx);
+                            if (idx >= end) break;
+                            fn(idx);
+                            ++idx;
                         }
                     } else {
-                        if (kind == NullBatchKind::kAllNull) {
-                            return;
-                        }
-                        if (kind == NullBatchKind::kAllNotNull || !f_data[i]) {
-                            this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->update(ctx, &data_column,
-                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
+                        for (size_t i = begin; i < end; ++i) {
+                            if (!selection[i]) {
+                                fn(i);
+                            }
                         }
                     }
-                });
-            };
+                };
+                enum class NullBatchKind { kAllNotNull, kAllNull, kMixed };
+                auto process_selected_range = [&](size_t begin, size_t end, NullBatchKind kind) {
+                    for_each_selected(begin, end, [&](size_t i) {
+                        if constexpr (!IgnoreNull) {
+                            this->data(states[i] + state_offset).is_null = false;
+                            if (kind == NullBatchKind::kAllNotNull) {
+                                this->nested_function->update(ctx, &data_column,
+                                                              this->data(states[i] + state_offset).mutable_nest_state(),
+                                                              i);
+                                return;
+                            }
+                            if (kind == NullBatchKind::kAllNull) {
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                                return;
+                            }
+                            if (!f_data[i]) {
+                                this->nested_function->update(ctx, &data_column,
+                                                              this->data(states[i] + state_offset).mutable_nest_state(),
+                                                              i);
+                            } else {
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
+                        } else {
+                            if (kind == NullBatchKind::kAllNull) {
+                                return;
+                            }
+                            if (kind == NullBatchKind::kAllNotNull || !f_data[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->update(ctx, &data_column,
+                                                              this->data(states[i] + state_offset).mutable_nest_state(),
+                                                              i);
+                            }
+                        }
+                    });
+                };
 
 #ifdef __AVX2__
-            // !important: filter must be an uint8_t container
-            constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
-            __m256i all0 = _mm256_setzero_si256();
-            while (offset + batch_nums < chunk_size) {
-                // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
-                __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
-                int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
-                if (mask == 0) {
-                    // all not null
-                    process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNotNull);
-                } else if (mask == 0xffffffff) {
-                    // all null
-                    if constexpr (!IgnoreNull) {
-                        process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNull);
+                // !important: filter must be an uint8_t container
+                constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
+                __m256i all0 = _mm256_setzero_si256();
+                while (offset + batch_nums < chunk_size) {
+                    // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
+                    __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
+                    int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
+                    if (mask == 0) {
+                        // all not null
+                        process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNotNull);
+                    } else if (mask == 0xffffffff) {
+                        // all null
+                        if constexpr (!IgnoreNull) {
+                            process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNull);
+                        }
+                    } else {
+                        process_selected_range(offset, offset + batch_nums, NullBatchKind::kMixed);
                     }
-                } else {
-                    process_selected_range(offset, offset + batch_nums, NullBatchKind::kMixed);
+                    offset += batch_nums;
                 }
-                offset += batch_nums;
-            }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
-            constexpr int batch_nums = 128 / (8 * sizeof(uint8_t));
-            while (offset + batch_nums < chunk_size) {
-                const uint8x16_t v_null_data = vld1q_u8(f_data + offset);
-                // v_null_data[i] = v_null_data[i] == 0 ? 0xFF : 0x00
-                const uint8x16_t v_notnull_data = vceqq_u8(v_null_data, vdupq_n_u8(0));
-                uint64_t notnull_nibble_mask = SIMD::get_nibble_mask(v_notnull_data);
-                if (notnull_nibble_mask == 0) { // All is null.
-                    if constexpr (!IgnoreNull) {
-                        process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNull);
+                constexpr int batch_nums = 128 / (8 * sizeof(uint8_t));
+                while (offset + batch_nums < chunk_size) {
+                    const uint8x16_t v_null_data = vld1q_u8(f_data + offset);
+                    // v_null_data[i] = v_null_data[i] == 0 ? 0xFF : 0x00
+                    const uint8x16_t v_notnull_data = vceqq_u8(v_null_data, vdupq_n_u8(0));
+                    uint64_t notnull_nibble_mask = SIMD::get_nibble_mask(v_notnull_data);
+                    if (notnull_nibble_mask == 0) { // All is null.
+                        if constexpr (!IgnoreNull) {
+                            process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNull);
+                        }
+                    } else if (notnull_nibble_mask == 0xffff'ffff'ffff'ffffull) { // All is not null.
+                        process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNotNull);
+                    } else { // Some is null.
+                        process_selected_range(offset, offset + batch_nums, NullBatchKind::kMixed);
                     }
-                } else if (notnull_nibble_mask == 0xffff'ffff'ffff'ffffull) { // All is not null.
-                    process_selected_range(offset, offset + batch_nums, NullBatchKind::kAllNotNull);
-                } else { // Some is null.
-                    process_selected_range(offset, offset + batch_nums, NullBatchKind::kMixed);
+                    offset += batch_nums;
                 }
-                offset += batch_nums;
-            }
 #endif
-            if (static_cast<size_t>(offset) < chunk_size) {
-                process_selected_range(offset, chunk_size, NullBatchKind::kMixed);
+                if (static_cast<size_t>(offset) < chunk_size) {
+                    process_selected_range(offset, chunk_size, NullBatchKind::kMixed);
+                }
+            };
+            if (sparse_selection) {
+                walk(std::true_type{});
+            } else {
+                walk(std::false_type{});
             }
         } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (!selection[i]) {
-                    this->data(states[i] + state_offset).is_null = false;
-                    this->nested_function->update(ctx, columns,
-                                                  this->data(states[i] + state_offset).mutable_nest_state(), i);
-                }
-            }
+            agg_selective::for_each_selected(selection, chunk_size, [&](size_t i) {
+                this->data(states[i] + state_offset).is_null = false;
+                this->nested_function->update(ctx, columns, this->data(states[i] + state_offset).mutable_nest_state(),
+                                              i);
+            });
         }
     }
 
