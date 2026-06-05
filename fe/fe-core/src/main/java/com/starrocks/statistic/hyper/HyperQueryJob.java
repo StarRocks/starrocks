@@ -32,6 +32,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.base.BaseColumnStats;
 import com.starrocks.statistic.base.ColumnClassifier;
 import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.statistic.base.DefaultColumnStats;
@@ -39,6 +40,13 @@ import com.starrocks.statistic.base.MultiColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.sample.TabletSampleManager;
 import com.starrocks.thrift.TStatisticData;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
+>>>>>>> 60d03c677c ([Enhancement] Add opt-in wide-string column isolation for statistics collection (#73258))
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -111,6 +119,22 @@ public abstract class HyperQueryJob {
 
     protected List<String> buildQuerySQL() {
         return Collections.emptyList();
+    }
+
+    /**
+     * Returns true if {@code stats} is a VARCHAR/CHAR column whose declared length exceeds
+     * {@code threshold}; during statistics collection, such wide columns are isolated into
+     * one SQL per column.
+     */
+    protected static boolean isWideStringColumn(ColumnStats stats, long threshold) {
+        if (!(stats instanceof BaseColumnStats)) {
+            return false;
+        }
+        Type type = ((BaseColumnStats) stats).getColumnType();
+        if (!(type instanceof ScalarType) || !type.getPrimitiveType().isCharFamily()) {
+            return false;
+        }
+        return ((ScalarType) type).getLength() > threshold;
     }
 
     public List<List<Expr>> getStatisticsData() {
