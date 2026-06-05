@@ -250,6 +250,54 @@ public class LakeInformationSchemaDataSourceTest {
         }
     }
 
+    /**
+     * A sync-mode vector index is built inline, so the built-version columns report the partition's
+     * visible version (always current) rather than 0.
+     */
+    @Test
+    public void testGetLakePartitionsMetaSyncVectorIndexBuiltVersion() throws Exception {
+        boolean prevEnableExperimentalVector = Config.enable_experimental_vector;
+        Config.enable_experimental_vector = true;
+        try {
+            starRocksAssert.withEnableMV().withDatabase("db_vi_sync").useDatabase("db_vi_sync");
+
+            String createTblStmtStr = "CREATE TABLE db_vi_sync.vi_sync_table (" +
+                    " c0 INT," +
+                    " c1 array<float> NOT NULL," +
+                    " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
+                    "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
+                    "'index_build_mode' = 'sync')) " +
+                    "DUPLICATE KEY(c0) " +
+                    "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
+                    "PROPERTIES ('replication_num' = '1');";
+            starRocksAssert.withTable(createTblStmtStr);
+
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("db_vi_sync", "vi_sync_table");
+            Assertions.assertFalse(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
+            Assertions.assertTrue(VectorIndexBuildScheduler.hasVectorIndex(table));
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+            TAuthInfo authInfo = new TAuthInfo();
+            authInfo.setPattern("db_vi_sync");
+            authInfo.setUser("root");
+            authInfo.setUser_ip("%");
+            req.setAuth_info(authInfo);
+            TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+            TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                    .filter(t -> t.getTable_name().equals("vi_sync_table")).findFirst().orElse(null);
+            Assertions.assertNotNull(partitionMeta);
+            Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
+            // Sync index is always current as of the visible version.
+            Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMin_vi_built_version());
+            Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMax_vi_built_version());
+        } finally {
+            Config.enable_experimental_vector = prevEnableExperimentalVector;
+        }
+    }
+
     @Test
     public void testGetTablesConfigWithExactTableNameFilter() throws Exception {
         starRocksAssert.withEnableMV().withDatabase("db_exact_filter").useDatabase("db_exact_filter");

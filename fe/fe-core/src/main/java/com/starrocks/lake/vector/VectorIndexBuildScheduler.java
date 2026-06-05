@@ -616,32 +616,55 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
         return false;
     }
 
-    /**
-     * {@code [min, max]} async-VI built-version span across the partition's base-index LakeTablets,
-     * for observability (e.g. {@code information_schema.partitions_meta}). Returns {@code null} when
-     * the table has no async vector index or the base index has no LakeTablets, so callers leave the
-     * columns unset. {@code min < visibleVersion} means the index is still catching up; {@code min <
-     * max} means progress is uneven across tablets. Owns the built-version semantics so observability
-     * callers don't reach into LakeTablet directly.
-     */
-    public static long[] getPartitionBuiltVersionSpan(OlapTable table, PhysicalPartition partition) {
-        if (!hasAsyncVectorIndex(table)) {
-            return null;
+    /** Whether the table has any vector index (sync or async). */
+    public static boolean hasVectorIndex(OlapTable table) {
+        if (table.getIndexes() == null) {
+            return false;
         }
-        MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
-        if (baseIndex == null) {
-            return null;
-        }
-        long minBuilt = Long.MAX_VALUE;
-        long maxBuilt = 0;
-        for (Tablet tablet : baseIndex.getTablets()) {
-            if (tablet instanceof LakeTablet) {
-                long bv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
-                minBuilt = Math.min(minBuilt, bv);
-                maxBuilt = Math.max(maxBuilt, bv);
+        for (Index index : table.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.VECTOR) {
+                return true;
             }
         }
-        return minBuilt == Long.MAX_VALUE ? null : new long[] {minBuilt, maxBuilt};
+        return false;
+    }
+
+    /**
+     * {@code [min, max]} vector-index built-version span across the partition's base-index LakeTablets,
+     * for observability (e.g. {@code information_schema.partitions_meta}). Returns {@code null} when the
+     * table has no vector index (callers then leave the columns unset).
+     * <ul>
+     *   <li>Async vector index: the actual per-tablet built-version span. {@code min < visibleVersion}
+     *       means the index is still catching up; {@code min < max} means progress is uneven across
+     *       tablets.</li>
+     *   <li>Sync vector index: built inline on write/compaction, so it is always current as of the
+     *       visible version; both bounds are reported as the partition's visible version.</li>
+     * </ul>
+     * Owns the built-version semantics so observability callers don't reach into LakeTablet directly.
+     */
+    public static long[] getPartitionBuiltVersionSpan(OlapTable table, PhysicalPartition partition) {
+        if (hasAsyncVectorIndex(table)) {
+            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return null;
+            }
+            long minBuilt = Long.MAX_VALUE;
+            long maxBuilt = 0;
+            for (Tablet tablet : baseIndex.getTablets()) {
+                if (tablet instanceof LakeTablet) {
+                    long bv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
+                    minBuilt = Math.min(minBuilt, bv);
+                    maxBuilt = Math.max(maxBuilt, bv);
+                }
+            }
+            return minBuilt == Long.MAX_VALUE ? null : new long[] {minBuilt, maxBuilt};
+        }
+        if (hasVectorIndex(table)) {
+            // Sync-mode vector index: built inline, always current as of the visible version.
+            long visible = partition.getVisibleVersion();
+            return new long[] {visible, visible};
+        }
+        return null;
     }
 
     // ========== Test helpers ==========

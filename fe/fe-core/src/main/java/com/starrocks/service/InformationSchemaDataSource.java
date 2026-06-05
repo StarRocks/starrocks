@@ -538,10 +538,10 @@ public class InformationSchemaDataSource {
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
             // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
-            // Async vector index builds per-tablet; surface the [min, max] built-version span across
-            // this partition's base-index tablets for observability (null = no async vector index).
-            // MIN < VISIBLE_VERSION means the index is still catching up; MIN < MAX means the build
-            // is uneven across tablets.
+            // Vector-index built-version span across this partition's base-index tablets, for
+            // observability (null = no vector index). Async: actual [min, max] — MIN < VISIBLE_VERSION
+            // means still catching up, MIN < MAX means uneven across tablets. Sync: always current,
+            // reported as the visible version.
             long[] viBuiltSpan = VectorIndexBuildScheduler.getPartitionBuiltVersionSpan(table, physicalPartition);
             if (viBuiltSpan != null) {
                 partitionMetaInfo.setMin_vi_built_version(viBuiltSpan[0]);
