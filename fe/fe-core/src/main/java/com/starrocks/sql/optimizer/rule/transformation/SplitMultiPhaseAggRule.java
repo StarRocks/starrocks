@@ -342,9 +342,17 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return elseOperator;
     }
 
+<<<<<<< HEAD
     private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys,
                                               List<ColumnRefOperator> partitionByColumns) {
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
+=======
+    static boolean isThreeStageMoreEfficient(ConnectContext connectContext, OptExpression input,
+                                             List<ColumnRefOperator> groupKeys,
+                                             List<ColumnRefOperator> partitionByColumns) {
+        final SessionVariable sv = connectContext.getSessionVariable();
+        if (sv.getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
+>>>>>>> ccaa6d64c1 ([Enhancement] Avoid group by skew optimization when high distinct NDV (#74167))
             return false;
         }
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == THREE_STAGE.ordinal()) {
