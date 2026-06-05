@@ -22,6 +22,8 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -178,7 +180,8 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         }
 
         if (!context.getSessionVariable().isCboCteReuse() && !canRewriteByMultiFunc) {
-            return false;
+            throw new StarRocksPlannerException(ErrorType.USER_ERROR,
+                    "%s is unsupported when cbo_cte_reuse is disabled", distinctAggOperatorList);
         }
 
         return !canRewriteByMultiFunc;
