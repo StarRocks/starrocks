@@ -210,6 +210,15 @@ This topic introduces the following types of BE configurations:
 
   Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the session — use `SET DEFAULT ROLE <roles> TO <user>;` or set `activate_all_roles_on_login=true` if the role is granted but not default. LDAP / security-integration group → role mappings activate automatically.
 
+### enable_stop_be_action
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Introduced in: -
+- Description: Whether to enable the BE `/api/_stop_be` HTTP endpoint, which shuts the BE process down. When `false`, requests to the endpoint are rejected with HTTP 403 and the BE process is not exited. This parameter requires a BE restart to take effect.
+
 ### be_port
 
 - Default: 9060

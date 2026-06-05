@@ -465,7 +465,8 @@
         "download_low_speed_limit_kbps",
         "download_low_speed_time",
         "enable_token_check",
-        "enable_http_auth"
+        "enable_http_auth",
+        "enable_stop_be_action"
       ]
     },
     {
