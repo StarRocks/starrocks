@@ -36,15 +36,15 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             query_id.lo = i;
             ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
             ASSERT_TRUE(query_ctx != nullptr);
-            query_ctx->set_delivery_expire_seconds(60);
-            query_ctx->set_query_expire_seconds(300);
+            query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+            query_ctx->query_runtime_state().set_query_expire_seconds(300);
             query_ctx->set_total_fragments(1);
-            query_ctx->extend_delivery_lifetime();
-            query_ctx->extend_query_lifetime();
+            query_ctx->query_runtime_state().extend_delivery_lifetime();
+            query_ctx->query_runtime_state().extend_query_lifetime();
             query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_EQ(query_ctx->query_id(), query_id);
-            ASSERT_FALSE(query_ctx->is_delivery_expired());
-            ASSERT_FALSE(query_ctx->is_query_expired());
+            ASSERT_FALSE(query_ctx->query_runtime_state().is_delivery_expired());
+            ASSERT_FALSE(query_ctx->query_runtime_state().is_query_expired());
             ASSERT_FALSE(query_ctx->has_no_active_instances());
             ASSERT_FALSE(query_ctx->is_dead());
         }
@@ -55,8 +55,8 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             auto query_ctx = query_ctx_mgr->get(query_id);
             ASSERT_TRUE(query_ctx);
             ASSERT_EQ(query_ctx->query_id(), query_id);
-            ASSERT_FALSE(query_ctx->is_delivery_expired());
-            ASSERT_FALSE(query_ctx->is_query_expired());
+            ASSERT_FALSE(query_ctx->query_runtime_state().is_delivery_expired());
+            ASSERT_FALSE(query_ctx->query_runtime_state().is_query_expired());
             ASSERT_FALSE(query_ctx->has_no_active_instances());
             ASSERT_FALSE(query_ctx->is_dead());
             query_ctx->count_down_fragments();
@@ -76,10 +76,10 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_id.lo = 1;
         ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
-        query_ctx->set_delivery_expire_seconds(60);
-        query_ctx->set_query_expire_seconds(300);
-        query_ctx->extend_delivery_lifetime();
-        query_ctx->extend_query_lifetime();
+        query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+        query_ctx->query_runtime_state().set_query_expire_seconds(300);
+        query_ctx->query_runtime_state().extend_delivery_lifetime();
+        query_ctx->query_runtime_state().extend_query_lifetime();
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
@@ -105,10 +105,10 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_id.lo = 2;
         ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
-        query_ctx->set_delivery_expire_seconds(60);
-        query_ctx->set_query_expire_seconds(300);
-        query_ctx->extend_delivery_lifetime();
-        query_ctx->extend_query_lifetime();
+        query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+        query_ctx->query_runtime_state().set_query_expire_seconds(300);
+        query_ctx->query_runtime_state().extend_delivery_lifetime();
+        query_ctx->query_runtime_state().extend_query_lifetime();
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
@@ -150,10 +150,10 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_id.lo = 3;
         ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
-        query_ctx->set_delivery_expire_seconds(60);
-        query_ctx->set_query_expire_seconds(300);
-        query_ctx->extend_delivery_lifetime();
-        query_ctx->extend_query_lifetime();
+        query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+        query_ctx->query_runtime_state().set_query_expire_seconds(300);
+        query_ctx->query_runtime_state().extend_delivery_lifetime();
+        query_ctx->query_runtime_state().extend_query_lifetime();
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         for (int i = 0; i < 3; ++i) {
@@ -168,9 +168,9 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         ASSERT_FALSE(query_ctx->is_dead());
         query_ctx_mgr->remove(query_id);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
-        query_ctx->set_delivery_expire_seconds(1);
-        query_ctx->extend_delivery_lifetime();
-        query_ctx->extend_query_lifetime();
+        query_ctx->query_runtime_state().set_delivery_expire_seconds(1);
+        query_ctx->query_runtime_state().extend_delivery_lifetime();
+        query_ctx->query_runtime_state().extend_query_lifetime();
         sleep(2);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
     }
@@ -183,10 +183,10 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_id.lo = 3;
         ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
-        query_ctx->set_delivery_expire_seconds(60);
-        query_ctx->set_query_expire_seconds(300);
-        query_ctx->extend_delivery_lifetime();
-        query_ctx->extend_query_lifetime();
+        query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+        query_ctx->query_runtime_state().set_query_expire_seconds(300);
+        query_ctx->query_runtime_state().extend_delivery_lifetime();
+        query_ctx->query_runtime_state().extend_query_lifetime();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         // port query_ctx to second map
         query_ctx->count_down_fragments(query_ctx_mgr.get());
@@ -213,11 +213,11 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
     query_id.hi = 2;
     ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
     query_ctx->set_total_fragments(202);
-    query_ctx->set_delivery_expire_seconds(60);
-    query_ctx->set_query_expire_seconds(300);
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(300);
     query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
-    query_ctx->extend_delivery_lifetime();
-    query_ctx->extend_query_lifetime();
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
     query_ctx->count_down_fragments();
     query_ctx_mgr->remove(query_id);
     ASSERT_TRUE(query_ctx->has_no_active_instances());
@@ -231,8 +231,8 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
                 ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
                 query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
                 ASSERT_TRUE(query_ctx != nullptr);
-                ASSERT_FALSE(query_ctx->is_delivery_expired());
-                ASSERT_FALSE(query_ctx->is_query_expired());
+                ASSERT_FALSE(query_ctx->query_runtime_state().is_delivery_expired());
+                ASSERT_FALSE(query_ctx->query_runtime_state().is_query_expired());
                 ASSERT_FALSE(query_ctx->is_dead());
                 std::this_thread::sleep_for(std::chrono::milliseconds(dist(rd)));
                 query_ctx->count_down_fragments();
@@ -265,11 +265,11 @@ QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager*
     }
     auto* query_ctx = res.value();
     query_ctx->set_total_fragments(total_fragments);
-    query_ctx->set_delivery_expire_seconds(delivery_expire_seconds);
-    query_ctx->set_query_expire_seconds(query_expire_seconds);
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(delivery_expire_seconds);
+    query_ctx->query_runtime_state().set_query_expire_seconds(query_expire_seconds);
     query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker);
-    query_ctx->extend_delivery_lifetime();
-    query_ctx->extend_query_lifetime();
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
     query_ctx->count_down_fragments();
 
     return query_ctx;
@@ -343,6 +343,10 @@ TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
     query_id.hi = 3;
     query_id.lo = 4;
     query_ctx->set_query_id(query_id);
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(30);
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
 
     RuntimeState runtime_state;
     query_ctx->attach_to_runtime_state(&runtime_state);
@@ -351,6 +355,9 @@ TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
     ASSERT_EQ(&query_ctx->query_runtime_state(), runtime_state.query_runtime_state());
     EXPECT_EQ(3, runtime_state.query_runtime_state()->query_id().hi);
     EXPECT_EQ(4, runtime_state.query_runtime_state()->query_id().lo);
+    EXPECT_FALSE(runtime_state.query_runtime_state()->is_delivery_expired());
+    EXPECT_FALSE(runtime_state.query_runtime_state()->is_query_expired());
+    EXPECT_EQ(30, runtime_state.query_runtime_state()->get_query_expire_seconds());
 }
 
 } // namespace starrocks::pipeline

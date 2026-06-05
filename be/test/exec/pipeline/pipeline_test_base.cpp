@@ -89,10 +89,10 @@ void PipelineTestBase::_prepare() {
 
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
