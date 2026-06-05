@@ -151,8 +151,8 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
     // NOT for production.
     {
         static int32_t lucky_sender = []() {
-            std::mt19937 gen(std::chrono::steady_clock::now().time_since_epoch().count() ^
-                             reinterpret_cast<uintptr_t>(&__FILE__[0]));
+            std::random_device rd;
+            std::mt19937 gen(rd());
             int32_t k = std::uniform_int_distribution<int32_t>(0, 31)(gen);
             LOG(WARNING) << "[REPRO] lottery lucky_sender = " << k
                          << " (this CN will only let sender_id==" << k << " open without delay)";
