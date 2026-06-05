@@ -154,13 +154,12 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
             std::random_device rd;
             std::mt19937 gen(rd());
             int32_t k = std::uniform_int_distribution<int32_t>(0, 31)(gen);
-            LOG(WARNING) << "[REPRO] lottery lucky_sender = " << k
-                         << " (this CN will only let sender_id==" << k << " open without delay)";
+            LOG(WARNING) << "[REPRO] lottery lucky_sender = " << k << " (this CN will only let sender_id==" << k
+                         << " open without delay)";
             return k;
         }();
         if (is_lake_tablet && request.has_sender_id() && request.sender_id() != lucky_sender &&
-            request.has_lake_tablet_params() &&
-            request.lake_tablet_params().enable_per_partition_coordinator()) {
+            request.has_lake_tablet_params() && request.lake_tablet_params().enable_per_partition_coordinator()) {
             bthread_usleep(500 * 1000);
         }
     }
