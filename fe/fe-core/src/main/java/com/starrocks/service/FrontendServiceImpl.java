@@ -1887,6 +1887,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
+        long txnId = request.getTxn_id();
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("immutable partition failed. error: txn %d does not exist", txnId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
