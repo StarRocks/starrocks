@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：認証、クエリ実行、データロードに関連する設定項目。"
 sidebar_label: "認証、クエリ、およびロード"
 ---
 
@@ -761,7 +762,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- デフォルト：10
+- デフォルト：5
 - タイプ：Int
 - 単位：-
 - 変更可能：No

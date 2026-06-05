@@ -44,7 +44,7 @@
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/util/minidump.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -389,7 +389,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
 
     if (config::enable_jemalloc_memory_tracker) {
         std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
-        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_track");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
 #endif

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INTERSECT calculates the intersection of results appearing in all result sets."
 sidebar_label: "INTERSECT"
 ---
 

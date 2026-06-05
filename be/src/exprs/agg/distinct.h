@@ -113,7 +113,7 @@ struct AdaptiveSliceHashSet {
     }
 
     void try_convert_to_two_level(MemPool* mem_pool) {
-        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold()) {
             two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
             two_level_set->reserve(set->capacity());
             two_level_set->insert(set->begin(), set->end());

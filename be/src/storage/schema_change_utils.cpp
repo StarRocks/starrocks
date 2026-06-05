@@ -262,7 +262,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
             auto filter = std::move(res.value());
             // If no filtered rows are left, return directly
-            if (SIMD::count_nonzero(filter) == 0) {
+            if (SIMD::all_zeros(filter)) {
                 base_chunk->set_num_rows(0);
                 return true;
             }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+description: "Overview of memory classification and memory management strategies in StarRocks."
 ---
 
 # Memory Management

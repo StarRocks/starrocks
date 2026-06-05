@@ -692,10 +692,20 @@ public class LakePublishBatchTest {
         txnState1.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), Lists.newArrayList(normalIndex.getId()));
         List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
 
-        // do a schema change, which will create a shadow index
+        // Disable the LakeTableAddIndexJob fast path just for the alterTable
+        // call so ADD INDEX routes through the legacy LakeTableSchemaChangeJob
+        // shadow-index flow that this batch-publish scenario exercises. Once
+        // the job is registered with the scheduler it runs on its own; we
+        // restore the flag immediately after.
         String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        boolean origFastPath = Config.enable_lake_add_index_fast_path;
+        Config.enable_lake_add_index_fast_path = false;
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        } finally {
+            Config.enable_lake_add_index_fast_path = origFastPath;
+        }
         List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
                 .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
         assertEquals(1, alterJobs.size());

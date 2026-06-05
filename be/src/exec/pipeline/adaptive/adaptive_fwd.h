@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "exec/pipeline/pipeline_fwd.h"
+
 namespace starrocks::pipeline {
 
 class CollectStatsContext;
@@ -29,8 +31,5 @@ class BlockState;
 class RoundRobinState;
 class PassthroughState;
 struct AdaptiveDopParam;
-
-class Event;
-using EventPtr = std::shared_ptr<Event>;
 
 } // namespace starrocks::pipeline

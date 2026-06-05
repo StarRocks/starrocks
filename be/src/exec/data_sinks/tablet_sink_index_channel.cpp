@@ -48,6 +48,58 @@ namespace starrocks {
 
 DEFINE_FAIL_POINT(node_channel_set_brpc_timeout);
 
+void AddChunksRequestBuilder::init(AddChunksChannelSpec spec) {
+    _spec = std::move(spec);
+}
+
+AddChunksBatchPayload AddChunksBatchAccumulator::take_batch(ChunkUniquePtr chunk) {
+    AddChunksBatchPayload p;
+    p.chunk = std::move(chunk);
+    p.tablet_ids = std::move(_pending_tablet_ids);
+    _pending_tablet_ids.assign(p.tablet_ids.size(), {});
+    return p;
+}
+
+PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<std::vector<int64_t>>& tablet_ids,
+                                                             const AddChunksSendOptions& opts) const {
+    PTabletWriterAddChunksRequest req;
+    if (_spec.load_id != nullptr) {
+        req.mutable_id()->CopyFrom(*_spec.load_id);
+    }
+    if (_spec.enable_colocate_mv_index) {
+        req.set_is_repeated_chunk(true);
+    }
+    DCHECK_EQ(tablet_ids.size(), _spec.indexes.size());
+    for (size_t i = 0; i < _spec.indexes.size(); ++i) {
+        const auto& s = _spec.indexes[i];
+        auto* sub = req.add_requests();
+        if (_spec.load_id != nullptr) {
+            sub->mutable_id()->CopyFrom(*_spec.load_id);
+        }
+        sub->set_index_id(s.index_id);
+        sub->set_txn_id(s.txn_id);
+        sub->set_sender_id(s.sender_id);
+        sub->set_timeout_ms(s.timeout_ms);
+        sub->set_sink_id(s.sink_id);
+        sub->set_packet_seq(opts.packet_seq);
+        sub->set_eos(opts.eos);
+        if (opts.finished) {
+            sub->set_wait_all_sender_close(true);
+        }
+        const auto& ids = tablet_ids[i];
+        sub->mutable_tablet_ids()->Add(ids.begin(), ids.end());
+        if (opts.eos && _spec.index_id_to_partition_ids != nullptr) {
+            auto it = _spec.index_id_to_partition_ids->find(s.index_id);
+            if (it != _spec.index_id_to_partition_ids->end()) {
+                for (auto pid : it->second) {
+                    sub->add_partition_ids(pid);
+                }
+            }
+        }
+    }
+    return req;
+}
+
 class OlapTableSink; // forward declaration
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
         : _parent(parent),
@@ -79,10 +131,6 @@ NodeChannel::~NodeChannel() noexcept {
         }
     }
 
-    for (int i = 0; i < _rpc_request.requests_size(); i++) {
-        _rpc_request.mutable_requests(i)->release_id();
-    }
-    _rpc_request.release_id();
     _release_diagnose_closure();
 }
 
@@ -118,18 +166,23 @@ Status NodeChannel::init(RuntimeState* state) {
         }
     });
 
-    // Initialize _rpc_request
+    // Initialize the AddChunks request builder with the channel-level immutable spec.
+    AddChunksChannelSpec spec;
+    spec.load_id = &_parent->_load_id;
+    spec.enable_colocate_mv_index = _enable_colocate_mv_index;
+    spec.index_id_to_partition_ids = &_parent->_index_id_partition_ids;
+    spec.indexes.reserve(_index_tablets_map.size());
     for (const auto& [index_id, tablets] : _index_tablets_map) {
-        auto request = _rpc_request.add_requests();
-        request->set_allocated_id(&_parent->_load_id);
-        request->set_index_id(index_id);
-        request->set_txn_id(_parent->_txn_id);
-        request->set_sender_id(_parent->_sender_id);
-        request->set_eos(false);
-        request->set_timeout_ms(_rpc_timeout_ms);
-        request->set_sink_id(_parent->_sink_id);
+        PerIndexSpec s;
+        s.index_id = index_id;
+        s.txn_id = _parent->_txn_id;
+        s.sender_id = _parent->_sender_id;
+        s.timeout_ms = _rpc_timeout_ms;
+        s.sink_id = _parent->_sink_id;
+        spec.indexes.emplace_back(s);
     }
-    _rpc_request.set_allocated_id(&_parent->_load_id);
+    _builder.init(std::move(spec));
+    _accumulator.reset(_builder.index_count());
 
     if (state->query_options().__isset.load_transmission_compression_type) {
         _compress_type = CompressionUtils::to_compression_pb(state->query_options().load_transmission_compression_type);
@@ -168,11 +221,11 @@ Status NodeChannel::init(RuntimeState* state) {
 }
 
 void NodeChannel::try_open() {
-    for (int i = 0; i < _rpc_request.requests_size(); i++) {
+    for (size_t i = 0; i < _builder.index_count(); i++) {
         _open_closures.emplace_back(new RefCountClosure<PTabletWriterOpenResult>());
         _open_closures.back()->ref();
-        _open(_rpc_request.requests(i).index_id(), _open_closures[i],
-              _index_tablets_map[_rpc_request.requests(i).index_id()], false);
+        auto index_id = _builder.index_id_at(i);
+        _open(index_id, _open_closures[i], _index_tablets_map[index_id], false);
     }
 }
 
@@ -293,18 +346,18 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 }
 
 void NodeChannel::try_incremental_open() {
-    for (int i = 0; i < _rpc_request.requests_size(); i++) {
+    for (size_t i = 0; i < _builder.index_count(); i++) {
         _open_closures.emplace_back(new RefCountClosure<PTabletWriterOpenResult>());
         _open_closures.back()->ref();
 
-        _open(_rpc_request.requests(i).index_id(), _open_closures[i],
-              _index_tablets_map[_rpc_request.requests(i).index_id()], true);
+        auto index_id = _builder.index_id_at(i);
+        _open(index_id, _open_closures[i], _index_tablets_map[index_id], true);
     }
 }
 
 bool NodeChannel::is_open_done() {
     bool open_done = true;
-    for (int i = 0; i < _rpc_request.requests_size(); i++) {
+    for (size_t i = 0; i < _builder.index_count(); i++) {
         if (_open_closures[i] != nullptr) {
             // open request already finished
             open_done &= (_open_closures[i]->count() != 2);
@@ -316,7 +369,7 @@ bool NodeChannel::is_open_done() {
 
 Status NodeChannel::open_wait() {
     Status res = Status::OK();
-    for (int i = 0; i < _rpc_request.requests_size(); i++) {
+    for (size_t i = 0; i < _builder.index_count(); i++) {
         auto st = _open_wait(_open_closures[i]);
         if (!st.ok()) {
             res = st;
@@ -487,7 +540,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         return _err_st;
     }
 
-    DCHECK(_rpc_request.requests_size() == 1);
+    DCHECK_EQ(_builder.index_count(), 1u);
     if (UNLIKELY(_cur_chunk == nullptr)) {
         _reset_cur_chunk(input);
     }
@@ -503,9 +556,8 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
     // 1. append data
     if (_where_clause == nullptr) {
         _append_data_to_cur_chunk(*input, indexes.data(), from, size);
-        auto req = _rpc_request.mutable_requests(0);
         for (size_t i = 0; i < size; ++i) {
-            req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+            _accumulator.append_tablet_id(0, tablet_ids[indexes[from + i]]);
         }
     } else {
         std::vector<uint32_t> filtered_indexes;
@@ -513,9 +565,8 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         size_t filter_size = filtered_indexes.size();
         _append_data_to_cur_chunk(*input, filtered_indexes.data(), from, filter_size);
 
-        auto req = _rpc_request.mutable_requests(0);
         for (size_t i = 0; i < filter_size; ++i) {
-            req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
+            _accumulator.append_tablet_id(0, tablet_ids[filtered_indexes[from + i]]);
         }
     }
 
@@ -528,10 +579,8 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         // passthrough: try to send data if queue not empty
     } else {
         // 3. chunk full push back to queue
-        _mem_tracker->consume(_cur_chunk->memory_usage());
-        _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
+        _enqueue_current_batch();
         _reset_cur_chunk(input);
-        _rpc_request.mutable_requests(0)->clear_tablet_ids();
     }
 
     // 4. check last request
@@ -549,7 +598,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         return _err_st;
     }
 
-    DCHECK(index_tablet_ids.size() == _rpc_request.requests_size());
+    DCHECK_EQ(index_tablet_ids.size(), _builder.index_count());
     if (UNLIKELY(_cur_chunk == nullptr)) {
         _reset_cur_chunk(input);
     }
@@ -566,9 +615,8 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
     _append_data_to_cur_chunk(*input, indexes.data(), from, size);
 
     for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
-        auto req = _rpc_request.mutable_requests(index_i);
         for (size_t i = from; i < size; ++i) {
-            req->add_tablet_ids(index_tablet_ids[index_i][indexes[from + i]]);
+            _accumulator.append_tablet_id(index_i, index_tablet_ids[index_i][indexes[from + i]]);
         }
     }
 
@@ -581,12 +629,8 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         // passthrough: try to send data if queue not empty
     } else {
         // 3. chunk full push back to queue
-        _mem_tracker->consume(_cur_chunk->memory_usage());
-        _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
+        _enqueue_current_batch();
         _reset_cur_chunk(input);
-        for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
-            _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
-        }
     }
 
     // 4. check last request
@@ -658,15 +702,22 @@ void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf) {
     iobuf->append(chunk_iobuf);
 }
 
+void NodeChannel::_enqueue_current_batch() {
+    DCHECK(_cur_chunk != nullptr);
+    _mem_tracker->consume(_cur_chunk->memory_usage());
+    _request_queue.emplace_back(_accumulator.take_batch(std::move(_cur_chunk)));
+}
+
 Status NodeChannel::_send_request(bool eos, bool finished) {
     if (eos || finished) {
         if (_request_queue.empty()) {
+            // No queued batch and eos arrived: flush whatever is pending into a
+            // final BatchPayload that will carry the eos signal. If no chunk has
+            // been built yet, push an empty Chunk as the carrier.
             if (_cur_chunk.get() == nullptr) {
                 _cur_chunk = std::make_unique<Chunk>();
             }
-            _mem_tracker->consume(_cur_chunk->memory_usage());
-            _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-            _cur_chunk = nullptr;
+            _enqueue_current_batch();
             _cur_chunk_mem_usage = 0;
         }
 
@@ -677,16 +728,14 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
         }
     }
 
-    AddMultiChunkReq add_chunk = std::move(_request_queue.front());
+    AddChunksBatchPayload payload = std::move(_request_queue.front());
     _request_queue.pop_front();
 
-    const auto& chunk = add_chunk.first;
+    const auto& chunk = payload.chunk;
 
     // reset mem tracker since we don't want to send the brpc request under query_mem_tracker
     // and the memory usage of the request is recorded by the olap_sink's mem tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-
-    auto& request = add_chunk.second;
 
     _mem_tracker->release(chunk->memory_usage());
 
@@ -694,36 +743,38 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
 
     SCOPED_RAW_TIMER(&_actual_consume_ns);
 
-    for (int i = 0; i < request.requests_size(); i++) {
-        auto req = request.mutable_requests(i);
-        if (UNLIKELY(eos)) {
-            req->set_eos(true);
+    // Build a fresh proto with the per-send options. The proto is created entirely
+    // under the nullptr mem-tracker scope above, so it will be destroyed under the
+    // same scope at end of function — no Swap trick needed.
+    AddChunksSendOptions opts;
+    opts.packet_seq = _next_packet_seq;
+    opts.eos = eos;
+    opts.finished = finished;
+    PTabletWriterAddChunksRequest request = _builder.build(payload.tablet_ids, opts);
 
-            auto& partition_ids = _parent->_index_id_partition_ids[req->index_id()];
-            if (!partition_ids.empty()) {
-                VLOG(2) << "partition_ids:" << std::string(partition_ids.begin(), partition_ids.end());
+    // Apply per-send side effects on the channel itself (mirroring the previous in-loop side effects).
+    if (UNLIKELY(eos)) {
+        // eos request must be the last request
+        _closed = true;
+        if (VLOG_IS_ON(2)) {
+            for (int i = 0; i < request.requests_size(); i++) {
+                const auto& pids = request.requests(i).partition_ids();
+                if (!pids.empty()) {
+                    VLOG(2) << "partition_ids:" << std::string(pids.begin(), pids.end());
+                }
             }
-            for (auto pid : partition_ids) {
-                req->add_partition_ids(pid);
-            }
-
-            // eos request must be the last request
-            _closed = true;
         }
-
+    }
+    if (UNLIKELY(finished)) {
         // This is added for automatic partition. We need to ensure that
         // all data has been sent before the incremental channel is closed.
-        if (UNLIKELY(finished)) {
-            req->set_wait_all_sender_close(true);
+        _finished = true;
+    }
 
-            _finished = true;
-        }
-
-        req->set_packet_seq(_next_packet_seq);
-
-        // only serialize one chunk if is_repeated_request is true
+    // only serialize one chunk if is_repeated_request is true
+    for (int i = 0; i < request.requests_size(); i++) {
         if ((!_enable_colocate_mv_index || i == 0) && chunk->num_rows() > 0) {
-            auto pchunk = req->mutable_chunk();
+            auto pchunk = request.mutable_requests(i)->mutable_chunk();
             RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk));
         }
     }
@@ -738,21 +789,17 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
 
     if (_enable_colocate_mv_index) {
-        request.set_is_repeated_chunk(true);
         if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
             TNetworkAddress brpc_addr;
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
-            auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
-            if (!res.ok()) {
-                return res.status();
-            }
+            ASSIGN_OR_RETURN(auto http_stub, HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr));
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
             FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
                                        TABLET_WRITER_ADD_CHUNKS_FP_ACTION(_node_info->host, closure, request));
-            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
+            http_stub->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
@@ -770,16 +817,13 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
-            auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
-            if (!res.ok()) {
-                return res.status();
-            }
+            ASSIGN_OR_RETURN(auto http_stub, HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr));
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunkRequest>(*request.mutable_requests(0),
                                                              &closure->cntl.request_attachment());
             FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
                                        TABLET_WRITER_ADD_CHUNKS_FP_ACTION(_node_info->host, closure, request));
-            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
+            http_stub->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
@@ -801,17 +845,6 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
 
     VLOG(2) << "NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
             << "] to [" << _node_info->host << ":" << _node_info->brpc_port << "]";
-
-    // Force-release protobuf memory under the current (process) tracker context.
-    // _serialize_chunk() allocated protobuf memory inside SCOPED(nullptr), which falls back
-    // to process_mem_tracker via CurrentThread::mem_tracker(). But `add_chunk` is destroyed
-    // after the SCOPED ends (under instance_mem_tracker / query_pool hierarchy).
-    // Swap transfers ownership to a temporary destroyed here (under process_mem_tracker),
-    // preventing the protobuf deallocation from being incorrectly charged to query_pool.
-    // Note: clear_chunk() alone is insufficient — protobuf retains internal buffers until
-    // the Message object is destroyed.
-    PTabletWriterAddChunksRequest().Swap(&request);
-    TEST_SYNC_POINT_CALLBACK("NodeChannel::_send_request::after_swap", &request);
 
     return Status::OK();
 }
@@ -872,6 +905,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_execution_time_us += closure->result.execution_time_us();
         _add_batch_counter.add_batch_wait_lock_time_us += closure->result.wait_lock_time_us();
         _add_batch_counter.add_batch_wait_memtable_flush_time_us += closure->result.wait_memtable_flush_time_us();
+        _add_batch_counter.add_batch_wait_writer_time_us += closure->result.wait_writer_time_us();
         _add_batch_counter.add_batch_num++;
     }
 
@@ -1116,8 +1150,8 @@ void NodeChannel::cancel(const Status& err_st) {
         closure->cancel();
     }
 
-    for (int i = 0; i < _rpc_request.requests_size(); i++) {
-        _cancel(_rpc_request.requests(i).index_id(), err_st);
+    for (size_t i = 0; i < _builder.index_count(); i++) {
+        _cancel(_builder.index_id_at(i), err_st);
     }
 
     _cancel_finished = true;
@@ -1275,7 +1309,9 @@ IndexChannel::~IndexChannel() {
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
     {
+        TEST_SYNC_POINT("IndexChannel::init::before_lock");
         std::unique_lock<std::shared_mutex> lock(_node_channels_mutex);
+        TEST_SYNC_POINT("IndexChannel::init::after_lock");
         for (const auto& tablet : tablets) {
             auto* location = _parent->_location->find_tablet(tablet.tablet_id());
             if (location == nullptr) {

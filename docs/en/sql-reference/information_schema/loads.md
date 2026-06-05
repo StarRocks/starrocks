@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "loads provides the results of load jobs."
 ---
 
 # loads
@@ -27,14 +28,20 @@ The following fields are provided in `loads`:
 | UNSELECTED_ROWS      | The number of data rows that are filtered out due to the conditions specified in the WHERE clause. |
 | SINK_ROWS            | The number of data rows that are loaded.                     |
 | RUNTIME_DETAILS      | Load runtime metadata. For details, see [RUNTIME_DETAILS](#runtime_details). |
-| CREATE_TIME          | The time at which the load job was created. Format: `yyyy-MM-dd HH:mm:ss`. Example: `2023-07-24 14:58:58`. |
-| LOAD_START_TIME      | The start time of the LOADING stage of the load job. Format: `yyyy-MM-dd HH:mm:ss`. Example: `2023-07-24 14:58:58`. |
-| LOAD_COMMIT_TIME     | The time at which the loading transaction was committed. Format: `yyyy-MM-dd HH:mm:ss`. Example: `2023-07-24 14:58:58`. |
-| LOAD_FINISH_TIME     | The end time of the LOADING stage of the load job. Format: `yyyy-MM-dd HH:mm:ss`. Example: `2023-07-24 14:58:58`. |
+| CREATE_TIME          | The time at which the load job was created. Format: `yyyy-MM-dd HH:mm:ss.SSSSSS`. Example: `2023-07-24 14:58:58.123000`. |
+| LOAD_START_TIME      | The start time of the LOADING stage of the load job. Format: `yyyy-MM-dd HH:mm:ss.SSSSSS`. Example: `2023-07-24 14:58:58.123000`. |
+| LOAD_COMMIT_TIME     | The time at which the loading transaction was committed. Format: `yyyy-MM-dd HH:mm:ss.SSSSSS`. Example: `2023-07-24 14:58:58.123000`. |
+| LOAD_FINISH_TIME     | The end time of the LOADING stage of the load job. Format: `yyyy-MM-dd HH:mm:ss.SSSSSS`. Example: `2023-07-24 14:58:58.123000`. |
 | PROPERTIES           | The static properties of the load job. For details, see [PROPERTIES](#properties). |
 | ERROR_MSG            | The error message of the load job. If the load job did not encounter any error, `NULL` is returned. |
 | TRACKING_SQL         | The SQL statement that can be used to query the tracking log of the load job. A SQL statement is returned only when the load job involves unqualified data rows. If the load job does not involve any unqualified data rows, `NULL` is returned. |
 | REJECTED_RECORD_PATH | The path from which you can access all the unqualified data rows that are filtered out in the load job. The number of unqualified data rows logged is determined by the `log_rejected_record_num` parameter configured in the load job. You can use the `wget` command to access the path. If the load job does not involve any unqualified data rows, `NULL` is returned. |
+
+:::note
+
+From v4.2 onwards, `CREATE_TIME`, `LOAD_START_TIME`, `LOAD_COMMIT_TIME`, and `LOAD_FINISH_TIME` carry millisecond precision. The sub-second part is rendered as six fractional digits, of which the last three are always `0` (for example, `2023-07-24 14:58:58.123000`). Predicates on these fields, such as `LOAD_FINISH_TIME <= '2023-07-24 14:58:58'`, are also evaluated at millisecond precision. In earlier versions, these fields are second-precision (format `yyyy-MM-dd HH:mm:ss`).
+
+:::
 
 ## RUNTIME_DETAILS
 

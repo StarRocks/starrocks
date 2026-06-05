@@ -171,6 +171,7 @@ public class MergeTabletJobTest {
     @Test
     public void testRunMergeTabletReshardJob() throws Exception {
         TabletReshardJob splitJob = createSplitTabletReshardJob();
+        splitJob.init();
         splitJob.run();
         splitJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
@@ -187,6 +188,10 @@ public class MergeTabletJobTest {
 
         TabletReshardJob mergeJob = createMergeTabletReshardJob();
         Assertions.assertNotNull(mergeJob);
+
+        // Admission reserves the table.
+        mergeJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
@@ -417,12 +422,14 @@ public class MergeTabletJobTest {
 
     @Test
     public void testSetTableStateMismatch() throws Exception {
+        // The table-state reservation moved to init() (admission). When the table is not NORMAL,
+        // init() fail-fasts with a StarRocksException instead of admitting a doomed job.
         OlapTable.OlapTableState original = table.getState();
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         try {
             MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(), table.getId(), new HashMap<>());
-            Assertions.assertThrows(TabletReshardException.class, mergeJob::runPendingJob);
+            Assertions.assertThrows(StarRocksException.class, mergeJob::init);
         } finally {
             table.setState(original);
         }
@@ -452,6 +459,7 @@ public class MergeTabletJobTest {
     @Test
     public void testRunRunningUsesBackgroundComputeResource() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        mergeJob.init();
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         ComputeResource expectedResource = WarehouseComputeResource.of(10010L);
         AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
@@ -514,10 +522,16 @@ public class MergeTabletJobTest {
 
     @Test
     public void testGetLockedTableNotFound() throws Exception {
+        // A dropped table during the reshard is surfaced via run()'s abort wrapper: PENDING -> ABORTED
+        // (no force-ABORTING from getOlapTable when canAbort() is true). The errorMessage is set on
+        // the ABORTING-via-getOlapTable step inside runAbortingJob.
         MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), -1, new HashMap<>());
-        Assertions.assertThrows(TabletReshardException.class, mergeJob::runPendingJob);
-        Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, mergeJob.getJobState());
+        // First tick: PENDING -> ABORTING via run()'s catch wrapper. Second tick: ABORTING -> ABORTED
+        // via runAbortingJob, which also restores errorMessage from the throwing getOlapTable.
+        mergeJob.run();
+        mergeJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, mergeJob.getJobState());
         Assertions.assertEquals("Table not found", mergeJob.getErrorMessage());
     }
 
@@ -538,6 +552,8 @@ public class MergeTabletJobTest {
 
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, mergeJob.getJobState());
         mergeJob.replay();
+        // replayPendingJob now performs the table reservation (moved here from replayPreparingJob).
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         mergeJob.setJobState(TabletReshardJob.JobState.PREPARING);
         mergeJob.replay();
@@ -564,6 +580,10 @@ public class MergeTabletJobTest {
     public void testAbortMergeTabletReshardJob() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();
         Assertions.assertNotNull(mergeJob);
+
+        // Admission reserves the table; abort must release it back to NORMAL.
+        mergeJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         mergeJob.abort("test abort");
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, mergeJob.getJobState());
@@ -896,6 +916,7 @@ public class MergeTabletJobTest {
         int maxTries = 5;
         while (materializedIndex.getTablets().size() < count && maxTries-- > 0) {
             TabletReshardJob splitJob = createSplitTabletReshardJob();
+            splitJob.init();
             splitJob.run();
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());

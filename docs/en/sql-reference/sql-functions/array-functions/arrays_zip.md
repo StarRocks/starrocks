@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Merges the given arrays by index into an array of structs in which the n-th struct contains n-th values of all input arrays."
 ---
 
 # arrays_zip

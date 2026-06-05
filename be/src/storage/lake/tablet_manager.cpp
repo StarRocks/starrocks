@@ -40,6 +40,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -453,8 +454,14 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, con
     // write metadata file
     auto t0 = butil::gettimeofday_us();
 
+    // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from
+    // segment_metas (so a BE rolled back to a pre-feature version can still read this metadata),
+    // without mutating the shared, immutable metadata object.
+    auto serializable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
+    RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+
     ProtobufFile file(metadata_location);
-    RETURN_IF_ERROR(file.save(*metadata));
+    RETURN_IF_ERROR(file.save(*serializable_metadata));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
     bool skip_cache_latest_metadata = false;
@@ -560,6 +567,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     std::string serialized_buf;
     int64_t current_offset = 0;
     for (auto& [tablet_id, meta] : tablet_metas) {
+        RETURN_IF_ERROR(normalize_tablet_metadata_before_save(&meta));
         meta.clear_schema();
         meta.mutable_historical_schemas()->clear();
         serialized_buf.clear();
@@ -617,6 +625,10 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
         // read again
         RETURN_IF_ERROR(file.load(metadata.get(), fill_data_cache));
     }
+
+    // Back-fill segment_metas from the deprecated legacy arrays for rowsets written by a
+    // pre-feature BE, so the migrated readers (which only consume segment_metas) work.
+    normalize_tablet_metadata_after_load(metadata.get());
 
     if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
         auto drop_status = drop_local_cache(metadata_location);
@@ -808,6 +820,7 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
         RETURN_IF(metadata->id() != tablet_page.first,
                   Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
                                                     tablet_page.first, metadata->id())));
+        normalize_tablet_metadata_after_load(metadata.get());
         metadatas.push_back(std::move(metadata));
     }
     return metadatas;
@@ -895,6 +908,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         (void)corrupted_tablet_meta_handler(corrupted_status, path);
         return corrupted_status;
     }
+    normalize_tablet_metadata_after_load(metadata.get());
 
     FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });
     auto schema_id = bundle_metadata->tablet_to_schema().find(tablet_id);
@@ -980,6 +994,8 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     auto meta = std::make_shared<TxnLog>();
     ProtobufFile file(txn_log_path);
     RETURN_IF_ERROR(file.load(meta.get(), fill_cache));
+    // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
+    normalize_txn_log_after_load(meta.get());
     auto t1 = butil::gettimeofday_us();
     g_get_txn_log_latency << (t1 - t0);
     return std::move(meta);
@@ -1013,6 +1029,10 @@ StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::stri
     auto log = std::make_shared<CombinedTxnLogPB>();
     ProtobufFile file(path);
     RETURN_IF_ERROR(file.load(log.get(), fill_cache));
+    // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
+    for (auto& txn_log : *log->mutable_txn_logs()) {
+        normalize_txn_log_after_load(&txn_log);
+    }
     if (fill_cache) {
         _metacache->cache_combined_txn_log(path, log);
     }
@@ -1053,8 +1073,13 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
     }
     auto t0 = butil::gettimeofday_us();
 
+    // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from the
+    // structured fields (for rollback compat) without mutating the shared, immutable log object.
+    auto serializable_log = std::make_shared<TxnLog>(*log);
+    RETURN_IF_ERROR(normalize_txn_log_before_save(serializable_log.get()));
+
     ProtobufFile file(path);
-    RETURN_IF_ERROR(file.save(*log));
+    RETURN_IF_ERROR(file.save(*serializable_log));
 
     _metacache->cache_txn_log(path, log);
 
@@ -1117,7 +1142,12 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
 #endif
     auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
     ProtobufFile file(path);
-    return file.save(logs);
+    // Dual-write the deprecated legacy parallel arrays from the structured fields for rollback compat.
+    CombinedTxnLogPB normalized_logs = logs;
+    for (auto& log : *normalized_logs.mutable_txn_logs()) {
+        RETURN_IF_ERROR(normalize_txn_log_before_save(&log));
+    }
+    return file.save(normalized_logs);
 }
 
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {

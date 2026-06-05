@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
 ---
 
@@ -495,6 +496,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
+
+### `slow_publish_partition_log_threshold_ms`
+
+- デフォルト：3000
+- タイプ：Long
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`PublishVersionDaemon` がパーティション公開の所要時間がこの値を超えた場合に、各フェーズの内訳（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）を WARN レベルで出力するしきい値です。稼働中のクラスターで公開レイテンシを調査する際は、この値を下げてサブ秒単位のジッターを捕捉できます。通常の許容範囲内の遅い公開を抑制するには、この値を上げます。デフォルト値では動作に変更はありません。
+- 導入時期：v4.2
 
 ### `meta_sync_force_delete_shard_meta`
 

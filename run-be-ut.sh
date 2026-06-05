@@ -426,7 +426,13 @@ export CLASSPATH=${STARROCKS_HOME}/java-extensions/java-utils/target/*:$CLASSPAT
 
 # ===========================================================
 
-export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
+asan_options="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
+if starrocks_is_darwin && [[ "${CMAKE_BUILD_TYPE}" == "ASAN" ]]; then
+    # Apple libc++ container annotations can report false positives in static
+    # third-party initializers before gtest starts, for example RE2.
+    asan_options="${asan_options}:detect_container_overflow=0"
+fi
+export ASAN_OPTIONS="${asan_options}"
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"

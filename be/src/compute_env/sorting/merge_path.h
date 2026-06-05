@@ -25,9 +25,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "compute_env/pipeline/observer.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sorting.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 

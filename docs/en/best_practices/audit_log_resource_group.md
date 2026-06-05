@@ -1,5 +1,6 @@
 ---
 sidebar_position: 120
+description: "How to use StarRocks audit logs to analyze query patterns and configure resource groups for workload isolation."
 ---
 
 # Audit Log-based Resource Group Configuration

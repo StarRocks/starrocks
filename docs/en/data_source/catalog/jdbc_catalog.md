@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+description: "StarRocks supports JDBC catalogs from v3.0 onwards."
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -215,6 +217,8 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
 
 ## Query JDBC data with native SQL
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "External catalog を使用して StarRocks から外部データソースのデータをクエリする方法。"
 ---
 
 # 外部データのクエリ

@@ -23,19 +23,20 @@ class EmptyIndexReader final : public VectorIndexReader {
 public:
     ~EmptyIndexReader() override = default;
 
-    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) override {
-        return Status::NotSupported("Not implement");
+    Status init_searcher(const tenann::IndexMeta& /*meta*/, const std::string& /*index_path*/,
+                         FileSystem* /*fs*/) override {
+        return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                   tenann::IdFilter* id_filter = nullptr) override {
-        return Status::NotSupported("Not implement");
+        return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 
     Status range_search(tenann::PrimitiveSeqView query_vector, int k, std::vector<int64_t>* result_ids,
                         std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
                         int order) override {
-        return Status::NotSupported("Not implement");
+        return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 };
 

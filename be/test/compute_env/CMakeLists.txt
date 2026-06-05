@@ -28,8 +28,36 @@ set(COMPUTE_ENV_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_executable(compute_env_test compute_env_test.cpp)
-target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
+set(COMPUTE_ENV_WORKGROUP_TEST_FILES
+    workgroup/lock_free_scan_task_queue_test.cpp
+    workgroup/lock_free_work_group_scan_task_queue_test.cpp
+    workgroup/mem_tracker_manager_test.cpp
+    workgroup/pipeline_executor_set_manager_test.cpp
+    workgroup/pipeline_executor_set_test.cpp
+    workgroup/scan_task_queue_test.cpp
+    workgroup/work_group_manager_test.cpp
+    workgroup/work_group_test.cpp
+)
+
+set(COMPUTE_ENV_SPILL_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    spill/operator_mem_resource_manager_test.cpp
+    spill/query_spill_manager_test.cpp
+    spill/spill_block_manager_test.cpp
+    spill/spill_metrics_test.cpp
+    spill/spill_test.cpp
+)
+
+add_executable(compute_env_test
+        buffer_control_block_test.cpp
+        compute_env_test.cpp
+        compute_env_test_main.cpp
+        data_stream_mgr_test.cpp
+        result_queue_mgr_test.cpp
+        ${COMPUTE_ENV_WORKGROUP_TEST_FILES}
+        ${COMPUTE_ENV_SPILL_TEST_FILES})
+set_target_properties(compute_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS})
 
 set(COMPUTE_ENV_SORTING_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}

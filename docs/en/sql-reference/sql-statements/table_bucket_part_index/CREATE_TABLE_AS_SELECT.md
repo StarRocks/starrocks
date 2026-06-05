@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['CTAS']
+description: "CREATE TABLE AS SELECT (CTAS) creates a new table and populates it with query results, supporting synchronous and asynchronous modes."
 ---
 
 # CREATE TABLE AS SELECT

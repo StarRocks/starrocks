@@ -21,14 +21,17 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "common/thread/cpu_util.h"
 #include "common/thread/thread.h"
-#include "pipeline_driver.h"
-#include "pipeline_driver_queue.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gutil/macros.h"
 
 namespace starrocks::pipeline {
 
+class DriverQueue;
 class PipelineDriverPoller;
 using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
 class PollerMetrics;

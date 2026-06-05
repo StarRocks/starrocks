@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the bitwise OR of two numeric expressions."
 ---
 
 # bitor

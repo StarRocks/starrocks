@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
+description: "Iceberg catalog procedures in StarRocks for snapshot management, branch management, data maintenance, and metadata operations."
 ---
 
 # Iceberg Procedures

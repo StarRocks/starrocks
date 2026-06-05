@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 
 #include "http/http_handler.h"
@@ -29,6 +30,8 @@ public:
     ~StopBeAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::NODE; }
 
 private:
     [[maybe_unused]] ExecEnv* _exec_env;

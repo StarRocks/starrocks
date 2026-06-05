@@ -41,9 +41,9 @@
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/query_cache/cache_manager_fwd.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker_fwd.h"
 #include "runtime/service_contexts.h"
@@ -83,10 +83,10 @@ class SmallFileMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
-class GlobalSpillManager;
 
 class HeartbeatFlags;
 class DiagnoseDaemon;
+class VectorIndexCache;
 
 namespace pipeline {
 class DriverExecutor;
@@ -105,7 +105,6 @@ namespace spill {
 class DirManager;
 class GlobalSpillManager;
 } // namespace spill
-
 namespace connector {
 class ConnectorSinkSpillExecutor;
 }
@@ -121,6 +120,12 @@ public:
                 GlobalEnv* global_env, bool as_cn = false);
     void stop();
     void destroy();
+    // Tears down the SR-owned VectorIndexCache. Kept out of destroy() so the
+    // call site can be placed before GlobalEnv::stop() — the entry deleters
+    // need vector_index_mem_tracker alive to account for the release.
+    // ~VectorIndexCache itself handles the IVF-PQ self-cascade safely; see
+    // the destructor for the FUTEX_WAIT_PRIVATE deadlock the cascade triggers.
+    void destroy_vector_index_cache();
     void wait_for_finish();
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -139,15 +144,15 @@ public:
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
-    DataStreamMgr* stream_mgr() { return _stream_mgr; }
+    DataStreamMgr* stream_mgr();
     LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
-    ResultBufferMgr* result_mgr() { return _result_mgr; }
-    ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
+    ResultBufferMgr* result_mgr();
+    ResultQueueMgr* result_queue_mgr();
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
     workgroup::ScanExecutor* connector_scan_executor();
-    workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
+    workgroup::WorkGroupManager* workgroup_manager();
 
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
@@ -204,10 +209,6 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
-    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
-
-    spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
-
     ThreadPool* delete_file_thread_pool();
 
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
@@ -215,6 +216,8 @@ public:
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
+
+    VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
 
 private:
     void _refresh_service_contexts();
@@ -227,12 +230,8 @@ private:
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
-    DataStreamMgr* _stream_mgr = nullptr;
-    ResultBufferMgr* _result_mgr = nullptr;
-    ResultQueueMgr* _result_queue_mgr = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
-    std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     std::unique_ptr<ComputeEnv> _compute_env;
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
@@ -267,8 +266,6 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr = nullptr;
-    std::shared_ptr<spill::DirManager> _spill_dir_mgr;
-    std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
@@ -278,6 +275,12 @@ private:
     AgentServices _agent_services;
     QueryExecutionServices _query_execution_services;
     AdminServices _admin_services;
+
+    // SR-owned LRU behind tenann::IndexCache. Must be destructed before the
+    // mem tracker hierarchy (see ExecEnv::destroy()). Only constructed when
+    // WITH_TENANN is on; the type is always declared so callers don't need
+    // their own WITH_TENANN guards to hold a pointer.
+    std::unique_ptr<VectorIndexCache> _vector_index_cache;
 };
 
 } // namespace starrocks

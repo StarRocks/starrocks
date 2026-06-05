@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "定义远端存储中的数据文件，用于数据导入和导出。"
 toc_max_heading_level: 5
 ---
 
@@ -644,7 +645,7 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 
 #### `schema`
 
-从 v4.0 开始，`FILES()` 支持显式的 `schema` 参数，允许您显式声明要读取的列及其 StarRocks 类型，跳过 BE 端的自动 Schema 推断。
+从 v4.1.2 开始，`FILES()` 支持显式的 `schema` 参数，允许您显式声明要读取的列及其 StarRocks 类型，跳过 BE 端的自动 Schema 推断。
 
 ```SQL
 "schema" = "col_name TYPE[, col_name TYPE ...]"

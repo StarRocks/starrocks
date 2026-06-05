@@ -41,8 +41,8 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/indexed_column_reader.h"
 
 namespace starrocks {
@@ -144,6 +144,19 @@ public:
               _ngram_bitmap_column_iter(std::move(ngram_bitmap_iter)),
               _has_null(has_null),
               _num_bitmap(num_bitmap) {}
+
+    // Virtual so subclasses can hang extra owned state (e.g. a transient
+    // BitmapIndexReader + RandomAccessFile backing an Index Delta Group
+    // .idx file) and release it on destruction.
+    virtual ~BitmapIndexIterator() = default;
+
+    // User-declared destructor suppresses the implicit move members, so define
+    // them explicitly; otherwise std::move() silently falls back to copy, which
+    // is deleted because of the unique_ptr members below.
+    BitmapIndexIterator(BitmapIndexIterator&&) = default;
+    BitmapIndexIterator& operator=(BitmapIndexIterator&&) = default;
+    BitmapIndexIterator(const BitmapIndexIterator&) = delete;
+    BitmapIndexIterator& operator=(const BitmapIndexIterator&) = delete;
 
     bool has_null_bitmap() const { return _has_null; }
 

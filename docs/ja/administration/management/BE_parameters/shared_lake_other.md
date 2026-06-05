@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
 ---
 
@@ -93,6 +94,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
+
+### lake_rows_mapper_read_parallelism
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: sub-chunk 数
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` が `.lcrm`（lake compaction rows-mapper）ファイルを読む際に in-flight で保持する sub-chunk 読み取りの最大数。各 sub-chunk のサイズは `lake_rows_mapper_sub_chunk_bytes` で制御され、segment 境界をまたぎません。イテレータは PK index 実行スレッドプールに最大この数の並行読み取りを投入し、リモート読み取りを呼び出し側の per-segment 処理とパイプライン化します。メモリ上限は `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`。`1` に設定するとパイプライン化を無効にし、逐次読み取りにフォールバックします。
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- デフォルト: 4194304
+- タイプ: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
 ### loop_count_wait_fragments_finish
 
@@ -374,6 +391,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
 - 導入バージョン: v3.1.7, v3.2.3
+
+### lake_replication_read_buffer_size
+
+- デフォルト: 16777216
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake replication）でセグメントファイルをダウンロードする際に使用する読み取りバッファサイズ。この値はリモートファイルの読み取りごとの割り当てサイズを決定し、実際にはこの設定値と 1 MB の大きい方が使用されます。値を大きくすると読み取り回数が減りスループットが向上しますが、並行ダウンロードごとのメモリ使用量が増加します。値を小さくするとメモリ使用量は減りますが I/O 呼び出し回数が増加します。ネットワーク帯域幅、ストレージ I/O 特性、並列レプリケーションスレッド数に応じて調整してください。
+- 導入バージョン: v4.1.2
+
+### lake_replication_max_file_copy_retry
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）における非セグメントファイル（`.sst`、`.delvec`、`.del`、`.cols`）コピーの最大リトライ回数。各試行でコピー済みファイルサイズがソースと一致するか検証し、オブジェクトストレージの一時的な問題による切り詰められたコピーを検出します。不安定なストレージ上でレプリケーション中にファイル破損が頻発する場合、この値を増やしてください。
+- 導入バージョン: v4.1.2
+
+### lake_replication_file_copy_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）でファイルごとのコピーに使用する専用スレッドプールのサイズ。`0` は `cpu_cores * 4`（`replication_threads` と同じデフォルトセマンティクス）を意味し、負の値は `-value * cpu_cores` を意味します。このプールはエージェントタスクの `replicate_snapshot` プールと意図的に分離されており、外部タスクが `ThreadPoolToken::wait()` を通じてファイルごとのコピーサブタスクを安全に待機でき、スレッドプールのセルフデッドロックガードをトリガーしません。このプールは起動時に一度だけ作成され、ランタイムのリサイズフックはないため、サイズ変更には CN の再起動が必要です。
+- 導入バージョン: v4.1.2
 
 ### lake_service_max_concurrency
 

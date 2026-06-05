@@ -58,7 +58,7 @@ public:
     void calculate_score() { score = (io_count() * 1024 * 1024) / read_bytes(); }
     // Rowset has multi segments and these segments are overlapped
     bool multi_segment_with_overlapped() const {
-        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segments_size() > 1;
+        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segment_metas_size() > 1;
     }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 

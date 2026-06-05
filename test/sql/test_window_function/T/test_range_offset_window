@@ -1,0 +1,154 @@
+-- name: test_range_offset_window
+CREATE TABLE `test_range_offset_window` (
+    `id` int NOT NULL,
+    `k` int NULL,
+    `dec_k` decimal(10, 2) NULL,
+    `d` date NULL,
+    `ts` datetime NULL,
+    `v` int NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO `test_range_offset_window` VALUES
+    (1, NULL, NULL, NULL, NULL, 10),
+    (2, NULL, NULL, NULL, NULL, 20),
+    (3, 1, 1.00, '2024-01-01', '2024-01-01 00:00:00', 1),
+    (4, 2, 2.25, '2024-01-02', '2024-01-15 00:00:00', 2),
+    (5, 2, 2.25, '2024-01-02', '2024-02-01 00:00:00', 3),
+    (6, 3, 3.50, '2024-01-04', '2024-02-15 00:00:00', 4),
+    (7, 5, 5.75, '2024-02-01', '2024-03-01 00:00:00', 5);
+
+-- INT key, NULLS FIRST, finite PRECEDING to CURRENT ROW; NULL current rows stay in their peer group.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, DESC NULLS LAST, finite PRECEDING to CURRENT ROW; verifies reversed comparison direction.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite PRECEDING to finite FOLLOWING; verifies both finite RANGE boundaries.
+SELECT id, k,
+       COUNT(v) OVER (ORDER BY k RANGE BETWEEN 0 PRECEDING AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- DATE key, INTERVAL PRECEDING to CURRENT ROW; forces DATE key to DATETIME for boundary calculation/comparison.
+SELECT id, d,
+       SUM(v) OVER (ORDER BY d RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- DATETIME key, DESC INTERVAL PRECEDING to CURRENT ROW.
+SELECT id, ts,
+       SUM(v) OVER (ORDER BY ts DESC RANGE BETWEEN INTERVAL 1 MONTH PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, existing half-unbounded RANGE frame: UNBOUNDED PRECEDING to CURRENT ROW.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, existing unbounded RANGE frame: UNBOUNDED PRECEDING to UNBOUNDED FOLLOWING.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, peer-group RANGE frame: CURRENT ROW to CURRENT ROW.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CURRENT ROW AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, CURRENT ROW to UNBOUNDED FOLLOWING; FE standardizes it by reversing ORDER BY and bounds.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, UNBOUNDED PRECEDING to finite PRECEDING; includes empty frames before the first non-null key.
+SELECT id, k,
+       COUNT(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, UNBOUNDED PRECEDING to finite FOLLOWING.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, CURRENT ROW to finite FOLLOWING.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite PRECEDING to finite FOLLOWING.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite PRECEDING to finite PRECEDING; produces empty SUM frames.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite PRECEDING lower bound after upper bound; produces empty SUM frames.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite FOLLOWING to finite FOLLOWING; produces empty SUM frames.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite PRECEDING to UNBOUNDED FOLLOWING.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- INT key, finite FOLLOWING to UNBOUNDED FOLLOWING.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- DECIMAL key with DOUBLE literal offsets; forces RANGE cast for decimal/double boundary calculation and comparison.
+SELECT id, dec_k,
+       SUM(v) OVER (
+           ORDER BY dec_k ASC NULLS LAST
+           RANGE BETWEEN 5E-1 PRECEDING AND 7.5E-1 FOLLOWING
+       ) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+-- FIRST_VALUE with RANGE offset must not be rewritten to ROWS; gaps in k make ROWS results different.
+SELECT id, k,
+       FIRST_VALUE(v) OVER (ORDER BY k ASC RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+WHERE id IN (3, 6, 7)
+ORDER BY id;
+
+-- LAST_VALUE with RANGE offset must not be rewritten to ROWS; gaps in k make ROWS results different.
+SELECT id, k,
+       LAST_VALUE(v) OVER (ORDER BY k ASC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+WHERE id IN (3, 6, 7)
+ORDER BY id;

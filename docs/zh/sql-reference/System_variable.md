@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 系统变量可通过 SET 命令动态设置，支持全局和会话范围的配置。"
 keywords: ['session','variable']
 ---
 
@@ -187,7 +188,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### array_low_cardinality_optimize
 
 * **作用域**: Session
-* **描述**: 控制优化器是否将 ARRAY&lt;VARCHAR&gt; 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 VARCHAR 或 ARRAY&lt;VARCHAR&gt; 的表达式。禁用时，仅标量 VARCHAR 列有资格参与，ARRAY&lt;VARCHAR&gt; 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
+* **描述**: 控制优化器是否将 `ARRAY<VARCHAR>` 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 VARCHAR 或 `ARRAY<VARCHAR>` 的表达式。禁用时，仅标量 VARCHAR 列有资格参与，`ARRAY<VARCHAR>` 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
 * **默认值**: `true`
 * **数据类型**: boolean
 * **引入版本**: v3.3.0, v3.4.0, v3.5.0
@@ -910,6 +911,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.3
 
+### enable_tablet_pre_split
+
+* 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）的会话级开关。默认 `true`，因此主开关由 FE 配置 `enable_tablet_pre_split_for_*` 控制。对于不希望被预分裂干扰的会话，可将其设为 `false`。预分裂需同时满足对应 FE 配置和该会话变量都为 `true`。
+* 默认值：true
+* 引入版本：v4.1.0
+
 ### enable_topn_runtime_filter
 
 * 描述: 是否启用 TopN Runtime Filter。如果启用此功能，对于 ORDER BY LIMIT 查询，将动态构建一个 Runtime Filter 并将其下推到 Scan 阶段进行过滤。
@@ -1285,9 +1292,9 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
   * `auto`：系统自动选择方案。
-  * `local`：使用本地缓存方案。
-  * `distributed`：使用分布式方案。
-* 默认值：auto
+  * `local`：由 FE 在本地解析 Iceberg manifest 文件，并在解析过程中将 scan range 增量下发给 BE，无需等待所有 manifest 解析完成，可降低内存占用和首包延迟。
+  * `distributed`：将 manifest 解析任务分发给多个 BE 并行处理，但 FE 需等待所有 BE 返回结果后才能下发 scan range，对于 manifest 文件较多的大表，可能导致较高内存占用和较长等待时间。仅在 FE CPU 成为瓶颈且 manifest 数量极多时建议使用。
+* 默认值：local（v3.5 起由 `auto` 改为 `local`；v3.5 起增量 scan range 下发默认开启，`local` 模式在大多数场景下内存占用更低、延迟更小）
 * 引入版本：v3.3.3
 
 #### enable_iceberg_column_statistics

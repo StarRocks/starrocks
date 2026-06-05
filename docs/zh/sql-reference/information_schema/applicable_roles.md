@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "applicable_roles 提供适用于当前用户的角色信息。"
 ---
 
 # applicable_roles

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Broker Load は HDFS またはクラウドストレージ（S3・GCS・Azure）から大量データを非同期ロードし、ジョブ管理とエラー処理機能を提供します。"
 ---
 
 # HDFS またはクラウドストレージからデータをロードする

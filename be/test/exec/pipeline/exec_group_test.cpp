@@ -24,7 +24,8 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -80,7 +81,7 @@ TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
         ops_with_sink.emplace_back(factories[0]->create(100, i));
         ops_with_sink.emplace_back(factories[1]->create(100, i));
         pipeline.drivers().emplace_back(
-                std::make_shared<PipelineDriver>(ops_with_sink, nullptr, nullptr, &pipeline, -1));
+                std::make_shared<PipelineDriver>(ops_with_sink, nullptr, nullptr, &pipeline, &pipeline, -1));
     }
 
     group.add_pipeline(&pipeline);

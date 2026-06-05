@@ -48,6 +48,7 @@
 #include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/config_runtime_fwd.h"
+#include "common/constexpr.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"

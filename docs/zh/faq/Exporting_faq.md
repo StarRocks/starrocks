@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 支持将数据备份到阿里云 OSS / AWS S3 或兼容 S3 协议的对象存储。"
 ---
 
 # 导出

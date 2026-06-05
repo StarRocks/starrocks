@@ -22,8 +22,8 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors_fwd.h"
 #include "runtime/runtime_fwd.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 
 namespace starrocks::pipeline {
 
@@ -44,21 +44,6 @@ public:
     int64_t receive_ts = 0;
 };
 using LookUpRequestContextPtr = std::shared_ptr<LookUpRequestContext>;
-
-class LocalLookUpRequestContext final : public LookUpRequestContext {
-public:
-    LocalLookUpRequestContext(FetchTaskContextPtr ctx) : fetch_ctx(std::move(ctx)) {}
-    ~LocalLookUpRequestContext() override = default;
-
-    TupleId request_tuple_id() const override { return fetch_ctx->request_tuple_id; }
-    Status collect_input_columns(ChunkPtr chunk) override;
-    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, const std::vector<SlotDescriptor*>& slots,
-                                   size_t start_offset) override;
-    void callback(const Status& status) override;
-
-    FetchTaskContextPtr fetch_ctx;
-};
-using LocalLookUpRequestContextPtr = std::shared_ptr<LocalLookUpRequestContext>;
 
 class RemoteLookUpRequestContext final : public LookUpRequestContext {
 public:

@@ -43,7 +43,7 @@
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "exec/catalog_scan_metrics.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/query_scan_metrics.h"
 #include "http/http_metrics.h"
 #include "runtime/exec_env.h"

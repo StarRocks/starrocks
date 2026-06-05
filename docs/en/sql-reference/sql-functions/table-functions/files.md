@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "Table function for defining data files in remote storage (HDFS, S3, GCS) for use in loading data into or unloading data from StarRocks."
 ---
 
 # `FILES`
@@ -644,7 +645,7 @@ Suppose the data file **file1** is stored under a path in the format of `/geo/co
 
 #### `schema`
 
-From v4.0 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
+From v4.1.2 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
 
 ```SQL
 "schema" = "col_name TYPE[, col_name TYPE ...]"

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Environment and system configuration checklist to complete before deploying StarRocks."
 ---
 
 # Check environment configurations
