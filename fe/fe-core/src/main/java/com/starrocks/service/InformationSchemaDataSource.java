@@ -540,7 +540,7 @@ public class InformationSchemaDataSource {
             // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
             // Async vector index builds per-tablet; surface the [min, max] built-version span across
             // this partition's base-index tablets for observability (null = no async vector index).
-            // MAX < VISIBLE_VERSION means the index is still catching up; MIN < MAX means the build
+            // MIN < VISIBLE_VERSION means the index is still catching up; MIN < MAX means the build
             // is uneven across tablets.
             long[] viBuiltSpan = VectorIndexBuildScheduler.getPartitionBuiltVersionSpan(table, physicalPartition);
             if (viBuiltSpan != null) {

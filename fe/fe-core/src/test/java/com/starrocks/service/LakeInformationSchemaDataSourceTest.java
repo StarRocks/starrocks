@@ -199,50 +199,55 @@ public class LakeInformationSchemaDataSourceTest {
      */
     @Test
     public void testGetLakePartitionsMetaAsyncVectorIndexBuiltVersion() throws Exception {
+        boolean prevEnableExperimentalVector = Config.enable_experimental_vector;
         Config.enable_experimental_vector = true;
-        starRocksAssert.withEnableMV().withDatabase("db_vi_meta").useDatabase("db_vi_meta");
+        try {
+            starRocksAssert.withEnableMV().withDatabase("db_vi_meta").useDatabase("db_vi_meta");
 
-        String createTblStmtStr = "CREATE TABLE db_vi_meta.vi_table (" +
-                " c0 INT," +
-                " c1 array<float> NOT NULL," +
-                " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
-                "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
-                "'index_build_mode' = 'async')) " +
-                "DUPLICATE KEY(c0) " +
-                "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
-                "PROPERTIES ('replication_num' = '1');";
-        starRocksAssert.withTable(createTblStmtStr);
+            String createTblStmtStr = "CREATE TABLE db_vi_meta.vi_table (" +
+                    " c0 INT," +
+                    " c1 array<float> NOT NULL," +
+                    " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
+                    "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
+                    "'index_build_mode' = 'async')) " +
+                    "DUPLICATE KEY(c0) " +
+                    "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
+                    "PROPERTIES ('replication_num' = '1');";
+            starRocksAssert.withTable(createTblStmtStr);
 
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable("db_vi_meta", "vi_table");
-        Assertions.assertTrue(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("db_vi_meta", "vi_table");
+            Assertions.assertTrue(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
 
-        // Stamp distinct built versions on the base-index tablets so the span becomes [3, 7].
-        long[] versions = {3L, 5L, 7L};
-        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
-            int i = 0;
-            for (Tablet tablet : baseIndex.getTablets()) {
-                ((LakeTablet) tablet).setVectorIndexBuiltVersion(versions[i % versions.length]);
-                i++;
+            // Stamp distinct built versions on the base-index tablets so the span becomes [3, 7].
+            long[] versions = {3L, 5L, 7L};
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+                MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+                int i = 0;
+                for (Tablet tablet : baseIndex.getTablets()) {
+                    ((LakeTablet) tablet).setVectorIndexBuiltVersion(versions[i % versions.length]);
+                    i++;
+                }
             }
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+            TAuthInfo authInfo = new TAuthInfo();
+            authInfo.setPattern("db_vi_meta");
+            authInfo.setUser("root");
+            authInfo.setUser_ip("%");
+            req.setAuth_info(authInfo);
+            TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+            TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                    .filter(t -> t.getTable_name().equals("vi_table")).findFirst().orElse(null);
+            Assertions.assertNotNull(partitionMeta);
+            Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
+            Assertions.assertEquals(3L, partitionMeta.getMin_vi_built_version());
+            Assertions.assertEquals(7L, partitionMeta.getMax_vi_built_version());
+        } finally {
+            Config.enable_experimental_vector = prevEnableExperimentalVector;
         }
-
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
-        TAuthInfo authInfo = new TAuthInfo();
-        authInfo.setPattern("db_vi_meta");
-        authInfo.setUser("root");
-        authInfo.setUser_ip("%");
-        req.setAuth_info(authInfo);
-        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
-
-        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
-                .filter(t -> t.getTable_name().equals("vi_table")).findFirst().orElse(null);
-        Assertions.assertNotNull(partitionMeta);
-        Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
-        Assertions.assertEquals(3L, partitionMeta.getMin_vi_built_version());
-        Assertions.assertEquals(7L, partitionMeta.getMax_vi_built_version());
     }
 
     @Test

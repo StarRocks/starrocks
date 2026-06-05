@@ -566,6 +566,23 @@ public class VectorIndexBuildSchedulerTest {
         Assertions.assertEquals(6L, getPendingTablets().get(4202L).latestVersion);
     }
 
+    @Test
+    public void testOnPublishCompleteBuildNotNeededAdvancesDirectly() {
+        mockGetScheduler(scheduler);
+        // build_needed=false routes onPublishComplete -> advanceBuiltVersionForNoBuild: with the
+        // recovery scan done and nothing pending, the frontier advances directly (no CN dispatch).
+        long tabletId = 4203L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(4L);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(true);
+
+        VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(tabletId, 5L, false)), false);
+
+        Assertions.assertEquals(5L, tablet.getVectorIndexBuiltVersion(), "direct-advanced, no build");
+        Assertions.assertTrue(getPendingTablets().isEmpty(), "no CN dispatch enqueued");
+    }
+
     // ========== advanceBuiltVersionForNoBuild (no-build versions) ==========
 
     @Test
