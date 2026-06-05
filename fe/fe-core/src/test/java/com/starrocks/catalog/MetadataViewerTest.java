@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -271,6 +272,44 @@ public class MetadataViewerTest {
         List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
         // Should return all results since non-status column filter is ignored
         Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testMissingReplicaRowMatchesMetadataColumnCount() throws Exception {
+        // Regression for the MySQL protocol desync: when a tablet has fewer replicas than
+        // replicationNum, the MISSING-replica branch must emit exactly as many cells as the
+        // ADMIN SHOW REPLICA STATUS result metadata declares. A short row corrupts the
+        // length-encoded row stream and hangs/disconnects the client.
+
+        // Force replicationNum (3 replicas exist) to 4 so the MISSING branch produces one phantom row.
+        new MockUp<PartitionInfo>() {
+            @Mock
+            public short getReplicationNum(long partitionId) {
+                return 4;
+            }
+        };
+
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+
+        int expectedColumnCount =
+                new ShowResultMetaFactory().getMetadata(stmt).getColumnCount();
+
+        // 3 existing replicas + 1 missing replica.
+        Assertions.assertEquals(4, result.size());
+        boolean sawMissing = false;
+        for (List<String> row : result) {
+            Assertions.assertEquals(expectedColumnCount, row.size(),
+                    "every row must have the same cell count as the declared metadata; row=" + row);
+            if (ReplicaStatus.MISSING.name().equals(row.get(row.size() - 1))) {
+                sawMissing = true;
+            }
+        }
+        Assertions.assertTrue(sawMissing, "expected at least one MISSING replica row");
     }
 
     @Test
