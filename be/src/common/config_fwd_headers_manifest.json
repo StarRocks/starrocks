@@ -334,7 +334,10 @@
         "enable_connector_sink_spill",
         "connector_sink_mem_high_watermark_ratio",
         "connector_sink_mem_low_watermark_ratio",
-        "connector_sink_mem_urgent_space_ratio"
+        "connector_sink_mem_urgent_space_ratio",
+        "connector_sink_skew_rebalance_partition_count",
+        "connector_sink_skew_rebalance_min_data_processed",
+        "connector_sink_skew_rebalance_min_partition_data_processed"
       ]
     },
     {

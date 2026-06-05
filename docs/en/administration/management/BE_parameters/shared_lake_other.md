@@ -302,6 +302,33 @@ This topic introduces the following types of BE configurations:
 - Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible. From v3.4.0 onwards, the default value is changed from `70` to `80`. This item is renamed from `datacache_disk_safe_level` to `disk_safe_level` from v4.0 onwards.
 - Introduced in: v3.3.0
 
+### connector_sink_skew_rebalance_min_data_processed
+
+- Default: 209715200
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Global trigger threshold for the connector sink skew partition rebalancer. A rebalance pass is not performed until this many bytes have accumulated since the last pass, which protects against per-chunk rebalance cost. Crossing it only invokes a rebalance check; whether any partition is actually spread is then decided by `connector_sink_skew_rebalance_min_partition_data_processed`. Default is 200 MB. Only takes effect when the FE plan sends the `CONNECTOR_SINK_SKEW_HASH_PARTITIONED` partition type to BE.
+- Introduced in: v4.1
+
+### connector_sink_skew_rebalance_min_partition_data_processed
+
+- Default: 125829120
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Per-partition gate for the connector sink skew partition rebalancer. A partition's estimated data size (bytes) must reach this value multiplied by the number of tasks currently assigned to that partition before it becomes eligible to be spread to an additional task. This makes spread gradual: a hot partition only gains one extra writer task per pass, and only after its currently-assigned tasks are saturated. Default is 120 MB.
+- Introduced in: v4.1
+
+### connector_sink_skew_rebalance_partition_count
+
+- Default: 4096
+- Type: Int32
+- Unit: -
+- Is mutable: Yes
+- Description: Number of logical buckets the connector sink skew partition rebalancer uses. Hash values of the partition columns are reduced modulo this value to land in `[0, partition_count)`. This is the rebalancer's internal hash bucket space and is unrelated to the user table's partition count. Matches Trino's hardcoded `SCALE_WRITERS_PARTITION_COUNT`. Raising it lowers the probability of hash collisions when the user table has many distinct partition values, at the cost of slightly higher per-pass rebalance scan time.
+- Introduced in: v4.1
+
 ### enable_connector_sink_spill
 
 - Default: true

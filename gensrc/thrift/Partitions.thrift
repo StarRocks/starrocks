@@ -57,7 +57,13 @@ enum TPartitionType {
   BUCKET_SHUFFLE_HASH_PARTITIONED,
 
   // Part of the data is hashed, and the other part is broadcast or randomly sent
-  HYBRID_HASH_PARTITIONED
+  HYBRID_HASH_PARTITIONED,
+
+  // Connector sink (Hive / Iceberg) hash shuffle with skew rebalancing.
+  // Like HASH_PARTITIONED, but BE routes rows via ScaleWriterShuffler
+  // (Crc32 hash -> SkewedPartitionRebalancer) so hot partitions get
+  // spread across multiple writer tasks.
+  CONNECTOR_SINK_SKEW_HASH_PARTITIONED
 }
 
 enum TDistributionType {

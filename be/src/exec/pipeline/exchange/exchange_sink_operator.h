@@ -24,6 +24,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
+#include "exec/pipeline/exchange/scale_writer_shuffler.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
@@ -197,6 +198,14 @@ private:
     RuntimeProfile::Counter* _shuffle_chunk_append_counter = nullptr;
     RuntimeProfile::Counter* _shuffle_chunk_append_timer = nullptr;
     RuntimeProfile::Counter* _compress_timer = nullptr;
+
+    // ScaleWriterShuffler observability counters (populated only when
+    // _part_type == CONNECTOR_SINK_SKEW_HASH_PARTITIONED). Updated once on close.
+    RuntimeProfile::Counter* _skew_rebalance_pass_count = nullptr;
+    RuntimeProfile::Counter* _skew_rebalance_spread_events = nullptr;
+    RuntimeProfile::Counter* _skew_rebalance_max_assigned_tasks = nullptr;
+    RuntimeProfile::Counter* _skew_rebalance_spread_partition_count = nullptr;
+    RuntimeProfile::Counter* _skew_rebalance_data_processed = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _raw_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _serialized_bytes_counter = nullptr;
@@ -232,6 +241,9 @@ private:
     std::vector<uint32_t> _bucket_ids;
 
     std::unique_ptr<Shuffler> _shuffler;
+    // Populated only when _part_type == CONNECTOR_SINK_SKEW_HASH_PARTITIONED;
+    // replaces _shuffler on that path.
+    std::unique_ptr<ScaleWriterShuffler> _scale_writer_shuffler;
 
     std::atomic<int32_t>& _num_sinkers;
 };
