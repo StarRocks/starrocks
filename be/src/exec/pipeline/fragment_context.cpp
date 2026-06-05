@@ -39,6 +39,7 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
@@ -193,7 +194,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     destroy_pass_through_chunk_buffer();
 
-    query_ctx->count_down_fragments();
+    runtime_services(state).query_context_mgr->count_down_fragments(query_ctx);
 }
 
 bool FragmentContext::need_report_exec_state() {
