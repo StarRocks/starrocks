@@ -2034,8 +2034,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds)
-                // Carry the table's current indexes through the rewrite (a sort-key change does not
-                // modify the index set), consistent with the column schema-change path.
                 .withAlterIndexInfo(false, olapTable.getCopiedIndexes());
 
         if (RunMode.isSharedDataMode()) {
@@ -3398,8 +3396,9 @@ public class SchemaChangeHandler extends AlterHandler {
         // Create Index object directly from IndexDef
         IndexDef indexDef = alterClause.getIndexDef();
         Index newIndex;
-        // Compatible index types (GIN, VECTOR) require a valid index_id for both
-        // OlapTable and cloud-native tables; non-compatible types (BITMAP, NGRAMBF) use -1.
+        // ADD INDEX only reaches here for OlapTable / cloud-native tables (gated earlier in the
+        // ALTER analysis), so we no longer branch on table type: compatible index types (GIN, VECTOR)
+        // require a valid index_id for both, while non-compatible types (BITMAP, NGRAMBF) use -1.
         if (IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType())) {
             long indexId = olapTable.incAndGetMaxIndexId();
             newIndex = new Index(indexId, indexDef.getIndexName(),

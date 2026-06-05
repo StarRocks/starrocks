@@ -221,7 +221,8 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     // the VectorIndexBuildScheduler. The FE stamps the shadow tablets' vibv=V_snap to mark this
     // inline-built existing data as done so the scheduler does not rebuild it.
     // No-op when the new schema has no async vector index (general_tablet_writer gates the flag on
-    // has_async_vector_index, and sync/no vector index already builds inline).
+    // has_async_vector_index, and sync/no vector index already builds inline). Also a no-op for PK
+    // tablet writers, which ignore this flag and always build the vector index inline.
     writer->force_set_build_vector_index_inline();
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });

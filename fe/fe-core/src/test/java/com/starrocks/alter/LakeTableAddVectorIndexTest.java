@@ -45,6 +45,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class LakeTableAddVectorIndexTest {
     private static ConnectContext connectContext;
@@ -396,7 +397,7 @@ public class LakeTableAddVectorIndexTest {
      *   <li>Collect the shadow tablet ids from the job's {@code physicalPartitionIndexMap}.
      *   <li>Manually register those ids in the scheduler (simulating what recoveryScan would do during RUNNING).
      *   <li>Cancel the job via {@code job.cancel("test")}.
-     *   <li>Assert all shadow ids have been removed from {@code getPendingTabletsForTest()}.
+     *   <li>Assert all shadow ids have been removed from the scheduler's {@code pendingTablets} map.
      * </ol>
      */
     @Test
@@ -426,9 +427,12 @@ public class LakeTableAddVectorIndexTest {
             scheduler.addPendingTablet(id, 1L, false);
         }
 
+        // Live reference to the scheduler's private pending map, so the asserts below observe eviction.
+        Map<Long, ?> pendingTablets = Deencapsulation.getField(scheduler, "pendingTablets");
+
         // Verify they are now pending.
         for (long id : shadowTabletIds) {
-            Assertions.assertTrue(scheduler.getPendingTabletsForTest().containsKey(id),
+            Assertions.assertTrue(pendingTablets.containsKey(id),
                     "Shadow tablet " + id + " must be pending before cancel");
         }
 
@@ -437,7 +441,7 @@ public class LakeTableAddVectorIndexTest {
 
         // All shadow ids must have been removed from the scheduler.
         for (long id : shadowTabletIds) {
-            Assertions.assertFalse(scheduler.getPendingTabletsForTest().containsKey(id),
+            Assertions.assertFalse(pendingTablets.containsKey(id),
                     "Shadow tablet " + id + " must be evicted from scheduler after ALTER cancel");
         }
     }
