@@ -58,11 +58,6 @@
 #include <mutex>
 #include <utility>
 
-<<<<<<< HEAD
-=======
-#include "base/failpoint/fail_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> 2b2e161060 ([BugFix] Fix use-after-free of LLVMContext when JIT compilation fails (#74396))
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -70,6 +65,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/mem_info.h"
 
 namespace starrocks {
