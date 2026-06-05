@@ -315,9 +315,7 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const {
-            return use_vector_index && !use_ivfpq;
-        }
+        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
     };
 
     // Inverted index related context, only created when needed
@@ -368,12 +366,8 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const {
-        return _segment->id();
-    }
-    uint32_t num_rows() const {
-        return _segment->num_rows();
-    }
+    uint32_t segment_id() const { return _segment->id(); }
+    uint32_t num_rows() const { return _segment->num_rows(); }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
