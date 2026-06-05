@@ -242,6 +242,64 @@ TEST_F(FragmentMgrTest, ProfileReportWorkerUsesInjectedServices) {
     worker.close();
 }
 
+TEST_F(FragmentMgrTest, QueryContextManagerReportFragmentsReturnsMissingPipelineTasks) {
+    pipeline::QueryContextManager query_context_manager(1);
+    ASSERT_OK(query_context_manager.init());
+
+    TUniqueId query_id;
+    query_id.__set_hi(301);
+    query_id.__set_lo(401);
+
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.__set_hi(501);
+    fragment_instance_id.__set_lo(601);
+
+    auto tasks_to_unregister =
+            query_context_manager.report_fragments({PipeLineReportTaskKey(query_id, fragment_instance_id)});
+    ASSERT_EQ(1, tasks_to_unregister.size());
+    EXPECT_EQ(query_id, tasks_to_unregister[0].query_id);
+    EXPECT_EQ(fragment_instance_id, tasks_to_unregister[0].fragment_instance_id);
+}
+
+TEST_F(FragmentMgrTest, FragmentMgrReportFragmentsReturnsMissingNonPipelineTasks) {
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
+
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.__set_hi(502);
+    fragment_instance_id.__set_lo(602);
+
+    auto fragment_instance_ids_to_unregister = mgr.report_fragments({fragment_instance_id});
+    ASSERT_EQ(1, fragment_instance_ids_to_unregister.size());
+    EXPECT_EQ(fragment_instance_id, fragment_instance_ids_to_unregister[0]);
+}
+
+TEST_F(FragmentMgrTest, ProfileReportWorkerRemovesReturnedStaleReportTasks) {
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
+    pipeline::QueryContextManager query_context_manager(1);
+    ASSERT_OK(query_context_manager.init());
+
+    TUniqueId query_id;
+    query_id.__set_hi(303);
+    query_id.__set_lo(403);
+
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.__set_hi(503);
+    fragment_instance_id.__set_lo(603);
+
+    ProfileReportWorker worker(&mgr, &query_context_manager);
+    worker.close();
+
+    ASSERT_OK(worker.register_non_pipeline_load(fragment_instance_id));
+    ASSERT_OK(worker.register_pipeline_load(query_id, fragment_instance_id));
+    worker._non_pipeline_report_tasks.find(fragment_instance_id)->second.last_report_time = 0;
+    worker._pipeline_report_tasks.find(PipeLineReportTaskKey(query_id, fragment_instance_id))->second.last_report_time =
+            0;
+
+    worker._start_report_profile();
+    EXPECT_TRUE(worker._non_pipeline_report_tasks.empty());
+    EXPECT_TRUE(worker._pipeline_report_tasks.empty());
+}
+
 // Reproduces the scenario where an output slot has an empty col_name (e.g. the
 // VARCHAR slot generated for the DECODE_NODE output tuple). Before switching to
 // get_slot_descriptor(), the lookup went through _slot_with_column_name_map,
