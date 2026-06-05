@@ -243,6 +243,13 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
                                                             _flush_pool, _bundle_file_context, _global_dicts);
     RETURN_IF_ERROR(writer->open());
     writer->set_auto_flush(auto_flush());
+    // Propagate the force-inline flag: spilled sorted schema changes merge through cloned writers
+    // (LoadSpillPipelineMergeIterator). Without this, clones default to false and defer .vi building
+    // even though the schema-change job stamped the shadow tablets' vibv as already built, so the
+    // existing rows would publish without inline-built vector files and never get rescheduled.
+    if (_force_build_vector_index_inline) {
+        writer->force_set_build_vector_index_inline();
+    }
     return writer;
 }
 
