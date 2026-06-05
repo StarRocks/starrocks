@@ -61,7 +61,7 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
-    private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
@@ -292,8 +292,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                             return null;
                         }
 
-                        Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
-                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                        Long tableId = tableIdCache.getPersistentCache(jdbcTable,
+                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong());
                         Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                         if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
