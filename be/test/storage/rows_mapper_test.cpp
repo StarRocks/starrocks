@@ -14,7 +14,7 @@
 
 #include "storage/rows_mapper.h"
 
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/data_dir.h"
