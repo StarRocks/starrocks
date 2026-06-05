@@ -186,8 +186,7 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
             }
             presences.push_back(p);
         }
-        set_sdcg_meta(std::move(kinds), std::move(counts), std::move(presences),
-                      dcg_ver_pb.source_segment_num_rows());
+        set_sdcg_meta(std::move(kinds), std::move(counts), std::move(presences), dcg_ver_pb.source_segment_num_rows());
     }
     _calc_memory_usage();
     return Status::OK();

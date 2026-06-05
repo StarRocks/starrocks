@@ -108,8 +108,7 @@ public:
                 return true;
             }
             // [min,max] closed vs [win_begin, win_end) half-open.
-            return presence_max < static_cast<int64_t>(win_begin) ||
-                   presence_min >= static_cast<int64_t>(win_end);
+            return presence_max < static_cast<int64_t>(win_begin) || presence_min >= static_cast<int64_t>(win_end);
         }
 
         // Lazily-loaded full materialization (loaded on first use by load()):

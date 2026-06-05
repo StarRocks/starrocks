@@ -1649,9 +1649,8 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
     const Hit& bottom = hits.back();
     if (bottom.kind == DeltaColumnFileKind::DENSE_COLS) {
         // Route through the metacache (footer parsed once) and fill caches per lake_io_opts.
-        ASSIGN_OR_RETURN(auto dense_seg,
-                         ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema, lake_io_opts,
-                                                      lake_io_opts.fill_metadata_cache));
+        ASSIGN_OR_RETURN(auto dense_seg, ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema,
+                                                                      lake_io_opts, lake_io_opts.fill_metadata_cache));
         RandomAccessFileOptions ropts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size,
                                       .skip_disk_cache = lake_io_opts.skip_disk_cache};

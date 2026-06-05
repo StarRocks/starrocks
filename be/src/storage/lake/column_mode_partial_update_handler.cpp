@@ -780,10 +780,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     inspect_existing_sparse_chain(params.metadata, rssid, selective_unique_update_column_ids,
                                                   &chain_len, &cum_k);
                     const bool hit_hard_count = (chain_len + 1) > config::sdcg_promotion_hard_count;
-                    const bool hit_threshold =
-                            source_num_rows > 0 &&
-                            (static_cast<double>(cum_k + K) >=
-                             config::sdcg_promotion_threshold * static_cast<double>(source_num_rows));
+                    const bool hit_threshold = source_num_rows > 0 && (static_cast<double>(cum_k + K) >=
+                                                                       config::sdcg_promotion_threshold *
+                                                                               static_cast<double>(source_num_rows));
                     if (hit_hard_count || hit_threshold) {
                         take_sparse = false;
                         LOG(INFO) << fmt::format(
@@ -800,10 +799,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     int64_t sparse_rows = 0;
                     int64_t min_source_rowid = kSDCGPresenceUnknown;
                     int64_t max_source_rowid = kSDCGPresenceUnknown;
-                    auto sparse_chunk_or =
-                            _build_sparse_chunk_from_upt(*upt_pairs_ptr, partial_schema, *sparse_schema,
-                                                         source_num_rows, &sparse_rows, &min_source_rowid,
-                                                         &max_source_rowid);
+                    auto sparse_chunk_or = _build_sparse_chunk_from_upt(*upt_pairs_ptr, partial_schema, *sparse_schema,
+                                                                        source_num_rows, &sparse_rows,
+                                                                        &min_source_rowid, &max_source_rowid);
                     if (!sparse_chunk_or.ok()) {
                         std::lock_guard<std::mutex> l(result_mutex);
                         shared_status.update(sparse_chunk_or.status());
@@ -839,7 +837,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                         dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
                         const std::string spcols_name = file_name(sparse_writer->segment_path());
                         dcg_column_file_with_encryption_metas[rssid].emplace_back(spcols_name,
-                                                                                 sparse_writer->encryption_meta());
+                                                                                  sparse_writer->encryption_meta());
                         dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
                         dcg_column_file_kinds[rssid].push_back(SPARSE_PERCOL);
                         dcg_column_sparse_row_counts[rssid].push_back(sparse_rows);

@@ -1394,8 +1394,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
         LayeredOverlayColumnIterator::SparseLayer layer;
         ASSIGN_OR_RETURN(layer.spcols_segment,
                          _segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, _opts.tablet_schema,
-                                                          _opts.lake_io_opts,
-                                                          _opts.lake_io_opts.fill_metadata_cache));
+                                                          _opts.lake_io_opts, _opts.lake_io_opts.fill_metadata_cache));
         layer.value_column = column;
         layer.version = hit.dcg->version();
         layer.row_count = hit.dcg->sparse_row_count(hit.file_idx);

@@ -341,8 +341,7 @@ struct SegmentZoneMapPruner {
             return false;
         } else {
             return it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
-                   (tablet_column.is_key() ||
-                    parent->_use_segment_zone_map_filter(read_options, column_unique_id));
+                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options, column_unique_id));
         }
     }
     bool operator()(const PredicateAndNode& node) const {
