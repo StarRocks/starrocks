@@ -122,10 +122,10 @@ message DeltaColumnGroupVerPB {
     // DENSE_COLS. Readers treat an out-of-range index as DENSE_COLS, so the
     // array is only emitted when at least one SPARSE_PERCOL file exists.
     repeated DeltaColumnFileKindPB file_kinds = 7;
-    // Reserved for per-column presence bitmaps in a future iteration. The PoC
-    // loads the .spcols source_rowid column at layer init instead, so this stays
-    // unused. NEVER reuse this ordinal for anything else.
-    reserved 8;
+    // Tag 8 is reserved (by convention, NOT via the `reserved` keyword -- the
+    // FE's jprotobuf proto parser cannot parse `reserved`) for per-column
+    // presence bitmaps in a future iteration. The PoC loads the .spcols
+    // source_rowid column at layer init instead. NEVER reuse ordinal 8.
     // Number of rows stored in each SPARSE_PERCOL file (== footer.num_rows == K),
     // parallel to column_files. 0 for DENSE_COLS entries / when unknown.
     repeated int64 sparse_row_counts = 9 [packed = true];
