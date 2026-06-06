@@ -22,18 +22,17 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_param.h"
+#include "compute_env/query_cache/lane_arbiter.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
-#include "exec/query_cache/cache_param.h"
 #include "exec/query_cache/conjugate_operator.h"
-#include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
-#include "exec/query_cache/ticket_checker.h"
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -1186,36 +1185,6 @@ TEST_F(QueryCacheTest, testPartialHit) {
     };
     test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
                    eq_validator_gen(801.0 * 801.0));
-}
-
-TEST_F(QueryCacheTest, testTicketChecker) {
-    auto test_func1 = [](int64_t id, int n) {
-        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
-        for (auto i = 0; i < n; ++i) {
-            ticket_checker->enter(1L, i + 1 == n);
-            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
-        }
-        for (auto i = 0; i < n; ++i) {
-            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
-        }
-    };
-
-    test_func1(1L, 1);
-    test_func1(1L, 10);
-    test_func1(1L, 100);
-
-    auto test_func2 = [](int64_t id, int n) {
-        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
-        for (auto i = 0; i < n; ++i) {
-            ticket_checker->enter(1L, i + 1 == n);
-            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
-            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
-        }
-    };
-
-    test_func2(1L, 1);
-    test_func2(1L, 10);
-    test_func2(1L, 100);
 }
 
 } // namespace starrocks

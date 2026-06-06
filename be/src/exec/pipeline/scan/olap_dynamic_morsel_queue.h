@@ -39,7 +39,7 @@ public:
     void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "dynamic_morsel_queue"; }
     Status append_morsels(Morsels&& morsels) override;
-    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() const override { return true; }
@@ -52,7 +52,7 @@ private:
     std::atomic<int64_t> _size = 0;
     std::deque<MorselPtr> _queue;
     std::mutex _mutex;
-    query_cache::TicketCheckerPtr _ticket_checker;
+    SplitMorselTicketCheckerPtr _ticket_checker;
     size_t _degree_of_parallelism;
 };
 

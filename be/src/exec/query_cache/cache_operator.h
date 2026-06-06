@@ -17,10 +17,10 @@
 #include <memory>
 #include <unordered_map>
 
+#include "compute_env/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_param.h"
+#include "compute_env/query_cache/lane_arbiter.h"
 #include "exec/pipeline/operator_factory.h"
-#include "exec/query_cache/cache_manager.h"
-#include "exec/query_cache/cache_param.h"
-#include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "storage/rowset/rowset.h"
 namespace starrocks {

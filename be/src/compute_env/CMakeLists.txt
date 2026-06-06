@@ -64,6 +64,11 @@ set(COMPUTE_ENV_SPILL_FILES
     spill/task_executor.cpp
 )
 
+set(COMPUTE_ENV_QUERY_CACHE_FILES
+    query_cache/cache_manager.cpp
+    query_cache/lane_arbiter.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -79,6 +84,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_SORTING_FILES}
     ${COMPUTE_ENV_WORKGROUP_FILES}
     ${COMPUTE_ENV_SPILL_FILES}
+    ${COMPUTE_ENV_QUERY_CACHE_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC

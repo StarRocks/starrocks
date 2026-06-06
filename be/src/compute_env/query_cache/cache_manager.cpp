@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_manager.h"
 
 #include "base/utility/defer_op.h"
 namespace starrocks::query_cache {

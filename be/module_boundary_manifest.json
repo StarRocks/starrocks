@@ -391,13 +391,12 @@
     {
       "id": "computeenv",
       "doc_label": "ComputeEnv",
-      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.",
+      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources, query-cache primitives, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.",
       "owned_targets": ["ComputeEnv"],
       "owned_roots": ["be/src/compute_env"],
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/runtime_filter/",
-        "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/primitives/",
@@ -431,7 +430,7 @@
       "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
       "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
+      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
       "id": "exprcore",
@@ -487,11 +486,11 @@
         "be/src/exec/pipeline/scan/dynamic_morsel_queue_builder.h",
         "be/src/exec/pipeline/scan/fixed_morsel_queue_builder.h",
         "be/src/exec/pipeline/scan/morsel_queue_builder.h",
-        "be/src/exec/pipeline/scan/ticketed_morsel_queue.h"
+        "be/src/exec/pipeline/scan/ticketed_morsel_queue.h",
+        "be/src/exec/pipeline/scan/split_morsel_ticket_checker.h"
       ],
       "allowed_include_prefixes": [
         "exec/runtime_filter/",
-        "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/operator_factory.h",
@@ -505,6 +504,7 @@
         "exec/pipeline/scan/fixed_morsel_queue_builder.h",
         "exec/pipeline/scan/dynamic_morsel_queue.h",
         "exec/pipeline/scan/dynamic_morsel_queue_builder.h",
+        "exec/pipeline/scan/split_morsel_ticket_checker.h",
         "exec/pipeline/scan/ticketed_morsel_queue.h",
         "exprs/",
         "runtime/",

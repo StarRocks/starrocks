@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/query_cache/lane_arbiter.h"
+#include "compute_env/query_cache/lane_arbiter.h"
 
 #include <glog/logging.h>
 

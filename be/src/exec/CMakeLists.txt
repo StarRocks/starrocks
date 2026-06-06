@@ -38,7 +38,7 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
     pipeline/scan/scan_morsel.cpp
-    query_cache/ticket_checker.cpp
+    pipeline/scan/split_morsel_ticket_checker.cpp
 )
 
 ADD_BE_LIB(ExecPrimitive
@@ -306,8 +306,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/spill_process_channel.cpp
     query_cache/multilane_operator.cpp
     query_cache/cache_operator.cpp
-    query_cache/cache_manager.cpp
-    query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
 )
 

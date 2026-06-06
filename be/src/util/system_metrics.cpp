@@ -24,7 +24,7 @@
 #endif
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_cache_fwd.h"
-#include "exec/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_manager.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/runtime_filter_worker.h"
 

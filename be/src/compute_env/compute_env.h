@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -40,6 +41,11 @@ class DirManager;
 class GlobalSpillManager;
 } // namespace spill
 
+namespace query_cache {
+class CacheManager;
+using CacheManagerRawPtr = CacheManager*;
+} // namespace query_cache
+
 struct ComputeEnvOptions {
     int max_num_pipeline_drivers = 0;
     MetricRegistry* metrics = nullptr;
@@ -63,6 +69,7 @@ public:
     Status init(const ComputeEnvOptions& options);
     Status init_workgroup(const ComputeEnvWorkGroupOptions& options);
     Status init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
+    Status init_query_cache(size_t capacity);
     Status init_profile_report_worker(ProfileReportWorkerOptions options);
     void stop();
     void stop_workgroup();
@@ -80,6 +87,7 @@ public:
     workgroup::WorkGroupManager* workgroup_manager() const { return _workgroup_manager.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
     spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
+    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr.get(); }
     ProfileReportWorker* profile_report_worker() const { return _profile_report_worker.get(); }
 
 private:
@@ -91,6 +99,7 @@ private:
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
+    std::unique_ptr<query_cache::CacheManager> _cache_mgr;
     std::unique_ptr<ProfileReportWorker> _profile_report_worker;
 };
 

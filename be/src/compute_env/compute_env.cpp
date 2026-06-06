@@ -25,6 +25,7 @@
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "compute_env/profile_report_worker.h"
+#include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "compute_env/spill/dir_manager.h"
@@ -118,6 +119,11 @@ Status ComputeEnv::init_spill(const std::vector<std::string>& store_paths, Metri
     return Status::OK();
 }
 
+Status ComputeEnv::init_query_cache(size_t capacity) {
+    _cache_mgr = std::make_unique<query_cache::CacheManager>(capacity);
+    return Status::OK();
+}
+
 Status ComputeEnv::init_profile_report_worker(ProfileReportWorkerOptions options) {
     if (_profile_report_worker != nullptr) {
         return Status::InternalError("ProfileReportWorker has been initialized");
@@ -175,6 +181,7 @@ void ComputeEnv::destroy() {
     _result_queue_mgr.reset();
     _result_mgr.reset();
     _stream_mgr.reset();
+    _cache_mgr.reset();
     _driver_limiter.reset();
     _pipeline_timer.reset();
 }
