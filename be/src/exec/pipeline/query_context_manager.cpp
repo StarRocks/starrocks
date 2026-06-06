@@ -28,7 +28,6 @@
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/query_context.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -287,7 +286,7 @@ void QueryContextManager::clear() {
 void QueryContextManager::report_fragments_with_same_host(
         const std::vector<std::shared_ptr<FragmentContext>>& need_report_fragment_context, std::vector<bool>& reported,
         const TNetworkAddress& last_coord_addr, std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
-        std::vector<int32_t>& cur_batch_report_indexes) {
+        std::vector<int32_t>& cur_batch_report_indexes, std::vector<PipeLineReportTaskKey>& tasks_to_unregister) {
     for (int i = 0; i < need_report_fragment_context.size(); i++) {
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
@@ -300,8 +299,7 @@ void QueryContextManager::report_fragments_with_same_host(
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
                 reported[i] = true;
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
-                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
+                tasks_to_unregister.emplace_back(fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -363,25 +361,25 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
     }
 }
 
-void QueryContextManager::report_fragments(
+std::vector<PipeLineReportTaskKey> QueryContextManager::report_fragments(
         const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
     std::vector<std::shared_ptr<QueryContext>> need_report_query_ctx;
     std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
 
-    std::vector<PipeLineReportTaskKey> fragment_context_non_exist;
+    std::vector<PipeLineReportTaskKey> tasks_to_unregister;
 
     for (const auto& key : pipeline_need_report_query_fragment_ids) {
         TUniqueId query_id = key.query_id;
         TUniqueId fragment_instance_id = key.fragment_instance_id;
         auto query_ctx = get(query_id);
         if (!query_ctx) {
-            fragment_context_non_exist.push_back(key);
+            tasks_to_unregister.push_back(key);
             continue;
         }
         need_report_query_ctx.push_back(query_ctx);
         auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (!fragment_ctx) {
-            fragment_context_non_exist.push_back(key);
+            tasks_to_unregister.push_back(key);
             continue;
         }
         need_report_fragment_context.push_back(fragment_ctx);
@@ -400,8 +398,7 @@ void QueryContextManager::report_fragments(
 
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
-                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
+                tasks_to_unregister.emplace_back(fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -437,7 +434,8 @@ void QueryContextManager::report_fragments(
             cur_batch_report_indexes.push_back(i);
 
             report_fragments_with_same_host(need_report_fragment_context, reported, fe_addr,
-                                            report_exec_status_params_vector, cur_batch_report_indexes);
+                                            report_exec_status_params_vector, cur_batch_report_indexes,
+                                            tasks_to_unregister);
 
             TBatchReportExecStatusParams report_batch;
             report_batch.__set_params_list(report_exec_status_params_vector);
@@ -469,10 +467,7 @@ void QueryContextManager::report_fragments(
         }
     }
 
-    for (const auto& key : fragment_context_non_exist) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(key.query_id,
-                                                                                             key.fragment_instance_id);
-    }
+    return tasks_to_unregister;
 }
 
 void QueryContextManager::for_each_active_ctx(const std::function<void(QueryContextPtr)>& func) {

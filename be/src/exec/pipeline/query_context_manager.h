@@ -32,7 +32,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/profile_report_worker.h"
+#include "runtime/profile_report_task.h"
 
 namespace starrocks::pipeline {
 
@@ -50,13 +50,15 @@ public:
     // used for graceful exit
     void clear();
 
-    void report_fragments(const std::vector<starrocks::PipeLineReportTaskKey>& non_pipeline_need_report_fragment_ids);
+    std::vector<starrocks::PipeLineReportTaskKey> report_fragments(
+            const std::vector<starrocks::PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids);
 
     void report_fragments_with_same_host(
             const std::vector<std::shared_ptr<FragmentContext>>& need_report_fragment_context,
             std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
             std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
-            std::vector<int32_t>& cur_batch_report_indexes);
+            std::vector<int32_t>& cur_batch_report_indexes,
+            std::vector<starrocks::PipeLineReportTaskKey>& tasks_to_unregister);
 
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
