@@ -14,7 +14,7 @@
 
 package com.starrocks.statistic.sample;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 public class ComplexTypeColumnStats extends ColumnStats {
 
@@ -33,7 +33,7 @@ public class ComplexTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getDateSize() {
+    public String getDataSize() {
         return columnType.getTypeSize() + "";
     }
 

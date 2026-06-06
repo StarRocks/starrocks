@@ -35,7 +35,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.StringJoiner;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class StarRocksDefaultErrorStrategy extends DefaultErrorStrategy {
 
@@ -71,7 +71,7 @@ public class StarRocksDefaultErrorStrategy extends DefaultErrorStrategy {
     @Override
     public void reportInputMismatch(Parser recognizer, InputMismatchException e) {
         Token t = e.getOffendingToken();
-        String tokenName = SqlParser.getTokenDisplay(t);
+        String tokenName = ErrorHandler.getTokenDisplay(t);
         IntervalSet expecting = getExpectedTokens(recognizer);
         String expects = filterExpectingToken(tokenName, expecting, recognizer.getVocabulary());
         String msg = PARSER_ERROR_MSG.unexpectedInput(tokenName, expects);
@@ -85,7 +85,7 @@ public class StarRocksDefaultErrorStrategy extends DefaultErrorStrategy {
         }
         beginErrorCondition(recognizer);
         Token t = recognizer.getCurrentToken();
-        String tokenName = SqlParser.getTokenDisplay(t);
+        String tokenName = ErrorHandler.getTokenDisplay(t);
         IntervalSet expecting = getExpectedTokens(recognizer);
         String expects = filterExpectingToken(tokenName, expecting, recognizer.getVocabulary());
         String msg = PARSER_ERROR_MSG.unexpectedInput(tokenName, expects);
@@ -148,4 +148,5 @@ public class StarRocksDefaultErrorStrategy extends DefaultErrorStrategy {
             }
         }
     }
+
 }

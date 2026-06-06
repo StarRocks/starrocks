@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Concatenates multiple strings into a single string."
 ---
 
 # concat

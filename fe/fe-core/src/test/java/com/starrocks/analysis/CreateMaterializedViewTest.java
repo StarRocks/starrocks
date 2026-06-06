@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -23,27 +24,29 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -52,20 +55,24 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
@@ -73,32 +80,39 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
-import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mockito;
 
-import java.io.File;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -107,6 +121,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
@@ -347,20 +363,33 @@ public class CreateMaterializedViewTest extends MVTestBase {
         stmtExecutor.execute();
     }
 
-    private List<TaskRunStatus> waitingTaskFinish() {
+    private List<TaskRunStatus> waitingTaskFinish(String mvTaskName) {
+        // Poll the task-run state for THIS task only, up to 15s with a 500ms interval.
+        // The previous version captured getMatchedTaskRunStatus(null) once at the start
+        // and then re-checked taskRuns.get(0) in a loop. That had two bugs:
+        //   1. The list was a snapshot - new pending/running runs submitted after the
+        //      first call were invisible, so the loop could return immediately by
+        //      seeing only an old, already-finished history entry.
+        //   2. Filter was null, so the "first" run might belong to any task in the
+        //      database, not the one the caller cares about.
+        // Both bugs were masked at the call sites by an unconditional Thread.sleep(4000L)
+        // inside getMaterializedViewChecked() that gave the periodic refresh task time
+        // to fire and reach a quiescent state before this method was even invoked.
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(null);
-        int retryCount = 0, maxRetry = 50;
-        while (retryCount < maxRetry) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(200L);
-            Constants.TaskRunState state = taskRuns.get(0).getState();
-            if (state.isFinishState()) {
-                break;
-            }
-            retryCount++;
-            LOG.info("waiting for TaskRunState retryCount:" + retryCount);
-        }
-        return taskRuns;
+        TGetTasksParams params = new TGetTasksParams();
+        params.setTask_name(mvTaskName);
+        Awaitility.await()
+                .atMost(15, TimeUnit.SECONDS)
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .until(() -> {
+                    List<TaskRunStatus> runs = taskManager.getMatchedTaskRunStatus(params);
+                    // At least one run must exist (covers the initial periodic-fire wait)
+                    // AND no pending/running runs may remain for this task name (so any
+                    // executeTask() submission made just before this call has drained).
+                    return !runs.isEmpty()
+                            && runs.stream().allMatch(r -> r.getState().isFinishState());
+                });
+        return taskManager.getMatchedTaskRunStatus(params);
     }
 
     // ========== full test ==========
@@ -398,7 +427,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Expr partitionExpr = ((ExpressionRangePartitionInfo) partitionInfo)
                 .getPartitionExprs(materializedView.getIdToColumn()).get(0);
         Assertions.assertTrue(partitionExpr instanceof FunctionCallExpr);
-        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFnName().getFunction());
+        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFunctionName());
         Assertions.assertEquals("k1", ((SlotRef) ((FunctionCallExpr) partitionExpr).getChild(1)).getColumnName());
     }
 
@@ -432,7 +461,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
     public void testFullCreateSync(MaterializedView materializedView, Table baseTable) throws Exception {
         String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
-        List<TaskRunStatus> taskRuns = waitingTaskFinish();
+        List<TaskRunStatus> taskRuns = waitingTaskFinish(mvTaskName);
         Assertions.assertEquals(Constants.TaskRunState.SKIPPED, taskRuns.get(0).getState());
 
         validatePartitionSync(baseTable, materializedView);
@@ -452,7 +481,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         new StmtExecutor(connectContext, statement).execute();
         GlobalStateMgr.getCurrentState().getTaskManager().executeTask(mvTaskName);
-        waitingTaskFinish();
+        waitingTaskFinish(mvTaskName);
     }
 
     @Test
@@ -584,7 +613,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         String sql = "create materialized view mv1\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+        Assertions.assertTrue(statementBase instanceof CreateSyncMVStmt);
     }
 
     @Test
@@ -1505,7 +1534,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, k2 from tbl1 group by k1, k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+            Assertions.assertTrue(statementBase instanceof CreateSyncMVStmt);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -1995,8 +2024,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 }
 
                 // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
-                return table.getIndexIdToMeta().values().stream()
-                        .filter(x -> x.getIndexId() != table.getBaseIndexId())
+                return table.getIndexMetaIdToMeta().values().stream()
+                        .filter(x -> x.getIndexMetaId() != table.getBaseIndexMetaId())
                         .allMatch(MaterializedIndexMeta::isColocateMVIndex);
             }
         };
@@ -2007,7 +2036,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select k1, k2 from colocateTable;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
             String fullGroupName = testDb.getId() + "_" + "colocate_group1";
@@ -2055,7 +2084,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         Assertions.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
         });
 
         currentState.getColocateTableIndex().clear();
@@ -2089,8 +2118,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 }
 
                 // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
-                return table.getIndexIdToMeta().values().stream()
-                        .filter(x -> x.getIndexId() != table.getBaseIndexId())
+                return table.getIndexMetaIdToMeta().values().stream()
+                        .filter(x -> x.getIndexMetaId() != table.getBaseIndexMetaId())
                         .allMatch(MaterializedIndexMeta::isColocateMVIndex);
             }
         };
@@ -2106,10 +2135,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select k1, k2 from colocateTable3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
 
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
@@ -2727,9 +2756,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1, partitionExpr.size());
         Assertions.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
-        Assertions.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
-        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
-        Assertions.assertEquals(1, slotDescriptor.getId().asInt());
+        Assertions.assertEquals("k1", slotRef.getColumnName());
+        Assertions.assertFalse(slotRef.getType().isInvalid());
     }
 
     @Test
@@ -2908,7 +2936,33 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "distributed by hash(l_shipdate) " +
                 " as select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
-        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        Assertions.assertTrue(exception.getMessage().contains("Getting syntax error"));
+    }
+
+    @Test
+    public void testInjectedUnsupportedRefreshSchemeCreateRejectedBeforePersistence() throws Exception {
+        String mvName = "unsupported_refresh_scheme_create_guard_mv";
+        String sql = "create materialized view test." + mvName + "\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "as select k2, sum(v1) as total from test.tbl1 group by k2;";
+        try {
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            stmt.setRefreshSchemeDesc(new RefreshSchemeClause(NodePosition.ZERO,
+                    stmt.getRefreshSchemeDesc().getMoment()));
+
+            DdlException exception = Assertions.assertThrows(DdlException.class,
+                    () -> currentState.getLocalMetastore().createMaterializedView(stmt));
+            Assertions.assertEquals("Unsupported refresh scheme type", exception.getMessage());
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName));
+        } finally {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName) != null) {
+                starRocksAssert.dropMaterializedView("test." + mvName);
+            }
+        }
     }
 
     @Test
@@ -2932,6 +2986,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(),
                             "async_mv_1");
+            Assertions.assertFalse(mv.getRefreshScheme().isIncremental());
+            Method getJob = MaterializedViewMgr.class.getDeclaredMethod("getJob", MvId.class);
+            getJob.setAccessible(true);
+            Assertions.assertNull(getJob.invoke(GlobalStateMgr.getCurrentState().getMaterializedViewMgr(), mv.getMvId()));
             Assertions.assertTrue(mv.getFullSchema().get(0).isKey());
             Assertions.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {
@@ -2969,8 +3027,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     .useDatabase("test_mv_different_db");
             String sql = "create materialized view test.test_mv_use_different_tbl " +
                     "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
-            CreateMaterializedViewStmt stmt =
-                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            CreateSyncMVStmt stmt =
+                    (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
             Assertions.assertEquals(stmt.getDBName(), "test");
             Assertions.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
             currentState.getLocalMetastore().createMaterializedView(stmt);
@@ -2979,8 +3037,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl5");
             Assertions.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().size() >= 2);
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().entrySet().stream()
                     .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             newStarRocksAssert.dropDatabase("test_mv_different_db");
             starRocksAssert.dropMaterializedView("test_mv_use_different_tbl");
@@ -3000,8 +3058,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Assertions.assertThrows(AnalysisException.class, () -> {
                 String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
                         "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
-                CreateMaterializedViewStmt stmt =
-                        (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                CreateSyncMVStmt stmt =
+                        (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                                 newStarRocksAssert.getCtx());
 
             });
@@ -3024,8 +3082,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
@@ -3051,8 +3109,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test_mv_different_db");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
 
@@ -3087,8 +3145,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "case_when_t1");
             Assertions.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().size() >= 2);
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().entrySet().stream()
                     .noneMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             List<Column> fullSchemas = table.getFullSchema();
             Assertions.assertTrue(fullSchemas.size() == 3);
@@ -3102,14 +3160,42 @@ public class CreateMaterializedViewTest extends MVTestBase {
         }
     }
 
-    @Test
-    public void testCreateAsync_Deferred(@Mocked TaskManager taskManager) throws Exception {
-        new Expectations() {
-            {
-                taskManager.executeTask((String) any);
-                times = 0;
+    // Counts invocations of TaskManager.executeTask(String). Used by the three
+    // testCreateAsync_* tests below in place of @Mocked TaskManager.
+    //
+    // Why a targeted MockUp instead of @Mocked TaskManager:
+    //   @Mocked TaskManager replaces every public method body of the class with a
+    //   JMockit stub for the duration of the test method. TaskManager.taskUnlock()
+    //   is public; tryTaskLock()/takeTaskLock() are private and therefore NOT
+    //   stubbed. If the TaskCleaner daemon happens to be inside one of the public
+    //   task-locked methods (e.g. removeExpiredTasks) when the test starts, the
+    //   real tryLock has already incremented the hold count - but the finally's
+    //   taskUnlock() call lands in the JMockit stub instead of taskLock.unlock().
+    //   The hold count never returns to zero, TaskCleaner becomes the perpetual
+    //   fair-lock owner, and every later test that drops a real-task MV wedges
+    //   in @AfterEach -> dropMaterializedView -> TaskManager.getTask ->
+    //   takeTaskLock. Observed as a flaky 1+ hour CI hang, reproduced twice
+    //   (2026-05-13 and 2026-05-29) with identical 2:06 elapsed-time fingerprint.
+    //   See trouble-shoot/fe-ut-timeout/findings-v2.html for the full write-up.
+    //
+    // The targeted MockUp only stubs the single public method we care about
+    // (executeTask(String)), so taskUnlock() and other TaskManager methods keep
+    // their real bodies and the strike window disappears.
+    private AtomicInteger installExecuteTaskCounter() {
+        AtomicInteger calls = new AtomicInteger();
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTask(String taskName) {
+                calls.incrementAndGet();
+                return new SubmitResult(null, SubmitResult.SubmitStatus.SUBMITTED);
             }
         };
+        return calls;
+    }
+
+    @Test
+    public void testCreateAsync_Deferred() throws Exception {
+        AtomicInteger executeTaskCalls = installExecuteTaskCounter();
         starRocksAssert.withMaterializedView(
                 "create materialized view deferred_async " +
                         "refresh deferred async distributed by hash(c_1_9) as" +
@@ -3122,16 +3208,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "create materialized view deferred_scheduled " +
                         "refresh deferred async every(interval 1 day) distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1");
+        Assertions.assertEquals(0, executeTaskCalls.get());
     }
 
     @Test
-    public void testCreateAsync_Immediate(@Mocked TaskManager taskManager) throws Exception {
-        new Expectations() {
-            {
-                taskManager.executeTask((String) any);
-                times = 3;
-            }
-        };
+    public void testCreateAsync_Immediate() throws Exception {
+        AtomicInteger executeTaskCalls = installExecuteTaskCounter();
         starRocksAssert.withMaterializedView(
                 "create materialized view async_immediate " +
                         "refresh immediate async distributed by hash(c_1_9) as" +
@@ -3144,16 +3226,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "create materialized view schedule_immediate " +
                         "refresh immediate async every(interval 1 day) distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1");
+        Assertions.assertEquals(3, executeTaskCalls.get());
     }
 
     @Test
-    public void testCreateAsync_Immediate_Implicit(@Mocked TaskManager taskManager) throws Exception {
-        new Expectations() {
-            {
-                taskManager.executeTask((String) any);
-                times = 3;
-            }
-        };
+    public void testCreateAsync_Immediate_Implicit() throws Exception {
+        AtomicInteger executeTaskCalls = installExecuteTaskCounter();
         starRocksAssert.withMaterializedView(
                 "create materialized view async_immediate_implicit " +
                         "refresh async distributed by hash(c_1_9) as" +
@@ -3166,6 +3244,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "create materialized view schedule_immediate_implicit " +
                         "refresh async every(interval 1 day) distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1");
+        Assertions.assertEquals(3, executeTaskCalls.get());
     }
 
     private void testMVColumnAlias(String expr) throws Exception {
@@ -3888,12 +3967,21 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     (CreateMaterializedViewStatement) statementBase;
 
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvName = createMaterializedViewStatement.getTableName();
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
-            Assertions.assertNotNull(table);
-            Assertions.assertTrue(table instanceof MaterializedView);
+            TableName mvName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
+            String mvTableName = mvName.getTbl();
+            // Poll for the named MV to appear in the local metastore, up to 5s with a
+            // 200ms interval. createMaterializedView is synchronous so the MV is normally
+            // visible immediately; polling tolerates any async registration delay.
+            // Periodic-refresh callers (e.g. testFullCreate) no longer rely on a fixed
+            // sleep here - the per-task-name waitingTaskFinish(mvTaskName) helper now
+            // waits for the first task run to reach a finish state instead.
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .until(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(testDb.getFullName(), mvTableName) instanceof MaterializedView);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvTableName);
             return (MaterializedView) table;
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
@@ -3909,14 +3997,26 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     (CreateMaterializedViewStatement) statementBase;
 
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvTableName = createMaterializedViewStatement.getTableName();
+            TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             mvName = mvTableName.getTbl();
 
+            // Poll for the named MV to appear in the local metastore, up to 5s with a 200ms
+            // interval. Replaces an unconditional Thread.sleep(4000L) that this helper used
+            // to do after createMaterializedView. The sleep was originally added in PR
+            // #9233 (Jul 2022) for one test that needed a periodic-refresh task to fire at
+            // least once; a subsequent refactor inherited it into this helper used by
+            // ~20 tests that only read the MV schema (no periodic refresh involved). The
+            // polling form costs ~0ms when the MV is already visible (the typical case,
+            // since createMaterializedView is synchronous) while still tolerating any
+            // future async registration delay.
+            String finalMvName = mvName;
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .until(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(testDb.getFullName(), finalMvName) instanceof MaterializedView);
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
-            Assertions.assertNotNull(table);
-            Assertions.assertTrue(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
 
             return mv.getFullSchema().stream().filter(Column::isKey).collect(Collectors.toList());
@@ -4215,6 +4315,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             public String getTableIdentifier() {
                 String uuid = UUID.randomUUID().toString();
                 return Joiner.on(":").join("tbl", uuid);
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(ConnectContext context, BaseTableInfo baseTableInfo) {
+                DeltaLakeTable mockTable = new DeltaLakeTable();
+                return Optional.of(mockTable);
             }
         };
         starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
@@ -4544,10 +4651,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1` LIMIT 10;"
+                        "AS select * from t1 limit 10;"
                 ,
                 starRocksAssert.showCreateTable("show create table mv_invalid"));
         starRocksAssert.dropMaterializedView("mv_invalid");
@@ -4568,10 +4672,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"false\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1` LIMIT 10;",
+                        "AS select * from t1 limit 10;",
                 starRocksAssert.showCreateTable("show create table mv_invalid"));
         starRocksAssert.dropMaterializedView("mv_invalid");
 
@@ -4590,10 +4691,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
@@ -4612,10 +4710,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"enable_query_rewrite\" = \"FALSE\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, null,
                 true, false, connectContext.getSessionVariable().getOptimizerExecuteTimeout());
@@ -4643,10 +4738,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1` LIMIT 10;", sql);
+                "AS select * from t1 limit 10;", sql);
         starRocksAssert.dropMaterializedView("mv_invalid");
 
         // enable
@@ -4664,10 +4756,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
@@ -4686,10 +4775,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1`;", sql);
+                "AS select * from t1;", sql);
         Assertions.assertTrue(!mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
 
@@ -4704,10 +4790,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assertions.assertTrue(mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
@@ -4722,10 +4805,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
+                        "AS select * from t1;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assertions.assertTrue(mv.isEnableTransparentRewrite());
         Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_DEFAULT));
@@ -4766,7 +4846,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         System.out.println(result);
         Assertions.assertTrue(result.contains("rack:*"));
         for (Tablet tablet : materializedView.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()) {
             Assertions.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 
@@ -5897,6 +5977,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             starRocksAssert.withMaterializedView(sql);
         }
     }
+
     @Test
     public void testPartitionByDateTruncWithNestedMV3() throws Exception {
         String sql = "create materialized view mv1 " +
@@ -5908,5 +5989,192 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") \n" +
                 "as select 'This is a test',123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
         starRocksAssert.withMaterializedView(sql);
+    }
+
+    @Test
+    public void testCreateMVWithGeneratedColumn() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE `user_events` (\n" +
+                "  `user_id` varchar(128) NULL COMMENT \"\",\n" +
+                "  `event_ts` bigint(20) NULL COMMENT \"\",\n" +
+                "  `event_name` varchar(128) NULL COMMENT \"\",\n" +
+                "  `session_id` varchar(128) NULL COMMENT \"\",\n" +
+                "  `event_type` varchar(64) NULL COMMENT \"\",\n" +
+                "  `event_level` varchar(64) NULL COMMENT \"\",\n" +
+                "  `properties` json NULL COMMENT \"\",\n" +
+                "  `dt` datetime NULL AS date_trunc('day', from_unixtime(`event_ts` / 1000)) COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`user_id`, `event_ts`, `event_name`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY (`dt`)\n" +
+                "DISTRIBUTED BY HASH(`user_id`) BUCKETS 10 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`user_events_agg_mv`\n" +
+                "PARTITION BY dt\n" +
+                "REFRESH ASYNC EVERY(INTERVAL 1 DAY)\n" +
+                "PROPERTIES (\n" +
+                "  \"partition_refresh_number\" = \"1\",\n" +
+                "  \"partition_ttl\" = \"100 DAY\"\n" +
+                ")\n" +
+                "AS\n" +
+                "WITH filtered_events AS (\n" +
+                "  SELECT\n" +
+                "    dt,\n" +
+                "    user_id,\n" +
+                "    session_id,\n" +
+                "    event_ts,\n" +
+                "    properties,\n" +
+                "    CAST(properties->'$.category_id' AS VARCHAR) as category_id,\n" +
+                "    CAST(properties->'$.product_id' AS VARCHAR) as product_id,\n" +
+                "    CAST(properties->'$.resource_id' AS VARCHAR) as resource_id,\n" +
+                "    properties->'$.resource_type' as resource_type_code,\n" +
+                "    CASE \n" +
+                "      WHEN resource_type_code IN (1, '1', 'category') THEN 'category'\n" +
+                "      WHEN resource_type_code IN (2, '2', 'product') THEN 'product'\n" +
+                "      WHEN resource_type_code IN (3, '3', 'brand') THEN 'brand'\n" +
+                "      ELSE NULL\n" +
+                "    END as resource_type\n" +
+                "  FROM user_events\n" +
+                "  WHERE dt >= CURRENT_DATE - INTERVAL 90 DAY\n" +
+                "    AND event_level IN ('click', 'view')\n" +
+                "    AND event_name != 'page_exit'\n" +
+                "),\n" +
+                "resource_interests AS (\n" +
+                "  SELECT\n" +
+                "    dt,\n" +
+                "    user_id,\n" +
+                "    session_id,\n" +
+                "    event_ts,\n" +
+                "    'category' as resource_type,\n" +
+                "    category_id as resource_id\n" +
+                "  FROM filtered_events\n" +
+                "  WHERE category_id IS NOT NULL\n" +
+                "\n" +
+                "  UNION ALL\n" +
+                "\n" +
+                "  SELECT\n" +
+                "    dt,\n" +
+                "    user_id,\n" +
+                "    session_id,\n" +
+                "    event_ts,\n" +
+                "    'product' as resource_type,\n" +
+                "    product_id as resource_id\n" +
+                "  FROM filtered_events\n" +
+                "  WHERE product_id IS NOT NULL\n" +
+                "\n" +
+                "  UNION ALL\n" +
+                "\n" +
+                "  SELECT\n" +
+                "    dt,\n" +
+                "    user_id,\n" +
+                "    session_id,\n" +
+                "    event_ts,\n" +
+                "    resource_type,\n" +
+                "    resource_id\n" +
+                "  FROM filtered_events\n" +
+                "  WHERE resource_type IS NOT NULL AND resource_id IS NOT NULL\n" +
+                ")\n" +
+                "\n" +
+                "SELECT\n" +
+                "  dt,\n" +
+                "  user_id,\n" +
+                "  resource_type,\n" +
+                "  resource_id,\n" +
+                "  COUNT(DISTINCT session_id) AS session_count,\n" +
+                "  COUNT(*) AS event_count\n" +
+                "FROM resource_interests\n" +
+                "WHERE user_id IS NOT NULL AND user_id != ''\n" +
+                "GROUP BY dt, user_id, resource_type, resource_id;");
+    }
+
+    @Test
+    public void testCreateMVWithComment() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "comment \"this is a comment2\" " +
+                "partition by date_trunc('month', date) " +
+                "distributed by random " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'\n" +
+                ") \n" +
+                "as select 'This is a test', --mocked \n" +
+                "123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = getMv("mv1");
+        {
+            String ddl = mv.getMaterializedViewDdlStmt(true, false);
+            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
+                    "COMMENT \"this is a comment2\"\n" +
+                    "PARTITION BY (date_trunc('month', `date`))\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS select 'This is a test', --mocked \n" +
+                    "123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1;", ddl);
+        }
+        {
+            String ddl = mv.getMaterializedViewDdlStmt(false, false);
+            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
+                    "COMMENT \"this is a comment2\"\n" +
+                    "PARTITION BY (date_trunc('month', `date`))\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT 'This is a test' AS `'This is a test'`, 123 AS `123`, `iceberg0`.`partitioned_db`.`v1`.`date`, `iceberg0`.`partitioned_db`.`v1`.`id`\n" +
+                    "FROM `iceberg0`.`partitioned_db`.`t2` AS `v1`;", ddl);
+        }
+    }
+
+    @Test
+    public void testRemoveHeavyObjectsFromTableClearsNativeIcebergTable() throws Exception {
+        Column column = new Column("c1", com.starrocks.type.IntegerType.INT);
+        ColumnRefOperator colRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "c1", true);
+
+        org.apache.iceberg.Schema schema =
+                new org.apache.iceberg.Schema(org.apache.iceberg.types.Types.NestedField.required(
+                        1, "c1", org.apache.iceberg.types.Types.IntegerType.get()));
+        org.apache.iceberg.PartitionSpec spec =
+                org.apache.iceberg.PartitionSpec.builderFor(schema).identity("c1").build();
+        org.apache.iceberg.TableMetadata meta = org.apache.iceberg.TableMetadata.newTableMetadata(
+                schema, spec, "/tmp/iceberg-test", java.util.Collections.emptyMap());
+        org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
+        Mockito.when(ops.current()).thenReturn(meta);
+        org.apache.iceberg.BaseTable nativeTable = new org.apache.iceberg.BaseTable(ops, "t");
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("iceberg")
+                .setCatalogDBName("db")
+                .setCatalogTableName("t")
+                .setNativeTable(nativeTable)
+                .setFullSchema(java.util.List.of(column))
+                .build();
+
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(
+                icebergTable,
+                ImmutableMap.of(colRef, column),
+                ImmutableMap.of(column, colRef),
+                Operator.DEFAULT_LIMIT,
+                null,
+                TvrTableSnapshot.empty());
+        OptExpression opt = OptExpression.create(scan);
+
+        Method remover = CachingMvPlanContextBuilder.class
+                .getDeclaredMethod("removeHeavyObjectsFromTable", OptExpression.class);
+        remover.setAccessible(true);
+        remover.invoke(null, opt);
+
+        Assertions.assertTrue(scan.getTable() instanceof LightWeightIcebergTable);
     }
 }

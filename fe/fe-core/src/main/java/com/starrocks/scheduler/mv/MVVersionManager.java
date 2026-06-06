@@ -19,14 +19,17 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
@@ -40,9 +43,6 @@ import java.util.stream.Collectors;
  * MVVersionManager is used to update materialized view version info when base table partition changes after mv refresh finished.
  */
 public class MVVersionManager {
-    // only used in the static methods
-    private static final Logger LOG = LogManager.getLogger(MVVersionManager.class);
-
     private final Logger logger;
     private final MaterializedView mv;
     private final MvTaskRunContext mvTaskRunContext;
@@ -60,15 +60,15 @@ public class MVVersionManager {
      * @param mvRefreshedPartitions mv refreshed partitions
      * @param refBaseTableIds  mv's ref base table ids
      * @param refTableAndPartitionNames mv's ref base table and partition names
-     * @param tempMvTvrVersionRangeMap temporary tvr version range map for each base table which is used for ivm refresh
+     * @param tvrDeltaToPromote TVR version ranges to promote into the persistent baseTableInfoTvrVersionRangeMap
      */
     public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                    Set<String> mvRefreshedPartitions,
+                                    PCellSortedSet mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
-                                    Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames,
-                                    Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
-        MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
-        MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
+                                    Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
+                                    Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote) {
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
+        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
         // update materialized view partition to ref base table partition names meta
         updateAssociatedPartitionMeta(refreshContext, mvRefreshedPartitions, refTableAndPartitionNames);
         // Update meta information for OLAP tables and external tables
@@ -83,12 +83,16 @@ public class MVVersionManager {
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
         }
-        if (tempMvTvrVersionRangeMap != null) {
+        if (tvrDeltaToPromote != null) {
             // update the tvr version range map in mv context
             final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
-            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
-                mvTvrVersionRangeMap.put(entry.getKey(), entry.getValue());
+                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tvrDeltaToPromote.entrySet()) {
+                TvrVersionRange versionRange = entry.getValue();
+                if (versionRange == null || versionRange.isEmpty()) {
+                    continue;
+                }
+                mvTvrVersionRangeMap.put(entry.getKey(), TvrTableSnapshot.of(versionRange.to()));
             }
         }
 
@@ -103,8 +107,14 @@ public class MVVersionManager {
                 }
             }
         }
-        mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
-        updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+        logger.info("Update materialized view {} refresh scheme, " +
+                        "last refresh time: {}, version meta changed",
+                mv.getName(), maxChangedTableRefreshTime);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(copiedScheme));
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
@@ -256,9 +266,11 @@ public class MVVersionManager {
      * partitions rather than the whole table.
      */
     private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
-                                               Set<String> mvRefreshedPartitions,
-                                               Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvTaskRunContext.getMvRefBaseTableIntersectedPartitions();
+                                               PCellSortedSet mvRefreshedPartitions,
+                                               Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
+        PCTPartitionTopology partitionTopology = mvTaskRunContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs =
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
         if (Objects.isNull(mvToBaseNameRefs) || Objects.isNull(refTableAndPartitionNames) ||
                 refTableAndPartitionNames.isEmpty()) {
             return;
@@ -267,15 +279,17 @@ public class MVVersionManager {
         try {
             Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
                     refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
-            for (String mvRefreshedPartition : mvRefreshedPartitions) {
-                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
+            for (PCellWithName mvPCellWithName : mvRefreshedPartitions.getPartitions()) {
+                String mvRefreshedPartition = mvPCellWithName.name();
+                Map<Table, PCellSortedSet> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
                 for (BaseTableSnapshotInfo snapshotInfo : refTableAndPartitionNames.keySet()) {
                     Table refBaseTable = snapshotInfo.getBaseTable();
                     if (!mvToBaseNameRef.containsKey(refBaseTable)) {
                         continue;
                     }
                     Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
-                    for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(refBaseTable)) {
+                    for (PCellWithName basePCellWithName : mvToBaseNameRef.get(refBaseTable).getPartitions()) {
+                        String refBaseTableAssociatedPartition = basePCellWithName.name();
                         realBaseTableAssociatedPartitions.addAll(
                                 mvTaskRunContext.getExternalTableRealPartitionName(refBaseTable,
                                         refBaseTableAssociatedPartition));
@@ -290,19 +304,4 @@ public class MVVersionManager {
         }
     }
 
-    /**
-     * Sync meta changes to followers by edit log after version meta changed.
-     * @param mv  mv that need to update
-     * @param maxChangedTableRefreshTime max changed table refresh time
-     */
-    public static void updateEditLogAfterVersionMetaChanged(MaterializedView mv,
-                                                            long maxChangedTableRefreshTime) {
-        mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                new ChangeMaterializedViewRefreshSchemeLog(mv);
-        LOG.info("Update materialized view {} refresh scheme, " +
-                        "last refresh time: {}, version meta changed",
-                mv.getName(), maxChangedTableRefreshTime);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-    }
 }

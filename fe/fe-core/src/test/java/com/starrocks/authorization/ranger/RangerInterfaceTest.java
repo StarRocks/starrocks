@@ -22,7 +22,7 @@ import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -36,8 +36,8 @@ import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -105,7 +105,7 @@ public class RangerInterfaceTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
-        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+        List<Column> columns = Lists.newArrayList(new Column("v1", IntegerType.INT));
 
         RangerStarRocksAccessController connectScheduler = new RangerStarRocksAccessController();
         try {
@@ -155,7 +155,7 @@ public class RangerInterfaceTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
-        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+        List<Column> columns = Lists.newArrayList(new Column("v1", IntegerType.INT));
 
         Map<String, Expr> e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
         Assertions.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);
@@ -209,9 +209,6 @@ public class RangerInterfaceTest {
         };
         RangerStarRocksAccessController rangerStarRocksAccessController = new RangerStarRocksAccessController();
 
-        ConnectContext connectContext = new ConnectContext();
-        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
-
         try {
             rangerStarRocksAccessController.hasPermission(
                     RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE);
@@ -230,7 +227,45 @@ public class RangerInterfaceTest {
         };
 
         Assertions.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
-                RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE));
+                RangerStarRocksResource.builder().setSystem().build(),
+                new UserIdentity("alice", "%"), Set.of(), PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testRootUserBypassesRanger() {
+        // Mock Ranger to deny all requests
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        RangerStarRocksAccessController controller = new RangerStarRocksAccessController();
+
+        // root user must bypass Ranger even when Ranger denies everything
+        Assertions.assertDoesNotThrow(() -> controller.hasPermission(
+                RangerStarRocksResource.builder().setSystem().build(),
+                UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE));
+        Assertions.assertDoesNotThrow(() -> controller.hasPermission(
+                RangerStarRocksResource.builder().setCatalog("hive_catalog").build(),
+                UserIdentity.ROOT, Set.of(), PrivilegeType.USAGE));
+        Assertions.assertDoesNotThrow(() -> controller.hasPermission(
+                RangerStarRocksResource.builder().setCatalog("default_catalog").setDatabase("db1").build(),
+                UserIdentity.ROOT, Set.of(), PrivilegeType.CREATE_TABLE));
+        Assertions.assertDoesNotThrow(() -> controller.hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog("default_catalog").setDatabase("db1").setTable("t1").build(),
+                UserIdentity.ROOT, Set.of(), PrivilegeType.SELECT));
+
+        // non-root user must still go through Ranger and be denied
+        UserIdentity normalUser = new UserIdentity("alice", "%");
+        Assertions.assertThrows(AccessDeniedException.class, () -> controller.hasPermission(
+                RangerStarRocksResource.builder().setSystem().build(),
+                normalUser, Set.of(), PrivilegeType.OPERATE));
     }
 
     @Test

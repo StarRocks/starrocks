@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "fmt/format.h"
 #include "http/action/profile_utils.h"
@@ -188,8 +188,10 @@ Status ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_fi
         // First, decompress the gzipped pprof file to a temporary location
         std::string gunzip_cmd = "gunzip -c '" + pprof_file_path + "' > '" + temp_pprof + "'";
         int gunzip_result = system(gunzip_cmd.c_str());
-        RETURN_IF(gunzip_result != 0, Status::InternalError("Failed to decompress pprof file, gunzip returned: " +
-                                                            std::to_string(gunzip_result)));
+        RETURN_IF(gunzip_result != 0,
+                  Status::InternalError(fmt::format(
+                          "Failed to decompress pprof file, gunzip returned: {}, errno: {}, error: {}, command: {}",
+                          gunzip_result, errno, strerror(errno), gunzip_cmd)));
 
         std::string pprof_path = config::flamegraph_tool_dir + "/pprof";
         std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";

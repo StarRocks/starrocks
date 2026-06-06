@@ -20,6 +20,7 @@ import com.google.gson.stream.JsonReader;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -58,7 +59,6 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1117,15 +1117,14 @@ public class AuthorizationMgrTest {
         oldValue = Config.privilege_max_total_roles_per_user;
         Config.privilege_max_total_roles_per_user = 3;
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_role_inheritance", "%");
-        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role0 to user_test_role_inheritance", ctx), ctx);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
         // exception:
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1134,14 +1133,14 @@ public class AuthorizationMgrTest {
             Assertions.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles > 3"));
         }
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
         // normal grant
         Config.privilege_max_total_roles_per_user = oldValue;
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role4 to user_test_role_inheritance", ctx), ctx);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(
                         roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
 
 
         // grant role with circle: bad case
@@ -1220,7 +1219,6 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("create user user_test_drop_role_inheritance"), ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_drop_role_inheritance", "%");
-        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
 
         // role0 -> role1[user] -> role2
         // role3[user]
@@ -1233,6 +1231,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_drop_role_3 to user_test_drop_role_inheritance", ctx), ctx);
 
+        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         assertTableSelectOnTest(user, true, true, false, true);
@@ -1240,6 +1239,7 @@ public class AuthorizationMgrTest {
         // role0 -> role1[user] -> role2
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_3;", ctx), ctx);
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         Assertions.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
@@ -1249,6 +1249,7 @@ public class AuthorizationMgrTest {
         // role0 -> role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_2;", ctx), ctx);
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         Assertions.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
@@ -1258,6 +1259,7 @@ public class AuthorizationMgrTest {
         // role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_0;", ctx), ctx);
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         Assertions.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
@@ -1274,6 +1276,7 @@ public class AuthorizationMgrTest {
         Assertions.assertEquals(role1NumSubs - 1,
                 manager.roleIdToPrivilegeCollection.get(roleIds[1]).getSubRoleIds().size());
 
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         assertTableSelectOnTest(user, false, true, false, false);
@@ -1375,6 +1378,71 @@ public class AuthorizationMgrTest {
                 "grant test_set_role_3 to role test_set_role_0;", ctx), ctx);
         assertTableSelectOnTestWithoutSetRole(user, true, false, false, true);
         GlobalVariable.setActivateAllRolesOnLogin(true);
+    }
+
+    // The `public` role is implicitly held by every user, so a privilege change on it
+    // must invalidate every cached merged-privilege collection. A user whose cache entry
+    // was populated *before* the change would otherwise keep authorizing against a stale
+    // snapshot. These two tests pin that behavior for GRANT and REVOKE respectively.
+    @Test
+    public void testGrantToPublicRoleInvalidatesMergedPrivilegeCache() throws Exception {
+        boolean oldCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
+        try {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create user user_grant_public", ctx), ctx);
+            UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_grant_public", "%");
+
+            // Populate the merged-privilege cache for the user before the grant: the user
+            // has no privilege on db.tbl0 yet, so the check is denied and that snapshot is cached.
+            setCurrentUserAndRoles(ctx, user);
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+
+            // Grant the privilege to the implicit `public` role.
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT select on db.tbl0 TO ROLE public", ctx), ctx);
+
+            // The user must now see the privilege; a stale cache entry would still deny it.
+            setCurrentUserAndRoles(ctx, user);
+            Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+        } finally {
+            Config.authorization_enable_priv_collection_cache = oldCacheEnabled;
+        }
+    }
+
+    @Test
+    public void testRevokeFromPublicRoleInvalidatesMergedPrivilegeCache() throws Exception {
+        boolean oldCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
+        try {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create user user_revoke_public", ctx), ctx);
+            UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_revoke_public", "%");
+
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT select on db.tbl0 TO ROLE public", ctx), ctx);
+
+            // Populate the merged-privilege cache for the user while public still grants the
+            // privilege, so the cached snapshot includes it.
+            setCurrentUserAndRoles(ctx, user);
+            Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+
+            // Revoke the privilege from the implicit `public` role.
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "REVOKE select on db.tbl0 FROM ROLE public", ctx), ctx);
+
+            // The user must no longer see the privilege; a stale cache entry would still allow it.
+            setCurrentUserAndRoles(ctx, user);
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+        } finally {
+            Config.authorization_enable_priv_collection_cache = oldCacheEnabled;
+        }
     }
 
     @Test

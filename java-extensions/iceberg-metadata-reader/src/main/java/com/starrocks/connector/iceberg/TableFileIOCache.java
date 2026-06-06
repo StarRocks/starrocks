@@ -18,10 +18,13 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.FileIO;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
 public class TableFileIOCache {
+    public static final org.slf4j.Logger LOG = LoggerFactory.getLogger(AbstractIcebergMetadataScanner.class);
+
     private final Cache<String, FileIO> cache;
 
     public TableFileIOCache(long expireSeconds, long capacity) {
@@ -35,12 +38,15 @@ public class TableFileIOCache {
                 .build();
     }
 
-    public FileIO get(Table table) {
+    public synchronized FileIO get(Table table) {
         String cacheKey = generateCacheKey(table);
         FileIO fileIO = cache.getIfPresent(cacheKey);
         if (fileIO == null) {
+            LOG.debug(String.format("TableFileIOCache miss for table: %s", table.name()));
             fileIO = table.io();
             cache.put(cacheKey, fileIO);
+        } else {
+            LOG.debug(String.format("TableFileIOCache hit for table: %s", table.name()));
         }
         return fileIO;
     }

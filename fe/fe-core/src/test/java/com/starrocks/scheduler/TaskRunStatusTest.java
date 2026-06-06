@@ -15,12 +15,40 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.WarehouseManager;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class TaskRunStatusTest {
+
+    @Test
+    public void testGetWarehouseNameReturnsDefaultWhenPropertiesNull() {
+        TaskRunStatus status = new TaskRunStatus();
+        // properties is null by default
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, status.getWarehouseName());
+    }
+
+    @Test
+    public void testGetWarehouseNameReturnsDefaultWhenWarehouseKeyAbsent() {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProperties(new HashMap<>());
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, status.getWarehouseName());
+    }
+
+    @Test
+    public void testGetWarehouseNameReturnsValueFromProperties() {
+        TaskRunStatus status = new TaskRunStatus();
+        Map<String, String> props = new HashMap<>();
+        props.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "my_warehouse");
+        status.setProperties(props);
+        Assertions.assertEquals("my_warehouse", status.getWarehouseName());
+    }
 
     @Test
     public void getLastRefreshStateReturnsStateWhenNotMVTask() {

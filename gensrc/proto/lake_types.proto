@@ -33,6 +33,15 @@ message DelvecPagePB {
     // position in file
     optional uint64 offset = 2;
     optional uint64 size = 3;
+    optional uint32 crc32c = 4;
+    // For upgrade compatibility.
+    optional int64 crc32c_gen_version = 5;
+}
+
+message PersistentIndexSstableRangePB {
+    // key range is [start_key, end_key].
+    optional bytes start_key = 1;
+    optional bytes end_key = 2;
 }
 
 message PersistentIndexSstablePB {
@@ -44,14 +53,16 @@ message PersistentIndexSstablePB {
     optional bytes encryption_meta = 5;
     // Whether this file shared by multiple tablets
     optional bool shared = 6 [default=false];
-    // Filter out rows which do not satisfy the predicate
-    // when reading this specific sstable
-    optional PersistentIndexSstablePredicatePB predicate = 7;
     // For sstable generated during data write & compaction process.
     optional uint32 shared_rssid = 8;
     optional int64 shared_version = 9;
     // For sstable generated during compaction process.
     optional DelvecPagePB delvec = 10;
+    optional PersistentIndexSstableRangePB range = 11;
+    // This file's fileset id. All files under same fileset should be non-overlapped.
+    optional PUniqueId fileset_id = 12;
+    // Offset applied to rssid when reusing sstables across tablets (e.g., tablet merge).
+    optional int32 rssid_offset = 13 [default = 0];
 }
 
 message PersistentIndexSstableMetaPB {
@@ -89,6 +100,10 @@ message DeltaColumnGroupVerPB {
     repeated bytes encryption_metas = 4;
     // Whether files are shared by multiple tablets
     repeated bool shared_files = 5;
+    // Per-file size of each `.cols` file, strictly 1:1 with column_files.
+    // 0 means unknown (data written before this field existed); readers then
+    // fall back to stat/HeadObject to discover the file size.
+    repeated int64 column_file_sizes = 6 [packed = true];
 }
 
 message DeltaColumnGroupMetadataPB {
@@ -96,12 +111,54 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+// An Index Delta Group (IDG) entry describes a standalone .idx file
+// produced by an ADD INDEX schema change. The file stores index blobs
+// for one or more (column, index_type) pairs for a single segment,
+// without rewriting the segment data. Mirrors DeltaColumnGroupEntry for
+// generated columns but carries index payloads instead of new columns.
+message IndexDeltaGroupEntryPB {
+    message IndexKey {
+        optional int32 col_unique_id = 1;
+        optional IndexType index_type = 2;
+    }
+    // The (column, index_type) pairs covered by this entry, i.e. what
+    // this .idx file was built for at creation time.
+    repeated IndexKey keys = 1;
+    // .idx file name, relative to segment_location (or GIN dir name).
+    optional string index_file = 2;
+    // alter_version at which this entry was created. Used for:
+    //   - visibility filter: only visible to query_version >= version
+    //   - compaction conflict detection: entry.version > compact_version
+    //     means a racing add-index happened after compaction's base.
+    optional int64 version = 3;
+    optional bytes encryption_meta = 4;
+    // Whether .idx file is shared across tablets (cross-tablet bundle).
+    optional bool shared_file = 5 [default=false];
+    optional int64 file_size = 6;
+    // Tombstone set written by DROP INDEX. A key appearing here is
+    // logically removed for read: readers skip it. Physical cleanup
+    // happens when compaction rebuilds the segment (keys not in
+    // dropped_keys are inlined into the new segment footer, remaining
+    // .idx file becomes orphan).
+    repeated IndexKey dropped_keys = 7;
+}
+
+// Multiple generations of IDG entries on a single segment, newest first.
+message IndexDeltaGroupVerPB {
+    repeated IndexDeltaGroupEntryPB entries = 1;
+}
+
+// Tablet-level IDG metadata: segment_id (global rssid) -> IDG entries.
+message IndexDeltaGroupMetadataPB {
+    map<uint32, IndexDeltaGroupVerPB> idgs = 1;
+}
+
 message DelfileWithRowsetId {
     optional string name = 1;
     // origin rowset that generate this del file.
     optional uint32 origin_rowset_id = 2;
     // Because of historical reason, DELETE don't have its own segment id, we only use
-    // `rowset_id + segment_id` for UPSERT.
+    // `rowset_id + segment_idx` for UPSERT.
     // So if there is a UPSERT and DELETE mix transaction, we use
     // `op_offset` to identify the order of deletes, and rssid of DELETE will be
     // just same as previous UPSERT. And if the Rowset don't have UPSERT, DELETE's rssid
@@ -119,16 +176,63 @@ message DelfileWithRowsetId {
     optional bool shared = 5 [default=false];
 }
 
+message SegmentMetadataPB {
+    optional TuplePB sort_key_min = 1;
+    optional TuplePB sort_key_max = 2;
+    optional int64 num_rows = 3;
+    // Segment index inside the rowset. The global rssid is `rowset_id + segment_idx`.
+    // Initially assigned as a contiguous positional index at write time, but may become
+    // non-contiguous after operations such as partial compaction or batch merge.
+    // Backward compatibility: if absent, consumers should fallback to positional index.
+    optional uint32 segment_idx = 4;
+    // IDs of vector indexes that need .vi files for this segment.
+    // Only populated when the segment meets the build threshold.
+    repeated int64 vector_index_ids = 5;
+    // Equal-row-interval samples of the sort key, NON-DECREASING.
+    // sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
+    // where interval == sort_key_sample_row_interval. Always paired with
+    // a positive sort_key_sample_row_interval. May be empty when num_rows
+    // is not greater than interval (small segments produce no samples
+    // because the first sample row is at index `interval`, which only
+    // exists for num_rows > interval). Consumed by tablet split and
+    // range-split parallel compaction to accurately estimate row
+    // distribution for overlapping segments.
+    repeated TuplePB sort_key_samples = 6;
+    // Row interval used to produce sort_key_samples. Set if and only if
+    // sort_key_samples_size() > 0; in that case the value is > 0 and
+    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
+    // Persisted per-segment so a future change to the producer's interval
+    // constant cannot break cross-version readers.
+    optional int64 sort_key_sample_row_interval = 7;
+    // File attributes of the segment. These are the canonical home for the
+    // per-segment file info that historically lived in the parallel arrays on
+    // RowsetMetadataPB (deprecated_segments / deprecated_segment_size /
+    // deprecated_segment_encryption_metas / deprecated_shared_segments /
+    // deprecated_bundle_file_offsets). Producers populate these; the legacy
+    // arrays are dual-written at save time only for version-rollback compat.
+    optional string filename = 8;
+    optional int64 size = 9;
+    optional bytes encryption_meta = 10;
+    // Whether this segment is shared by multiple tablets.
+    optional bool shared = 11 [default=false];
+    // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
+    // to test presence: 0 is a legitimate value (first segment in a bundle).
+    optional int64 bundle_file_offset = 12;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
-    repeated string segments = 3;
+    // DEPRECATED: superseded by segment_metas[].filename. Dual-written at save
+    // time for version-rollback compat only. Do not read; use segment_metas.
+    repeated string deprecated_segments = 3 [json_name = "segments"];
     optional int64 num_rows = 4;
     optional int64 data_size = 5;
     optional DeletePredicatePB delete_predicate = 6;
     // approximate, BE upgrade from old version can't get exact number of dels
     optional int64 num_dels = 7;
-    repeated uint64 segment_size = 8 [packed = true];
+    // DEPRECATED: superseded by segment_metas[].size. Dual-written for rollback.
+    repeated uint64 deprecated_segment_size = 8 [packed = true, json_name = "segment_size"];
     // May not be empty if this rowset was generated by a compaction task in PK table.
     // We use max_compact_input_rowset_id to decide the rowset order when doing pk recover.
     optional uint32 max_compact_input_rowset_id = 9;
@@ -136,15 +240,24 @@ message RowsetMetadataPB {
     optional int64 version = 10;
     // del_files are generated when pk table handle delete operation.
     repeated DelfileWithRowsetId del_files = 11;
-    repeated bytes segment_encryption_metas = 12;
+    // DEPRECATED: superseded by segment_metas[].encryption_meta. Dual-written for rollback.
+    repeated bytes deprecated_segment_encryption_metas = 12 [json_name = "segment_encryption_metas"];
     // set in partial compaction, indicate which segment index next compaction should start from
     // only be set > 0 if `overlapped` is true
     optional uint32 next_compaction_offset = 13;
-    repeated int64 bundle_file_offsets = 14;
-    // Whether segments are shared by multiple tablets
-    repeated bool shared_segments = 15;
-    // Record Predicate use for filtering all segments for the current rowset
-    optional RecordPredicatePB record_predicate = 16;
+    // DEPRECATED: superseded by segment_metas[].bundle_file_offset. Dual-written for rollback.
+    repeated int64 deprecated_bundle_file_offsets = 14 [json_name = "bundle_file_offsets"];
+    // DEPRECATED: superseded by segment_metas[].shared. Dual-written for rollback.
+    repeated bool deprecated_shared_segments = 15 [json_name = "shared_segments"];
+    repeated SegmentMetadataPB segment_metas = 17;
+    // Indicates the effective sort key range of this rowset for range distribution table.
+    optional TabletRangePB range = 18;
+    // Global unique id of this rowset's DATA, alongside the per-tablet local `id`.
+    // Minted once at rowset creation and carried verbatim by CopyFrom across SPLIT,
+    // cross-publish, linked schema change, and replication, so that siblings produced
+    // from the same logical rowset compare equal. MERGE dedups rowsets by uid equality.
+    // Optional => backward compatible; legacy rowsets are backfilled at split time.
+    optional PUniqueId uid = 19;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -200,6 +313,14 @@ message TabletMetadataPB {
     optional CompactionStrategyPB compaction_strategy = 20;
     // flat json
     optional FlatJsonConfigPB flat_json_config = 21;
+    // Indicates sort key range for range distribution table only
+    optional TabletRangePB range = 22;
+    // Watermark for async vector index build: all rowsets with end_version <= this value
+    // have their .vi files fully built. Carry-forwarded during publish.
+    optional int64 vector_index_built_version = 23;
+    // Per-segment index delta groups produced by ADD INDEX schema change
+    // (lake-only). Allows adding indexes without rewriting segment data.
+    optional IndexDeltaGroupMetadataPB idg_meta = 24;
 }
 
 message MetadataUpdateInfoPB {
@@ -219,15 +340,33 @@ message BundleTabletMetadataPB {
 }
 
 message TxnLogPB {
+
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
         // some txn semantic information bind to this rowset
         optional RowsetTxnMetaPB txn_meta = 2;
-        repeated string dels = 3;
+        // DEPRECATED: superseded by dels_meta[].name. Dual-written for rollback.
+        repeated string deprecated_dels = 3 [json_name = "dels"];
+        // DEPRECATED: superseded by rewrite_segments_meta[].name. Dual-written for rollback.
         // for partial update, record dest rewrite segment names to avoid gc
-        repeated string rewrite_segments = 4;
-        repeated bytes del_encryption_metas = 5;
+        repeated string deprecated_rewrite_segments = 4 [json_name = "rewrite_segments"];
+        // DEPRECATED: superseded by dels_meta[].encryption_meta. Dual-written for rollback.
+        repeated bytes deprecated_del_encryption_metas = 5 [json_name = "del_encryption_metas"];
         repeated FileMetaPB ssts = 6;
+        repeated PersistentIndexSstableRangePB sst_ranges = 7;
+        // The specific table schema used to generate this rowset
+        optional TableSchemaKeyPB schema_key = 8;
+        // DEPRECATED: superseded by dels_meta[].shared. Dual-written for rollback.
+        // Parallel to `dels`: whether each del file is shared across tablets.
+        // Populated during tablet split cross-publish so that the del files keep
+        // their shared flag when written into RowsetMetadataPB.del_files. Empty
+        // (default) means all dels are private.
+        repeated bool deprecated_shared_dels = 9 [json_name = "shared_dels"];
+        // Canonical per-del-file metadata (name / size / shared / encryption_meta),
+        // superseding deprecated_dels / deprecated_del_encryption_metas / deprecated_shared_dels.
+        repeated FileMetaPB dels_meta = 19;
+        // Canonical per-rewrite-segment metadata, superseding deprecated_rewrite_segments.
+        repeated FileMetaPB rewrite_segments_meta = 20;
     }
 
     message OpCompaction {
@@ -246,6 +385,55 @@ message TxnLogPB {
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
         repeated FileMetaPB ssts = 8;
+        repeated PersistentIndexSstableRangePB sst_ranges = 9;
+        // Pk index compaction may generate multi sstables in latest impl.
+        repeated PersistentIndexSstablePB output_sstables = 10;
+        // Lake Compaction Rows Mapper file metadata (.lcrm on remote storage)
+        // WHY: Store mapper file metadata in txn log to enable light publish optimization
+        // during parallel pk index execution. The file maps input rowset rows to output
+        // rowset rows, allowing quick conflict resolution without re-reading all data.
+        // DESIGN: FileMetaPB includes both name and size to avoid expensive get_size()
+        // calls to S3/HDFS during publish phase (~10-50ms saved per file access).
+        optional FileMetaPB lcrm_file = 11;
+        // Subtask ID for parallel compaction. Only set when this OpCompaction is part of
+        // OpParallelCompaction. For normal compaction, this field is not set.
+        optional int32 subtask_id = 12;
+        // Segment range for large rowset split compaction.
+        // When a large rowset is split into multiple subtasks, each subtask processes
+        // a range of segments [segment_range_start, segment_range_end).
+        // Only set for LARGE_ROWSET_PART type subtasks.
+        optional int32 segment_range_start = 13;
+        optional int32 segment_range_end = 14;
+        // For RANGE_SPLIT type: the sort key range this subtask processed.
+        // All subtask ranges are non-overlapping, so merged output is non-overlapping.
+        optional TuplePB range_split_lower_bound = 15;
+        optional TuplePB range_split_upper_bound = 16;
+        optional bool range_split_lower_inclusive = 17;
+        optional bool range_split_upper_inclusive = 18;
+    }
+
+    // Parallel compaction operation: contains multiple subtask compaction results.
+    // Each subtask generates an independent OpCompaction that can be processed using
+    // the standard publish_primary_compaction logic.
+    message OpParallelCompaction {
+        // Each successful subtask's standard OpCompaction.
+        // Contains input_rowsets, output_rowset, and lcrm_file for each subtask.
+        // SST compaction fields (input_sstables/output_sstable) should be empty in subtask OpCompactions.
+        repeated OpCompaction subtask_compactions = 1;
+        // List of successful subtask IDs for tracking.
+        repeated int32 success_subtask_ids = 2;
+        // Unified SST compaction results (executed once after all subtasks complete).
+        repeated PersistentIndexSstablePB input_sstables = 3;
+        optional PersistentIndexSstablePB output_sstable = 4;
+        // Pk index compaction may generate multi sstables in latest impl.
+        repeated PersistentIndexSstablePB output_sstables = 5;
+        // Orphan lcrm files to be cleaned up during publish.
+        // When large rowset split subtasks are merged, their individual lcrm_files
+        // are no longer valid (segment IDs change after merge) and must be cleaned.
+        repeated FileMetaPB orphan_lcrm_files = 6;
+        // Whether this parallel compaction uses range-split strategy.
+        // When true, the merged output rowset is non-overlapping.
+        optional bool is_range_split = 7;
     }
 
     message OpSchemaChange {
@@ -273,6 +461,39 @@ message TxnLogPB {
         repeated OpWrite op_writes = 2;
         map<uint32, DelvecDataPB> delvecs = 3;
         optional TabletSchemaPB source_schema = 4;
+        // used for shared-data replication to store the tablet meta replicated
+        optional TabletMetadataPB tablet_metadata = 5;
+        // delta column group metadata for partial update and generated column replication
+        optional DeltaColumnGroupMetadataPB dcg_meta = 6;
+    }
+
+    // Produced by ADD INDEX fast-path schema change (lake-only). Carries
+    // the per-segment IDG entries built during the alter; publish commits
+    // them into TabletMetadataPB.idg_meta.
+    message OpAddIndex {
+        message SegmentEntry {
+            optional uint32 segment_id = 1;
+            optional IndexDeltaGroupEntryPB entry = 2;
+        }
+        repeated SegmentEntry segment_entries = 1;
+        optional int64 alter_version = 2;
+        // Indexes added by this alter; redundant w.r.t. schema.table_indices
+        // that FE has already published, kept for idempotent reconciliation.
+        repeated TabletIndexPB new_indexes = 3;
+    }
+
+    // Produced by DROP INDEX fast-path schema change (lake-only). Applied
+    // as a logical tombstone: on publish, matching (col_unique_id,
+    // index_type) entries in IDG get their keys moved to dropped_keys.
+    // Physical cleanup happens at compaction time.
+    message OpDropIndex {
+        message DroppedIndex {
+            optional int64 index_id = 1;
+            optional int32 col_unique_id = 2;
+            optional IndexType index_type = 3;
+        }
+        repeated DroppedIndex dropped = 1;
+        optional int64 drop_version = 2;
     }
 
     optional int64 tablet_id = 1;
@@ -284,6 +505,11 @@ message TxnLogPB {
     optional OpReplication op_replication = 7;
     optional int64 partition_id = 8;
     optional PUniqueId load_id = 9;
+    optional OpParallelCompaction op_parallel_compaction = 10;
+    // ADD INDEX fast-path op (lake-only).
+    optional OpAddIndex op_add_index = 11;
+    // DROP INDEX fast-path op (lake-only).
+    optional OpDropIndex op_drop_index = 12;
 }
 
 message CombinedTxnLogPB {
@@ -302,11 +528,43 @@ message TxnInfoPB {
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
     repeated PUniqueId load_ids = 8;
+    // Placeholder for external cluster snapshot feature.
+    optional bool restore_force_publish = 9; // Txn from snapshot restore, publish directly succeed
+    optional int64 restore_gtid = 10;
+    // Number of leading sort-key columns that participate in the table's range
+    // colocate group. Only used by tablet split (TXN_TABLET_RESHARD with split
+    // direction). 0 (default) = legacy / non-colocate-aware split. BE uses this
+    // to prefer canonical colocate-prefix boundaries over within-prefix data-
+    // distribution candidates; FE classifies the resulting tablet ranges as
+    // Level 1 (new ColocateRange) vs Level 2 (intra-colocate).
+    // Carried at the txn level (not per SplittingTabletInfoPB) because the value
+    // is table-level metadata: every SplittingTabletInfoPB in one txn would
+    // carry the same value.
+    optional int32 colocate_column_count = 11;
+    // Admin-issued no-op publish flag. When true, BE bypasses txn-log loading and
+    // apply for this transaction; the publish loop still writes a new tablet
+    // metadata file (so partition visible version advances) but it carries no
+    // data contribution from this txn. Used by ADMIN ABORT COMMITTED TRANSACTION
+    // to unblock a stuck-publish transaction. Only meaningful for load/compaction
+    // txn types in the current implementation; alter is not supported yet.
+    optional bool no_op_publish = 12;
 }
 
 message SplittingTabletInfoPB {
     optional int64 old_tablet_id = 1;
     repeated int64 new_tablet_ids = 2;
+    // FE-supplied new-tablet ranges (external-boundaries path).
+    // When non-empty:
+    //   - BE skips data-driven boundary computation in `split_tablet` and
+    //     dispatches to `compute_split_ranges_from_external_boundaries`
+    //     instead, which honors these ranges verbatim.
+    //   - Size MUST equal new_tablet_ids.size.
+    //   - Ranges MUST cover the old tablet's range exactly with no gaps/overlaps.
+    //   - Each range uses [lower, upper) (upper_bound_included=false).
+    // Upgrade ordering policy: BE is upgraded before FE, so any FE that
+    // populates this field is guaranteed to be talking to BEs that consume
+    // it; no separate capability flag is needed.
+    repeated TabletRangePB new_tablet_ranges = 3;
 }
 
 message MergingTabletInfoPB {
@@ -319,8 +577,20 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message DynamicTabletsInfoPB {
-    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
-    repeated MergingTabletInfoPB merging_tablet_infos = 2;
-    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
+message ReshardingTabletInfoPB {
+    optional SplittingTabletInfoPB splitting_tablet_info = 1;
+    optional MergingTabletInfoPB merging_tablet_info = 2;
+    optional IdenticalTabletInfoPB identical_tablet_info = 3;
+}
+
+// Placeholder for external cluster snapshot feature.
+message ExternalClusterSnapshotLogPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    repeated string delete_data_files = 6;
+    repeated string delete_meta_files = 7;
+    repeated string delete_schema_files = 8;
 }

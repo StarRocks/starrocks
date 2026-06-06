@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.3 起支持 Kudu catalog，无导入直接查询 Apache Kudu 数据及转换导入。"
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
@@ -182,7 +183,7 @@ DROP Catalog kudu_catalog;
    USE <catalog_name>.<db_name>;
    ```
 
-3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

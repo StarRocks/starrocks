@@ -17,8 +17,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/phmap/phmap.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class HyperLogLogFunctionsTest : public ::testing::Test {

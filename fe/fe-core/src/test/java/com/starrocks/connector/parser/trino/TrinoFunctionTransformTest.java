@@ -211,6 +211,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select date_diff('month', timestamp '2023-07-31')";
         analyzeFail(sql, "date_diff function must have 3 arguments");
 
+        sql = "select date('2026-02-20')";
+        assertPlanContains(sql, "cast");
+
+        sql = "select date('2026-02-20', 1)";
+        analyzeFail(sql, "date function must have 1 argument");
+
         sql = "select to_date('2022-02-02', 'yyyy-mm-dd')";
         assertPlanContains(sql, "to_tera_date('2022-02-02', 'yyyy-mm-dd')");
 
@@ -506,5 +512,11 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select merge(approx_set(\"tc\")) from tall";
         assertPlanContains(sql, "hll_raw_agg(hll_hash(CAST(3: tc AS VARCHAR)))");
+    }
+
+    @Test
+    public void testMapFunction() throws Exception {
+        String sql = "select map_agg('key', 'value')";
+        assertPlanContains(sql, "array_agg('key'), array_agg('value')", "map_from_arrays(2: array_agg, 3: array_agg)");
     }
 }

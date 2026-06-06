@@ -23,6 +23,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -32,11 +34,19 @@ import org.junit.jupiter.api.Test;
 public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         // Should disable Dynamic Partition in replay dump test
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;

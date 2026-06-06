@@ -14,8 +14,8 @@
 
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+#include "base/simd/simd.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -80,7 +80,7 @@ void PredicateCompoundNode<Type>::add_child(const PredicateCompoundNode<ChildTyp
 
 template <CompoundNodeType Type>
 void PredicateCompoundNode<Type>::add_child(PredicateColumnNode&& child) {
-    _col_children_map[child.col_pred()->column_id()].emplace_back(std::move(child));
+    _col_children_map[child.col_pred()->column_id()].emplace_back(child);
 }
 
 template <CompoundNodeType Type>
@@ -472,12 +472,56 @@ bool PredicateTree::empty() const {
     return is_empty(_root);
 }
 
+bool PredicateTree::has_or_predicate() const {
+    // if only has AND predicates, there is only one compound And predicate node
+    return _compound_node_contexts.size() > 1;
+}
+
 PredicateAndNode PredicateTree::release_root() {
     return std::move(_root);
 }
 
 const ColumnPredicateMap& PredicateTree::get_immediate_column_predicate_map() const {
     return _compound_node_contexts[0].cid_to_col_preds(_root);
+}
+
+template <CompoundNodeType Type>
+static void collect_column_predicates(const PredicateCompoundNode<Type>& node, ColumnPredicateMap& result) {
+    for (const auto& [cid, col_children] : node.col_children_map()) {
+        for (const auto& child : col_children) {
+            result[cid].emplace_back(child.col_pred());
+        }
+    }
+    for (const auto& child : node.compound_children()) {
+        collect_column_predicates(child, result);
+    }
+}
+
+const ColumnPredicateMap& PredicateTree::get_non_immediate_column_predicate_map() const {
+    if (_cached_non_immediate_col_preds.has_value()) {
+        return _cached_non_immediate_col_preds.value();
+    }
+    auto& non_immediate_col_preds = _cached_non_immediate_col_preds.emplace();
+    for (const auto& or_child : _root.compound_children()) {
+        collect_column_predicates(or_child, non_immediate_col_preds);
+    }
+    return non_immediate_col_preds;
+}
+
+const ColumnPredicateMap& PredicateTree::get_all_column_predicate_map() const {
+    if (_cached_all_col_preds.has_value()) {
+        return _cached_all_col_preds.value();
+    }
+    auto& all_col_preds = _cached_all_col_preds.emplace();
+    for (const auto& [cid, preds] : get_immediate_column_predicate_map()) {
+        auto& dest = all_col_preds[cid];
+        dest.insert(dest.end(), preds.begin(), preds.end());
+    }
+    for (const auto& [cid, preds] : get_non_immediate_column_predicate_map()) {
+        auto& dest = all_col_preds[cid];
+        dest.insert(dest.end(), preds.begin(), preds.end());
+    }
+    return all_col_preds;
 }
 
 // ------------------------------------------------------------------------------------

@@ -20,9 +20,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -40,6 +39,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -114,10 +115,10 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         agg.getAggregations().forEach((k, v) -> {
             if (v.isDistinct() && v.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(v.getFnName()) &&
                     (v.getChildren().size() == 1) && v.getChild(0).getType().isComplexType()) {
-                Preconditions.checkState(v.getType() == Type.BIGINT);
+                Preconditions.checkState(v.getType() == IntegerType.BIGINT);
                 IsNullPredicateOperator isNull = new IsNullPredicateOperator(true, v.getChild(0));
-                CastOperator cast = new CastOperator(Type.BIGINT, isNull);
-                Function fn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {Type.BIGINT},
+                CastOperator cast = new CastOperator(IntegerType.BIGINT, isNull);
+                Function fn = ExprUtils.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {IntegerType.BIGINT},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 CallOperator anyValue =
                         new CallOperator(FunctionSet.ANY_VALUE, v.getType(), Lists.newArrayList(cast), fn, false);

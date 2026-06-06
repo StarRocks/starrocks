@@ -12,12 +12,22 @@ shell: ossutil64 cp --force ./sql/test_files/orc_format/tinyint.orc oss://${oss_
 Succeed: Total num: 1, size: 247. OK num: 1(upload 1 files).
 -- !result
 
-select * from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format' = 'orc');
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "orc");
 -- result:
 -128
 -- !result
 
-create table t1 as select * from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format' = 'orc');
+create table t1 as select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "orc");
 
 desc t1;
 -- result:

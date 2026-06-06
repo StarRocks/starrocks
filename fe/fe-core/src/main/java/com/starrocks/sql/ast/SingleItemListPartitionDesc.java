@@ -17,11 +17,11 @@ package com.starrocks.sql.ast;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;

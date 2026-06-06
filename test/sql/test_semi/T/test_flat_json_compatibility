@@ -1,0 +1,25 @@
+-- name: test_normal_flat_json_compatibility @sequential
+
+-- Test: compatible with adaptive DOP
+SET enable_runtime_adaptive_dop = true;
+CREATE TABLE t1(c1 int, c2 json);
+
+update information_schema.be_configs set value = 'false' where name = 'enable_json_flat';
+
+INSERT INTO t1 
+SELECT generate_series, json_object('a', generate_series)
+FROM TABLE(generate_series(1, 100000));
+
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+
+INSERT INTO t1 
+SELECT generate_series, json_object('a', generate_series - 100000)
+FROM TABLE(generate_series(100001, 200000));
+INSERT INTO t1 
+SELECT generate_series, json_object('b', generate_series - 200000)
+FROM TABLE(generate_series(200001, 300000));
+
+SELECT count(c2) FROM t1;
+SELECT c2 FROM t1 ORDER BY c1 LIMIT 10;
+
+SET enable_runtime_adaptive_dop = false;

@@ -17,9 +17,9 @@ package com.starrocks.sql.optimizer.transformer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -27,17 +27,30 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.math.BigDecimal;
@@ -47,6 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -96,23 +110,23 @@ public class WindowTransformer {
         List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
 
         // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
-        if (AnalyticExpr.isRowNumberFn(callExpr.getFn())) {
+        if (isRowNumberFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for row_numer()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
-        } else if (AnalyticExpr.isNtileFn(callExpr.getFn())) {
+        } else if (isNtileFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for NTILE()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
 
             try {
-                callExpr.uncheckedCastChild(Type.BIGINT, 0);
+                ExprCastFunction.uncheckedCastChild(callExpr, IntegerType.BIGINT, 0);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-        } else if (AnalyticExpr.isCumeFn(callExpr.getFn())) {
+        } else if (isCumeFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for "
                     + callExpr.getFn().getFunctionName() + "()");
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
-        } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
+        } else if (isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);
                 Type firstType = callExpr.getChild(0).getType();
@@ -123,19 +137,19 @@ public class WindowTransformer {
                 }
 
                 if (callExpr.getChildren().size() == 1) {
-                    callExpr.addChild(new IntLiteral("1", Type.BIGINT));
+                    callExpr.addChild(new IntLiteral("1", IntegerType.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));
                 } else if (callExpr.getChildren().size() == 2) {
                     callExpr.addChild(NullLiteral.create(firstType));
                 }
 
-                AnalyticExpr.checkDefaultValue(callExpr);
+                checkDefaultValue(callExpr);
                 // check the value whether out of range
-                callExpr.uncheckedCastChild(Type.BIGINT, 1);
+                ExprCastFunction.uncheckedCastChild(callExpr, IntegerType.BIGINT, 1);
 
-                AnalyticWindow.BoundaryType rightBoundaryType = AnalyticWindow.BoundaryType.FOLLOWING;
-                if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {
-                    rightBoundaryType = AnalyticWindow.BoundaryType.PRECEDING;
+                AnalyticWindowBoundary.BoundaryType rightBoundaryType = AnalyticWindowBoundary.BoundaryType.FOLLOWING;
+                if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LAG)) {
+                    rightBoundaryType = AnalyticWindowBoundary.BoundaryType.PRECEDING;
                 }
 
                 Expr rightBoundary;
@@ -144,15 +158,15 @@ public class WindowTransformer {
                 } else {
                     rightBoundary = new DecimalLiteral(BigDecimal.valueOf(1));
                 }
-                BigDecimal offsetValue = BigDecimal.valueOf(Expr.getConstFromExpr(rightBoundary));
+                BigDecimal offsetValue = BigDecimal.valueOf(ExprUtils.getConstFromExpr(rightBoundary));
 
                 windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
-                        new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
-                        new AnalyticWindow.Boundary(rightBoundaryType, rightBoundary, offsetValue));
+                        new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING, null),
+                        new AnalyticWindowBoundary(rightBoundaryType, rightBoundary, offsetValue));
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-        } else if (AnalyticExpr.isApproxTopKFn(callExpr.getFn())) {
+        } else if (isApproxTopKFn(callExpr.getFn())) {
             Preconditions.checkState(CollectionUtils.isEmpty(orderByElements),
                     "Unexpected order by clause for approx_top_k()");
             Preconditions.checkState(windowFrame == null, "Unexpected window set for approx_top_k()");
@@ -162,8 +176,8 @@ public class WindowTransformer {
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
         // and not starting with UNBOUNDED PRECEDING.
         if (windowFrame != null
-                && windowFrame.getRightBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING
-                && windowFrame.getLeftBoundary().getType() != AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING) {
+                && windowFrame.getRightBoundary().getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING
+                && windowFrame.getLeftBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
             orderByElements = OrderByElement.reverse(orderByElements);
             windowFrame = windowFrame.reverse();
 
@@ -171,26 +185,28 @@ public class WindowTransformer {
             // need to also change the function.
             String reversedFnName = null;
 
-            if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
+            if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
                 reversedFnName = AnalyticExpr.LASTVALUE;
-            } else if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
+            } else if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
                 reversedFnName = AnalyticExpr.FIRSTVALUE;
             }
 
             if (reversedFnName != null) {
                 callExpr.resetFnName("", reversedFnName);
-                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                Function reversedFn = ExprUtils.getBuiltinFunction(reversedFnName,
                         callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
                 callExpr.setFn(reversedFn);
             }
         }
 
         if (windowFrame != null
-                && windowFrame.getLeftBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING
-                && windowFrame.getRightBoundary().getType() != AnalyticWindow.BoundaryType.PRECEDING
-                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
+                && windowFrame.getLeftBoundary().getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && windowFrame.getRightBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.PRECEDING
+                && callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
                 !callExpr.getIgnoreNulls()) {
-            windowFrame.setRightBoundary(new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
+            windowFrame = new AnalyticWindow(windowFrame.getType(), windowFrame.getLeftBoundary(),
+                    new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null),
+                    windowFrame.getPos());
         }
 
         // Set the default window.
@@ -204,11 +220,8 @@ public class WindowTransformer {
             Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
-        // Change first_value/last_value RANGE windows to ROWS
-        if ((callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
-                || callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
-                && windowFrame != null
-                && windowFrame.getType() == AnalyticWindow.Type.RANGE) {
+        // Change first_value/last_value RANGE windows to ROWS only when peer-group semantics cannot affect the result.
+        if (canRewriteRangeFirstLastValueToRows(callExpr, windowFrame)) {
             windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS, windowFrame.getLeftBoundary(),
                     windowFrame.getRightBoundary());
         }
@@ -237,8 +250,93 @@ public class WindowTransformer {
 
         analyticExpr.getOrderByElements().clear();
         analyticExpr.getOrderByElements().addAll(orderings);
+        windowFrame = withAnalyzedRangeBoundaryExprs(windowFrame, orderByElements);
         return new WindowOperator(analyticExpr, analyticExpr.getPartitionExprs(),
                 orderByElements, windowFrame);
+    }
+
+    private static AnalyticWindow withAnalyzedRangeBoundaryExprs(AnalyticWindow windowFrame,
+                                                                 List<OrderByElement> orderByElements) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE) {
+            return windowFrame;
+        }
+        Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
+        OrderByElement orderByElement = orderByElements.get(0);
+        if (!hasOffsetBoundary(windowFrame)) {
+            return windowFrame;
+        }
+
+        Expr orderByExpr = orderByElement.getExpr();
+        AnalyticWindowBoundary leftBoundary = withAnalyzedRangeBoundaryExpr(
+                windowFrame.getLeftBoundary(), orderByExpr, orderByElement.getIsAsc());
+        AnalyticWindowBoundary rightBoundary = withAnalyzedRangeBoundaryExpr(
+                windowFrame.getRightBoundary(), orderByExpr, orderByElement.getIsAsc());
+        return new AnalyticWindow(windowFrame.getType(), leftBoundary, rightBoundary, windowFrame.getPos());
+    }
+
+    private static AnalyticWindowBoundary withAnalyzedRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                                                       boolean orderByIsAsc) {
+        if (boundary == null || !boundary.getBoundaryType().isOffset()) {
+            return boundary;
+        }
+        return boundary.withAnalyzedRangeBoundaryExpr(buildRangeBoundaryExpr(boundary, orderByExpr, orderByIsAsc));
+    }
+
+    private static Expr buildRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                               boolean orderByIsAsc) {
+        boolean addOffset =
+                (orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) ||
+                        (!orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING);
+        ArithmeticExpr.Operator op = addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT;
+        // AnalyticAnalyzer has already normalized RANGE order keys: DATE keys become DATETIME, and numeric
+        // keys become the common key type. This builder only creates the boundary arithmetic expression.
+        if (orderByExpr.getType().isDateType()) {
+            Preconditions.checkState(orderByExpr.getType().isDatetime(),
+                    "DATE RANGE order key should be cast to DATETIME before boundary expression construction");
+            IntervalLiteral interval = (IntervalLiteral) boundary.getExpr();
+            Expr orderKey = orderByExpr.clone();
+            Expr intervalValue = TypeManager.addCastExpr(interval.getValue().clone(), IntegerType.INT);
+            TimestampArithmeticExpr timestampExpr = new TimestampArithmeticExpr(
+                    op, orderKey, intervalValue, interval.getUnitIdentifier().getDescription(), false);
+            timestampExpr.setType(DateType.DATETIME);
+            return timestampExpr;
+        }
+
+        Type rangeKeyType = orderByExpr.getType();
+        Preconditions.checkState(rangeKeyType.isNumericType(), "RANGE boundary requires a numeric order key");
+        Expr orderKey = orderByExpr.clone();
+        Expr offset = TypeManager.addCastExpr(boundary.getExpr().clone(), rangeKeyType);
+        ArithmeticExpr arithmeticExpr = new ArithmeticExpr(op, orderKey, offset);
+        arithmeticExpr.setType(rangeKeyType);
+        return arithmeticExpr;
+    }
+
+    private static boolean hasOffsetBoundary(AnalyticWindow windowFrame) {
+        return windowFrame.getLeftBoundary().getBoundaryType().isOffset() ||
+                windowFrame.getRightBoundary().getBoundaryType().isOffset();
+    }
+
+    private static boolean canRewriteRangeFirstLastValueToRows(FunctionCallExpr callExpr, AnalyticWindow windowFrame) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE || hasOffsetBoundary(windowFrame)) {
+            return false;
+        }
+
+        boolean isFirstValue = callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE);
+        boolean isLastValue = callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE);
+        if (!isFirstValue && !isLastValue) {
+            return false;
+        }
+
+        AnalyticWindowBoundary.BoundaryType leftBoundaryType = windowFrame.getLeftBoundary().getBoundaryType();
+        AnalyticWindowBoundary.BoundaryType rightBoundaryType = windowFrame.getRightBoundary().getBoundaryType();
+        if (leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
+            return true;
+        }
+
+        return isFirstValue && !callExpr.getIgnoreNulls()
+                && leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW;
     }
 
     /**
@@ -299,6 +397,20 @@ public class WindowTransformer {
                 }
             }
 
+            // Translate skewColumn and skewValues if present
+            ScalarOperator skewColumnOp = null;
+            List<ScalarOperator> skewValueOps = List.of();
+            if (windowOperator.getSkewColumn() != null) {
+                skewColumnOp = SqlToScalarOperatorTranslator
+                        .translate(windowOperator.getSkewColumn(), subOpt.getExpressionMapping(), columnRefFactory);
+            }
+            if (windowOperator.getSkewValues() != null && !windowOperator.getSkewValues().isEmpty()) {
+                skewValueOps = windowOperator.getSkewValues().stream()
+                        .map(v -> SqlToScalarOperatorTranslator
+                                .translate(v, subOpt.getExpressionMapping(), columnRefFactory))
+                        .toList();
+            }
+
             logicalWindowOperators.add(new LogicalWindowOperator.Builder()
                     .setWindowCall(analyticCall)
                     .setPartitionExpressions(partitions)
@@ -307,6 +419,8 @@ public class WindowTransformer {
                     .setEnforceSortColumns(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
                     .setUseHashBasedPartition(windowOperator.useHashBasedPartition)
                     .setIsSkewed(windowOperator.isSkewed)
+                    .setSkewColumn(skewColumnOp)
+                    .setSkewValues(skewValueOps)
                     .build());
         }
 
@@ -464,6 +578,104 @@ public class WindowTransformer {
         return partitionPrefix.contains(subSet);
     }
 
+    public static boolean isAnalyticFn(Function fn) {
+        return fn instanceof AggregateFunction
+                && ((AggregateFunction) fn).isAnalyticFn();
+    }
+
+    public static boolean isOffsetFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.LEAD) || fn.functionName().equalsIgnoreCase(AnalyticExpr.LAG);
+    }
+
+    public static boolean isNtileFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    public static boolean isCumeFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST) || fn.functionName().equalsIgnoreCase(
+                AnalyticExpr.PERCENTRANK);
+    }
+
+    public static boolean isRowNumberFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER);
+    }
+
+    public static boolean isApproxTopKFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.APPROX_TOP_K);
+    }
+
+    /**
+     * check the value out of range in lag/lead() function
+     */
+    public static void checkDefaultValue(FunctionCallExpr call) throws AnalysisException {
+        Expr val = call.getChild(2);
+
+        if (!(val instanceof LiteralExpr)) {
+            return;
+        }
+
+        if (!call.getChild(0).getType().getPrimitiveType().isNumericType()) {
+            return;
+        }
+
+        double value = ExprUtils.getConstFromExpr(val);
+        PrimitiveType type = call.getChild(0).getType().getPrimitiveType();
+        boolean out = false;
+
+        if (type == PrimitiveType.TINYINT) {
+            if (value > Byte.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.SMALLINT) {
+            if (value > Short.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.INT) {
+            if (value > Integer.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.BIGINT) {
+            if (value > Long.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.FLOAT) {
+            if (value > Float.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.DOUBLE) {
+            if (value > Double.MAX_VALUE) {
+                out = true;
+            }
+        } else {
+            return;
+        }
+
+        if (out) {
+            throw new AnalysisException("Column type="
+                    + call.getChildren().get(0).getType() + ", value is out of range ");
+        }
+    }
+
     /**
      * SortGroup represent the window functions that can be calculated in one SortNode
      * to reduce the generation of SortNode
@@ -534,6 +746,7 @@ public class WindowTransformer {
     public static class WindowOperator {
         private final List<AnalyticExpr> windowFunctions = Lists.newArrayList();
         private final List<Expr> partitionExprs;
+        private final List<Expr> orderedPartitionExprs;
         private List<OrderByElement> orderByElements;
         private final AnalyticWindow window;
         private final boolean useHashBasedPartition;
@@ -542,10 +755,21 @@ public class WindowTransformer {
         // hashCode method.
         private boolean isSkewed;
 
+        // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
+        private Expr skewColumn;
+        private List<Expr> skewValues;
+
         public WindowOperator(AnalyticExpr analyticExpr, List<Expr> partitionExprs,
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
             this.windowFunctions.add(analyticExpr);
             this.partitionExprs = partitionExprs;
+            // AnalyticExpr with the iso-window can merged into one WindowOperator;
+            // partition exprs are unordered, the same partition exprs may have
+            // different permutations, so we sort them for normalization and it used for equals
+            // and hashCode methods.
+            this.orderedPartitionExprs = Optional.ofNullable(partitionExprs)
+                    .map(partitions -> partitions.stream().sorted(Comparator.comparing(ExprToSql::toSql)).toList())
+                    .orElse(List.of());
             this.orderByElements = orderByElements;
             this.window = window;
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
@@ -566,8 +790,12 @@ public class WindowTransformer {
             }
             if (!partitionExprs.isEmpty()) {
                 this.isSkewed = analyticExpr.isSkewed();
+                this.skewColumn = analyticExpr.getSkewColumn();
+                this.skewValues = analyticExpr.getSkewValues();
             } else {
                 this.isSkewed = false;
+                this.skewColumn = null;
+                this.skewValues = List.of();
             }
         }
 
@@ -605,6 +833,22 @@ public class WindowTransformer {
             isSkewed = true;
         }
 
+        public void setSkewColumn(Expr skewColumn) {
+            this.skewColumn = skewColumn;
+        }
+
+        public void setSkewValues(List<Expr> skewValues) {
+            this.skewValues = skewValues;
+        }
+
+        public Expr getSkewColumn() {
+            return skewColumn;
+        }
+
+        public List<Expr> getSkewValues() {
+            return skewValues;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) {
@@ -614,7 +858,7 @@ public class WindowTransformer {
                 return false;
             }
             WindowOperator that = (WindowOperator) o;
-            return Objects.equals(partitionExprs, that.partitionExprs) &&
+            return Objects.equals(orderedPartitionExprs, that.orderedPartitionExprs) &&
                     Objects.equals(orderByElements, that.orderByElements) &&
                     Objects.equals(window, that.window) &&
                     Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
@@ -622,8 +866,7 @@ public class WindowTransformer {
 
         @Override
         public int hashCode() {
-            return Objects.hash(partitionExprs, orderByElements, window, useHashBasedPartition);
+            return Objects.hash(orderedPartitionExprs, orderByElements, window, useHashBasedPartition);
         }
     }
 }
-

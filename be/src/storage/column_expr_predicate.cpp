@@ -22,7 +22,7 @@ namespace starrocks {
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          const SlotDescriptor* slot_desc)
-        : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
+        : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc) {
     _is_expr_predicate = true;
 }
 
@@ -80,7 +80,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
-    ColumnPtr bits = const_cast<Column*>(column)->as_mutable_ptr();
+    ColumnPtr bits = column->get_ptr();
     chunk.append_column(bits, _slot_desc->id());
 
     // theoretically there will be a chain of expr contexts.
@@ -109,8 +109,8 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     // deal with nullable.
     if (bits->is_nullable()) {
         auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
-        uint8_t* null_value = null_column->null_column_data().data();
-        uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
+        const uint8_t* null_value = null_column->null_column_data().data();
+        const uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
         for (uint16_t i = from; i < to; i++) {
             selection[i] = (!null_value[i]) & (data_value[i]);
         }
@@ -118,7 +118,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     }
 
     // deal with non-nullable.
-    uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
+    const uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
     memcpy(selection + from, data_value, (to - from));
     return Status::OK();
 }
@@ -128,7 +128,7 @@ Status ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uin
     DCHECK(from == 0);
 
     uint16_t size = to - from;
-    _tmp_select.reserve(size);
+    _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
@@ -142,7 +142,7 @@ Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint
     DCHECK(from == 0);
 
     uint16_t size = to - from;
-    _tmp_select.reserve(size);
+    _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
@@ -150,6 +150,25 @@ Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint
     }
 
     return Status::OK();
+}
+
+bool ColumnExprPredicate::is_match_expr() const {
+    if (_expr_ctxs.empty()) {
+        return false;
+    }
+    Expr* root = _expr_ctxs[0]->root();
+    if (root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT) {
+        root = root->get_child(0);
+    }
+    return root->node_type() == TExprNodeType::MATCH_EXPR;
+}
+
+bool ColumnExprPredicate::is_negated_expr() const {
+    if (_expr_ctxs.empty()) {
+        return false;
+    }
+    Expr* root = _expr_ctxs[0]->root();
+    return root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT;
 }
 
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
@@ -283,8 +302,8 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
 
     return Status::OK();
 }
-Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                roaring::Roaring* row_bitmap) const {
+StatusOr<std::optional<roaring::Roaring>> ColumnExprPredicate::read_inverted_index(
+        const std::string_view column_name, InvertedIndexIterator* iterator) const {
 #ifndef __APPLE__
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
@@ -332,12 +351,11 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     Slice padded_value(literal_col->get(0).get_slice());
     // MATCH an empty string should always return empty set.
     if (padded_value.empty()) {
-        *row_bitmap -= *row_bitmap;
-        return Status::OK();
+        return std::nullopt;
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    bool has_wildcard = str_v.find('*') != std::string::npos || str_v.find('%') != std::string::npos;
+    bool has_wildcard = str_v.find('%') != std::string::npos;
 
     // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
     if (valid_match && expr->op() == TExprOpcode::MATCH_ANY) {
@@ -350,10 +368,30 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
 
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    return roaring;
+#else
+    return Status::NotSupported("Inverted index is not supported on Apple");
+#endif
+}
+
+Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                                roaring::Roaring* row_bitmap) const {
+#ifndef __APPLE__
+    bool with_not = _expr_ctxs[0]->root()->node_type() == TExprNodeType::COMPOUND_PRED &&
+                    _expr_ctxs[0]->root()->op() == TExprOpcode::COMPOUND_NOT;
+
+    ASSIGN_OR_RETURN(auto roaring_opt, read_inverted_index(column_name, iterator));
+
+    // nullopt means empty match string - clear bitmap
+    if (!roaring_opt.has_value()) {
+        *row_bitmap -= *row_bitmap;
+        return Status::OK();
+    }
+
     if (with_not) {
-        *row_bitmap -= roaring;
+        *row_bitmap -= roaring_opt.value();
     } else {
-        *row_bitmap &= roaring;
+        *row_bitmap &= roaring_opt.value();
     }
     return Status::OK();
 #else

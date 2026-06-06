@@ -14,11 +14,13 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 public class PipesSystemTable {
     public static final String NAME = "pipes";
@@ -26,15 +28,15 @@ public class PipesSystemTable {
     public static SystemTable create() {
         return new SystemTable(SystemId.PIPES_ID, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("DATABASE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("PIPE_ID", ScalarType.BIGINT)
-                        .column("PIPE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("PROPERTIES", ScalarType.createVarcharType(1024))
-                        .column("STATE", ScalarType.createVarcharType(8))
-                        .column("TABLE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("LOAD_STATUS", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("LAST_ERROR", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("CREATED_TIME", ScalarType.DATETIME)
+                        .column("DATABASE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("PIPE_ID", IntegerType.BIGINT)
+                        .column("PIPE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("PROPERTIES", TypeFactory.createVarcharType(1024))
+                        .column("STATE", TypeFactory.createVarcharType(8))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("LOAD_STATUS", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("LAST_ERROR", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("CREATED_TIME", DateType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_PIPES);
     }

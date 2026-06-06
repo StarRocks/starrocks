@@ -16,15 +16,21 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "exec/exec_factory.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -36,6 +42,7 @@ public:
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
     }
     void TearDown() override {}
 
@@ -68,8 +75,10 @@ std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state() {
 std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state(const TQueryOptions& query_options) {
     TUniqueId fragment_id;
     TQueryGlobals query_globals;
-    std::shared_ptr<RuntimeState> runtime_state =
-            std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+            fragment_id, query_options, query_globals, &_exec_env->query_execution_services(), _exec_env);
+    auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+    runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;
     runtime_state->init_mem_trackers(id);
     return runtime_state;
@@ -125,7 +134,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_cloud(si
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        scan_ranges.push_back(param);
+        scan_ranges.emplace_back(param);
     }
 
     return scan_ranges;
@@ -159,7 +168,14 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cl
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
-                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode, false));
+    ASSERT_FALSE(morsel_queue_factory->is_shared());
+
+    // dop is 2 and not so much morsels but enable shared scan
+    ASSIGN_OR_ABORT(morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode, true));
     ASSERT_TRUE(morsel_queue_factory->is_shared());
 
     // dop is 2 and so much morsels
@@ -170,6 +186,25 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cl
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(morsel_queue_factory->is_shared());
+}
+
+TEST_F(ConnectorScanNodeTest, lake_morsel_queue_builder_preserves_olap_capability) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_cloud();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    auto scan_ranges = create_scan_ranges_cloud(1);
+    ASSIGN_OR_ABORT(auto builder, scan_node->convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, scan_node->id(), 1,
+                                          /*enable_tablet_internal_parallel=*/false,
+                                          TTabletInternalParallelMode::type::AUTO, scan_ranges.size()));
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_NE(nullptr, dynamic_cast<pipeline::OlapMorselQueue*>(queue.get()));
 }
 
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_hive() {
@@ -202,7 +237,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_hive(siz
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        scan_ranges.push_back(param);
+        scan_ranges.emplace_back(param);
     }
 
     return scan_ranges;
@@ -249,6 +284,25 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
     ASSERT_TRUE(morsel_queue_factory->is_shared());
 }
 
+TEST_F(ConnectorScanNodeTest, hive_morsel_queue_builder_uses_generic_dynamic_queue) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_hive();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    auto scan_ranges = create_scan_ranges_hive(1);
+    ASSIGN_OR_ABORT(auto builder, scan_node->convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, scan_node->id(), 1,
+                                          /*enable_tablet_internal_parallel=*/false,
+                                          TTabletInternalParallelMode::type::AUTO, scan_ranges.size()));
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_EQ(nullptr, dynamic_cast<pipeline::OlapMorselQueue*>(queue.get()));
+}
+
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_stream_load() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
 
@@ -274,7 +328,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_stream_l
     params->src_tuple_id = 0;
     for (int i = 0; i < types.size(); i++) {
         params->expr_of_dest_slot[i] = TExpr();
-        params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
+        params->expr_of_dest_slot[i].nodes.emplace_back();
         params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
         params->expr_of_dest_slot[i].nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         params->expr_of_dest_slot[i].nodes[0].__set_is_nullable(true);
@@ -349,6 +403,255 @@ TEST_F(ConnectorScanNodeTest, test_stream_load_thread_pool) {
     ASSERT_EQ(1, tuple.get(0).get_int32());
     ASSERT_EQ("test", tuple.get(1).get_slice());
     ASSERT_TRUE(scan_node->use_stream_load_thread_pool());
+}
+
+TEST_F(ConnectorScanNodeTest, missing_connector_returns_unknown_error) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = create_tplan_node_hive();
+    tnode->connector_scan_node.connector_name = "__missing_connector__";
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+
+    auto status = scan_node->init(*tnode, runtime_state.get());
+    ASSERT_TRUE(status.is_unknown()) << status;
+    ASSERT_NE(status.message().find("Unknown connector: __missing_connector__"), std::string::npos);
+}
+
+// When FE sets catalog_type explicitly, use it.
+TEST_F(ConnectorScanNodeTest, test_catalog_type_with_explicit_value) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = std::make_shared<TPlanNode>();
+    tnode->__set_node_id(1);
+    tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
+    std::vector<::starrocks::TTupleId> tuple_ids{0};
+    tnode->__set_row_tuples(tuple_ids);
+    tnode->__set_limit(-1);
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::HIVE;
+    connector_scan_node.__set_catalog_type("iceberg");
+    tnode->__set_connector_scan_node(connector_scan_node);
+
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_EQ("iceberg", scan_node->catalog_type());
+}
+
+// When FE does not set catalog_type (rolling upgrade), catalog_type should be empty
+// so that BE skips catalog metrics rather than reporting wrong values.
+TEST_F(ConnectorScanNodeTest, test_catalog_type_empty_without_fe_value) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = create_tplan_node_hive();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_TRUE(scan_node->catalog_type().empty());
+}
+
+// ExecFactory tests: verify make_connector_scan_node correctly copies catalog_type
+// and each scan node case routes to the right connector.
+
+// HDFS_SCAN_NODE with pre-set catalog_type: covers make_connector_scan_node copy path
+// (exec_factory.cpp lines 163, 167) and the HDFS case (line 275).
+TEST_F(ConnectorScanNodeTest, test_exec_factory_hdfs_preserves_catalog_type) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::HIVE;
+    csn.__set_catalog_type("hive");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("hive", scan->catalog_type());
+}
+
+// LAKE_SCAN_NODE without catalog_type: BE should default to "default"
+// (exec_factory.cpp lines 311-314).
+TEST_F(ConnectorScanNodeTest, test_exec_factory_lake_defaults_to_default_catalog_type) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    // No connector_scan_node set — BE must default catalog_type to "default".
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("default", scan->catalog_type());
+}
+
+// LAKE_SCAN_NODE with pre-set catalog_type from FE: BE must not overwrite it.
+// (exec_factory.cpp line 311, 312 branch not taken since catalog_type already set).
+TEST_F(ConnectorScanNodeTest, test_exec_factory_lake_preserves_catalog_type_when_fe_sets_it) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::LAKE;
+    csn.__set_catalog_type("default");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("default", scan->catalog_type());
+}
+
+// JDBC_SCAN_NODE: covers exec_factory.cpp line 305.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_jdbc_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::JDBC_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::JDBC;
+    csn.__set_catalog_type("jdbc");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("jdbc", scan->catalog_type());
+}
+
+// ES_HTTP_SCAN_NODE: covers exec_factory.cpp line 293.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_es_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::ES_HTTP_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::ES;
+    csn.__set_catalog_type("elasticsearch");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("elasticsearch", scan->catalog_type());
+}
+
+// MYSQL_SCAN_NODE: covers exec_factory.cpp line 281.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_mysql_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::MYSQL_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::MYSQL;
+    csn.__set_catalog_type("mysql");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("mysql", scan->catalog_type());
+}
+
+// BENCHMARK_SCAN_NODE: covers exec_factory.cpp line 287.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_benchmark_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::BENCHMARK_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::BENCHMARK;
+    csn.__set_catalog_type("default");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("default", scan->catalog_type());
 }
 
 } // namespace starrocks

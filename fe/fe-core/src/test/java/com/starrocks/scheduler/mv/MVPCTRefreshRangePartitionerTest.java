@@ -23,7 +23,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshRangePartitioner;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import org.junit.jupiter.api.Assertions;
@@ -50,21 +52,27 @@ public class MVPCTRefreshRangePartitionerTest {
         when(mv.isPartitionedTable()).thenReturn(true);
 
         OlapTable refTable1 = Mockito.mock(OlapTable.class);
-        Set<String> refTablePartition1 = Set.of("partition1", "partition2");
-        Map<Table, Set<String>> ref1 = new HashMap<>();
+        Mockito.when(refTable1.isNativeTableOrMaterializedView()).thenReturn(true);
+        PCellWithName pCellWithName1 = PCellWithName.of("partition1", new PCellNone());
+        PCellWithName pCellWithName2 = PCellWithName.of("partition2", new PCellNone());
+        PCellSortedSet refTablePartition1 = PCellSortedSet.of(Set.of(pCellWithName1, pCellWithName2));
+        Map<Table, PCellSortedSet> ref1 = new HashMap<>();
         ref1.put(refTable1, refTablePartition1);
 
         IcebergTable refTable2 = Mockito.mock(IcebergTable.class);
-        Set<String> refTablePartition2 = Set.of("partition1", "partition2");
-        Map<Table, Set<String>> ref2 = new HashMap<>();
+        PCellSortedSet refTablePartition2 = PCellSortedSet.of(Set.of(pCellWithName1, pCellWithName2));
+        Map<Table, PCellSortedSet> ref2 = new HashMap<>();
         ref2.put(refTable2, refTablePartition2);
 
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = Maps.newHashMap();
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = Maps.newHashMap();
         mvToBaseNameRefs.put("mv_p1", ref1);
         mvToBaseNameRefs.put("mv_p2", ref2);
 
-        Mockito.when(mvContext.getMvRefBaseTableIntersectedPartitions()).thenReturn(mvToBaseNameRefs);
-        Mockito.when(mvContext.getExternalRefBaseTableMVPartitionMap()).thenReturn(new HashMap<>());
+        Mockito.when(mvContext.getPartitionTopology()).thenReturn(new PCTPartitionTopology(
+                PCellSortedSet.of(),
+                Maps.newHashMap(),
+                Maps.<Table, PCellSetMapping>newHashMap(),
+                mvToBaseNameRefs));
         // TODO: make range cells
         List<PCellWithName> partitions = Arrays.asList(PCellWithName.of("mv_p1", new PCellNone()),
                 PCellWithName.of("mv_p2", new PCellNone()));

@@ -23,7 +23,6 @@ import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -124,28 +123,6 @@ public class TaskBuilder {
         }
     }
 
-    public static String getAnalyzeMVStmt(String tableName) {
-        final ConnectContext ctx = ConnectContext.get();
-        return getAnalyzeMVStmt(ctx, tableName);
-    }
-
-    public static String getAnalyzeMVStmt(ConnectContext ctx, String tableName) {
-        if (FeConstants.runningUnitTest || ctx == null) {
-            return "";
-        }
-        final String analyze = ctx.getSessionVariable().getAnalyzeForMV();
-        final String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
-        String stmt;
-        if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
-        } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName + async;
-        } else {
-            stmt = "";
-        }
-        return stmt;
-    }
-
     public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName,
                                                  long warehouseId) {
         OptimizeTask task = new OptimizeTask(name);
@@ -170,15 +147,11 @@ public class TaskBuilder {
         taskProperties.put(MV_ID, String.valueOf(materializedView.getId()));
         // Don't put mv table properties into task properties since mv refresh doesn't need them, and the properties
         // will cause task run's meta-data too large.
-        // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
-        // it only keeps session started properties
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getWarehouse(materializedView.getWarehouseId());
-        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        // NOTE: Don't persist warehouse property in task since it may be changed at runtime via
+        // "ALTER MATERIALIZED VIEW SET WAREHOUSE". The warehouse will be fetched from MV in refreshTaskProperties.
         task.setProperties(taskProperties);
 
         task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
@@ -197,7 +170,6 @@ public class TaskBuilder {
         previousTaskProperties.put(MV_ID, mvId);
         task.setProperties(previousTaskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (previousTask != null) {
             task.setCreateUser(previousTask.getCreateUser());
@@ -272,13 +244,13 @@ public class TaskBuilder {
         if (currentTask == null) {
             task = TaskBuilder.buildMvTask(materializedView, dbName);
             TaskBuilder.updateTaskInfo(task, materializedView);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
                     Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
             Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
-            taskManager.alterTask(currentTask, changedTask, false);
+            taskManager.alterTask(currentTask, changedTask);
             task = currentTask;
         }
 

@@ -23,7 +23,7 @@ namespace starrocks {
 
 class JsonParser {
 public:
-    JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
+    explicit JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
     virtual ~JsonParser() = default;
     // parse initiates the parser. The inner iterator would point to the first object to be returned.
     virtual Status parse(char* data, size_t len, size_t allocated) noexcept = 0;
@@ -45,11 +45,12 @@ protected:
 // input: {"key":1} {"key":2}
 class JsonDocumentStreamParser : public JsonParser {
 public:
-    JsonDocumentStreamParser(simdjson::ondemand::parser* parser);
+    explicit JsonDocumentStreamParser(simdjson::ondemand::parser* parser);
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
+    size_t truncated_bytes() const noexcept;
 
 private:
     Status _get_current_impl(simdjson::ondemand::object* row);
@@ -99,7 +100,7 @@ private:
 // input: [{"key": 1}, {"key": 2}].
 class JsonArrayParser : public JsonParser {
 public:
-    JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
+    explicit JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
@@ -128,7 +129,7 @@ private:
 // eg:
 // input: {"data": {"key":1}} {"data": {"key":2}}
 // json root: $.data
-class JsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
+class JsonDocumentStreamParserWithRoot final : public JsonDocumentStreamParser {
 public:
     JsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath>& root_paths)
             : JsonDocumentStreamParser(parser), _root_paths(root_paths) {}
@@ -153,7 +154,7 @@ private:
 // eg:
 // input: [{"data": {"key":1}}, {"data": {"key":2}}]
 // json root: $.data
-class JsonArrayParserWithRoot : public JsonArrayParser {
+class JsonArrayParserWithRoot final : public JsonArrayParser {
 public:
     JsonArrayParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonArrayParser(parser), _root_paths(std::move(root_paths)) {}
@@ -178,7 +179,7 @@ private:
 // eg:
 // input: {"data": [{"key":1}, {"key":2}]} {"data": [{"key":3}, {"key":4}]}
 // json root: $.data
-class ExpandedJsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
+class ExpandedJsonDocumentStreamParserWithRoot final : public JsonDocumentStreamParser {
 public:
     ExpandedJsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonDocumentStreamParser(parser), _root_paths(std::move(root_paths)) {}
@@ -213,7 +214,7 @@ private:
 // eg:
 // input: [{"data": [{"key":1}, {"key":2}]}, {"data": [{"key":3}, {"key":4}]}]
 // json root: $.data
-class ExpandedJsonArrayParserWithRoot : public JsonArrayParser {
+class ExpandedJsonArrayParserWithRoot final : public JsonArrayParser {
 public:
     ExpandedJsonArrayParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonArrayParser(parser), _root_paths(std::move(root_paths)) {}
@@ -241,6 +242,39 @@ private:
     // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
     // _curr_ready denotes whether the _curr has been parsed.
+    bool _curr_ready = false;
+};
+
+// DebeziumJsonDocumentStreamParser parses Debezium CDC JSON envelope format.
+// It extracts data from the payload.after (for insert/update) or payload.before (for delete),
+// and exposes the CDC operation type for __op column mapping.
+// eg:
+// input:
+//   {"payload":{"before":null,"after":{"id":1,"name":"foo"},"op":"c",...}}
+//   {"before":null,"after":{"id":1,"name":"foo"},"op":"c",...}
+// For op=c/u/r: returns the "after" object
+// For op=d: returns the "before" object
+class DebeziumJsonDocumentStreamParser final : public JsonDocumentStreamParser {
+public:
+    explicit DebeziumJsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonDocumentStreamParser(parser) {}
+    Status get_current(simdjson::ondemand::object* row) noexcept override;
+    Status advance() noexcept override;
+
+    // Returns the CDC operation for the current row: 0 = upsert, 1 = delete
+    uint8_t current_op() const { return _current_op; }
+
+private:
+    static constexpr std::string_view kFieldPayload = "payload";
+    static constexpr std::string_view kFieldOp = "op";
+    static constexpr std::string_view kFieldBefore = "before";
+    static constexpr std::string_view kFieldAfter = "after";
+    static constexpr std::string_view kOpCreate = "c";
+    static constexpr std::string_view kOpUpdate = "u";
+    static constexpr std::string_view kOpRead = "r";
+    static constexpr std::string_view kOpDelete = "d";
+
+    uint8_t _current_op = 0;
+    simdjson::ondemand::object _curr;
     bool _curr_ready = false;
 };
 

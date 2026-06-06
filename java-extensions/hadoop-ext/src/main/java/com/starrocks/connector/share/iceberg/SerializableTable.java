@@ -24,6 +24,7 @@ import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.IncrementalAppendScan;
 import org.apache.iceberg.IncrementalChangelogScan;
+import org.apache.iceberg.LocationProviders;
 import org.apache.iceberg.ManageSnapshots;
 import org.apache.iceberg.OverwriteFiles;
 import org.apache.iceberg.PartitionSpec;
@@ -64,7 +65,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public class SerializableTable implements Table, Serializable, HasTableOperations {
-
     private final String name;
     private final String location;
     private final UUID uuid;
@@ -76,8 +76,9 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
     private final String sortOrderAsJson;
     private final FileIO io;
     private final EncryptionManager encryption;
-    private final LocationProvider locationProvider;
     private final Map<String, SnapshotRef> refs;
+
+    private transient volatile LocationProvider lazyLocationProvider;
 
     private transient volatile Table lazyTable = null;
     private transient volatile Schema lazySchema = null;
@@ -98,7 +99,6 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
         this.sortOrderAsJson = SortOrderParser.toJson(table.sortOrder());
         this.io = fileIO(fileIO);
         this.encryption = table.encryption();
-        this.locationProvider = table.locationProvider();
         this.refs = SerializableMap.copyOf(table.refs());
     }
 
@@ -129,7 +129,7 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
                     }
 
                     TableOperations ops =
-                            new StaticTableOperations(metadataFileLocation, io, locationProvider);
+                            new StaticTableOperations(metadataFileLocation, io);
                     this.lazyTable = newTable(ops, name);
                 }
             }
@@ -239,7 +239,14 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
 
     @Override
     public LocationProvider locationProvider() {
-        return locationProvider;
+        if (lazyLocationProvider == null) {
+            synchronized (this) {
+                if (lazyLocationProvider == null) {
+                    this.lazyLocationProvider = LocationProviders.locationsFor(location, properties);
+                }
+            }
+        }
+        return lazyLocationProvider;
     }
 
     @Override

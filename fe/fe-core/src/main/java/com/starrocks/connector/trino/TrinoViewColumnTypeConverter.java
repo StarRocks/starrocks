@@ -14,14 +14,16 @@
 
 package com.starrocks.connector.trino;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.UnknownType;
+import com.starrocks.type.VarbinaryType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -82,20 +84,20 @@ public class TrinoViewColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case "VARCHAR":
                 int length = 0;
                 try {
                     length = getVarcharLength(trinoType);
                 } catch (StarRocksConnectorException e) {
-                    return ScalarType.createDefaultCatalogString();
+                    return TypeFactory.createDefaultCatalogString();
                 }
-                return ScalarType.createVarcharType(length);
+                return TypeFactory.createVarcharType(length);
             case "CHAR":
-                return ScalarType.createCharType(getCharLength(trinoType));
+                return TypeFactory.createCharType(getCharLength(trinoType));
             case "BINARY":
             case "VARBINARY":
-                return Type.VARBINARY;
+                return VarbinaryType.VARBINARY;
             case "BOOLEAN":
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
@@ -104,21 +106,21 @@ public class TrinoViewColumnTypeConverter {
                 if (type.isArrayType()) {
                     return type;
                 } else {
-                    return Type.UNKNOWN_TYPE;
+                    return UnknownType.UNKNOWN_TYPE;
                 }
             case "MAP":
                 Type mapType = fromTrinoTypeToMapType(trinoType);
                 if (mapType.isMapType()) {
                     return mapType;
                 } else {
-                    return Type.UNKNOWN_TYPE;
+                    return UnknownType.UNKNOWN_TYPE;
                 }
             case "ROW":
                 Type structType = fromTrinoTypeToStructType(trinoType);
                 if (structType.isStructType()) {
                     return structType;
                 } else {
-                    return Type.UNKNOWN_TYPE;
+                    return UnknownType.UNKNOWN_TYPE;
                 }
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
@@ -126,23 +128,23 @@ public class TrinoViewColumnTypeConverter {
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int[] parts = getPrecisionAndScale(trinoType);
-            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
+            return TypeFactory.createUnifiedDecimalType(parts[0], parts[1]);
         }
     }
 
     // Array string like "Array(Integer)"
     public static Type fromTrinoTypeToArrayType(String typeStr) {
         if (UNSUPPORTED_TYPES.stream().anyMatch(typeStr.toUpperCase()::contains)) {
-            return Type.UNKNOWN_TYPE;
+            return UnknownType.UNKNOWN_TYPE;
         }
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            if (fromTrinoTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
-                itemType = Type.UNKNOWN_TYPE;
+            if (fromTrinoTypeToArrayType(matcher.group(1)).equals(UnknownType.UNKNOWN_TYPE)) {
+                itemType = UnknownType.UNKNOWN_TYPE;
             } else {
                 itemType = new ArrayType(fromTrinoTypeToArrayType(matcher.group(1)));
             }

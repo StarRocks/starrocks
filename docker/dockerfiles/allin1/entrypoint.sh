@@ -29,10 +29,21 @@ update_feproxy_config()
     cat $SR_HOME/feproxy/feproxy.conf.template | sed -e "s|{{feproxyhome}}|$SR_HOME/feproxy|g" -e "s|{{fewebport}}|${fehttpport}|g" > $SR_HOME/feproxy/feproxy.conf
 }
 
+append_if_missing()
+{
+    local key=$1
+    local value=$2
+    local file=$3
+    grep -Eq "^[[:space:]]*${key}[[:space:]]*=" "$file" && return
+    # ensure the file ends with a newline before appending
+    [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ] && echo >> "$file"
+    echo "${key} = ${value}" >> "$file"
+}
+
 setup_priority_networks()
 {
-    echo "priority_networks = 127.0.0.1/32" >> $SR_HOME/fe/conf/fe.conf
-    echo "priority_networks = 127.0.0.1/32" >> $SR_HOME/be/conf/be.conf
+    append_if_missing "priority_networks" "127.0.0.1/32" "$SR_HOME/fe/conf/fe.conf"
+    append_if_missing "priority_networks" "127.0.0.1/32" "$SR_HOME/be/conf/be.conf"
 }
 
 loginfo()

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.api.client.util.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -23,11 +24,16 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class ExternalTableTest extends PlanTestBase {
 
@@ -43,6 +49,22 @@ public class ExternalTableTest extends PlanTestBase {
                 "\"resource\"=\"jdbc_test\",\n" +
                 "\"table\"=\"test_table\"\n" +
                 ");");
+        starRocksAssert.withResource("create external resource \"jdbc_pg\"\n" +
+                        "PROPERTIES (\n" +
+                        "\"type\"=\"jdbc\",\n" +
+                        "\"user\"=\"test_user\",\n" +
+                        "\"password\"=\"test_passwd\",\n" +
+                        "\"driver_url\"=\"test_driver_url\",\n" +
+                        "\"driver_class\"=\"org.postgresql.Driver\",\n" +
+                        "\"jdbc_uri\"=\"jdbc:postgresql://127.0.0.1:5432/testdb\"\n" +
+                        ");")
+                .withTable("create external table test.jdbc_pg_test\n" +
+                        "(a int, b varchar(20), c float)\n" +
+                        "ENGINE=jdbc\n" +
+                        "PROPERTIES (\n" +
+                        "\"resource\"=\"jdbc_pg\",\n" +
+                        "\"table\"=\"test_table\"\n" +
+                        ");");
         FeConstants.runningUnitTest = false;
     }
 
@@ -50,7 +72,7 @@ public class ExternalTableTest extends PlanTestBase {
     public void testKeyWordWhereCaluse() throws Exception {
         String sql = "select * from test.jdbc_key_words_test where `schema` = \"test\"";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "schema = 'test'");
+        assertContains(plan, "`schema` = 'test'");
     }
 
     @Test
@@ -185,8 +207,8 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
-                "     TABLE: test_table\n" +
-                "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10) AND (b < 'abc')\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10) AND (`b` < 'abc')\n" +
                 "     limit: 10"), plan);
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
@@ -196,8 +218,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  limit: 10\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
-                        "     TABLE: test_table\n" +
-                        "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10)"), plan);
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10)"), plan);
 
     }
 
@@ -211,8 +233,18 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  group by: b\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
-                        "     TABLE: test_table\n" +
-                        "     QUERY: SELECT a, b FROM test_table"));
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT `a`, `b` FROM `test_table`"));
+    }
+
+    @Test
+    public void testPostgreSQLJDBCTableFilter() throws Exception {
+        String sql = "select * from test.jdbc_pg_test where a > 10 and b < 'abc' limit 10";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
+                "     TABLE: \"test_table\"\n" +
+                "     QUERY: SELECT \"a\", \"b\", \"c\" FROM \"test_table\" WHERE (\"a\" > 10) AND (\"b\" < 'abc')\n" +
+                "     limit: 10"), plan);
     }
 
     @Test
@@ -240,8 +272,9 @@ public class ExternalTableTest extends PlanTestBase {
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "jointest");
         for (Partition partition : tbl.getPartitions()) {
             partition.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            partition.getDefaultPhysicalPartition().setDataVersion(2);
             for (MaterializedIndex mIndex : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -268,4 +301,21 @@ public class ExternalTableTest extends PlanTestBase {
         Assertions.assertTrue(explainString.contains("4:SCAN MYSQL"));
     }
 
+    @Test
+    public void testPushDownMoveAroundPredicatesOfJdbcTable() throws Exception {
+        String sql = "select t0.* from t0  inner join[broadcast] jdbc_key_words_test t2 on t0.v1 =  t2.a " +
+                "where t0.v1 in (1,2,3);";
+        ExecPlan execPlan = getExecPlan(sql);
+        List<JDBCScanNode> scanNodes = Lists.newArrayList();
+        execPlan.getTopFragment().getPlanRoot().collect(JDBCScanNode.class, scanNodes);
+        Assertions.assertEquals(1, scanNodes.size());
+        List<InPredicate> predicates = scanNodes.get(0).getConjuncts().stream()
+                .filter(expr -> expr instanceof InPredicate)
+                .map(expr -> (InPredicate) expr).collect(Collectors.toList());
+        Assertions.assertTrue(predicates.isEmpty());
+        String plan = getCostExplain(sql);
+        assertCContains(plan, "  1:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT `a` FROM `test_table` WHERE (`a` IN (1, 2, 3)) AND (`a` IS NOT NULL)");
+    }
 }

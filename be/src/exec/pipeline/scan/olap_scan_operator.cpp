@@ -16,9 +16,11 @@
 
 #include "column/chunk.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "fmt/format.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -62,7 +64,7 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t
 }
 
 OlapScanOperator::~OlapScanOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }
@@ -139,10 +141,9 @@ std::string OlapScanOperator::get_name() const {
     bool has_active = _ctx->has_active_input();
     std::string morsel_queue_name = _morsel_queue->name();
     bool morsel_queue_empty = _morsel_queue->empty();
-    return fmt::format(
-            "{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{} has_output:{}}}", _name,
-            _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(), morsel_queue_name,
-            morsel_queue_empty, has_output());
+    return fmt::format("{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{}}}", _name,
+                       _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(),
+                       morsel_queue_name, morsel_queue_empty);
 }
 
 } // namespace starrocks::pipeline

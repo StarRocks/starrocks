@@ -39,7 +39,13 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -48,8 +54,9 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
-#include "storage/empty_iterator.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -62,9 +69,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 using std::string;
 
@@ -277,42 +282,42 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
     }
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
     }
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -328,7 +333,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
         size_t count = 0;
         for (size_t seg_id = 0; seg_id < rowset->rowset_meta()->num_segments(); seg_id++) {
             SegmentReadOptions seg_options;
-            ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
+            ASSIGN_OR_ABORT(seg_options.fs, FileSystemFactory::CreateSharedFromString("posix://"));
             seg_options.stats = &_stats;
             std::string segment_file =
                     Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, seg_id);
@@ -336,11 +341,11 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
             ASSERT_NE(segment->num_rows(), 0);
             auto res = segment->new_iterator(schema, seg_options);
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
-            auto seg_iterator = res.value();
+            const auto& seg_iterator = res.value();
 
             ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
-            auto chunk = ChunkHelper::new_chunk(schema, 100);
+            auto chunk = ChunkFactory::new_chunk(schema, 100);
             while (true) {
                 auto st = seg_iterator->get_next(chunk.get());
                 if (st.is_end_of_file()) {
@@ -382,7 +387,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
         TabletReader reader(tablet, Version(0, 2), schema);
         auto iter = create_tablet_iterator(reader, schema);
         ASSERT_TRUE(iter != nullptr);
-        auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+        auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
         size_t count = 0;
         while (true) {
             auto st = iter->get_next(chunk.get());
@@ -445,42 +450,42 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
     }
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
     }
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -496,7 +501,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
         size_t count = 0;
         for (size_t seg_id = 0; seg_id < rowset->rowset_meta()->num_segments(); seg_id++) {
             SegmentReadOptions seg_options;
-            ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
+            ASSIGN_OR_ABORT(seg_options.fs, FileSystemFactory::CreateSharedFromString("posix://"));
             seg_options.stats = &_stats;
 
             std::string segment_file =
@@ -507,9 +512,9 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
             auto res = segment->new_iterator(schema, seg_options);
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
-            auto seg_iterator = res.value();
+            const auto& seg_iterator = res.value();
             ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-            auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
+            auto chunk = ChunkFactory::new_chunk(seg_iterator->schema(), 100);
             while (true) {
                 auto st = seg_iterator->get_next(chunk.get());
                 if (st.is_end_of_file()) {
@@ -551,7 +556,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
         TabletReader reader(tablet, Version(0, 2), schema);
         auto iter = create_tablet_iterator(reader, schema);
         ASSERT_TRUE(iter != nullptr);
-        auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+        auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
         size_t count = 0;
         while (true) {
             auto st = iter->get_next(chunk.get());
@@ -583,28 +588,28 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 }
 
 static ssize_t read_and_compare(const ChunkIteratorPtr& iter, int64_t nkeys) {
-    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
-    auto& cols = full_chunk->columns();
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), nkeys);
+    auto cols = full_chunk->columns();
     for (size_t i = 0; i < nkeys / 4; i++) {
-        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-        cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-        cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
-        cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+        cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
     }
     for (size_t i = nkeys / 4; i < nkeys / 2; i++) {
-        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-        cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-        cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
-        cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
+        cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
     }
     for (size_t i = nkeys / 2; i < nkeys; i++) {
-        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-        cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-        cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
-        cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
+        cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
     }
     size_t count = 0;
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
     while (true) {
         auto st = iter->get_next(chunk.get());
         if (st.is_end_of_file()) {
@@ -652,39 +657,39 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     auto schema = ChunkHelper::convert_schema(partial_schema);
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
     }
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(2)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
     }
 
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(3)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -719,13 +724,13 @@ TEST_F(RowsetTest, VerticalWriteTest) {
         // k1 k2
         std::vector<uint32_t> column_indexes{0, 1};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto& cols = chunk->columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
         }
@@ -736,12 +741,12 @@ TEST_F(RowsetTest, VerticalWriteTest) {
         // v1
         std::vector<uint32_t> column_indexes{2};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto& cols = chunk->columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));
         }
@@ -763,9 +768,9 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     auto res = rowset->new_iterator(schema, rs_opts);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
-    auto iterator = res.value();
+    const auto& iterator = res.value();
     int count = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = iterator->get_next(chunk.get());
@@ -801,14 +806,14 @@ TEST_F(RowsetTest, LoadFailedTest) {
         // k1 k2 v
         std::vector<uint32_t> column_indexes{0, 1, 2};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows / chunk_size + 1; ++i) {
             chunk->reset();
-            auto& cols = chunk->columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-                cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             seg_infos.emplace_back(std::make_unique<SegmentPB>());
             ASSERT_OK(rowset_writer->flush_chunk(*chunk, seg_infos.back().get()));
@@ -847,14 +852,14 @@ TEST_F(RowsetTest, SegmentWriteTest) {
         // k1 k2 v
         std::vector<uint32_t> column_indexes{0, 1, 2};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows / chunk_size + 1; ++i) {
             chunk->reset();
-            auto& cols = chunk->columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-                cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             seg_infos.emplace_back(std::make_unique<SegmentPB>());
             ASSERT_OK(rowset_writer->flush_chunk(*chunk, seg_infos.back().get()));
@@ -875,9 +880,9 @@ TEST_F(RowsetTest, SegmentWriteTest) {
     auto res = rowset->new_iterator(schema, rs_opts);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
-    auto iterator = res.value();
+    const auto& iterator = res.value();
     int count = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = iterator->get_next(chunk.get());
@@ -898,7 +903,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
     writer_context.rowset_path_prefix = config::storage_root_path + "/data/rowset_test_seg";
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &segment_rowset_writer).ok());
 
-    std::shared_ptr<FileSystem> fs = FileSystem::CreateSharedFromString(rowset->rowset_path()).value();
+    std::shared_ptr<FileSystem> fs = FileSystemFactory::CreateSharedFromString(rowset->rowset_path()).value();
 
     for (int i = 0; i < seg_infos.size(); ++i) {
         auto& seg_info = seg_infos[i];
@@ -930,9 +935,9 @@ TEST_F(RowsetTest, SegmentWriteTest) {
         auto res = rowset->new_iterator(schema, rs_opts);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
-        auto iterator = res.value();
+        const auto& iterator = res.value();
         int count = 0;
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         while (true) {
             chunk->reset();
             auto st = iterator->get_next(chunk.get());
@@ -969,14 +974,14 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     {
         std::vector<uint32_t> column_indexes{0, 1, 2};
         auto schema = ChunkHelper::convert_schema(partial_tablet_schema, column_indexes);
-        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows / chunk_size + 1; ++i) {
             chunk->reset();
-            auto& cols = chunk->columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-                cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             seg_infos.emplace_back(std::make_unique<SegmentPB>());
             ASSERT_OK(rowset_writer->flush_chunk(*chunk, seg_infos.back().get()));
@@ -988,7 +993,7 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     ASSERT_EQ(2, rowset->rowset_meta()->num_segments());
     rowset->load();
 
-    std::shared_ptr<FileSystem> fs = FileSystem::CreateSharedFromString(rowset->rowset_path()).value();
+    std::shared_ptr<FileSystem> fs = FileSystemFactory::CreateSharedFromString(rowset->rowset_path()).value();
     std::string file_name = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
 
     auto partial_segment = *Segment::open(fs, FileInfo{file_name}, 0, partial_tablet_schema);
@@ -997,11 +1002,11 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
     std::vector<uint32_t> read_column_ids{2, 3};
-    std::vector<MutableColumnPtr> write_columns(read_column_ids.size());
+    MutableColumns write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
-        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         write_columns[i] = column->clone_empty();
         for (auto j = 0; j < num_rows; ++j) {
             write_columns[i]->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
@@ -1036,14 +1041,14 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     Int64Column deletes;
     std::unique_ptr<SegmentPB> seg_info = std::make_unique<SegmentPB>();
     {
-        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-        auto& cols = chunk->columns();
+        auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+        auto cols = chunk->columns();
         for (auto i = 0; i < num_rows; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[4]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
             if (i % 2 == 1) {
                 deletes.append(i);
             }
@@ -1061,7 +1066,7 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     writer_context.rowset_path_prefix = config::storage_root_path + "/data/rowset_test_delete";
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &segment_rowset_writer).ok());
 
-    std::shared_ptr<FileSystem> fs = FileSystem::CreateSharedFromString(rowset->rowset_path()).value();
+    std::shared_ptr<FileSystem> fs = FileSystemFactory::CreateSharedFromString(rowset->rowset_path()).value();
 
     auto seg_path = rowset->segment_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
     auto seg_del_path = rowset->segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);

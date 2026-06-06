@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DATETIME YEARS_ADD(DATETIME expr1,INT expr2)"
 ---
 
 # years_add

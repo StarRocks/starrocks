@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 
 namespace starrocks {
@@ -59,8 +59,7 @@ private:
 
     NullColumnPtr _null_column;
 
-    // raw pointer
-    const RunTimeCppType<Type>* _data;
+    RunTimeImmContainerType<Type> _data;
 
     const NullColumn::ValueType* _null_data;
 

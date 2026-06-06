@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -23,6 +22,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -61,7 +64,7 @@ public class BinaryPredicateStatisticCalculator {
                     double rowCount = statistics.getOutputRowCount() * columnStatistic.getNullsFraction();
                     return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
                                     .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
-                            .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                            .orElseGet(() -> statistics.withOutputRowCount(rowCount));
                 } else {
                     return estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics);
                 }
@@ -130,15 +133,22 @@ public class BinaryPredicateStatisticCalculator {
             } else {
                 // The constant was not found in the column histogram.
                 Long mostCommonValuesCount = columnHist.getMCV().values().stream().reduce(Long::sum).orElse(0L);
-                double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - columnHist.getMCV().size(),
-                        columnHist.getBuckets().size());
-                double predicateFactor = (columnHist.getTotalRows() - mostCommonValuesCount) * f / columnHist.getTotalRows();
-                rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
+                double remainingDistinctValues =
+                        columnStatistic.getDistinctValuesCount() - columnHist.getMCV().size();
+                double remainingHistogramRows = columnHist.getTotalRows() - mostCommonValuesCount;
+                double denominator = Math.max(remainingDistinctValues, columnHist.getBuckets().size());
+                if (remainingHistogramRows <= 0 || denominator <= 0) {
+                    rows = 0;
+                } else {
+                    double f = 1 / denominator;
+                    double predicateFactor = remainingHistogramRows * f / columnHist.getTotalRows();
+                    rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
+                }
             }
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rows)
                             .addColumnStatistic(operator, estimatedColumnStatisticBuilder.build()).build())
-                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rows).build());
+                    .orElseGet(() -> statistics.withOutputRowCount(rows));
         }
     }
 
@@ -154,7 +164,7 @@ public class BinaryPredicateStatisticCalculator {
         Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
 
         String constantStringValue = constantOperator.toString();
-        if (constantOperator.getType() == Type.BOOLEAN) {
+        if (constantOperator.getType() == BooleanType.BOOLEAN) {
             constantStringValue = constantOperator.getBoolean() ? "1" : "0";
         }
         // If there is a constant key in MCV, we use the MCV count to estimate the row count.
@@ -213,15 +223,16 @@ public class BinaryPredicateStatisticCalculator {
                     ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                             addColumnStatistic(operator, newEstimateColumnStatistics).build()).
-                    orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                    orElseGet(() -> statistics.withOutputRowCount(rowCount));
         } else {
             ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
             double rowCount = statistics.getOutputRowCount() -
-                    estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics).getOutputRowCount();
+                    estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics)
+                            .getOutputRowCount();
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
                             .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
-                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                    .orElseGet(() -> statistics.withOutputRowCount(rowCount));
         }
     }
 
@@ -261,7 +272,7 @@ public class BinaryPredicateStatisticCalculator {
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                             addColumnStatistic(operator, finalNewEstimateColumnStatistics).build()).
-                    orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                    orElseGet(() -> statistics.withOutputRowCount(rowCount));
         }
     }
 
@@ -300,7 +311,7 @@ public class BinaryPredicateStatisticCalculator {
                     newEstimateColumnStatistics, constant, statistics, columnRefOperator, false);
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount)
                                     .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
-                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                    .orElseGet(() -> statistics.withOutputRowCount(rowCount));
         }
     }
 
@@ -360,7 +371,7 @@ public class BinaryPredicateStatisticCalculator {
             case GT:
                 // 0.5 is unknown filter coefficient
                 double rowCount = statistics.getOutputRowCount() * 0.5;
-                return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build();
+                return statistics.withOutputRowCount(rowCount);
             default:
                 throw new IllegalArgumentException("unknown binary type: " + predicate.getBinaryType());
         }
@@ -451,7 +462,7 @@ public class BinaryPredicateStatisticCalculator {
                 estimateBucketToBucket(leftHistogram, leftColumnDistinctCount, leftColumnType, rightHistogram,
                         rightColumnDistinctCount, rightColumnType);
 
-        if (estimatedMcv.isEmpty() && estimatedBuckets.isEmpty()) {
+        if (MapUtils.isEmpty(estimatedMcv) && CollectionUtils.isEmpty(estimatedBuckets)) {
             return Optional.empty();
         }
 
@@ -607,7 +618,7 @@ public class BinaryPredicateStatisticCalculator {
             rowCount = rowCount * (1.0 - selectivity)
                     * (1 - leftColumn.getNullsFraction()) * (1 - rightColumn.getNullsFraction());
         }
-        return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build();
+        return statistics.withOutputRowCount(rowCount);
     }
 
     public static Statistics estimatePredicateRange(Optional<ColumnRefOperator> columnRefOperator,
@@ -639,7 +650,7 @@ public class BinaryPredicateStatisticCalculator {
                 build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                         addColumnStatistic(operator, newEstimateColumnStatistics).build()).
-                orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                orElseGet(() -> statistics.withOutputRowCount(rowCount));
     }
 
     public static Optional<Histogram> updateHistWithLessThan(ColumnStatistic columnStatistic,

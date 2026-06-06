@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <chrono>
 #include <sstream>
 
@@ -35,7 +37,9 @@ protected:
 
         ss >> std::get_time(&tm, "%Y-%m-%d");
 
-        auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+        // Use timegm instead of mktime to avoid timezone issues
+        // timegm treats the tm struct as UTC time
+        auto tp = std::chrono::system_clock::from_time_t(timegm(&tm));
         auto days = std::chrono::duration_cast<std::chrono::days>(tp.time_since_epoch());
         return days.count();
     }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "materialized_views 提供所有物化视图的信息。"
 ---
 
 # materialized_views
@@ -13,7 +14,7 @@ displayed_sidebar: docs
 | MATERIALIZED_VIEW_ID                 | 物化视图 ID。                                    |
 | TABLE_SCHEMA                         | 物化视图所在的数据库名称。                       |
 | TABLE_NAME                           | 物化视图名称。                                   |
-| REFRESH_TYPE                         | 物化视图（刷新）类型，包括 `ROLLUP`（同步物化视图）、`ASYNC`（异步刷新物化视图）以及 `MANUAL`（手动刷新物化视图）。当此值为 `ROLLUP` 时，以下生效状态和刷新相关的字段为空。 |
+| REFRESH_TYPE                         | 物化视图（刷新）类型，有效值：`SYNC`（同步物化视图）和 `ASYNC`（异步物化视图，无论以何种方式触发刷新）。当此值为 `SYNC` 时，以下生效状态和刷新相关的字段为空。异步物化视图的刷新方式请参见 `REFRESH_TRIGGER` 和 `REFRESH_POLICY`。 |
 | IS_ACTIVE                            | 是否生效，失效的物化视图不会被刷新和查询改写。   |
 | INACTIVE_REASON                      | 失效的原因。                                     |
 | PARTITION_TYPE                       | 物化视图分区类型。                               |
@@ -37,3 +38,9 @@ displayed_sidebar: docs
 | CREATOR                              | 物化视图的创建者。                               |
 | LAST_REFRESH_PROCESS_TIME            | 最近一次刷新任务的处理时间。                     |
 | LAST_REFRESH_JOB_ID                  | 最近一次刷新任务的作业 ID。                      |
+| LAST_REFRESH_TIME                    | 物化视图已反映基表更新的最新时间。               |
+| WAREHOUSE                            | 异步物化视图执行刷新任务所使用的 warehouse 名称。在存算一体模式下，或对于同步（rollup）物化视图，该值为空。 |
+| REFRESH_MODE                         | 异步物化视图配置的刷新模式。有效值：`PCT`（分区变更跟踪，仅刷新发生变更的分区）、`INCREMENTAL`（增量视图维护）和 `AUTO`。对于同步物化视图为空。 |
+| REFRESH_TRIGGER                      | 刷新的触发方式。有效值：`NONE`（同步物化视图）、`MANUAL`（仅通过 REFRESH MATERIALIZED VIEW 触发）、`SCHEDULED`（周期性触发，通过 EVERY 间隔）和 `ON_BASE_TABLE_CHANGE`（基表导入或变更时自动触发）。 |
+| REFRESH_POLICY                       | 可读的刷新策略。有效值：`NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`，或形如 `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` 的调度（仅当定义了起始时间时才包含 `START` 子句）。 |
+| RESOURCE_GROUP                       | 物化视图刷新任务所使用的资源组（来自物化视图的 `resource_group` 属性）。未设置时默认为 `default_mv_wg`。 |

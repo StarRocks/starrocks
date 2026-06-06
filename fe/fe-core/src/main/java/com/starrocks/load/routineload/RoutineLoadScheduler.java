@@ -39,7 +39,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +48,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class RoutineLoadScheduler extends FrontendDaemon {
+public class RoutineLoadScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
 
@@ -56,17 +56,17 @@ public class RoutineLoadScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public RoutineLoadScheduler() {
-        super();
+        super("routine-load-scheduler", Config.routine_load_scheduler_interval_millisecond);
         routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
     public RoutineLoadScheduler(RoutineLoadMgr routineLoadManager) {
-        super("Routine load scheduler", Config.routine_load_scheduler_interval_millisecond);
+        super("routine-load-scheduler", Config.routine_load_scheduler_interval_millisecond);
         this.routineLoadManager = routineLoadManager;
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {
@@ -120,7 +120,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
                         .build(), userException);
                 try {
                     ErrorReason reason = new ErrorReason(userException.getInternalErrorCode(), userException.getMessage());
-                    routineLoadJob.updateState(errorJobState, reason, false);
+                    routineLoadJob.updateState(errorJobState, reason);
                 } catch (StarRocksException e) {
                     LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                             .add("current_state", routineLoadJob.getState())

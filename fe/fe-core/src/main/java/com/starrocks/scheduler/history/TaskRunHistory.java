@@ -39,7 +39,6 @@ import java.util.stream.Collectors;
 
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
-    private static final int MEMORY_TASK_RUN_SAMPLES = 10;
 
     // Thread-Safe history map:
     // QueryId -> TaskRunStatus
@@ -85,13 +84,6 @@ public class TaskRunHistory {
 
     public synchronized long getTaskRunCount() {
         return historyTaskRunMap.size();
-    }
-
-    public synchronized List<Object> getSamplesForMemoryTracker() {
-        return historyTaskRunMap.values()
-                .stream()
-                .limit(MEMORY_TASK_RUN_SAMPLES)
-                .collect(Collectors.toList());
     }
 
     public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
@@ -199,15 +191,11 @@ public class TaskRunHistory {
             Stopwatch watch = Stopwatch.createStarted();
             historyTable.addHistories(runs);
 
-            // 2. Remove from memory
-            for (var run : runs) {
-                removeTaskByQueryId(run.getQueryId());
-            }
-
-            // 3. Write EditLog
+            // 2. Write EditLog
             List<String> queryIdList = runs.stream().map(TaskRunStatus::getQueryId).collect(Collectors.toList());
             ArchiveTaskRunsLog log = new ArchiveTaskRunsLog(queryIdList);
-            GlobalStateMgr.getCurrentState().getEditLog().logArchiveTaskRuns(log);
+            GlobalStateMgr.getCurrentState().getEditLog().logArchiveTaskRuns(log,
+                    wal -> replay((ArchiveTaskRunsLog) wal));
             LOG.info("archive task-run history, {} records took {}ms",
                     runs.size(), watch.elapsed(TimeUnit.MILLISECONDS));
         } catch (Throwable e) {

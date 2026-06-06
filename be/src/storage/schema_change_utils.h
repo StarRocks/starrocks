@@ -16,8 +16,10 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
-#include "storage/column_mapping.h"
+#include "exprs/expr_factory.h"
+#include "runtime/descriptors.h"
 #include "storage/convert_helper.h"
+#include "storage/primitive/column_mapping.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
@@ -35,30 +37,9 @@ struct AlterMaterializedViewParam {
 };
 using MaterializedViewParamMap = std::unordered_map<std::string, AlterMaterializedViewParam>;
 
-struct SchemaChangeParams {
-    TabletSharedPtr base_tablet;
-    TabletSharedPtr new_tablet;
-    std::vector<std::unique_ptr<TabletReader>> rowset_readers;
-    Version version;
-    int64_t gtid = 0;
-    TabletSchemaCSPtr base_tablet_schema = nullptr;
-    std::vector<RowsetSharedPtr> rowsets_to_change;
-    bool sc_sorting = false;
-    bool sc_directly = false;
-    std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
-
-    TAlterJobType::type alter_job_type;
-
-    // materialzied view parameters
-    DescriptorTbl* desc_tbl = nullptr;
-    std::unique_ptr<TExpr> where_expr;
-    std::vector<std::string> base_table_column_names;
-    MaterializedViewParamMap materialized_params_map;
-};
-
 class ChunkChanger {
 public:
-    ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+    ChunkChanger(TabletSchemaCSPtr base_schema, const TabletSchemaCSPtr& new_schema,
                  std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type);
     ChunkChanger(const TabletSchemaCSPtr& new_schema);
     ~ChunkChanger();
@@ -67,7 +48,7 @@ public:
 
     Status prepare_where_expr(const TExpr& where_expr) {
         VLOG(2) << "parse contain where expr";
-        RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, where_expr, &_where_expr, _state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&_obj_pool, where_expr, &_where_expr, _state));
         RETURN_IF_ERROR(_where_expr->prepare(_state));
         RETURN_IF_ERROR(_where_expr->open(_state));
         return Status::OK();
@@ -135,6 +116,27 @@ private:
     std::unordered_map<int, int> _column_ref_mapping;
 
     DISALLOW_COPY(ChunkChanger);
+};
+
+struct SchemaChangeParams {
+    TabletSharedPtr base_tablet;
+    TabletSharedPtr new_tablet;
+    std::vector<std::unique_ptr<TabletReader>> rowset_readers;
+    Version version;
+    int64_t gtid = 0;
+    TabletSchemaCSPtr base_tablet_schema = nullptr;
+    std::vector<RowsetSharedPtr> rowsets_to_change;
+    bool sc_sorting = false;
+    bool sc_directly = false;
+    std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
+
+    TAlterJobType::type alter_job_type;
+
+    // materialized view parameters
+    DescriptorTbl* desc_tbl = nullptr;
+    std::unique_ptr<TExpr> where_expr;
+    std::vector<std::string> base_table_column_names;
+    MaterializedViewParamMap materialized_params_map;
 };
 
 class SchemaChangeUtils {

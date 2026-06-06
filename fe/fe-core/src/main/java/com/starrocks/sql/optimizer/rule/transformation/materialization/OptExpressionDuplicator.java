@@ -20,8 +20,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
+import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -29,7 +32,6 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -40,6 +42,7 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -90,7 +93,7 @@ public class OptExpressionDuplicator {
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
         this.mvRefBaseTableColumns = materializationContext.getMv().getRefBaseTablePartitionColumns();
-        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
+        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMVToRefreshPCells().isEmpty();
         this.optimizerContext = materializationContext.getOptimizerContext();
     }
 
@@ -189,6 +192,10 @@ public class OptExpressionDuplicator {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
             opBuilder.withOperator(scanOperator);
+            // Use scan operator's table instead of columnRefFactory's table.
+            // If a lightweight external table sneaks in (from mv plan cache), restore full table here
+            // to avoid leaking LightWeight* into physical planning (e.g. Iceberg native table access execpetion).
+            Table scanTable = refreshLightWeightExternalTable(scanOperator.getTable());
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
             Map<Integer, Integer> relationIdMapping = Maps.newHashMap();
@@ -197,8 +204,9 @@ public class OptExpressionDuplicator {
                 ColumnRefOperator newColumnRef = columnRefFactory.create(key, key.getType(), key.isNullable());
                 columnRefColumnMapBuilder.put(newColumnRef, entry.getValue());
                 columnMapping.put(entry.getKey(), newColumnRef);
-                columnRefFactory.updateColumnRefToColumns(newColumnRef, columnRefFactory.getColumn(key),
-                        columnRefFactory.getColumnRefToTable().get(key));
+                // Use scan operator's table instead of columnRefFactory's table
+                Column column = entry.getValue();
+                columnRefFactory.updateColumnRefToColumns(newColumnRef, column, scanTable);
                 Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
                         k -> columnRefFactory.getNextRelationId());
                 columnRefFactory.updateColumnToRelationIds(newColumnRef.getId(), newRelationId);
@@ -211,8 +219,9 @@ public class OptExpressionDuplicator {
                 ColumnRefOperator key = entry.getValue();
                 ColumnRefOperator mapped = columnMapping.computeIfAbsent(key,
                         k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
-                columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
-                        columnRefFactory.getColumnRefToTable().get(key));
+                // Use scan operator's table and column instead of columnRefFactory's
+                Column column = entry.getKey();
+                columnRefFactory.updateColumnRefToColumns(mapped, column, scanTable);
                 Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
                         k -> columnRefFactory.getNextRelationId());
                 columnRefFactory.updateColumnToRelationIds(mapped.getId(), newRelationId);
@@ -221,7 +230,7 @@ public class OptExpressionDuplicator {
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
-            // process HashDistributionSpec
+            // process HashDistributionSpec / RangeDistributionSpec
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
@@ -229,6 +238,10 @@ public class OptExpressionDuplicator {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                } else if (olapScan.getDistributionSpec() instanceof RangeDistributionSpec) {
+                    RangeDistributionSpec newRangeSpec =
+                            processRangeDistributionSpec((RangeDistributionSpec) olapScan.getDistributionSpec());
+                    olapScanBuilder.setDistributionSpec(newRangeSpec);
                 }
 
                 if (isResetSelectedPartitions) {
@@ -249,18 +262,14 @@ public class OptExpressionDuplicator {
             } else {
                 if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
                     // refresh iceberg table's metadata
-                    Table refBaseTable = scanOperator.getTable();
-                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                    String catalogName = cachedIcebergTable.getCatalogName();
-                    String dbName = cachedIcebergTable.getCatalogDBName();
-                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable =
-                            GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
-                                    .orElse(null);
+                    Table refBaseTable = scanTable;
+                    //the table is already load in refreshLightWeightExternalTable
+                    IcebergTable currentTable = (IcebergTable) refBaseTable;
+
                     if (currentTable == null) {
                         return null;
                     }
-                    scanBuilder.setTable(currentTable);
+
                     TvrVersionRange versionRange = TvrTableSnapshot.of(
                             Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
                                     .map(Snapshot::snapshotId));
@@ -290,6 +299,7 @@ public class OptExpressionDuplicator {
             }
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
+            scanBuilder.setTable(scanTable);
 
             // process external table scan operator's predicates
             LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
@@ -297,6 +307,25 @@ public class OptExpressionDuplicator {
                 processExternalTableScanOperator(newScanOperator);
             }
             return OptExpression.create(newScanOperator);
+        }
+
+        private Table refreshLightWeightExternalTable(Table table) {
+            if (!(table instanceof LightWeightIcebergTable || table instanceof LightWeightDeltaLakeTable)) {
+                return table;
+            }
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+            String catalogName = table.getCatalogName();
+            String dbName = table.getCatalogDBName();
+            TableName tableName = new TableName(catalogName, dbName, table.getName());
+            try {
+                // lookup the latest full table from global state manager
+                Table currentTable =
+                        GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(connectContext, tableName)
+                                .orElse(null);
+                return currentTable;
+            } catch (Exception e) {
+                return null;
+            }
         }
 
         private void processExternalTableScanOperator(LogicalScanOperator newScanOperator) {
@@ -377,7 +406,12 @@ public class OptExpressionDuplicator {
                 ScalarOperator newOnPredicate = rewriter.rewrite(onpredicate);
                 LogicalJoinOperator.Builder joinBuilder = (LogicalJoinOperator.Builder) opBuilder;
                 joinBuilder.setOnPredicate(newOnPredicate);
+
+                if (joinOperator.getSkewColumn() != null) {
+                    joinBuilder.setSkewColumn(rewriter.rewrite(joinOperator.getSkewColumn()));
+                }
             }
+
             return OptExpression.create(opBuilder.build(), inputs);
         }
 
@@ -494,6 +528,10 @@ public class OptExpressionDuplicator {
                 newWindowCalls.put(newColumnRef, (CallOperator) newCall);
             }
             opBuilder.setWindowCall(newWindowCalls);
+
+            if (windowOperator.getSkewColumn() != null) {
+                opBuilder.setSkewColumn(getNewScalarOp(windowOperator.getSkewColumn()));
+            }
 
             processCommon(opBuilder);
 
@@ -659,12 +697,22 @@ public class OptExpressionDuplicator {
             LogicalCTEConsumeOperator cteConsumeOperator = (LogicalCTEConsumeOperator) optExpression.getOp();
             LogicalCTEConsumeOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
             opBuilder.withOperator(cteConsumeOperator);
-            opBuilder.setCteId(getOrCreateCteId(cteConsumeOperator.getCteId()));
+
+            // If the CTE anchor/produce for this consumer was also duplicated, remap the CTE ID
+            // and both sides of the output column map. Otherwise, keep the original CTE ID and
+            // only remap the consumer-side columns, preserving the producer-side
+            // column refs so the consumer still references the original producer.
+            boolean hasMatchingProducer = cteIdMapping.containsKey(cteConsumeOperator.getCteId());
+            if (hasMatchingProducer) {
+                opBuilder.setCteId(getOrCreateCteId(cteConsumeOperator.getCteId()));
+            }
 
             // cteOutputColumnRefMap
             Map<ColumnRefOperator, ColumnRefOperator> newCteOutputColumnRefMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : cteConsumeOperator.getCteOutputColumnRefMap().entrySet()) {
-                newCteOutputColumnRefMap.put(getOrCreateColRef(e.getKey()), getOrCreateColRef(e.getValue()));
+                ColumnRefOperator newKey = getOrCreateColRef(e.getKey());
+                ColumnRefOperator newValue = hasMatchingProducer ? getOrCreateColRef(e.getValue()) : e.getValue();
+                newCteOutputColumnRefMap.put(newKey, newValue);
             }
             opBuilder.setCteOutputColumnRefMap(newCteOutputColumnRefMap);
 
@@ -697,6 +745,26 @@ public class OptExpressionDuplicator {
             updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
             updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
+        }
+
+        // Rewrite colocate columns and the EquivalentDescriptor inside a
+        // RangeDistributionSpec, mirroring processHashDistributionSpec above.
+        // Column ids change when the scan is duplicated for MV rewrite.
+        private RangeDistributionSpec processRangeDistributionSpec(RangeDistributionSpec originSpec) {
+            final List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol col : originSpec.getColocateColumns()) {
+                final ColumnRefOperator newRefOperator = getNewDistributionColRef(col);
+                Preconditions.checkNotNull(newRefOperator);
+                newColumns.add(new DistributionCol(newRefOperator.getId(), col.isNullStrict()));
+            }
+            Preconditions.checkState(newColumns.size() == originSpec.getColocateColumns().size());
+
+            final EquivalentDescriptor equivDesc = originSpec.getEquivalentDescriptor();
+            final EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(),
+                    equivDesc.getPartitionIds());
+            updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
+            updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
+            return new RangeDistributionSpec(newColumns, newEquivDesc);
         }
 
         private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,

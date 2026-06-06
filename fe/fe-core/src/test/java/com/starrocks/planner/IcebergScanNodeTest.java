@@ -2,17 +2,20 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergMORParams;
@@ -29,6 +32,9 @@ import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -38,16 +44,20 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBucketFunction;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TIcebergTable;
+import com.starrocks.thrift.TIcebergTableSink;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -67,6 +77,7 @@ import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
@@ -103,7 +114,8 @@ public class IcebergScanNodeTest {
                     Deencapsulation.getField(original, "desc"),
                     Deencapsulation.getField(original, "bucketProperties"),
                     Deencapsulation.getField(original, "partitionIdGenerator"),
-                    Deencapsulation.getField(original, "recordScanFiles")
+                    Deencapsulation.getField(original, "recordScanFiles"),
+                    Deencapsulation.getField(original, "useMinMaxOpt")
             );
         }
 
@@ -136,19 +148,35 @@ public class IcebergScanNodeTest {
         delFiles.add(mockEqDelFile);
         new Expectations() {{
             GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-            result = connector; minTimes = 0;
+            result = connector;
+            minTimes = 0;
             connector.getMetadata().getCloudConfiguration();
-            result = cc; minTimes = 0;
-            table.getCatalogName(); result = catalog; minTimes = 0;
-            table.getCatalogDBName(); result = "db1"; minTimes = 0;
-            table.getCatalogTableName(); result = "tbl1"; minTimes = 0;
+            result = cc;
+            minTimes = 0;
+            table.getCatalogName();
+            result = catalog;
+            minTimes = 0;
+            table.getCatalogDBName();
+            result = "db1";
+            minTimes = 0;
+            table.getCatalogTableName();
+            result = "tbl1";
+            minTimes = 0;
             // mockPosDelFile.content(); result = FileContent.POSITION_DELETES; minTimes = 0;
             // mockEqDelFile.content(); result = FileContent.EQUALITY_DELETES; minTimes = 0;
             // fileScanTask.deletes(); result = delFiles; minTimes = 0;
-            fileScanTask.file(); result = mockDataFile; minTimes = 0;
-            mockDataFile.fileSizeInBytes(); result = 10000000L; minTimes = 0;
-            mockDataFile.specId(); result = 1; minTimes = 0;
-            mockDataFile.partition(); result = null; minTimes = 0;
+            fileScanTask.file();
+            result = mockDataFile;
+            minTimes = 0;
+            mockDataFile.fileSizeInBytes();
+            result = 10000000L;
+            minTimes = 0;
+            mockDataFile.specId();
+            result = 1;
+            minTimes = 0;
+            mockDataFile.partition();
+            result = null;
+            minTimes = 0;
         }};
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
@@ -158,6 +186,7 @@ public class IcebergScanNodeTest {
                 new PlanNodeId(0), desc, catalog,
                 tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
         scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
         List<RemoteFileInfo> remoteFileInfos = List.of(remoteFileInfo);
@@ -199,22 +228,33 @@ public class IcebergScanNodeTest {
         IcebergRemoteFileInfo mockIcebergRemoteFileInfo = new IcebergRemoteFileInfo(mockScanTask);
 
         new Expectations() {{
-            mockSource.getOutput(); result = mockIcebergRemoteFileInfo; minTimes = 0;
-            mockScanTask.file(); result = mockDataFile; minTimes = 0;
-            mockScanTask.deletes(); result = deleteFiles; minTimes = 0;
-            mockPosDelFile.content(); result = FileContent.POSITION_DELETES; minTimes = 0;
-            mockEqDelFile.content(); result = FileContent.EQUALITY_DELETES; minTimes = 0;
+            mockSource.getOutput();
+            result = mockIcebergRemoteFileInfo;
+            minTimes = 0;
+            mockScanTask.file();
+            result = mockDataFile;
+            minTimes = 0;
+            mockScanTask.deletes();
+            result = deleteFiles;
+            minTimes = 0;
+            mockPosDelFile.content();
+            result = FileContent.POSITION_DELETES;
+            minTimes = 0;
+            mockEqDelFile.content();
+            result = FileContent.EQUALITY_DELETES;
+            minTimes = 0;
         }};
 
         IcebergConnectorScanRangeSource scanSource = new IcebergConnectorScanRangeSource(
                 null, mockSource, null, null, Optional.empty(),
-                PartitionIdGenerator.of(), true  // recordScanFiles = true
+                PartitionIdGenerator.of(), true,  // recordScanFiles = true
+                false
         ) {
             private int callCount = 0;
 
             @Override
             public boolean sourceHasMoreOutput() {
-                return callCount++ == 0;  
+                return callCount++ == 0;
             }
 
             @Override
@@ -246,19 +286,19 @@ public class IcebergScanNodeTest {
             result = Collections.emptyList();
             minTimes = 0;
 
-            mockTask.spec(); 
+            mockTask.spec();
             result = mockSpec;
             minTimes = 0;
-            mockSpec.partitionType(); 
+            mockSpec.partitionType();
             result = Types.StructType.of();
             minTimes = 0;
-            mockTask.file(); 
+            mockTask.file();
             result = mockDataFile;
             minTimes = 0;
-            mockDataFile.partition(); 
+            mockDataFile.partition();
             result = null;
             minTimes = 0;
-            mockDataFile.fileSizeInBytes(); 
+            mockDataFile.fileSizeInBytes();
             result = 1024L;
             minTimes = 0;
         }};
@@ -347,7 +387,7 @@ public class IcebergScanNodeTest {
 
 
         List<Column> schemaColumns = new ArrayList<>();
-        schemaColumns.add(new Column("col1", ScalarType.createVarchar(20)));
+        schemaColumns.add(new Column("col1", TypeFactory.createVarcharType(20)));
 
         IcebergTable icebergTable = new IcebergTable.Builder()
                 .setId(1234)
@@ -463,7 +503,7 @@ public class IcebergScanNodeTest {
 
     @Test
     void testDynamicOverwrite() {
-        
+
         InMemoryCatalog catalog = new InMemoryCatalog();
         catalog.initialize("test", new HashMap<>());
 
@@ -509,6 +549,10 @@ public class IcebergScanNodeTest {
 
         Assertions.assertTrue(sinkExtra.getScannedDataFiles().contains(df));
         Assertions.assertTrue(sinkExtra.getAppliedDeleteFiles().contains(del));
+
+        Assertions.assertNull(sinkExtra.getBaseSnapshotId());
+        sinkExtra.setBaseSnapshotId(42L);
+        Assertions.assertEquals(42L, sinkExtra.getBaseSnapshotId());
     }
 
     @Test
@@ -516,49 +560,157 @@ public class IcebergScanNodeTest {
         // 1. Mock InsertStmt
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         Mockito.when(rewriteStmt.rewriteAll()).thenReturn(true);
-    
+
         // 2. Mock IcebergScanNode
         IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
-    
+
         DeleteFile pos1 = Mockito.mock(DeleteFile.class);
         DeleteFile pos2 = Mockito.mock(DeleteFile.class);
         DeleteFile eq1 = Mockito.mock(DeleteFile.class);
         DataFile data1 = Mockito.mock(DataFile.class);
         DataFile data2 = Mockito.mock(DataFile.class);
-    
+
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
         Mockito.when(scanNode.getPosAppliedDeleteFiles()).thenReturn(Set.of(pos1, pos2));
         Mockito.when(scanNode.getEqualAppliedDeleteFiles()).thenReturn(Set.of(eq1));
         Mockito.when(scanNode.getScannedDataFiles()).thenReturn(Set.of(data1, data2));
-    
+
         // 3. Mock PlanFragment
         PlanFragment fragment = Mockito.mock(PlanFragment.class);
         Mockito.when(fragment.collectScanNodes())
                 .thenReturn(Map.of(new PlanNodeId(0), scanNode));
-    
+
         // 4. Mock ExecPlan
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
         Mockito.when(execPlan.getFragments()).thenReturn(new ArrayList<>(List.of(fragment)));
-    
+
         // 5. Prepare commitInfos
         List<TSinkCommitInfo> commitInfos = new ArrayList<>();
         TSinkCommitInfo info1 = new TSinkCommitInfo();
         TSinkCommitInfo info2 = new TSinkCommitInfo();
         commitInfos.add(info1);
         commitInfos.add(info2);
-    
+
         // 6. Executor and extra
         StatementBase fakeStmt = Mockito.mock(StatementBase.class);
         ConnectContext ctx = new ConnectContext();
         StmtExecutor executor = new StmtExecutor(ctx, fakeStmt);
         IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
-    
+
         // 7. Call target method
         executor.fillRewriteFiles(rewriteStmt, execPlan, commitInfos, extra);
-    
+
         // 8. Assert
         Assertions.assertTrue(info1.isIs_rewrite());
         Assertions.assertTrue(info2.isIs_rewrite());
+    }
+
+    @Test
+    public void testExtractBaseSnapshotIdFromExecPlan() {
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(42L);
+
+        IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(scanNode.getIcebergTable()).thenReturn(target);
+        Mockito.when(scanNode.getBaseSnapshotId()).thenReturn(Optional.of(777L));
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes()).thenReturn(new ArrayList<>(List.of(scanNode)));
+
+        Assertions.assertEquals(777L,
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(execPlan, target));
+
+        // Empty plan -> null.
+        ExecPlan empty = Mockito.mock(ExecPlan.class);
+        Mockito.when(empty.getScanNodes()).thenReturn(new ArrayList<>());
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(empty, target));
+
+        // Scan over the target but with no plan-time snapshot -> null.
+        IcebergScanNode noSnap = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(noSnap.getIcebergTable()).thenReturn(target);
+        Mockito.when(noSnap.getBaseSnapshotId()).thenReturn(Optional.empty());
+        ExecPlan planNoSnap = Mockito.mock(ExecPlan.class);
+        Mockito.when(planNoSnap.getScanNodes()).thenReturn(new ArrayList<>(List.of(noSnap)));
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(planNoSnap, target));
+    }
+
+    @Test
+    public void testBuildIcebergFilterExprSkipsNonTargetIcebergScans() {
+        // Symmetric to testExtractBaseSnapshotIdSkipsNonTargetIcebergScans: same fix
+        // applies to buildIcebergFilterExpr, which previously picked the first
+        // IcebergScanNode regardless of which table it scanned. With a non-target
+        // source scan listed first, the helper must still consult only the target's
+        // scan. Verified two ways:
+        //   (1) the result is null because the target's predicate is null
+        //       (legacy code would have produced a non-null filter from the source's
+        //       predicate);
+        //   (2) Mockito.verify confirms the source's predicate getter is never called.
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(100L);
+        Table nativeTable = Mockito.mock(Table.class);
+        Schema nativeSchema = Mockito.mock(Schema.class);
+        Mockito.when(target.getNativeTable()).thenReturn(nativeTable);
+        Mockito.when(nativeTable.schema()).thenReturn(nativeSchema);
+
+        IcebergTable source = Mockito.mock(IcebergTable.class);
+        Mockito.when(source.getId()).thenReturn(200L);
+
+        IcebergScanNode sourceScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(sourceScan.getIcebergTable()).thenReturn(source);
+
+        IcebergScanNode targetScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(targetScan.getIcebergTable()).thenReturn(target);
+        Mockito.when(targetScan.getIcebergJobPlanningPredicate()).thenReturn(null);
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan, targetScan)));
+
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, target));
+        Mockito.verify(targetScan).getIcebergJobPlanningPredicate();
+        Mockito.verify(sourceScan, Mockito.never()).getIcebergJobPlanningPredicate();
+    }
+
+    @Test
+    public void testExtractBaseSnapshotIdSkipsNonTargetIcebergScans() {
+        // Simulates `UPDATE target SET ... WHERE id IN (SELECT id FROM source_iceberg)`:
+        // the plan contains two IcebergScanNodes (target + source). The helper must
+        // return the TARGET's plan-time snapshot id, not the source's — passing the
+        // source snapshot id into RowDelta.validateFromSnapshot would either be rejected
+        // by Iceberg (snapshot missing from target's history) or validate against an
+        // unrelated window.
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(100L);
+        IcebergTable source = Mockito.mock(IcebergTable.class);
+        Mockito.when(source.getId()).thenReturn(200L);
+
+        // Source scan appears FIRST in the plan — the legacy "first IcebergScan wins"
+        // logic would have returned 999L, the wrong snapshot id.
+        IcebergScanNode sourceScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(sourceScan.getIcebergTable()).thenReturn(source);
+        Mockito.when(sourceScan.getBaseSnapshotId()).thenReturn(Optional.of(999L));
+
+        IcebergScanNode targetScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(targetScan.getIcebergTable()).thenReturn(target);
+        Mockito.when(targetScan.getBaseSnapshotId()).thenReturn(Optional.of(123L));
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan, targetScan)));
+
+        Assertions.assertEquals(123L,
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(execPlan, target));
+
+        // No scan matches the target (e.g. target is referenced only by the sink, not by
+        // any scan) -> null.
+        ExecPlan onlySource = Mockito.mock(ExecPlan.class);
+        Mockito.when(onlySource.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan)));
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(onlySource, target));
     }
 
     @Test
@@ -618,8 +770,8 @@ public class IcebergScanNodeTest {
                 morParams,
                 tupleDesc,
                 Optional.empty(),
-                PartitionIdGenerator.of()
-                );
+                PartitionIdGenerator.of(), false, false
+        );
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
                 10, // maxSize
@@ -649,7 +801,7 @@ public class IcebergScanNodeTest {
             result = Optional.of(connectorMetadata);
             minTimes = 0;
 
-            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra);
+            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra, null);
         }};
 
         metadataMgr.finishSink("testCatalog", "db", "tbl", sinkCommitInfos, "branch", extra);
@@ -673,7 +825,7 @@ public class IcebergScanNodeTest {
             result = Optional.of(connectorMetadata);
             minTimes = 0;
 
-            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra);
+            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra, null);
             result = new StarRocksConnectorException("fail!");
             minTimes = 0;
         }};
@@ -725,7 +877,7 @@ public class IcebergScanNodeTest {
         Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
         Mockito.when(sessVar.clone()).thenReturn(sessVar);
         Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
-    
+
         // --- Mock DataFile ---
         DataFile dataFile = Mockito.mock(DataFile.class);
         Mockito.when(dataFile.fileSizeInBytes()).thenReturn(500L);
@@ -742,10 +894,19 @@ public class IcebergScanNodeTest {
         Mockito.when(remoteFileInfo.cast()).thenReturn(icebergRemoteFileInfo);
         RemoteFileInfoSource remoteFileInfoSource = new RemoteFileInfoSource() {
             int count = 0;
-            @Override public RemoteFileInfo getOutput() { count++; return remoteFileInfo; }
-            @Override public boolean hasMoreOutput() { return count == 0; }
+
+            @Override
+            public RemoteFileInfo getOutput() {
+                count++;
+                return remoteFileInfo;
+            }
+
+            @Override
+            public boolean hasMoreOutput() {
+                return count == 0;
+            }
         };
-    
+
         IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
         IcebergMORParams morParams = Mockito.mock(IcebergMORParams.class);
         TupleDescriptor tupleDesc = Mockito.mock(TupleDescriptor.class);
@@ -756,19 +917,23 @@ public class IcebergScanNodeTest {
                 morParams,
                 tupleDesc,
                 Optional.empty(),
-                PartitionIdGenerator.of()
-                );
+                PartitionIdGenerator.of(), false, false
+        );
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         new MockUp<StmtExecutor>() {
             private static StmtExecutor HOLDER;
-            { HOLDER = executor; }
+
+            {
+                HOLDER = executor;
+            }
+
             @Mock
             public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
                 return HOLDER;
             }
         };
-    
+
         new MockUp<com.starrocks.sql.parser.SqlParser>() {
             @Mock
             public List<com.starrocks.sql.ast.StatementBase> parse(String sql, SessionVariable sessionVariable) {
@@ -796,20 +961,20 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergRewriteStmt>() {
             @Mock
-            public void $init(InsertStmt base, boolean rewriteAll) {
+            public void $init(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) {
                 //do nothing
             }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, false, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "rewriteData", rewriteData);
-        
+
         ConcurrentLinkedQueue<IcebergRewriteDataJob.FinishArgs> finishArg = new ConcurrentLinkedQueue<>();
         finishArg.add(job.new FinishArgs(
                 "c", "db", "t",
@@ -824,9 +989,9 @@ public class IcebergScanNodeTest {
         Mockito.verify(rewriteData, Mockito.times(2)).hasMoreTaskGroup();
         Mockito.verify(rewriteData, Mockito.times(1)).nextTaskGroup();
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(oneGroup);
-    
+
         Mockito.verify(executor, Mockito.times(1))
-               .handleDMLStmt(eq(execPlan), isA(IcebergRewriteStmt.class));
+                .handleDMLStmt(eq(execPlan), isA(IcebergRewriteStmt.class));
     }
 
     @Test
@@ -841,18 +1006,18 @@ public class IcebergScanNodeTest {
         List<RemoteFileInfo> oneGroup = new ArrayList<>();
         RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
         oneGroup.add(rfi);
-    
+
         Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
         Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
-    
+
         Mockito.when(context.getQueryId()).thenReturn(java.util.UUID.randomUUID());
         Mockito.when(context.getSkipFinishSink()).thenReturn(true);
         Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
         Mockito.when(sessVar.clone()).thenReturn(sessVar);
         Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
 
-    
+
         PlanFragment fragment = Mockito.mock(PlanFragment.class);
         ArrayList<PlanFragment> fragments = new ArrayList<>();
         fragments.add(fragment);
@@ -861,36 +1026,40 @@ public class IcebergScanNodeTest {
         scanMap.put(new PlanNodeId(1), scanNode);
         Mockito.when(execPlan.getFragments()).thenReturn(fragments);
         Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
-    
+
         com.starrocks.sql.ast.InsertStmt parsedInsert = Mockito.mock(com.starrocks.sql.ast.InsertStmt.class);
-    
+
         new mockit.MockUp<StatementPlanner>() {
             @mockit.Mock
-            public ExecPlan plan(StatementBase stmt, ConnectContext session) { return execPlan; }
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) {
+                return execPlan;
+            }
         };
         new mockit.MockUp<IcebergRewriteStmt>() {
             @mockit.Mock
-            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
+            public void $init(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) { /* no-op */ }
         };
-        new mockit.MockUp<IcebergScanNode>() {
-            @mockit.Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
-        };
-    
+
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         Mockito.doThrow(new RuntimeException("boom"))
-               .when(executor)
-               .handleDMLStmt(Mockito.eq(execPlan), Mockito.isA(IcebergRewriteStmt.class));
-    
+                .when(executor)
+                .handleDMLStmt(Mockito.eq(execPlan), Mockito.isA(IcebergRewriteStmt.class));
+
         new mockit.MockUp<StmtExecutor>() {
             private static StmtExecutor HOLDER;
-            { HOLDER = executor; }     
+
+            {
+                HOLDER = executor;
+            }
+
             @mockit.Mock
-            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) { return HOLDER; }
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return HOLDER;
+            }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, false, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "parsedStmt", parsedInsert);
@@ -905,6 +1074,29 @@ public class IcebergScanNodeTest {
     }
 
     @Test
+    public void testPrepareRetry(@Mocked IcebergTable table,
+                                 @Mocked IcebergConnectorScanRangeSource mockSource) throws Exception {
+        // setupCloudCredential returns early when catalogName is null (mocked default)
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+        // Set empty snapshot so setupScanRangeLocations returns early
+        scanNode.setTvrVersionRange(TvrTableSnapshot.empty());
+        // Simulate partially consumed state
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+        Deencapsulation.setField(scanNode, "reachLimit", true);
+
+        scanNode.prepareRetry();
+
+        Assertions.assertFalse((boolean) Deencapsulation.getField(scanNode, "reachLimit"),
+                "reachLimit should be reset to false");
+        Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
+                "scanRangeSource should be cleared");
+    }
+
+    @Test
     public void testGetBucketNums(@Mocked IcebergTable table) {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
@@ -915,10 +1107,10 @@ public class IcebergScanNodeTest {
 
         // Create three bucket properties
         List<BucketProperty> bucketProperties = new ArrayList<>();
-        Column column1 = new Column("test_col1", ScalarType.INT);
-        Column column2 = new Column("test_col2", ScalarType.INT);
-        Column column3 = new Column("test_col3", ScalarType.INT);
-        Column column4 = new Column("test_col4", ScalarType.INT);
+        Column column1 = new Column("test_col1", IntegerType.INT);
+        Column column2 = new Column("test_col2", IntegerType.INT);
+        Column column3 = new Column("test_col3", IntegerType.INT);
+        Column column4 = new Column("test_col4", IntegerType.INT);
         BucketProperty bucketProperty1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, column1);
         BucketProperty bucketProperty2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 3, column2);
         BucketProperty bucketProperty3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, column3);
@@ -937,5 +1129,685 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals(360, result);
         // wrong method
         Assertions.assertEquals(876, Stream.of(2, 3, 4, 5).reduce(1, (a, b) -> (a + 1) * (b + 1)));
+    }
+
+    @Test
+    public void testIcebergTableSinkToThrift(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) throws Exception {
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(icebergTable.getCatalogName());
+            result = connector;
+            minTimes = 0;
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+            connectorMetadata.getCatalogProperties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+            connectorMetadata.getCloudConfiguration();
+            result = new CloudConfiguration();
+            minTimes = 0;
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+            fileIO.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+            icebergNativeTable.location();
+            result = "s3://bucket/path/";
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+        TDataSink tDataSink = Deencapsulation.invoke(sink, "toThrift");
+        TIcebergTableSink tIceberg = tDataSink.getIceberg_table_sink();
+        Assertions.assertEquals("main", sink.getTargetBranch());
+        Assertions.assertTrue(tIceberg.isSetCloud_configuration());
+    }
+
+    @Test
+    public void testIcebergTableSinkCatalogConfigCredentialFallback(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> catalogConfigProps = new HashMap<>();
+        catalogConfigProps.put("s3.access-key-id", "AKIA_FROM_CONFIG");
+        catalogConfigProps.put("s3.secret-access-key", "secret_from_config");
+        catalogConfigProps.put("s3.session-token", "token_from_config");
+        catalogConfigProps.put("client.region", "us-west-2");
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            connectorMetadata.getCatalogProperties();
+            result = catalogConfigProps;
+            minTimes = 0;
+
+            connectorMetadata.getCloudConfiguration();
+            result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        // Verify that credentials came from catalog config
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_FROM_CONFIG", credential.getAccessKey());
+        Assertions.assertEquals("secret_from_config", credential.getSecretKey());
+    }
+
+    @Test
+    public void testIcebergTableSinkVendedCredentialsPriority(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> vendedCredentials = new HashMap<>();
+        vendedCredentials.put("s3.access-key-id", "AKIA_VENDED");
+        vendedCredentials.put("s3.secret-access-key", "secret_vended");
+        vendedCredentials.put("s3.session-token", "token_vended");
+        vendedCredentials.put("client.region", "eu-west-1");
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = vendedCredentials;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        // Verify that vended credentials take priority
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_VENDED", credential.getAccessKey());
+        Assertions.assertEquals("secret_vended", credential.getSecretKey());
+    }
+
+    @Test
+    public void testIcebergTableSinkUserProvidedFallback(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> emptyCatalogConfigProps = new HashMap<>();
+        CloudConfiguration userProvidedConfig = CloudConfigurationFactory.buildCloudConfigurationForStorage(
+                Map.of("aws.s3.access_key", "AKIA_USER", "aws.s3.secret_key", "secret_user"));
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            connectorMetadata.getCatalogProperties();
+            result = emptyCatalogConfigProps;
+            minTimes = 0;
+
+            connectorMetadata.getCloudConfiguration();
+            result = userProvidedConfig;
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        Assertions.assertEquals(userProvidedConfig, cloudConfig);
+    }
+
+    @Test
+    public void testSetupCloudCredentialWithCatalogConfigFallback(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable table,
+            @Mocked org.apache.iceberg.Table nativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO,
+            @Mocked IcebergTableMORParams tableMORParams) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> catalogConfigProps = new HashMap<>();
+        catalogConfigProps.put("s3.access-key-id", "AKIA_FROM_CONFIG");
+        catalogConfigProps.put("s3.secret-access-key", "secret_from_config");
+        catalogConfigProps.put("s3.session-token", "token_from_config");
+        catalogConfigProps.put("client.region", "us-west-2");
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            connectorMetadata.getCatalogProperties();
+            result = catalogConfigProps;
+            minTimes = 0;
+
+            connectorMetadata.getCloudConfiguration();
+            result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+            minTimes = 0;
+
+            table.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            table.getNativeTable();
+            result = nativeTable;
+            minTimes = 0;
+
+            nativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            nativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, catalogName,
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(scanNode, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        // Verify that credentials came from catalog config (lines 215-220)
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_FROM_CONFIG", credential.getAccessKey());
+        Assertions.assertEquals("secret_from_config", credential.getSecretKey());
+    }
+
+    @Test
+    public void testSetupCloudCredentialVendedCredentialsPriority(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked IcebergTable table,
+            @Mocked org.apache.iceberg.Table nativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO,
+            @Mocked IcebergTableMORParams tableMORParams) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> vendedCredentials = new HashMap<>();
+        vendedCredentials.put("s3.access-key-id", "AKIA_VENDED");
+        vendedCredentials.put("s3.secret-access-key", "secret_vended");
+        vendedCredentials.put("s3.session-token", "token_vended");
+        vendedCredentials.put("client.region", "eu-west-1");
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            table.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            table.getNativeTable();
+            result = nativeTable;
+            minTimes = 0;
+
+            nativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = vendedCredentials;
+            minTimes = 0;
+
+            nativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, catalogName,
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(scanNode, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+    }
+
+    @Test
+    public void testSetupCloudCredentialUserProvidedFallback(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable table,
+            @Mocked org.apache.iceberg.Table nativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO,
+            @Mocked IcebergTableMORParams tableMORParams) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> emptyCatalogConfigProps = new HashMap<>();
+        CloudConfiguration userProvidedConfig = CloudConfigurationFactory.buildCloudConfigurationForStorage(
+                Map.of("aws.s3.access_key", "AKIA_USER", "aws.s3.secret_key", "secret_user"));
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            connectorMetadata.getCatalogProperties();
+            result = emptyCatalogConfigProps;
+            minTimes = 0;
+
+            connectorMetadata.getCloudConfiguration();
+            result = userProvidedConfig;
+            minTimes = 0;
+
+            table.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            table.getNativeTable();
+            result = nativeTable;
+            minTimes = 0;
+
+            nativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            nativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, catalogName,
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(scanNode, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        Assertions.assertEquals(userProvidedConfig, cloudConfig);
+    }
+
+    /**
+     * Test that CatalogConnectorMetadata properly delegates getCatalogProperties()
+     * to the wrapped IcebergMetadata. This ensures the credential fallback works
+     * in production where CatalogConnector.getMetadata() returns CatalogConnectorMetadata.
+     */
+    @Test
+    public void testSetupCloudCredentialWithCatalogConnectorMetadataWrapper(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata underlyingMetadata,
+            @Mocked IcebergTable table,
+            @Mocked org.apache.iceberg.Table nativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO,
+            @Mocked IcebergTableMORParams tableMORParams) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> catalogConfigProps = new HashMap<>();
+        catalogConfigProps.put("s3.access-key-id", "AKIA_WRAPPED");
+        catalogConfigProps.put("s3.secret-access-key", "secret_wrapped");
+        catalogConfigProps.put("s3.session-token", "token_wrapped");
+        catalogConfigProps.put("client.region", "ap-northeast-2");
+
+        InformationSchemaMetadata infoSchemaMetadata = new InformationSchemaMetadata(catalogName);
+        TableMetaMetadata tableMetaMetadata = new TableMetaMetadata(catalogName, "iceberg");
+
+        // Create the real CatalogConnectorMetadata wrapper
+        CatalogConnectorMetadata wrappedMetadata = new CatalogConnectorMetadata(
+                underlyingMetadata, infoSchemaMetadata, tableMetaMetadata);
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            // Return the CatalogConnectorMetadata wrapper (like production)
+            connector.getMetadata();
+            result = wrappedMetadata;
+            minTimes = 0;
+
+            // The underlying metadata returns catalog properties
+            underlyingMetadata.getCatalogProperties();
+            result = catalogConfigProps;
+            minTimes = 0;
+
+            underlyingMetadata.getCloudConfiguration();
+            result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+            minTimes = 0;
+
+            underlyingMetadata.getTableType();
+            result = com.starrocks.catalog.Table.TableType.ICEBERG;
+            minTimes = 0;
+
+            table.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            table.getNativeTable();
+            result = nativeTable;
+            minTimes = 0;
+
+            nativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            nativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, catalogName,
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(scanNode, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        // Verify credentials came from catalog config via CatalogConnectorMetadata delegation
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_WRAPPED", credential.getAccessKey());
+        Assertions.assertEquals("secret_wrapped", credential.getSecretKey());
+    }
+
+    /**
+     * Test CatalogConnectorMetadata delegation for IcebergTableSink.
+     */
+    @Test
+    public void testIcebergTableSinkWithCatalogConnectorMetadataWrapper(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata underlyingMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> catalogConfigProps = new HashMap<>();
+        catalogConfigProps.put("s3.access-key-id", "AKIA_SINK_WRAPPED");
+        catalogConfigProps.put("s3.secret-access-key", "secret_sink_wrapped");
+        catalogConfigProps.put("s3.session-token", "token_sink_wrapped");
+        catalogConfigProps.put("client.region", "eu-central-1");
+
+        InformationSchemaMetadata infoSchemaMetadata = new InformationSchemaMetadata(catalogName);
+        TableMetaMetadata tableMetaMetadata = new TableMetaMetadata(catalogName, "iceberg");
+        CatalogConnectorMetadata wrappedMetadata = new CatalogConnectorMetadata(
+                underlyingMetadata, infoSchemaMetadata, tableMetaMetadata);
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = wrappedMetadata;
+            minTimes = 0;
+
+            underlyingMetadata.getCatalogProperties();
+            result = catalogConfigProps;
+            minTimes = 0;
+
+            underlyingMetadata.getCloudConfiguration();
+            result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+            minTimes = 0;
+
+            underlyingMetadata.getTableType();
+            result = com.starrocks.catalog.Table.TableType.ICEBERG;
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_SINK_WRAPPED", credential.getAccessKey());
+        Assertions.assertEquals("secret_sink_wrapped", credential.getSecretKey());
+    }
+
+    @Test
+    public void testSetupScanRangeLocationsPassesColumnNames(@Mocked GlobalStateMgr globalStateMgr,
+                                                               @Mocked MetadataMgr metadataMgr,
+                                                               @Mocked IcebergTable table,
+                                                               @Mocked Table nativeTable) throws Exception {
+        final GetRemoteFilesParams[] capturedParams = new GetRemoteFilesParams[1];
+        Schema nativeSchema = new Schema(
+                Types.NestedField.optional(1, "event_ts", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "src_ip4", Types.IntegerType.get()));
+
+        new Expectations() {{
+            table.getCatalogName(); result = "iceberg_catalog"; minTimes = 0;
+            table.getCatalogDBName(); result = "test_db"; minTimes = 0;
+            table.getCatalogTableName(); result = "test_tbl"; minTimes = 0;
+            table.getNativeTable(); result = nativeTable; minTimes = 0;
+            nativeTable.schema(); result = nativeSchema; minTimes = 0;
+            globalStateMgr.getMetadataMgr(); result = metadataMgr; minTimes = 0;
+            metadataMgr.getRemoteFiles((com.starrocks.catalog.Table) any, (GetRemoteFilesParams) any);
+            result = new mockit.Delegate() {
+                List<RemoteFileInfo> getRemoteFiles(com.starrocks.catalog.Table tbl,
+                                                     GetRemoteFilesParams params) {
+                    capturedParams[0] = params;
+                    return Collections.emptyList();
+                }
+            };
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "event_ts", IntegerType.INT, true);
+        slot1.setColumn(new Column("event_ts", IntegerType.INT));
+        slot1.setIsMaterialized(true);
+        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "src_ip4", IntegerType.INT, true);
+        slot2.setColumn(new Column("src_ip4", IntegerType.INT));
+        slot2.setIsMaterialized(true);
+        SlotDescriptor hiddenSlot = new SlotDescriptor(new SlotId(3), IcebergTable.FILE_PATH, IntegerType.INT, true);
+        hiddenSlot.setColumn(new Column(IcebergTable.FILE_PATH, IntegerType.INT));
+        hiddenSlot.setIsMaterialized(true);
+        desc.addSlot(slot1);
+        desc.addSlot(slot2);
+        desc.addSlot(hiddenSlot);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+
+        scanNode.setupScanRangeLocations(false);
+
+        Assertions.assertNotNull(capturedParams[0], "params should have been captured");
+        List<String> fieldNames = capturedParams[0].getFieldNames();
+        Assertions.assertNotNull(fieldNames, "fieldNames should not be null");
+        Assertions.assertEquals(2, fieldNames.size());
+        Assertions.assertEquals("event_ts", fieldNames.get(0));
+        Assertions.assertEquals("src_ip4", fieldNames.get(1));
     }
 }

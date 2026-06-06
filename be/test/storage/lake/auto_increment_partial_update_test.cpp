@@ -16,11 +16,16 @@
 
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -31,9 +36,6 @@
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
@@ -153,7 +155,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());

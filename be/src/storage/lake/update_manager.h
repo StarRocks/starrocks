@@ -17,7 +17,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "runtime/exec_env.h"
+#include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/rowset_update_state.h"
@@ -25,9 +25,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/update_compaction_state.h"
 #include "util/dynamic_cache.h"
-#include "util/mem_info.h"
-#include "util/parse_util.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -64,7 +61,7 @@ private:
 class RssidFileInfoContainer {
 public:
     void add_rssid_to_file(const TabletMetadata& metadata);
-    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_id,
+    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
                            const std::map<int, FileInfo>& replace_segments);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
@@ -91,20 +88,16 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
-    Status _write_segment_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
-                                     const std::shared_ptr<FileSystem>& fs, int64_t txn_id, uint32_t seg,
-                                     const std::vector<uint32_t>& insert_rowids,
-                                     const std::vector<uint32_t>& update_cids, TxnLogPB_OpWrite* new_rows_op,
-                                     uint64_t* total_rows, ChunkPtr* out_chunk);
-
-    Status _handle_upsert_index_conflicts(const TabletMetadataPtr& metadata, LakePrimaryIndex& index,
-                                          MetaFileBuilder* builder, const Schema& pkey_schema, uint32_t rowset_id,
-                                          const TxnLogPB_OpWrite& new_rows_op, const ChunkPtr& full_chunk,
-                                          std::map<uint32_t, size_t>* segment_id_to_add_dels_new_acc);
+    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                  const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
+                                  ChunkPtr* out_chunk);
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
-                                      MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id);
+                                      MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
+                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                      uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
                                 Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
@@ -116,17 +109,27 @@ public:
                                               IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
-                                   const std::vector<MutableColumnPtr>& upserts,
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumnPtr& upsert,
                                    std::vector<uint64_t>* rss_rowids, bool need_lock);
 
+    // Batch query rss_rowids for multiple update segments using parallel PK index reads.
+    // SegmentPKIterators are created and consumed one at a time to avoid memory spike
+    // from eagerly initializing all iterators upfront. Each iterator uses lazy_load to
+    // read PKs chunk-by-chunk, and each chunk is queried in parallel via thread pool.
+    // Acquires the index cache entry once for all segments. To learn each update
+    // segment's physical rowid base (range_start), call
+    // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
+    Status batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
+                                             std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                             std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                             bool need_lock);
+
     // get column data by rssid and rowids
-    Status get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
-                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<MutableColumnPtr>* columns,
-                             const std::map<string, string>* column_to_expr_value = nullptr,
+    Status get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
+                             bool with_default, const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             MutableColumns* columns, const std::map<string, string>* column_to_expr_value = nullptr,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
@@ -141,12 +144,16 @@ public:
     // get del nums from rowset, for compaction policy
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
+    // Get del nums from rowset using already-loaded tablet metadata,
+    // avoiding repeated metadata loads for each segment.
+    size_t get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta);
+
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                      const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
+                                      const TabletMetadataPtr& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                            const TabletMetadata& metadata, const Tablet& tablet,
+                                            const TabletMetadataPtr& metadata, const Tablet& tablet,
                                             IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
@@ -164,7 +171,6 @@ public:
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
-    void preload_update_state(const TxnLog& op_write, Tablet* tablet);
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
@@ -174,12 +180,7 @@ public:
     bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
-        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-        _index_cache.set_capacity(byte_limits * update_mem_percent);
-        return Status::OK();
-    }
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
@@ -200,6 +201,23 @@ public:
     void remove_primary_index_cache(IndexEntry* index_entry);
 
     void unload_and_remove_primary_index(int64_t tablet_id);
+
+    // For a cloud-native PK tablet, flush its cached PK-index memtable into
+    // sstables on shared storage, then return a new metadata snapshot whose
+    // sstable_meta covers all live data of the tablet's rowsets at
+    // metadata->version(). Non-PK or non-cloud-native tablets pass through:
+    // the input |metadata| is returned unchanged.
+    //
+    // Used by tablet split/merge paths to establish the reshard invariant
+    // that every input tablet's sstable_meta covers all inherited rowsets'
+    // live data before any metadata-level restructuring.
+    //
+    // Locking mirrors PrimaryKeyTxnLogApplier: shard-level shared lock +
+    // per-index write_guard via prepare_primary_index. Assumes FE's mutual
+    // exclusion between publish_resharding_tablet and publish_version, so
+    // the cached _data_version cannot advance past metadata->version()
+    // during this call.
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
@@ -227,15 +245,25 @@ public:
 
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
+    int64_t get_index_memory_size(int64_t tablet_id) const;
+
 private:
     // print memory tracker state
     void _print_memory_stats();
-    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
-                      PrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update);
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
+                      LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
 
+    // Performs condition-based merge update using parallel chunk-level execution for segments
+    // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values
+    // are read from the freshly-ingested segment file on demand, and winning new rows are upserted
+    // into the primary index in-place here (there is no later SST ingest).
+    //
+    // PARALLELISM: compare/read phase runs per-chunk on the lake_partial_update_thread_pool;
+    // index.upsert is applied serially after the barrier because PrimaryIndex::upsert is not
+    // thread-safe.
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-                                     int32_t condition_column, const MutableColumnPtr& upsert, PrimaryIndex& index,
-                                     DeletesMap* new_deletes);
+                                     int32_t condition_column, const SegmentPKIteratorPtr& upsert,
+                                     LakePrimaryIndex& index, DeletesMap* new_deletes);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
@@ -244,16 +272,32 @@ private:
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
 
+    // Processes a single chunk during parallel condition merge.
+    // Compares condition column values between old and new rows to decide which rows to delete.
+    // This is called concurrently by multiple worker threads, with mutex protecting shared state.
+    Status _process_single_chunk_update_with_condition(
+            const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
+            SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context, const SegmentPKChunkRef& current,
+            const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index);
+
+    // Performs condition-based merge update using parallel execution for segments with SST files.
+    // This optimized path leverages pre-materialized condition values in SST files to enable
+    // chunk-level parallelism, providing 3-5x performance improvement over serial merge.
+    // Requires: SST files must exist with condition column values.
+    Status _do_update_with_condition_parallel(const RowsetUpdateStateParams& params, uint32_t rowset_id,
+                                              int32_t upsert_idx, int32_t condition_column,
+                                              const SegmentPKIteratorPtr& upsert, LakePrimaryIndex& index,
+                                              DeletesMap* new_deletes);
+
     struct PkIndexShard {
         mutable std::shared_mutex lock;
     };
 
-    PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
-        return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
-    }
+    PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
     // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id);
+    bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,
+                                               int64_t tablet_id, int64_t txn_id);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

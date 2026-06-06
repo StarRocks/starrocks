@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.sql.ast.OrderByPair;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

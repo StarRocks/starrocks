@@ -26,11 +26,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -43,15 +43,15 @@ public class PartitionsProcDirTest {
     public void testFetchResultForCloudNativeTable() throws AnalysisException {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         DataCacheInfo dataCache = new DataCacheInfo(true, false);
         long partitionId = 1025;
         listPartition.setDataCacheInfo(partitionId, dataCache);
         LakeTable cloudNativeTable = new LakeTable(1024L, "cloud_native_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
-        Map<String, Long> indexNameToId = cloudNativeTable.getIndexNameToId();
-        indexNameToId.put("index1", index.getId());
+        Map<String, Long> indexNameToMetaId = cloudNativeTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
         cloudNativeTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
 
         db.registerTableUnlocked(cloudNativeTable);
@@ -70,20 +70,49 @@ public class PartitionsProcDirTest {
     }
 
     @Test
-    public void testFetchResultForOlapTable() throws AnalysisException {
+    public void testLookupNonExistentPartitionNameThrowsAnalysisException() {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         long partitionId = 1025;
         listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-        listPartition.setIsInMemory(partitionId, false);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+
+        db.registerTableUnlocked(olapTable);
+
+        PartitionsProcDir dir = new PartitionsProcDir(db, olapTable, false);
+
+        // Regression: lookup() previously dereferenced table.getPartition(name, ...) without
+        // a null-guard, so a missing name produced an NPE instead of the documented
+        // AnalysisException. The non-numeric name forces the catch-NumberFormatException
+        // branch that hits both getPartition(name, false) and getPartition(name, true) and
+        // resolves them as null.
+        AnalysisException ex = Assertions.assertThrows(AnalysisException.class,
+                () -> dir.lookup("no_such_partition"));
+        Assertions.assertTrue(ex.getMessage().contains("no_such_partition"),
+                "Expected message to mention the missing partition name, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testFetchResultForOlapTable() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         listPartition.setReplicationNum(partitionId, (short) 1);
         OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
         index.setBalanceStat(BalanceStat.BALANCED_STAT);
-        Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
-        indexNameToId.put("index1", index.getId());
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
         olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
 
         db.registerTableUnlocked(olapTable);

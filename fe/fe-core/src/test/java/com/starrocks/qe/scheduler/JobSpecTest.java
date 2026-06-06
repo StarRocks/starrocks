@@ -42,6 +42,7 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
@@ -60,6 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class JobSpecTest extends SchedulerTestBase {
@@ -120,7 +122,7 @@ public class JobSpecTest extends SchedulerTestBase {
         List<ScanNode> scanNodes = execPlan.getScanNodes();
 
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(connectContext, sql, coordinator));
@@ -134,12 +136,11 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(lastQueryId.toString(), jobSpec.getQueryGlobals().getLast_query_id());
         Assertions.assertEquals(TQueryType.SELECT, jobSpec.getQueryOptions().getQuery_type());
         Assertions.assertTrue(jobSpec.isEnablePipeline());
-        Assertions.assertFalse(jobSpec.isEnableStreamPipeline());
         Assertions.assertFalse(jobSpec.isBlockQuery());
         Assertions.assertEquals(QUERY_RESOURCE_GROUP, jobSpec.getResourceGroup());
 
         coordinator = COORDINATOR_FACTORY.createInsertScheduler(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
         jobSpec = coordinator.getJobSpec();
         Assertions.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
     }
@@ -149,7 +150,7 @@ public class JobSpecTest extends SchedulerTestBase {
      */
     @Test
     public void testQueryResourceGroup() throws Exception {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(BACKEND1_ID, 16);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, BACKEND1_ID, 16);
         GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
 
         new MockUp<ResourceGroupMgr>() {
@@ -175,7 +176,7 @@ public class JobSpecTest extends SchedulerTestBase {
         // Check created jobSpec.
         {
             DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                    connectContext, fragments, scanNodes, descTable.toThrift());
+                    connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
             JobSpec jobSpec = coordinator.getJobSpec();
 
             TWorkGroup group = jobSpec.getResourceGroup();
@@ -188,7 +189,7 @@ public class JobSpecTest extends SchedulerTestBase {
             connectContext.getSessionVariable().setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
 
             DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                    connectContext, fragments, scanNodes, descTable.toThrift());
+                    connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
             JobSpec jobSpec = coordinator.getJobSpec();
 
             // Check created jobSpec.
@@ -196,33 +197,6 @@ public class JobSpecTest extends SchedulerTestBase {
             assertThat(group.getName()).isEqualTo(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
             assertThat(group.getId()).isEqualTo(ResourceGroup.DEFAULT_MV_WG_ID);
         }
-    }
-
-    @Test
-    public void testFromMVMaintenanceJobSpec() throws Exception {
-        // Prepare input arguments.
-        String sql = "select * from lineitem";
-        ExecPlan execPlan = getExecPlan(sql);
-
-        TUniqueId queryId = new TUniqueId(2, 3);
-        connectContext.setExecutionId(queryId);
-        UUID lastQueryId = new UUID(4L, 5L);
-        connectContext.setLastQueryId(lastQueryId);
-        DescriptorTable descTable = new DescriptorTable();
-        List<PlanFragment> fragments = execPlan.getFragments();
-        List<ScanNode> scanNodes = execPlan.getScanNodes();
-
-        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(
-                connectContext, fragments, scanNodes, descTable.toThrift());
-
-        // Check created jobSpec.
-        Assertions.assertEquals(queryId, jobSpec.getQueryId());
-        Assertions.assertEquals(lastQueryId.toString(), jobSpec.getQueryGlobals().getLast_query_id());
-        Assertions.assertEquals(TQueryType.SELECT, jobSpec.getQueryOptions().getQuery_type());
-        Assertions.assertTrue(jobSpec.isEnablePipeline());
-        Assertions.assertTrue(jobSpec.isEnableStreamPipeline());
-        Assertions.assertFalse(jobSpec.isBlockQuery());
-        Assertions.assertEquals(QUERY_RESOURCE_GROUP, jobSpec.getResourceGroup());
     }
 
     @Test
@@ -259,7 +233,6 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(execMemLimit, jobSpec.getQueryOptions().getMem_limit());
         Assertions.assertEquals(execMemLimit, jobSpec.getQueryOptions().getQuery_mem_limit());
         Assertions.assertTrue(jobSpec.isEnablePipeline());
-        Assertions.assertFalse(jobSpec.isEnableStreamPipeline());
         Assertions.assertTrue(jobSpec.isBlockQuery());
         Assertions.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
 
@@ -329,7 +302,6 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(execMemLimit, jobSpec.getQueryOptions().getMem_limit());
         Assertions.assertEquals(execMemLimit, jobSpec.getQueryOptions().getQuery_mem_limit());
         Assertions.assertTrue(jobSpec.isEnablePipeline());
-        Assertions.assertFalse(jobSpec.isEnableStreamPipeline());
         Assertions.assertTrue(jobSpec.isBlockQuery());
         Assertions.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
 
@@ -391,7 +363,6 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(queryId, jobSpec.getQueryId());
         Assertions.assertEquals(execMemLimit, jobSpec.getQueryOptions().getMem_limit());
         Assertions.assertTrue(jobSpec.isEnablePipeline());
-        Assertions.assertFalse(jobSpec.isEnableStreamPipeline());
         Assertions.assertTrue(jobSpec.isBlockQuery());
         Assertions.assertEquals(QUERY_RESOURCE_GROUP, jobSpec.getResourceGroup()); // Export job doesn't setTQueryType.
 
@@ -432,8 +403,36 @@ public class JobSpecTest extends SchedulerTestBase {
         // Check created jobSpec.
         Assertions.assertEquals(queryId, jobSpec.getQueryId());
         Assertions.assertFalse(jobSpec.isEnablePipeline());
-        Assertions.assertFalse(jobSpec.isEnableStreamPipeline());
         Assertions.assertNull(jobSpec.getResourceGroup());
+        Assertions.assertFalse(jobSpec.getQueryOptions().isSetEnable_profile());
+        Assertions.assertFalse(coordinator.isEnableLoadProfile());
+    }
 
+    @Test
+    public void testFromSyncStreamLoadSpecEnableProfile(@Mocked StreamLoadPlanner planner) throws Exception {
+        TUniqueId queryId = new TUniqueId(2, 3);
+        TQueryOptions plannerOptions = new TQueryOptions();
+        plannerOptions.setEnable_profile(true);
+        plannerOptions.setLoad_profile_collect_second(42);
+        TExecPlanFragmentParams params = new TExecPlanFragmentParams()
+                .setParams(new TPlanFragmentExecParams().setFragment_instance_id(queryId))
+                .setQuery_options(plannerOptions);
+        new Expectations(planner) {
+            {
+                planner.getExecPlanFragmentParams();
+                result = params;
+                planner.getConnectContext();
+                result = new ConnectContext();
+            }
+        };
+
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createSyncStreamLoadScheduler(planner, new TNetworkAddress());
+        JobSpec jobSpec = coordinator.getJobSpec();
+
+        Assertions.assertTrue(jobSpec.getQueryOptions().isEnable_profile());
+        Assertions.assertEquals(42, jobSpec.getQueryOptions().getLoad_profile_collect_second());
+        // isEnableLoadProfile must honor the planner-decided enable_profile even though the
+        // ConnectContext has an empty SessionVariable (the direct-CN stream-load path).
+        Assertions.assertTrue(coordinator.isEnableLoadProfile());
     }
 }

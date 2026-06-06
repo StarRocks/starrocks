@@ -36,9 +36,24 @@
 
 #include <fmt/format.h>
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
+#include "runtime/exec_env.h"
+#include "runtime/stream_load/load_stream_mgr.h"
+#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
+
+StreamLoadContext::~StreamLoadContext() noexcept {
+    if (need_rollback) {
+        (void)_exec_env->stream_load_executor()->rollback_txn(this);
+        need_rollback = false;
+    }
+
+    _exec_env->load_stream_mgr()->remove(id);
+    if (_running_loads != nullptr) {
+        _running_loads->increment(-1);
+    }
+}
 
 std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
     rapidjson::StringBuffer s;
@@ -64,6 +79,12 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
     std::string_view msg = st.message();
     writer.Key("Message");
     writer.String(msg.data(), msg.size());
+    // db
+    writer.Key("Db");
+    writer.String(db.c_str());
+    // table
+    writer.Key("Table");
+    writer.String(table.c_str());
 
     if (st.ok()) {
         // label
@@ -144,6 +165,14 @@ std::string StreamLoadContext::to_json() const {
     writer.Key("Label");
     writer.String(label.c_str());
 
+    // db
+    writer.Key("Db");
+    writer.String(db.c_str());
+
+    // table
+    writer.Key("Table");
+    writer.String(table.c_str());
+
     // status
     writer.Key("Status");
     switch (status.code()) {
@@ -216,6 +245,10 @@ std::string StreamLoadContext::to_merge_commit_json() const {
     writer.Int64(txn_id);
     writer.Key("Label");
     writer.String(batch_write_label.c_str());
+    writer.Key("Db");
+    writer.String(db.c_str());
+    writer.Key("Table");
+    writer.String(table.c_str());
 
     writer.Key("Status");
     switch (status.code()) {

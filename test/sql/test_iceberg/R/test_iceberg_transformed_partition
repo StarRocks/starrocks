@@ -2,11 +2,203 @@
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
 -- !result
-function: assert_explain_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;","cardinality=1")
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;
+-- result:
+1	aa
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_identity_to_bucket_partition	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;","cardinality=1", "ESTIMATE")
 -- result:
 None
 -- !result
-function: assert_explain_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;","cardinality=1")
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+-- result:
+1	2024-08-08 15:32:51.751000
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.day_partition	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;","cardinality=1", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_date_add_bucket order by k1;
+-- result:
+1	sr	2025-01-01
+2	sr	2025-01-02
+3	sr	2025-01-03
+4	lake	2025-01-04
+5	lake	2025-01-05
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_date_add_bucket;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_date_add_bucket	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_date_add_bucket order by k1;","cardinality=5", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_ts_to_day order by k1;
+-- result:
+1	sr	2025-01-01 00:00:00
+2	sr	2025-01-01 02:00:00
+3	sr	2025-01-02 02:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_ts_to_day;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_ts_to_day	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_ts_to_day order by k1;","cardinality=3", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_month order by k1;
+-- result:
+1	sr	2025-01-01 00:00:00
+2	sr	2025-01-02 00:00:00
+3	sr	2025-01-03 00:00:00
+4	sr	2025-01-04 00:00:00
+5	sr	2025-01-05 00:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_month;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_day_to_month	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_month order by k1;","cardinality=7", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_month_to_year order by k1;
+-- result:
+1	sr	2025-01-01
+2	sr	2025-02-01
+3	sr	2025-03-01
+4	sr	2025-10-01
+5	sr	2026-08-01
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_month_to_year;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_month_to_year	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_month_to_year order by k1;","cardinality=7", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_bucket_drop_bucket order by k1;
+-- result:
+1	sr	2025-01-02 00:00:00
+2	sr	2025-01-03 00:00:00
+3	sr	2025-01-03 00:00:00
+4	sr	2025-01-04 00:00:00
+5	sr	2025-01-05 00:00:00
+6	sr	2025-01-02 00:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_bucket_drop_bucket;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_day_bucket_drop_bucket	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_bucket_drop_bucket order by k1;","cardinality=7", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_bucket order by k1;
+-- result:
+1	sr	2025-01-02 00:00:00
+2	sr	2025-01-03 00:00:00
+2	sr	2025-01-05 00:00:00
+3	sr	2025-01-05 00:00:00
+4	sr	2025-01-06 00:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_bucket;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_day_to_bucket	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_bucket order by k1;","cardinality=6", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_truncate order by k1;
+-- result:
+1	sr	2025-01-01 00:00:00
+2	sr	2025-01-02 00:00:00
+3	sr	2025-01-02 00:00:00
+4	lake	2025-01-02 00:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_truncate;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_day_to_truncate	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_truncate order by k1;","cardinality=8", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_drop_day order by k1;
+-- result:
+1	sr	2025-01-01 00:00:00
+2	sr	2025-01-02 00:00:00
+3	sr	2025-01-03 00:00:00
+4	sr	2025-01-04 00:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_drop_day;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_day_drop_day	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_drop_day order by k1;","cardinality=4", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_day_add_month order by k1;
+-- result:
+1	sr	2025-01-01 00:00:00
+2	sr	2025-01-02 00:00:00
+3	sr	2025-01-03 00:00:00
+4	sr	2025-01-04 00:00:00
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_day_add_month;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_drop_day_add_month	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_day_add_month order by k1;","cardinality=5", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_month_add_bucket order by k1;
+-- result:
+1	sr	2025-01-01
+2	sr	2025-01-02
+3	sr	2025-01-03
+4	sr	2025-01-04
+5	sr	2025-01-05
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_month_add_bucket;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_drop_month_add_bucket	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_month_add_bucket order by k1;","cardinality=7", "ESTIMATE")
+-- result:
+None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_bucket_add_truncate order by k1;
+-- result:
+1	sr	2025-01-01
+2	sr	2025-01-02
+3	sr	2025-01-03
+4	sr	2025-02-03
+5	sr	2025-02-05
+6	sr	2025-03-05
+7	sr	2025-03-07
+8	lake	2025-03-08
+9	lake	2025-05-08
+-- !result
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_bucket_add_truncate;
+-- result:
+iceberg_sql_test_9b5179fb8fe44ee0a352473d2bd47108.iceberg_ci_db.test_partition_drop_bucket_add_truncate	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_bucket_add_truncate order by k1;","cardinality=8", "ESTIMATE")
 -- result:
 None
 -- !result

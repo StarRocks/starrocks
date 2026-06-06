@@ -37,5 +37,5 @@ jobs:
           COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}
           BRANCH: ${{ github.base_ref }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && timeout 60 git pull >/dev/null || echo "git pull timeout, using cached ci-tool"
           ./scripts/run-repo-sync.sh

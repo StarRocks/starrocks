@@ -21,8 +21,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/compression/block_compression.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
@@ -33,10 +37,6 @@
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
-#include "util/compression/block_compression.h"
-#include "util/runtime_profile.h"
-#include "util/slice.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 class NullableColumn;

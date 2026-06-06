@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
-import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -42,8 +42,8 @@ public class CreateFunctionStmtTest {
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
 
-        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertEquals("ABC", stmt.getFunctionRef().getDbName());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionRef().getFunctionName());
         Assertions.assertFalse(stmt.shouldReplaceIfExists());
     }
 
@@ -145,8 +145,8 @@ public class CreateFunctionStmtTest {
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
 
-        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertEquals("ABC", stmt.getFunctionRef().getDbName());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionRef().getFunctionName());
         Assertions.assertTrue(stmt.shouldReplaceIfExists());
     }
 
@@ -162,8 +162,8 @@ public class CreateFunctionStmtTest {
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
 
-        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertEquals("ABC", stmt.getFunctionRef().getDbName());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionRef().getFunctionName());
         Assertions.assertFalse(stmt.shouldReplaceIfExists());
         Assertions.assertTrue(stmt.createIfNotExists());
 

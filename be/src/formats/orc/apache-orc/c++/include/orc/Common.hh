@@ -25,7 +25,7 @@
 #include "orc/Exceptions.hh"
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
-#include "runtime/integer_overflow_arithmetics.h"
+#include "types/integer_overflow_arithmetics.h"
 
 namespace orc {
 

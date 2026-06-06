@@ -34,25 +34,26 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
 
-#include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/Exprs_types.h"
-#include "runtime/query_statistics.h"
 
 namespace starrocks {
 
+class Chunk;
+class DataStreamSender;
 class ObjectPool;
+class QueryStatistics;
+class RowDescriptor;
 class RuntimeProfile;
 class RuntimeState;
 class TPlanFragmentExecParams;
-class RowDescriptor;
-class DataStreamSender;
 
 namespace pipeline {
 class UnifiedExecPlanFragmentParams;
@@ -79,7 +80,7 @@ public:
     // Further send() calls are illegal after calling close().
     // It must be okay to call this multiple times. Subsequent calls should
     // be ignored.
-    virtual Status close(RuntimeState* state, Status exec_status) {
+    virtual Status close(RuntimeState* state, const Status& exec_status) {
         _closed = true;
         return Status::OK();
     }

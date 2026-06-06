@@ -16,13 +16,16 @@
 
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "fmt/core.h"
+#include "fs/credential/cloud_configuration_factory.h"
+#include "runtime/descriptors_ext.h"
+#include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -57,8 +60,8 @@ Status JniScanner::do_open(RuntimeState* state) {
 }
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_scanner_obj != nullptr) {
+        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
         if (_jni_scanner_close != nullptr) {
             env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
         }
@@ -66,6 +69,7 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
+        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
         env->DeleteLocalRef(_jni_scanner_cls);
         _jni_scanner_cls = nullptr;
     }
@@ -186,12 +190,12 @@ Status JniScanner::_append_array_data(const FillColumnArgs& args) {
     auto* array_column = down_cast<ArrayColumn*>(args.column);
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
 
-    auto* offsets = array_column->offsets_column().get();
+    auto* offsets = array_column->offsets_column_raw_ptr();
     offsets->resize_uninitialized(args.num_rows + 1);
     memcpy(offsets->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
 
     int total_length = offset_ptr[args.num_rows];
-    Column* elements = array_column->elements_column().get();
+    Column* elements = array_column->elements_column_raw_ptr();
     std::string name = args.slot_name + ".$0";
     FillColumnArgs sub_args = {.num_rows = total_length,
                                .slot_name = name,
@@ -209,13 +213,13 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
     auto* map_column = down_cast<MapColumn*>(args.column);
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
 
-    auto* offsets = map_column->offsets_column().get();
+    auto* offsets = map_column->offsets_column_raw_ptr();
     offsets->resize_uninitialized(args.num_rows + 1);
     memcpy(offsets->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
 
     int total_length = offset_ptr[args.num_rows];
     {
-        Column* keys = map_column->keys_column().get();
+        Column* keys = map_column->keys_column_raw_ptr();
         if (!args.slot_type.children[0].is_unknown_type()) {
             std::string name = args.slot_name + ".$0";
             FillColumnArgs sub_args = {.num_rows = total_length,
@@ -231,7 +235,7 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
     }
 
     {
-        Column* values = map_column->values_column().get();
+        Column* values = map_column->values_column_raw_ptr();
         if (!args.slot_type.children[1].is_unknown_type()) {
             std::string name = args.slot_name + ".$1";
             FillColumnArgs sub_args = {.num_rows = total_length,
@@ -254,7 +258,7 @@ Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
     auto* struct_column = down_cast<StructColumn*>(args.column);
     const TypeDescriptor& type = args.slot_type;
     for (int i = 0; i < type.children.size(); i++) {
-        Column* column = struct_column->fields_column()[i].get();
+        Column* column = struct_column->field_column_raw_ptr(i);
         std::string name = args.slot_name + "." + type.field_names[i];
         FillColumnArgs sub_args = {.num_rows = args.num_rows,
                                    .slot_name = name,
@@ -291,7 +295,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         memcpy(null_data.data(), null_column_ptr, args.num_rows);
         nullable_column->update_has_null();
 
-        auto* data_column = nullable_column->data_column().get();
+        auto* data_column = nullable_column->data_column_raw_ptr();
         pargs->column = data_column;
         pargs->nulls = null_data.data();
     } else {
@@ -355,14 +359,14 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
 
     for (size_t col_idx = 0; col_idx < _scanner_ctx.materialized_columns.size(); col_idx++) {
         SlotDescriptor* slot_desc = _scanner_ctx.materialized_columns[col_idx].slot_desc;
-        const std::string& slot_name = slot_desc->col_name();
+        const auto slot_name = std::string(slot_desc->col_name());
         const TypeDescriptor& slot_type = slot_desc->type();
-        ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,
                             .slot_name = slot_name,
                             .slot_type = slot_type,
                             .nulls = nullptr,
-                            .column = column.get(),
+                            .column = column,
                             .must_nullable = true};
         RETURN_IF_ERROR(_fill_column(&args));
         env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
@@ -402,11 +406,16 @@ StatusOr<size_t> JniScanner::fill_empty_chunk(ChunkPtr* chunk) {
     return status;
 }
 
-static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
+static void build_nested_fields(const TypeDescriptor& type, std::string_view parent, std::string* sb) {
     for (int i = 0; i < type.children.size(); i++) {
         const auto& t = type.children[i];
         if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
+        std::string p;
+        if (type.is_struct_type()) {
+            p = fmt::format("{}.{}", parent, type.field_names[i]);
+        } else {
+            p = fmt::format("{}.${}", parent, i);
+        }
         if (t.is_complex_type()) {
             build_nested_fields(t, p, sb);
         } else {
@@ -519,7 +528,7 @@ std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOpti
     } else if (dynamic_cast<const HdfsTableDescriptor*>(hive_table)) {
         const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(hive_table);
         auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
+        std::string partition_full_path(partition_desc->location());
         data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
 
         hive_column_names = hdfs_table->get_hive_column_names();
@@ -574,7 +583,7 @@ std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOpti
     const auto& scan_range = *(options.scan_range);
     const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(options.hive_table);
     auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
+    std::string partition_full_path(partition_desc->location());
 
     std::string delta_file_paths;
     if (!scan_range.hudi_logs.empty()) {

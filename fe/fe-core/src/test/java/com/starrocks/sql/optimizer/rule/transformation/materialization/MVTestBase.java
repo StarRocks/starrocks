@@ -17,8 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -28,13 +26,16 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.mv.refresh.pct.MVPCTRefreshSynchronizer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -52,7 +53,7 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -64,8 +65,9 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
@@ -87,6 +89,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
+import com.starrocks.utframe.StarRocksTestExtension;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -115,7 +118,7 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view tests.
  */
-@ExtendWith(MVTraceExtension.class)
+@ExtendWith(StarRocksTestExtension.class)
 public abstract class MVTestBase extends StarRocksTestBase {
 
     public interface ExceptionRunnable {
@@ -142,6 +145,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.enable_virtual_columns = false;
 
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
@@ -221,7 +225,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-            mvTableName = createMaterializedViewStatement.getTableName();
+            mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Assertions.assertTrue(mvTableName != null);
 
             createAndRefreshMv(sql);
@@ -242,7 +246,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
         Assertions.assertTrue(mvTableName != null);
         String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? DB_NAME : mvTableName.getDb();
         String mvName = mvTableName.getTbl();
@@ -313,13 +317,17 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
-        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        OptimizerContext optimizerContext = OptimizerFactory.initContext(connectContext,
+                new ColumnRefFactory());
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(optimizerContext);
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
     }
 
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
         Preconditions.checkState(mvUpdateInfo != null);
-        return mvUpdateInfo.getMvToRefreshPartitionNames();
+        return mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
     }
 
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
@@ -391,7 +399,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Task task = taskManager.getTask(mv);
         if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         }
 
         Map<String, String> testProperties = task.getProperties();
@@ -414,7 +422,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         return getMVTaskRunProcessor(taskRun);
     }
 
-    protected MVPCTBasedRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+    protected MVPCTRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
         return getPartitionBasedRefreshProcessor(taskRun);
     }
@@ -441,11 +449,15 @@ public abstract class MVTestBase extends StarRocksTestBase {
                 QueryMaterializationContext.QueryCacheStats.class);
     }
 
-    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(MVPCTBasedRefreshProcessor processor) {
-        Map<BaseTableSnapshotInfo, Set<String>> baseTables = processor
-                .getPCTRefTableRefreshPartitions(Sets.newHashSet("p20220101"));
+    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(MVPCTRefreshProcessor processor) {
+        PCellSortedSet set = PCellSortedSet.of(Set.of(PCellWithName.of("p20220101", new PCellNone())));
+        Map<BaseTableSnapshotInfo, PCellSortedSet> baseTables =
+                new MVPCTRefreshSynchronizer(processor).getPCTRefTableRefreshPartitions(set);
         Assertions.assertEquals(2, baseTables.size());
-        return baseTables.entrySet().stream().collect(Collectors.toMap(x -> x.getKey().getBaseTable(), x -> x.getValue()));
+        return baseTables.entrySet()
+                .stream()
+                .collect(Collectors.toMap(x -> x.getKey().getBaseTable(),
+                        x -> x.getValue().getPartitionNames()));
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
@@ -663,7 +675,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
             Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
             ExecPlan execPlan = mvTaskRunContext.getExecPlan();
             Assertions.assertTrue(execPlan != null);
@@ -678,10 +690,10 @@ public abstract class MVTestBase extends StarRocksTestBase {
         return (MVTaskRunProcessor) taskRun.getProcessor();
     }
 
-    public static MVPCTBasedRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
+    public static MVPCTRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
         Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
         MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
-        return (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        return (MVPCTRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
     }
 
     protected void withMVQuery(String mvQuery,
@@ -801,18 +813,18 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected void addListPartition(String tbl, List<String> values) {
-        Map<String, PCell> partitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        PCellSortedSet partitions = PCellSortedSet.of();
         for (String val : values) {
             PListCell pListCell = new PListCell(val);
             String pName = AnalyzerUtils.getFormatPartitionValue(val);
-            if (partitions.containsKey(pName)) {
+            if (partitions.containsName(pName)) {
                 try {
                     pName = AnalyzerUtils.calculateUniquePartitionName(pName, pListCell, partitions);
                 } catch (Exception e) {
                     Assertions.fail("add partition failed:" + e);
                 }
             }
-            partitions.put(pName, pListCell);
+            partitions.add(pName, pListCell);
             addListPartition(tbl, pName, val);
         }
     }
@@ -858,13 +870,68 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected MaterializedView createMaterializedViewWithRefreshMode(String query,
                                                                      String refreshMode) throws Exception {
-        String ddl = String.format("CREATE MATERIALIZED VIEW `test_mv1` " +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"refresh_mode\" = \"%s\"" +
-                ")\n" +
-                "AS %s;", refreshMode, query);
-        starRocksAssert.withMaterializedView(ddl);
+        return createMaterializedViewWithRefreshMode(query, refreshMode, null, null);
+    }
+
+    /**
+     * Create a materialized view with the given refresh mode, optional partition clause, and extra properties.
+     *
+     * @param query          the AS query for the MV
+     * @param refreshMode    refresh mode: "incremental", "auto", "pct", etc.
+     * @param partitionBy    partition clause content, e.g. "`date`". null for non-partitioned MV.
+     * @param extraProperties extra properties map, e.g. {"partition_refresh_number": "1"}. null if none.
+     */
+    protected MaterializedView createMaterializedViewWithRefreshMode(
+            String query,
+            String refreshMode,
+            String partitionBy,
+            Map<String, String> extraProperties) throws Exception {
+        // AUTO is rejected at the user-input boundary. Test-only bypass: substitute INCREMENTAL
+        // through the SQL path (which exercises the IVMAnalyzer the same way), then promote
+        // currentRefreshMode to AUTO. If the query is not IVM-eligible, INCREMENTAL throws;
+        // fall back to PCT, mirroring AUTO's real create-time fallback.
+        boolean wantAuto = "auto".equalsIgnoreCase(refreshMode);
+        String effectiveMode = wantAuto ? "incremental" : refreshMode;
+
+        MaterializedView mv;
+        try {
+            mv = createMaterializedViewViaSql(query, effectiveMode, partitionBy, extraProperties);
+        } catch (Exception e) {
+            if (!wantAuto) {
+                throw e;
+            }
+            mv = createMaterializedViewViaSql(query, "pct", partitionBy, extraProperties);
+        }
+        if (wantAuto && mv.getCurrentRefreshMode() == MaterializedView.RefreshMode.INCREMENTAL) {
+            mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+            // Persisted refresh_mode property remains "incremental" so DDL regeneration during
+            // ALTER ACTIVE does not feed "auto" back through IVMAnalyzer (which now rejects it).
+            // The in-memory currentRefreshMode is what drives processor selection.
+        }
+        return mv;
+    }
+
+    private MaterializedView createMaterializedViewViaSql(
+            String query,
+            String refreshMode,
+            String partitionBy,
+            Map<String, String> extraProperties) throws Exception {
+        StringBuilder ddl = new StringBuilder();
+        ddl.append("CREATE MATERIALIZED VIEW `test_mv1` ");
+        if (partitionBy != null) {
+            ddl.append("PARTITION BY (").append(partitionBy).append(") ");
+        }
+        ddl.append("REFRESH DEFERRED MANUAL\n");
+        ddl.append("PROPERTIES (\n");
+        ddl.append("\"refresh_mode\" = \"").append(refreshMode).append("\"");
+        if (extraProperties != null) {
+            for (Map.Entry<String, String> entry : extraProperties.entrySet()) {
+                ddl.append(",\n\"").append(entry.getKey()).append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+        ddl.append("\n)\n");
+        ddl.append("AS ").append(query).append(";");
+        starRocksAssert.withMaterializedView(ddl.toString());
         return getMv("test_mv1");
     }
 }

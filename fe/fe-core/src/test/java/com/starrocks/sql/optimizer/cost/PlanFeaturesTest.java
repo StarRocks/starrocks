@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
 import com.starrocks.sql.optimizer.cost.feature.OperatorFeatures;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -28,59 +29,40 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 class PlanFeaturesTest extends PlanTestBase {
 
     @ParameterizedTest
-    @CsvSource(delimiter = '|', value = {
-            "select count(*) from t0 where v1 < 100 limit 100 " +
-                    "| tables=[0,0,10003] " +
-                    "| 41,1,0,8,0,2,0,3;42,1,0,8,2,2,4,0,0,1,1;46,1,0,9,0,2,0,0,0,1,1",
-            "select max(v1) from t0 where v1 < 100 limit 100" +
-                    "|tables=[0,0,10003] " +
-                    "| 41,1,0,8,0,2,0,3;42,1,0,8,2,2,4,0,0,1,1;46,1,0,8,0,2,0,0,0,1,1",
-            "select v1, count(*) from t0 group by v1 " +
-                    "| tables=[0,0,10003] " +
-                    "| 42,1,0,16,2,2,0,0,1,1,1;46,1,0,8,0,2,0,0,0,0,0",
-            "select count(*) from t0 a join t0 b on a.v1 = b.v2" +
-                    "| tables=[0,0,10003] " +
-                    "| 41,2,0,16,2,4,0,4;42,2,0,16,2,2,0,0,0,2,2;46,2,0,16,0,4,0,0,0,2,0",
-
-            // mysql external table
-            "select * from ods_order where org_order_no" +
-                    "| tables=[0,0,test.ods_order]" +
-                    "| 41,0,0,0,0,0,0,0,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,0,0,0,0,0",
-            "select * from (select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c') t1 where t1.k2 = 'c'" +
-                    "| tables=[0,db1.tbl1,test.ods_order] " +
-                    "| 41,1,0,8,2,2,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,",
-            "select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c'" +
-                    "| tables=[0,db1.tbl1,test.ods_order] " +
-                    "| 41,1,0,8,2,2,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,",
-
-    })
-    public void testBasic(String query, String expectedTables, String expected) throws Exception {
+    @MethodSource("basicCases")
+    public void testBasic(String query, String expectedTables, List<ExpectedOperatorSlice> expectedSlices)
+            throws Exception {
         expectedTables = StringUtils.trim(expectedTables);
-        expected = StringUtils.trim(expected);
 
         ExecPlan execPlan = getExecPlan(query);
         OptExpression physicalPlan = execPlan.getPhysicalPlan();
         PlanFeatures planFeatures = FeatureExtractor.extractFeatures(physicalPlan);
 
         // feature string
-        String string = planFeatures.toFeatureString();
-        Assertions.assertTrue(string.startsWith(expectedTables), string);
-        Splitter.on(";").splitToList(expected).forEach(slice -> {
-            Assertions.assertTrue(string.contains(slice), "slice is " + slice + ", feature is " + string);
-        });
+        String featureString = planFeatures.toFeatureString();
+        Assertions.assertTrue(featureString.startsWith(expectedTables), featureString);
+        Map<OperatorType, List<Long>> featureSlices = operatorSlicesFromFeatureString(featureString);
 
         // feature csv
         String csv = planFeatures.toFeatureCsv();
-        Splitter.on(";").splitToList(expected).forEach(slice -> {
-            Assertions.assertTrue(csv.contains(slice), "slice is " + slice + ", feature is " + string);
-        });
+        Map<OperatorType, List<Long>> csvSlices = operatorSlicesFromCsv(csv);
+
+        for (ExpectedOperatorSlice expectedSlice : expectedSlices) {
+            assertOperatorSlice(featureSlices, expectedSlice, "feature string");
+            assertOperatorSlice(csvSlices, expectedSlice, "feature csv");
+        }
     }
 
     @Test
@@ -94,7 +76,7 @@ class PlanFeaturesTest extends PlanTestBase {
         Assertions.assertEquals(3, numTables);
         Assertions.assertEquals(3, numEnvs);
         Assertions.assertEquals(1, numVars);
-        Assertions.assertEquals(377, numOperators);
+        Assertions.assertEquals(expectedOperatorHeaderCount(), numOperators);
     }
 
     @Test
@@ -136,5 +118,176 @@ class PlanFeaturesTest extends PlanTestBase {
 
         OperatorFeatures.TableFeature f00 = new OperatorFeatures.TableFeature(t00, statistics);
         Assertions.assertTrue(f00.equals(f0));
+    }
+
+    private static Stream<Arguments> basicCases() {
+        return Stream.of(
+                Arguments.of(
+                        "select count(*) from t0 where v1 < 100 limit 100 ",
+                        "tables=[0,0,10003]",
+                        List.of(
+                                slice(OperatorType.PHYSICAL_DISTRIBUTION, 1, 0, 8, 0, 2, 0, 3),
+                                slice(OperatorType.PHYSICAL_HASH_AGG, 1, 0, 8, 2, 2, 4, 0, 0, 1, 1),
+                                slice(OperatorType.PHYSICAL_OLAP_SCAN, 1, 0, 9, 0, 2, 0, 0, 0, 1, 1))),
+                Arguments.of(
+                        "select max(v1) from t0 where v1 < 100 limit 100",
+                        "tables=[0,0,10003]",
+                        List.of(
+                                slice(OperatorType.PHYSICAL_DISTRIBUTION, 1, 0, 8, 0, 2, 0, 3),
+                                slice(OperatorType.PHYSICAL_HASH_AGG, 1, 0, 8, 2, 2, 4, 0, 0, 1, 1),
+                                slice(OperatorType.PHYSICAL_OLAP_SCAN, 1, 0, 8, 0, 2, 0, 0, 0, 1, 1))),
+                Arguments.of(
+                        "select v1, count(*) from t0 group by v1 ",
+                        "tables=[0,0,10003]",
+                        List.of(
+                                slice(OperatorType.PHYSICAL_HASH_AGG, 1, 0, 16, 2, 2, 0, 0, 1, 1, 1),
+                                slice(OperatorType.PHYSICAL_OLAP_SCAN, 1, 0, 8, 0, 2, 0, 0, 0, 0, 0))),
+                Arguments.of(
+                        "select count(*) from t0 a join t0 b on a.v1 = b.v2",
+                        "tables=[0,0,10003]",
+                        List.of(
+                                slice(OperatorType.PHYSICAL_DISTRIBUTION, 2, 0, 16, 2, 4, 0, 4),
+                                slice(OperatorType.PHYSICAL_HASH_AGG, 2, 0, 16, 2, 2, 0, 0, 0, 2, 2),
+                                slice(OperatorType.PHYSICAL_OLAP_SCAN, 2, 0, 16, 0, 4, 0, 0, 0, 2, 0))),
+                // mysql external table
+                Arguments.of(
+                        "select * from ods_order where org_order_no",
+                        "tables=[0,0,test.ods_order]",
+                        List.of(
+                                sliceZeros(OperatorType.PHYSICAL_DISTRIBUTION, 0),
+                                sliceZeros(OperatorType.PHYSICAL_HASH_AGG, 0),
+                                sliceZeros(OperatorType.PHYSICAL_HASH_JOIN, 0),
+                                sliceZeros(OperatorType.PHYSICAL_NESTLOOP_JOIN, 0))),
+                Arguments.of(
+                        "select * from (select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c') " +
+                                "t1 where t1.k2 = 'c'",
+                        "tables=[0,test.ods_order,db1.tbl1]",
+                        List.of(
+                                slice(OperatorType.PHYSICAL_DISTRIBUTION, 1, 0, 8, 2, 2, 0, 1),
+                                sliceZeros(OperatorType.PHYSICAL_HASH_AGG, 0),
+                                sliceZeros(OperatorType.PHYSICAL_HASH_JOIN, 0),
+                                slice(OperatorType.PHYSICAL_NESTLOOP_JOIN, 1))),
+                Arguments.of(
+                        "select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c'",
+                        "tables=[0,test.ods_order,db1.tbl1]",
+                        List.of(
+                                slice(OperatorType.PHYSICAL_DISTRIBUTION, 1, 0, 8, 2, 2, 0, 1),
+                                sliceZeros(OperatorType.PHYSICAL_HASH_AGG, 0),
+                                sliceZeros(OperatorType.PHYSICAL_HASH_JOIN, 0),
+                                slice(OperatorType.PHYSICAL_NESTLOOP_JOIN, 1)))
+        );
+    }
+
+    private static ExpectedOperatorSlice slice(OperatorType type, long count, long... vectorPrefix) {
+        return new ExpectedOperatorSlice(type, count, vectorPrefix);
+    }
+
+    private static ExpectedOperatorSlice sliceZeros(OperatorType type, long count) {
+        return new ExpectedOperatorSlice(type, count, zeroVector(type));
+    }
+
+    private static long[] zeroVector(OperatorType type) {
+        int length = OperatorFeatures.vectorLength(type);
+        long[] zeros = new long[length];
+        for (int i = 0; i < length; i++) {
+            zeros[i] = 0L;
+        }
+        return zeros;
+    }
+
+    private static Map<OperatorType, List<Long>> operatorSlicesFromFeatureString(String featureString) {
+        String operators = StringUtils.substringBetween(featureString, "operators=[", "]");
+        Assertions.assertNotNull(operators, "Missing operators in feature string: " + featureString);
+        List<Long> values = parseLongList(Splitter.on(",").trimResults().splitToList(operators));
+        return decodeOperatorVectors(values);
+    }
+
+    private static Map<OperatorType, List<Long>> operatorSlicesFromCsv(String csv) {
+        List<String> parts = Splitter.on(",").trimResults().splitToList(csv);
+        int offset = operatorVectorOffset();
+        List<Long> values = parseLongList(parts.subList(offset, parts.size()));
+        return decodeOperatorVectors(values);
+    }
+
+    private static int operatorVectorOffset() {
+        List<String> headers = Splitter.on(",").splitToList(PlanFeatures.featuresHeader());
+        int offset = 0;
+        for (String header : headers) {
+            if (header.startsWith("operators_")) {
+                break;
+            }
+            offset++;
+        }
+        return offset;
+    }
+
+    private static List<Long> parseLongList(List<String> values) {
+        List<Long> result = new ArrayList<>(values.size());
+        for (String value : values) {
+            if (value.isEmpty()) {
+                continue;
+            }
+            result.add(Long.parseLong(value));
+        }
+        return result;
+    }
+
+    private static Map<OperatorType, List<Long>> decodeOperatorVectors(List<Long> values) {
+        Map<OperatorType, List<Long>> slices = new EnumMap<>(OperatorType.class);
+        int index = 0;
+        for (int start = OperatorType.PHYSICAL.ordinal() + 1; start < OperatorType.SCALAR.ordinal(); start++) {
+            OperatorType opType = OperatorType.values()[start];
+            if (PlanFeatures.skipOperator(opType)) {
+                continue;
+            }
+            int length = OperatorFeatures.vectorLength(opType) + PlanFeatures.AggregatedFeature.numExtraFeatures(opType);
+            List<Long> slice = values.subList(index, index + length);
+            slices.put(opType, new ArrayList<>(slice));
+            index += length;
+        }
+        Assertions.assertEquals(values.size(), index, "operator feature vector length mismatch");
+        return slices;
+    }
+
+    private static void assertOperatorSlice(Map<OperatorType, List<Long>> slices, ExpectedOperatorSlice expected,
+                                            String source) {
+        List<Long> actual = slices.get(expected.type);
+        Assertions.assertNotNull(actual, "Missing operator slice for " + expected.type + " in " + source);
+        int requiredSize = 2 + expected.vectorPrefix.length;
+        Assertions.assertTrue(actual.size() >= requiredSize,
+                "Slice length is " + actual.size() + " for " + expected.type + " in " + source);
+        Assertions.assertEquals((long) expected.type.ordinal(), actual.get(0),
+                "Operator ordinal mismatch for " + expected.type + " in " + source);
+        Assertions.assertEquals(expected.count, actual.get(1),
+                "Operator count mismatch for " + expected.type + " in " + source);
+        for (int i = 0; i < expected.vectorPrefix.length; i++) {
+            Assertions.assertEquals(expected.vectorPrefix[i], actual.get(2 + i),
+                    "Vector mismatch for " + expected.type + " index " + i + " in " + source);
+        }
+    }
+
+    private static int expectedOperatorHeaderCount() {
+        int num = 0;
+        for (int start = OperatorType.PHYSICAL.ordinal() + 1; start < OperatorType.SCALAR.ordinal(); start++) {
+            OperatorType opType = OperatorType.values()[start];
+            if (PlanFeatures.skipOperator(opType)) {
+                continue;
+            }
+            num += OperatorFeatures.vectorLength(opType);
+            num += PlanFeatures.AggregatedFeature.numExtraFeatures(opType);
+        }
+        return num;
+    }
+
+    private static final class ExpectedOperatorSlice {
+        private final OperatorType type;
+        private final long count;
+        private final long[] vectorPrefix;
+
+        private ExpectedOperatorSlice(OperatorType type, long count, long[] vectorPrefix) {
+            this.type = type;
+            this.count = count;
+            this.vectorPrefix = vectorPrefix;
+        }
     }
 }

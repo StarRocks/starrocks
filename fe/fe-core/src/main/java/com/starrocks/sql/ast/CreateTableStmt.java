@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -29,7 +28,7 @@ import java.util.Map;
 public class CreateTableStmt extends DdlStmt {
     private boolean ifNotExists;
     private boolean isExternal;
-    private TableName tableName;
+    private TableRef tableRef;
     private List<ColumnDef> columnDefs;
     private List<IndexDef> indexDefs;
     private KeysDesc keysDesc;
@@ -58,7 +57,7 @@ public class CreateTableStmt extends DdlStmt {
 
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
-                           TableName tableName,
+                           TableRef tableRef,
                            List<ColumnDef> columnDefinitions,
                            String engineName,
                            KeysDesc keysDesc,
@@ -67,13 +66,13 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, null, keysDesc, partitionDesc,
+        this(ifNotExists, isExternal, tableRef, columnDefinitions, null, engineName, null, keysDesc, partitionDesc,
                 distributionDesc, properties, extProperties, comment, null, null);
     }
 
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
-                           TableName tableName,
+                           TableRef tableRef,
                            List<ColumnDef> columnDefinitions,
                            String engineName,
                            KeysDesc keysDesc,
@@ -82,13 +81,13 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> ops) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, engineName, null, keysDesc, partitionDesc,
+        this(ifNotExists, isExternal, tableRef, columnDefinitions, engineName, null, keysDesc, partitionDesc,
                 distributionDesc, properties, extProperties, comment, ops, null);
     }
 
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
-                           TableName tableName,
+                           TableRef tableRef,
                            List<ColumnDef> columnDefinitions,
                            String engineName,
                            String charsetName,
@@ -98,13 +97,13 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> ops, List<OrderByElement> orderByElements) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
+        this(ifNotExists, isExternal, tableRef, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
                 distributionDesc, properties, extProperties, comment, ops, orderByElements);
     }
 
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
-                           TableName tableName,
+                           TableRef tableRef,
                            List<ColumnDef> columnDefinitions,
                            List<IndexDef> indexDefs,
                            String engineName,
@@ -115,14 +114,14 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
+        this(ifNotExists, isExternal, tableRef, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
                 partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList,
                 orderByElements, NodePosition.ZERO);
     }
 
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
-                           TableName tableName,
+                           TableRef tableRef,
                            List<ColumnDef> columnDefinitions,
                            List<IndexDef> indexDefs,
                            String engineName,
@@ -135,7 +134,7 @@ public class CreateTableStmt extends DdlStmt {
                            String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements,
                            NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         if (columnDefinitions == null) {
             this.columnDefs = Lists.newArrayList();
         } else {
@@ -174,16 +173,20 @@ public class CreateTableStmt extends DdlStmt {
         return isExternal;
     }
 
-    public TableName getDbTbl() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public String getCatalogName() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getTableName() {
-        return tableName.getTbl();
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<Column> getColumns() {
@@ -243,7 +246,7 @@ public class CreateTableStmt extends DdlStmt {
     }
 
     public String getDbName() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public void setTableSignature(int tableSignature) {
@@ -255,7 +258,13 @@ public class CreateTableStmt extends DdlStmt {
     }
 
     public void setTableName(String newTableName) {
-        tableName = new TableName(tableName.getDb(), newTableName);
+        if (tableRef == null) {
+            throw new IllegalStateException("TableRef is null");
+        }
+        String catalog = tableRef.getCatalogName();
+        String db = tableRef.getDbName();
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList(catalog, db, newTableName));
+        this.tableRef = new TableRef(qualifiedName, null, tableRef.getPos());
     }
 
     public String getComment() {

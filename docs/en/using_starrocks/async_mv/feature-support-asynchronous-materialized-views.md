@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 sidebar_label: "Feature Support"
+description: "Reference for feature support boundaries of asynchronous materialized views in StarRocks: supported join types, aggregate functions, query rewrite..."
 ---
 
 # Feature Support: Asynchronous Materialized Views
@@ -92,6 +93,10 @@ This document outlines the boundaries of competence for asynchronous materialize
 | Paimon                       | <ul><li>Non-partitioned table: v2.5.4 & v3.0+</li><li>DATE and DATETIME-type partition: To be supported</li><li>Multi-level partitioning: To be supported</li></ul> | Not Stable                                    |
 | DeltaLake                    | <ul><li>Non-partitioned table: v3.2+</li><li>Partitioned table: To be supported</li><li>Multi-level partitioning: To be supported</li></ul> | Not Stable                                    |
 | JDBC                         | <ul><li>Non-partitioned table: v3.0+</li><li>Partitioned table: MySQL RangeColumn Partition v3.1.4</li></ul> | Not Stable                                    |
+
+:::note
+External table materialized views do not support automatic refresh **triggered by base table data changes**. They only support asynchronous **fixed-interval** refresh and manual refresh.
+:::
 
 ## Query Rewrite
 

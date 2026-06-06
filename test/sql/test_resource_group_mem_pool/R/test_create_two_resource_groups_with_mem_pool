@@ -1,0 +1,35 @@
+-- name: test_create_two_resource_groups_with_mem_pool
+
+[UC] drop resource group shared_resource_group_for_john;
+[UC] drop resource group shared_resource_group_for_jane;
+
+[UC] create resource group shared_resource_group_for_john 
+to (user='john') 
+with (
+  'cpu_weight' = '7',
+  'mem_limit' = '55%',
+  'mem_pool' = 'shared_pool_john_and_jane'
+);
+
+
+[UC] create resource group shared_resource_group_for_jane 
+to (user='jane') 
+with (
+  'cpu_weight' = '8',
+  'mem_limit' = '55%',
+  'mem_pool' = 'shared_pool_john_and_jane'
+);
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_john.+7.+55(\.\d+)?%.+NORMAL.+\(id=\d+,.+user=john\)\s*shared_pool_john_and_jane
+-- !result
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_jane.+8.+55(\.\d+)?%.+NORMAL.+\(id=\d+,.+user=jane\)\s*shared_pool_john_and_jane
+-- !result
+
+
+[UC] drop resource group shared_resource_group_for_john;
+[UC] drop resource group shared_resource_group_for_jane;

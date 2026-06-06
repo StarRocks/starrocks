@@ -19,15 +19,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/container/raw_container.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc_helper.h"
+#include "common/config_compaction_fwd.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
+#include "platform/platform_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
-#include "util/brpc_stub_cache.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -90,7 +93,7 @@ Status ReplicateChannel::_init() {
     }
     _inited = true;
 
-    _stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(_host, _port);
+    _stub = PlatformEnv::GetInstance()->brpc_stub_cache()->get_stub(_host, _port);
     if (_stub == nullptr) {
         auto msg = fmt::format("Failed to Connect {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;
@@ -155,7 +158,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
-    SET_IGNORE_OVERCROWDED(_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_closure->cntl);
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);
@@ -338,6 +341,32 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 auto& index = mutable_indexes->at(i);
                 if (index.index_type() == VECTOR) {
                     auto index_path = mutable_indexes->at(i).index_path();
+
+                    // .vi may be absent when the writer skipped the build below
+                    // threshold (sync OLAP is the only path here — see
+                    // VectorIndexWriter::finish). The primary's segment footer
+                    // is set to VECTOR_INDEX_STORAGE_NONE in that case, so the
+                    // secondary's read path will skip the vector index without
+                    // ever opening this file. Drop the entry from PB so the
+                    // secondary does not attempt to consume an absent payload
+                    // from the IOBuf stream.
+                    auto exists_st = _fs->path_exists(index_path);
+                    if (exists_st.is_not_found()) {
+                        // Expected on every small-segment publish below the build
+                        // threshold; keep at VLOG so it doesn't dominate logs at
+                        // high QPS.
+                        VLOG(1) << "skip replicating non-existent vector index file " << index_path << " for "
+                                << segment->DebugString();
+                        mutable_indexes->DeleteSubrange(i, 1);
+                        --i;
+                        continue;
+                    }
+                    if (!exists_st.ok()) {
+                        LOG(WARNING) << "Failed to stat index file " << index_path << " by " << debug_string()
+                                     << " err " << exists_st;
+                        return set_status(exists_st);
+                    }
+
                     auto res = _fs->new_random_access_file(index_path);
 
                     if (!res.ok()) {
@@ -365,8 +394,12 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                         return set_status(st);
                     }
                 }
-                segment->set_seg_index_data_size(total_index_data_size);
             }
+            // Set once after the loop so the final value reflects all
+            // surviving entries (including the empty case where every VECTOR
+            // entry was dropped via DeleteSubrange) instead of being skipped
+            // on iterations that hit `continue`.
+            segment->set_seg_index_data_size(total_index_data_size);
         }
     }
 
@@ -399,7 +432,7 @@ Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
     int max_threads = std::max(data_dir_num * min_threads, min_threads);
-    return ThreadPoolBuilder("segment_replicate")
+    return ThreadPoolBuilder("seg_replicate")
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_replicate_pool);

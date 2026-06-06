@@ -17,12 +17,12 @@ package com.starrocks.statistic;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.Type;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
@@ -98,7 +98,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             }
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
-            collectStatisticSync(sql, context);
+            collectStatisticSync(sql, context, analyzeStatus);
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);

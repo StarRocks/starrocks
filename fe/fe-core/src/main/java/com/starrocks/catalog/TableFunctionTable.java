@@ -42,6 +42,8 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -58,6 +60,13 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
@@ -98,10 +107,10 @@ public class TableFunctionTable extends Table {
     }
 
     private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
-            .column("PATH", Type.STRING)
-            .column("SIZE", Type.BIGINT)
-            .column("IS_DIR", Type.BOOLEAN)
-            .column("MODIFICATION_TIME", Type.DATETIME)
+            .column("PATH", StringType.STRING)
+            .column("SIZE", IntegerType.BIGINT)
+            .column("IS_DIR", BooleanType.BOOLEAN)
+            .column("MODIFICATION_TIME", DateType.DATETIME)
             .build();
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 2;
@@ -120,6 +129,7 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
+    public static final String PROPERTY_AUTO_DETECT_TYPES = "auto_detect_types";
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
@@ -129,6 +139,7 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
     private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
     private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    private static final String PROPERTY_CSV_INCLUDE_HEADER = "csv.include_header";
 
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
     private static final Set<String> SUPPORTED_PARQUET_VERSIONS = Sets.newHashSet("1.0", "2.4", "2.6");
@@ -136,6 +147,8 @@ public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
+
+    public static final String PROPERTY_SCHEMA = "schema";
 
     public enum MisMatchFillValue {
         NONE,       // error
@@ -170,6 +183,7 @@ public class TableFunctionTable extends Table {
     // for load/query data
     private int autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
     private int autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
+    private boolean autoDetectTypes = true;
 
     private List<String> columnsFromPath = new ArrayList<>();
     private boolean strictMode = false;
@@ -178,6 +192,8 @@ public class TableFunctionTable extends Table {
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
     private MisMatchFillValue misMatchFillValue = MisMatchFillValue.NONE;
+
+    private Optional<List<Column>> explicitSchemaColumns = Optional.empty();
 
     // for unload data
     private String compressionType;
@@ -192,6 +208,7 @@ public class TableFunctionTable extends Table {
     private byte csvEscape;
     private long csvSkipHeader;
     private boolean csvTrimSpace;
+    private boolean csvIncludeHeader = false;
 
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
@@ -244,11 +261,13 @@ public class TableFunctionTable extends Table {
     private void setSchemaForLoadAndQuery() throws DdlException {
         parseFilesForLoadAndQuery();
 
-        // infer schema from files
-        List<Column> columns = new ArrayList<>();
-        if (path.startsWith(FAKE_PATH)) {
-            columns.add(new Column("col_int", Type.INT));
-            columns.add(new Column("col_string", Type.VARCHAR));
+        List<Column> columns;
+        if (explicitSchemaColumns.isPresent()) {
+            columns = new ArrayList<>(explicitSchemaColumns.get());
+        } else if (path.startsWith(FAKE_PATH)) {
+            columns = new ArrayList<>();
+            columns.add(new Column("col_int", IntegerType.INT));
+            columns.add(new Column("col_string", VarcharType.VARCHAR));
         } else {
             columns = getFileSchema();
         }
@@ -386,6 +405,13 @@ public class TableFunctionTable extends Table {
         if (CSV.equalsIgnoreCase(format)) {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
+            tTableFunctionTable.setCsv_include_header(csvIncludeHeader);
+            if (csvEnclose != 0) {
+                tTableFunctionTable.setCsv_enclose(csvEnclose);
+            }
+            if (csvEscape != 0) {
+                tTableFunctionTable.setCsv_escape(csvEscape);
+            }
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         TParquetOptions parquetOptions = new TParquetOptions();
@@ -454,6 +480,26 @@ public class TableFunctionTable extends Table {
             throw new DdlException("not supported format: " + format);
         }
 
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_FILES, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_TYPES, PROPERTY_SCHEMA);
+
+            String schemaStr = properties.get(PROPERTY_SCHEMA);
+            if (Strings.isNullOrEmpty(schemaStr) || schemaStr.trim().isEmpty()) {
+                throw new DdlException("'schema' property is empty");
+            }
+            try {
+                List<Column> cols = SqlParser.parseFilesSchema(schemaStr);
+                if (cols.isEmpty()) {
+                    throw new DdlException("'schema' declares no columns");
+                }
+                explicitSchemaColumns = Optional.of(cols);
+            } catch (ParsingException e) {
+                throw new DdlException("invalid 'schema': " + e.getMessage(), e);
+            }
+        }
+
         String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
         if (!Strings.isNullOrEmpty(colsFromPathProp)) {
             String[] colsFromPath = colsFromPathProp.split(",");
@@ -494,6 +540,21 @@ public class TableFunctionTable extends Table {
             } catch (NumberFormatException e) {
                 ErrorReport.reportDdlException(
                         ErrorCode.ERR_INVALID_VALUE, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, property, "int number");
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_TYPES)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_TYPES);
+            if (property.equalsIgnoreCase("true")) {
+                autoDetectTypes = true;
+            } else if (property.equalsIgnoreCase("false")) {
+                autoDetectTypes = false;
+            } else {
+                throw new DdlException(
+                    String.format(
+                        "Illegal value of %s: %s, only true/false allowed", PROPERTY_AUTO_DETECT_TYPES, property
+                    )
+                );
             }
         }
 
@@ -597,6 +658,7 @@ public class TableFunctionTable extends Table {
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
         params.setSchema_sample_file_row_count(autoDetectSampleRows);
+        params.setSchema_sample_types(autoDetectTypes);
         params.setEnclose(csvEnclose);
         params.setEscape(csvEscape);
         params.setSkip_header(csvSkipHeader);
@@ -690,7 +752,8 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType), true));
+            boolean isNullable = slot.isIsNullable() ? slot.isNullable : slot.nullIndicatorBit != -1;
+            columns.add(new Column(slot.colName, TypeDeserializer.fromProtobuf(slot.slotType), isNullable));
         }
         return columns;
     }
@@ -698,7 +761,7 @@ public class TableFunctionTable extends Table {
     private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
         for (String colName : columnsFromPath) {
-            columns.add(new Column(colName, ScalarType.createDefaultString(), true));
+            columns.add(new Column(colName, StringType.DEFAULT_STRING, true));
         }
         return columns;
     }
@@ -723,6 +786,10 @@ public class TableFunctionTable extends Table {
 
     public boolean isFlexibleColumnMapping() {
         return misMatchFillValue != MisMatchFillValue.NONE;
+    }
+
+    public boolean hasExplicitSchema() {
+        return explicitSchemaColumns.isPresent();
     }
 
     @Override
@@ -777,6 +844,12 @@ public class TableFunctionTable extends Table {
     }
 
     public void parsePropertiesForUnload(List<Column> columns, SessionVariable sessionVariable) {
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            throw new SemanticException(
+                    "'schema' is not supported in INSERT INTO FILES (unload); " +
+                    "output columns are determined by the SELECT list");
+        }
+
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
@@ -890,6 +963,38 @@ public class TableFunctionTable extends Table {
             }
         }
 
+        if (properties.containsKey(PROPERTY_CSV_INCLUDE_HEADER)) {
+            String includeHeader = properties.get(PROPERTY_CSV_INCLUDE_HEADER);
+            if (!includeHeader.equalsIgnoreCase("true") && !includeHeader.equalsIgnoreCase("false")) {
+                throw new SemanticException("got invalid parameter \"csv.include_header\" = \"%s\", " +
+                        "expect a boolean value (true or false).", includeHeader);
+            }
+            this.csvIncludeHeader = includeHeader.equalsIgnoreCase("true");
+        }
+
+        // csv enclose & escape options: accept exactly one single-byte ASCII character.
+        // Reject empty, multi-character, or multi-byte (non-ASCII) values so that the
+        // byte transmitted to BE unambiguously represents the user's intent.
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.enclose must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ENCLOSE), bs.length);
+            }
+            this.csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.escape must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ESCAPE), bs.length);
+            }
+            this.csvEscape = bs[0];
+        }
+
         // parquet options
         if (properties.containsKey(PROPERTY_PARQUET_USE_LEGACY_ENCODING)) {
             String useLegacyEncoding = properties.getOrDefault(PROPERTY_PARQUET_USE_LEGACY_ENCODING, "false");
@@ -924,6 +1029,14 @@ public class TableFunctionTable extends Table {
 
         public List<Column> build() {
             return columns;
+        }
+    }
+
+    private static void rejectIfPresent(Map<String, String> props, String key, String against)
+            throws DdlException {
+        if (props.containsKey(key)) {
+            throw new DdlException(
+                    String.format("'%s' cannot be used together with '%s'", key, against));
         }
     }
 }

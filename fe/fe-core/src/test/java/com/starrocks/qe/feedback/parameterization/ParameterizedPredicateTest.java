@@ -17,7 +17,6 @@ package com.starrocks.qe.feedback.parameterization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.feedback.ParameterizedPredicate;
 import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -34,6 +33,10 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.AndRangeP
 import com.starrocks.sql.optimizer.rule.transformation.materialization.ColumnRangePredicate;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OrRangePredicate;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.RangePredicate;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,13 +59,13 @@ public class ParameterizedPredicateTest {
 
     @BeforeEach
     public void setUp() {
-        colRef1 = new ColumnRefOperator(1, Type.INT, "int_col", false);
-        colRef2 = new ColumnRefOperator(2, Type.DOUBLE, "double_col", false);
-        colRef3 = new ColumnRefOperator(3, Type.BIGINT, "bigint_col", false);
-        stringCol = new ColumnRefOperator(4, Type.VARCHAR, "string_col", false);
-        dateCol = new ColumnRefOperator(5, Type.DATE, "date_col", false);
-        datetimeCol = new ColumnRefOperator(6, Type.DATETIME, "datetime_col", false);
-        stringDateCol = new ColumnRefOperator(7, Type.VARCHAR, "string_date_col", false);
+        colRef1 = new ColumnRefOperator(1, IntegerType.INT, "int_col", false);
+        colRef2 = new ColumnRefOperator(2, FloatType.DOUBLE, "double_col", false);
+        colRef3 = new ColumnRefOperator(3, IntegerType.BIGINT, "bigint_col", false);
+        stringCol = new ColumnRefOperator(4, VarcharType.VARCHAR, "string_col", false);
+        dateCol = new ColumnRefOperator(5, DateType.DATE, "date_col", false);
+        datetimeCol = new ColumnRefOperator(6, DateType.DATETIME, "datetime_col", false);
+        stringDateCol = new ColumnRefOperator(7, VarcharType.VARCHAR, "string_date_col", false);
     }
 
     private ScanNode createScanNode(ScalarOperator predicate) {
@@ -86,7 +89,7 @@ public class ParameterizedPredicateTest {
         List<ScalarOperator> args = new ArrayList<>();
         args.add(stringCol);
         args.add(ConstantOperator.createVarchar(format));
-        return new CallOperator("str2date", Type.DATE, args);
+        return new CallOperator("str2date", DateType.DATE, args);
     }
 
     private ColumnRangePredicate createColumnRangePredicate(ColumnRefOperator col, int lower, int upper) {

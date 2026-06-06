@@ -27,15 +27,15 @@ SELECT col_int, count_ts, sum_int from mv2 where col_int >1;
 
 refresh materialized view mv1 with sync mode;
 select count(1) from mv1;
-function: check_hit_materialized_view("SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table", "mv1")
+function: print_hit_materialized_view("SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table", "mv1")
 SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table order by 1, 2 limit 5;
 
 refresh materialized view mv2 with sync mode;
-function: check_hit_materialized_view("SELECT col_int, count(col_timestamp) as count_ts, sum(col_double) as sum_int from mv1 group by col_int;", "mv2")
+function: print_hit_materialized_view("SELECT col_int, count(col_timestamp) as count_ts, sum(col_double) as sum_int from mv1 group by col_int;", "mv2")
 SELECT col_int, count(col_timestamp) as count_ts, sum(col_double) as sum_int from mv1 group by col_int order by 1, 2 limit 5;
 
 refresh materialized view mv3 with sync mode;
-function: check_hit_materialized_view("SELECT col_int, count_ts, sum_int from mv2 where col_int >1;", "mv3")
+function: print_hit_materialized_view("SELECT col_int, count_ts, sum_int from mv2 where col_int >1;", "mv3")
 SELECT col_int, count_ts, sum_int from mv2 where col_int >1 order by 1, 2 limit 5;
 
 drop catalog mv_hudi_${uuid0};

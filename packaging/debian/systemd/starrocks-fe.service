@@ -1,0 +1,30 @@
+[Unit]
+Description=StarRocks Frontend (FE)
+After=network.target
+
+[Service]
+Type=simple
+User=starrocks
+Group=starrocks
+RuntimeDirectory=starrocks-fe
+RuntimeDirectoryMode=0750
+ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh
+Restart=on-failure
+LimitNOFILE=65536
+# NOTE: FE is a Java process. Unlike BE/CN, it typically does not require 
+# LimitMEMLOCK=infinity as it doesn't use mlockall() for native storage.
+TimeoutStartSec=300
+TimeoutStopSec=300
+KillSignal=SIGTERM
+
+# NOTE:  
+# - FE is started via start_fe.sh, which runs in foreground mode by default  
+#   (RUN_DAEMON=0) unless the --daemon flag is explicitly provided.  
+# - For systemd Type=simple, the main process must stay in the foreground.  
+# - Therefore we intentionally do NOT pass --daemon or a separate  
+#   "foreground" flag here. BE/CN services are configured in their own  
+#   systemd units and startup scripts to keep the main process in the  
+#   foreground as well.  
+
+[Install]
+WantedBy=multi-user.target

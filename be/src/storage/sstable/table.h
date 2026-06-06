@@ -3,6 +3,8 @@
 // (https://developers.google.com/open-source/licenses/bsd)
 #pragma once
 
+#include <memory>
+
 #include "common/status.h"
 
 namespace starrocks {
@@ -25,15 +27,15 @@ public:
     // of "file", and read the metadata entries necessary to allow
     // retrieving data from the table.
     //
-    // If successful, returns ok and sets "*table" to the newly opened
-    // table.  The client should delete "*table" when no longer needed.
-    // If there was an error while initializing the table, sets "*table"
-    // to nullptr and returns a non-ok status.  Does not take ownership of
-    // "*source", but the client must ensure that "source" remains live
-    // for the duration of the returned table's lifetime.
+    // If successful, returns ok and sets "table" to the newly opened table.
+    // The caller may only use "table" when the returned Status is OK.
+    // On failure, "table" is left in an unspecified state and must not be used.
     //
-    // *file must remain live while this Table is in use.
-    static Status Open(const Options& options, RandomAccessFile* file, uint64_t file_size, Table** table);
+    // Does not take ownership of "file", but the caller must ensure
+    // that "file" remains live for the duration of the returned table's
+    // lifetime.
+    static Status Open(const Options& options, RandomAccessFile* file, uint64_t file_size,
+                       std::unique_ptr<Table>& table);
 
     Table(const Table&) = delete;
     Table& operator=(const Table&) = delete;
@@ -52,6 +54,10 @@ public:
                     std::vector<std::string>* values);
 
     size_t memory_usage() const;
+
+    // Sample keys from the table for parallel compaction task splitting.
+    // Loading the index block, one key is sampled for every sample_interval_bytes worth of data.
+    Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
 
 private:
     struct Rep;

@@ -35,53 +35,29 @@
 #include "service/backend_base.h"
 
 #include <arrow/record_batch.h>
-#include <thrift/concurrency/ThreadFactory.h>
-#include <thrift/processor/TMultiplexedProcessor.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <memory>
 
-#include "common/config.h"
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/result/result_buffer_mgr.h"
+#include "compute_env/result/result_queue_mgr.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "service_be/backend_service.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
-#include "util/blocking_queue.hpp"
-#include "util/thrift_server.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
-using apache::thrift::concurrency::ThreadFactory;
-
 BackendServiceBase::BackendServiceBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
-
-template <class Service>
-std::unique_ptr<ThriftServer> BackendServiceBase::create(ExecEnv* exec_env, int port) {
-    auto handler = std::make_shared<Service>(exec_env);
-    // TODO: do we want a BoostThreadFactory?
-    // TODO: we want separate thread factories here, so that fe requests can't starve
-    // cn requests
-    auto thread_factory = std::make_shared<ThreadFactory>();
-    auto processor = std::make_shared<BackendServiceProcessor>(handler);
-
-    LOG(INFO) << "StarRocksInternalService has started listening port on " << port;
-    // TODO: May be rename be_service_threads to thrift_service_threads ?
-    return std::make_unique<ThriftServer>("BackendService", processor, port, exec_env->metrics(),
-                                          config::be_service_threads);
-}
-
-template std::unique_ptr<ThriftServer> BackendServiceBase::create<BackendService>(ExecEnv* exec_env, int port);
 
 void BackendServiceBase::exec_plan_fragment(TExecPlanFragmentResult& return_val,
                                             const TExecPlanFragmentParams& params) {
@@ -195,9 +171,10 @@ void BackendServiceBase::get_next(TScanBatchResult& result_, const TScanNextBatc
         LOG(ERROR) << "getNext error: context offset [" << context->offset << " ]"
                    << " ,client offset [ " << offset << " ]";
         // invalid offset
-        t_status.status_code = TStatusCode::NOT_FOUND;
-        t_status.error_msgs.push_back(strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2",
-                                                          context_id, offset, context->offset));
+        std::string error_msg = strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2", context_id,
+                                                    offset, context->offset);
+        Status st = Status::NotFound(error_msg);
+        st.to_thrift(&t_status);
         result_.status = t_status;
     } else {
         // during accessing, should disabled last_access_time

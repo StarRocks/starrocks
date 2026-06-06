@@ -14,13 +14,12 @@
 
 package com.starrocks.sql.optimizer.rule.tvr;
 
-import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -36,8 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptContext;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptMeta;
 import org.apache.hadoop.util.Lists;
@@ -76,22 +75,22 @@ public class TvrAggregateRule extends TvrTransformationRule {
     }
 
     protected OptExpression doTransformWithMonotonic(OptimizerContext optimizerContext,
-                                                     OlapTable aggStateTable,
+                                                     MaterializedView aggStateTable,
                                                      LogicalAggregationOperator inputAggOperator,
                                                      OptExpression input) {
         Preconditions.checkArgument(aggStateTable != null,
                 "Aggregate state table must not be null for TVR aggregate rule");
-        final Column tvrColumnRowId = aggStateTable.getColumn(TvrOpUtils.COLUMN_ROW_ID);
+        final Column tvrColumnRowId = aggStateTable.getColumn(IvmOpUtils.COLUMN_ROW_ID);
         Preconditions.checkArgument(tvrColumnRowId != null,
                 "TVR column row id must exist in agg state table");
         final ColumnRefFactory columnRefFactory = optimizerContext.getColumnRefFactory();
         final LogicalOlapScanOperator aggStateOlapScanOperator = MvRewritePreprocessor.createScanMvOperator(
-                aggStateTable, columnRefFactory, Sets.newHashSet(), true);
+                aggStateTable, columnRefFactory, PCellSortedSet.of(), true);
         ColumnRefOperator aggStateRowIdColumnRef =
                 aggStateOlapScanOperator.getColumnMetaToColRefMap().get(tvrColumnRowId);
         List<Column> aggStateTableFullColumns = aggStateTable.getFullSchema();
         List<Column> aggStateTableColumns = aggStateTableFullColumns.stream()
-                .filter(col -> col.getName().startsWith(TvrOpUtils.COLUMN_AGG_STATE_PREFIX))
+                .filter(col -> col.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX))
                 .collect(Collectors.toList());
         // collect agg state table's aggregate agg state columns
         Map<Column, ColumnRefOperator> aggStateTableColumnMetaToColRefMap =
@@ -112,8 +111,9 @@ public class TvrAggregateRule extends TvrTransformationRule {
                 .stream()
                 .map(col -> (ScalarOperator) col)
                 .collect(Collectors.toList());
-        ScalarOperator eqRowIdOperator = TvrOpUtils.buildRowIdEqBinaryPredicateOp(aggStateRowIdColumnRef,
-                inputAggUniqueKeys);
+        final int encodeRowIdVersion = aggStateTable.getEncodeRowIdVersion();
+        ScalarOperator eqRowIdOperator = IvmOpUtils.buildRowIdEqBinaryPredicateOp(encodeRowIdVersion,
+                aggStateRowIdColumnRef, inputAggUniqueKeys);
 
         // old aggregate function to new column ref operator map
         Map<ScalarOperator, ColumnRefOperator> oldToNewColumnRefMap = Maps.newHashMap();
@@ -151,7 +151,7 @@ public class TvrAggregateRule extends TvrTransformationRule {
             Preconditions.checkState(intermediateAggColumnRef != null,
                     "New column ref operator should not be null for: %s", callOperator);
             ColumnRefOperator aggStateAggStateColumnRef = aggStateTableColumnRefs.get(i);
-            ScalarOperator stateUnionScalarOperator = TvrOpUtils.buildStateUnionScalarOperator(
+            ScalarOperator stateUnionScalarOperator = IvmOpUtils.buildStateUnionScalarOperator(
                     callOperator, intermediateAggColumnRef, aggStateAggStateColumnRef);
             projColumnRefMap.put(oldColumnRef, stateUnionScalarOperator);
         }

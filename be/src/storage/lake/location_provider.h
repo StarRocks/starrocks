@@ -28,6 +28,16 @@ namespace starrocks::lake {
 static const char* const kMetadataDirectoryName = "meta";
 static const char* const kTxnLogDirectoryName = "log";
 static const char* const kSegmentDirectoryName = "data";
+// Legacy load_spill layout: <root>/load_spill/<load_id_uuid>/. Written by BE versions
+// before the txn_id-scoped layout was introduced; new code only reclaims it via
+// vacuum_load_spill() when its cleanup_legacy_load_spill flag is set.
+static const char* const kLoadSpillDirectoryName = "load_spill";
+// Active load_spill layout (flat). All spill files from Lake DeltaWriterImpl live
+// directly under <root>/load_spill_txns/ with names "<txn_id_hex>_<load_id>_<frag_id>_<seq>";
+// vacuum_load_spill() reclaims expired files by parsing the leading hex txn_id, so a
+// single paginated list over this dir is sufficient. Non-Lake callers (connector /
+// SpillPartitionChunkWriter) keep using kLoadSpillDirectoryName above.
+static const char* const kLoadSpillTxnsDirectoryName = "load_spill_txns";
 
 class LocationProvider {
 public:
@@ -105,6 +115,16 @@ public:
         return join_path(segment_root_location(tablet_id), delvec_name);
     }
 
+    // Construct full remote storage path for Lake Compaction Rows Mapper file
+    // WHY: lcrm files are stored alongside segments in the tablet's segment root on remote
+    // storage (S3/HDFS). This ensures they're subject to the same lifecycle management,
+    // access patterns, and storage policies as other tablet data files.
+    // CONSISTENCY: Using segment_root_location maintains path consistency with delvec and
+    // SST files, simplifying storage management and backup/restore operations.
+    std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const {
+        return join_path(segment_root_location(tablet_id), crm_name);
+    }
+
     std::string sst_location(int64_t tablet_id, std::string_view sst_name) const {
         return join_path(segment_root_location(tablet_id), sst_name);
     }
@@ -113,7 +133,7 @@ public:
         return join_path(root_location(tablet_id), schema_filename(schema_id));
     }
 
-private:
+protected:
     static std::string join_path(std::string_view parent, std::string_view child) {
         return fmt::format("{}/{}", parent, child);
     }

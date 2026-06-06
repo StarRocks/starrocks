@@ -16,10 +16,9 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -29,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.InvalidType;
 
 import java.util.HashMap;
 import java.util.List;
@@ -66,7 +66,7 @@ public class RewriteHllCountDistinctRule extends TransformationRule {
                     oldFunctionCall.getChildren().size() == 1 &&
                     oldFunctionCall.getChildren().get(0).getType().isHllType()) {
                 Function searchDesc = new Function(new FunctionName(FunctionSet.HLL_UNION_AGG),
-                        oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
+                        oldFunctionCall.getFunction().getArgs(), InvalidType.INVALID, false);
                 Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
                 CallOperator c = new CallOperator(FunctionSet.HLL_UNION_AGG,

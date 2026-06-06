@@ -1,0 +1,34 @@
+-- name: test_lake_alter_colocate @cloud
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Create a lake table WITHOUT colocate_with property
+CREATE TABLE t1 (
+    c0 int,
+    c1 varchar(20)
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+-- ALTER TABLE to set colocate_with to a NEW group (this triggers the bug)
+ALTER TABLE t1 SET ("colocate_with" = "${uuid0}_group1");
+
+-- Verify colocate group was set
+SHOW CREATE TABLE t1;
+
+-- Create a second table and join the same colocate group
+CREATE TABLE t2 (
+    c0 int,
+    c1 varchar(20)
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+ALTER TABLE t2 SET ("colocate_with" = "${uuid0}_group1");
+
+-- Verify both tables are in the same colocate group
+SHOW CREATE TABLE t2;
+
+-- Clean up
+drop database db_${uuid0} force;

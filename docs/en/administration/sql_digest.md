@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use SQL Digest in StarRocks to fingerprint and group SQL queries with the same structure for analysis."
 ---
 
 # SQL Digest
@@ -98,7 +99,3 @@ WHERE digest IN (SELECT digest FROM top_sql);
 - Constant values in SQL will be normalized. For example, similar SQL statements with `WHERE a = 1` and `WHERE a = 2` will have the same Digest.
 - IN predicates will be normalized. For example, similar SQL statements with `IN (1,2,3)` and `IN (1,2)` will have the same Digest.
 - `LIMIT N` clauses will be normalized. For example, similar SQL statements with `LIMIT 10` and `LIMIT 30` will have the same Digest.
-
-<!--
-- For `INSERT VALUES`, multiple `VALUES` rows will be normalized.
--->

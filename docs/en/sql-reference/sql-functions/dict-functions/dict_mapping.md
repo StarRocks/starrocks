@@ -1,10 +1,9 @@
 ---
 displayed_sidebar: docs
+description: "Returns the value mapped to the specified key in a dictionary table."
 ---
 
 # dict_mapping
-
-
 
 Returns the value mapped to the specified key in a dictionary table.
 
@@ -126,7 +125,7 @@ However, when the value mapped to the specified key is not found, if the `<null_
       4 rows in set (0.02 sec)
       ```
 
-    The usage of `dict_mapping` in this example can accelerate [deduplication calculations and JOIN queries](../../../using_starrocks/query_acceleration_with_auto_increment.md). Compared to the previous solutions for building a global dictionary to accelerate precise deduplication, the  solution by using `dict_mapping` is more flexible and user-friendly. Because the mapping values are directly obtained from the dictionary table at the stage "loading mapping relationships between keys and values into the table". You do not need to write statements to join the dictionary table to obtain mapping values. Additionally, this solution supports various data loading methods.<!--For detailed usage, please refer to xxx.-->
+    The usage of `dict_mapping` in this example can accelerate [deduplication calculations and JOIN queries](../../../using_starrocks/query_acceleration_with_auto_increment.md). Compared to the previous solutions for building a global dictionary to accelerate precise deduplication, the  solution by using `dict_mapping` is more flexible and user-friendly. Because the mapping values are directly obtained from the dictionary table at the stage "loading mapping relationships between keys and values into the table". You do not need to write statements to join the dictionary table to obtain mapping values. Additionally, this solution supports various data loading methods.
 
 **Example 3: If the mapping column in the table is not configured as a generated column, you need to explicitly configure the `dict_mapping` function for the mapping column when loading data into the table, obtain the values mapped to the keys.**
 

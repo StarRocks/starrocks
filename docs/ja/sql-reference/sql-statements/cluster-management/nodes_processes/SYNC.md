@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SYNC は、異なるセッション間でデータの一貫性を同期します。"
 ---
 
 # SYNC

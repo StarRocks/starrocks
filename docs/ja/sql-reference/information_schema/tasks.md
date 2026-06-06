@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "tasksは非同期タスクに関する情報を提供します。"
 ---
 
 # tasks
@@ -16,3 +17,7 @@ displayed_sidebar: docs
 | DATABASE    | タスクが属するデータベース。                                 |
 | DEFINITION  | タスクの SQL 定義。                                          |
 | EXPIRE_TIME | タスクの有効期限。                                           |
+
+## リファレンス
+
+[`SUBMIT_TASK`](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md)

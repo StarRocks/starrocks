@@ -40,6 +40,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksHttpException;
@@ -65,7 +66,6 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -326,6 +326,8 @@ public class TableQueryPlanAction extends RestBaseAction {
             tabletInfo.put(tablet, new TTabletVersionInfo(tablet, node.version, 0, node.schemaHash));
         });
         tQueryPlanInfo.tablet_info = tabletInfo;
+
+        LOG.debug("query plan: {}", tQueryPlanInfo);
 
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
         String opaquedQueryPlan;

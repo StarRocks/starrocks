@@ -18,9 +18,9 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Comparator;
 import java.util.List;
@@ -65,6 +65,33 @@ public class LambdaFunctionOperator extends ScalarOperator {
             return refColumns.indexOf(lambdaExpr) + 1;
         }
         return 0;
+    }
+
+    // array_map((x,y) -> other_col, arr1, arr2) is independent of inputs.
+    public boolean isIndependentOfArguments() {
+        return getNumberOfDependentArguments() == 0;
+    }
+
+    // array_map((x,y) -> other_col + x, arr1, arr2) would yield 1 since x is used but y is unused.
+    public long getNumberOfDependentArguments() {
+        // getUsedColumns() returns an empty set for LAMBDA_ARGUMENT column refs,
+        // so we must collect all ColumnRefOperator nodes (including lambda arguments)
+        // by traversing the expression tree directly.
+        ColumnRefSet usedCols = collectAllUsedColumns(lambdaExpr);
+        return refColumns.stream() //
+                .filter(usedCols::contains) //
+                .count();
+    }
+
+    private static ColumnRefSet collectAllUsedColumns(ScalarOperator expr) {
+        ColumnRefSet result = new ColumnRefSet();
+        if (expr instanceof ColumnRefOperator) {
+            result.union(((ColumnRefOperator) expr).getId());
+        }
+        for (ScalarOperator child : expr.getChildren()) {
+            result.union(collectAllUsedColumns(child));
+        }
+        return result;
     }
 
     // only need to concern the lambda expression.

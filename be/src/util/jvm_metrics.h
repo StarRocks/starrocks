@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "base/metrics.h"
 #include "common/status.h"
 #include "jni.h"
-#include "udf/java/java_udf.h"
-#include "util/metrics.h"
+#include "runtime/env/java/java_env.h"
 
 namespace starrocks {
 
@@ -44,6 +44,8 @@ class JVMMetrics {
 public:
     JVMMetrics() = default;
     ~JVMMetrics() = default;
+
+    static JVMMetrics* instance();
 
     METRIC_DEFINE_INT_GAUGE(jvm_heap_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_heap_committed_bytes, MetricUnit::BYTES);

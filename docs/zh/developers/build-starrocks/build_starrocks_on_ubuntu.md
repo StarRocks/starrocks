@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在 Ubuntu 操作系统上编译 StarRocks 源代码。"
 ---
 
 # 基于 Ubuntu 编译 StarRocks
@@ -17,7 +18,7 @@ sudo apt-get update
 ```
 
 ```bash
-sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 -y
+sudo apt-get install automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 -y
 ```
 
 ### 安装编译器

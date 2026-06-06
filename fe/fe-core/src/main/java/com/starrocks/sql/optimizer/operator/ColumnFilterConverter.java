@@ -26,7 +26,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -61,6 +60,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,9 +110,20 @@ public class ColumnFilterConverter {
 
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
-            String functionName = node.getFnName().getFunction();
+            String functionName = node.getFunctionName();
             if (FunctionSet.SUBSTRING.equalsIgnoreCase(functionName) ||
                     FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
+                Expr firstExpr = node.getChild(0);
+                if (firstExpr instanceof SlotRef slotRef) {
+                    if (columnRef.getName().equals(slotRef.getColumnName())) {
+                        node.setChild(0, new StringLiteral(constant.getVarchar()));
+                        return true;
+                    }
+                }
+            } else if (FunctionSet.STR2DATE.equalsIgnoreCase(functionName)
+                    || FunctionSet.STR_TO_DATE.equalsIgnoreCase(functionName)) {
+                // str2date/str_to_date(partition_col, format) -> str2date/str_to_date(constant, format)
+                // so that the partition expression can be evaluated to a date literal.
                 Expr firstExpr = node.getChild(0);
                 if (firstExpr instanceof SlotRef slotRef) {
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
@@ -184,6 +196,21 @@ public class ColumnFilterConverter {
         predicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
+    public static Optional<List<Expr>> getPartitionExprs(Table table) {
+        if (!(table instanceof OlapTable)) {
+            return Optional.empty();
+        }
+        PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
+        if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+            return Optional.ofNullable(
+                    ((ExpressionRangePartitionInfoV2) partitionInfo).getPartitionExprs(table.getIdToColumn()));
+        } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            return Optional.ofNullable(
+                    ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs(table.getIdToColumn()));
+        } else {
+            return Optional.empty();
+        }
+    }
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
         // convert bool_col predicate to bool_col = true
@@ -195,11 +222,9 @@ public class ColumnFilterConverter {
             return;
         }
 
-        if (table != null && table.isExprPartitionTable()) {
-            OlapTable olapTable = (OlapTable) table;
-            predicate = convertPredicate(predicate,
-                    (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo(),
-                    table.getIdToColumn());
+        Optional<List<Expr>> optPartitionExprs = getPartitionExprs(table);
+        if (optPartitionExprs.isPresent()) {
+            predicate = convertPredicate(predicate, optPartitionExprs.get());
         }
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
@@ -318,16 +343,23 @@ public class ColumnFilterConverter {
         }
     }
 
-    // Replace the predicate of the query with the predicate of the partition expression and evaluate.
-    // If the condition is not met, there will be no change to the predicate.
     public static ScalarOperator convertPredicate(ScalarOperator predicate,
                                                   ExpressionRangePartitionInfoV2 exprRangePartitionInfo,
                                                   Map<ColumnId, Column> idToColumn) {
-        // Currently only one partition column is supported
         if (exprRangePartitionInfo.getPartitionExprsSize() != 1) {
             return predicate;
         }
         Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
+        return convertPredicate(predicate, List.of(firstPartitionExpr));
+    }
+    // Replace the predicate of the query with the predicate of the partition expression and evaluate.
+    // If the condition is not met, there will be no change to the predicate.
+    public static ScalarOperator convertPredicate(ScalarOperator predicate, List<Expr> partitionExprs) {
+        if (partitionExprs.size() != 1) {
+            return predicate;
+        }
+        // Currently only one partition column is supported
+        Expr firstPartitionExpr = partitionExprs.get(0);
         Expr predicateExpr = firstPartitionExpr.clone();
 
         // only support binary predicate
@@ -373,7 +405,7 @@ public class ColumnFilterConverter {
 
             if (type.isFixedPointType() && columnType.isFixedPointType()) {
                 // LargeIntLiteral getHashValue method is different with IntLiteral
-                return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
+                return type == columnType || (type != IntegerType.LARGEINT && columnType != IntegerType.LARGEINT);
             }
 
             return type.equals(columnType);
@@ -411,7 +443,7 @@ public class ColumnFilterConverter {
 
     private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
                                                             CallOperator callOperator) {
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
         if (!Objects.equals(fnName, callOperator.getFnName())) {
             return false;
         }

@@ -15,12 +15,14 @@
 #include "formats/json/struct_column.h"
 
 #include "column/struct_column.h"
+#include "common/simdjson_util.h"
+#include "common/statusor.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
 
-Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_struct_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                          simdjson::ondemand::value* value) {
     auto struct_column = down_cast<StructColumn*>(column);
 
@@ -36,7 +38,7 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
             const auto& field_name = type_desc.field_names[i];
             const auto& field_type_desc = type_desc.children[i];
 
-            auto field_column = struct_column->field_column(field_name);
+            ASSIGN_OR_RETURN(auto* field_column, struct_column->field_column_raw_ptr(field_name));
             simdjson::ondemand::value field_value;
             auto err = obj.find_field_unordered(field_name).get(field_value);
             simdjson::ondemand::value* field_value_ptr = nullptr;
@@ -49,10 +51,13 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
                                                    simdjson::error_message(err));
                 LOG(WARNING) << err_msg;
             }
-            RETURN_IF_ERROR(add_nullable_column(field_column.get(), field_type_desc, name, field_value_ptr, true));
+            RETURN_IF_ERROR(add_nullable_column(field_column, field_type_desc, name, field_value_ptr, true));
         }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
+        if (is_simdjson_critical_error(e.error())) {
+            throw;
+        }
         auto err_msg = strings::Substitute("Failed to parse value as object, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);

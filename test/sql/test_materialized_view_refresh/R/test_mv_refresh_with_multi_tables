@@ -413,3 +413,133 @@ SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
 DROP database db_${uuid0};
 -- result:
 -- !result
+-- name: test_mv_refresh_with_multi_tables5
+CREATE TABLE t1 (dt1 date, int1 int) PARTITION BY date_trunc("day",dt1);
+-- result:
+-- !result
+CREATE TABLE t2 (dt2 date, int2 int) PARTITION BY date_trunc("month",dt2);
+-- result:
+-- !result
+INSERT INTO t1 VALUES ("2020-06-23",1),("2020-07-23",1),("2020-07-23",1),("2020-08-23",1),(null,null);
+-- result:
+-- !result
+INSERT INTO t2 VALUES ("2020-06-23",1),("2020-07-23",1),("2020-07-23",1),("2020-08-23",1),(null,null);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY date_trunc("month",dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="3") AS
+SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT * FROM mv1 ORDER BY dt1;
+-- result:
+2020-06-23	2020-06-23	1
+2020-07-23	2020-07-23	4
+2020-08-23	2020-08-23	1
+-- !result
+function: print_hit_materialized_view("SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;", "mv1")
+-- result:
+True
+-- !result
+SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;
+-- result:
+2020-06-23	2020-06-23	1
+2020-07-23	2020-07-23	4
+2020-08-23	2020-08-23	1
+-- !result
+CREATE MATERIALIZED VIEW mv2 PARTITION BY date_trunc("month",dt1) 
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("partition_refresh_number"="3")
+AS SELECT dt1,sum(int1) from t1 group by dt1 union all
+SELECT dt2,sum(int2) from t2 group by dt2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+SELECT * FROM mv2 ORDER BY dt1;
+-- result:
+None	None
+None	None
+2020-06-23	1
+2020-06-23	1
+2020-07-23	2
+2020-07-23	2
+2020-08-23	1
+2020-08-23	1
+-- !result
+function: print_hit_materialized_view("SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;", "mv2")
+-- result:
+False
+-- !result
+SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;
+-- result:
+None	None
+None	None
+2020-06-23	1
+2020-06-23	1
+2020-07-23	2
+2020-07-23	2
+2020-08-23	1
+2020-08-23	1
+-- !result
+INSERT INTO t1 VALUES ("2020-06-23",1);
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;", "mv1")
+-- result:
+True
+-- !result
+SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;
+-- result:
+2020-06-23	2020-06-23	2
+2020-07-23	2020-07-23	4
+2020-08-23	2020-08-23	1
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT * FROM mv1 ORDER BY dt1;
+-- result:
+2020-06-23	2020-06-23	2
+2020-07-23	2020-07-23	4
+2020-08-23	2020-08-23	1
+-- !result
+function: print_hit_materialized_view("SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;", "mv2")
+-- result:
+False
+-- !result
+SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;
+-- result:
+None	None
+None	None
+2020-06-23	1
+2020-06-23	2
+2020-07-23	2
+2020-07-23	2
+2020-08-23	1
+2020-08-23	1
+-- !result
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+SELECT * FROM mv2 ORDER BY dt1;
+-- result:
+None	None
+None	None
+2020-06-23	1
+2020-06-23	2
+2020-07-23	2
+2020-07-23	2
+2020-08-23	1
+2020-08-23	1
+-- !result
+DROP MATERIALIZED VIEW mv1;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW mv2;
+-- result:
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+DROP TABLE t2;
+-- result:
+-- !result

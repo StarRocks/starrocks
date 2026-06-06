@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
 #include "common/statusor.h"
+#include "serde/encode_level.h"
 
 namespace starrocks {
 class ChunkPB;
@@ -43,7 +44,10 @@ public:
     // update encode_level for each column
     void update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte);
 
-    int get_encode_level(const int col_id) { return _column_encode_level[col_id]; }
+    int get_encode_level(const int col_id) {
+        DCHECK(col_id < _column_encode_level.size()) << "Mismatch the number of columns and encode levels.";
+        return _column_encode_level[col_id];
+    }
 
     const std::vector<uint32_t>& get_encode_levels() const { return _column_encode_level; }
 
@@ -57,14 +61,11 @@ public:
 
     static constexpr uint16_t STREAMVBYTE_PADDING_SIZE = STREAMVBYTE_PADDING;
 
-    static bool enable_encode_integer(const int encode_level) { return encode_level & ENCODE_INTEGER; }
+    static bool enable_encode_integer(const int encode_level) { return is_integer_encoding_enabled(encode_level); }
 
-    static bool enable_encode_string(const int encode_level) { return encode_level & ENCODE_STRING; }
+    static bool enable_encode_string(const int encode_level) { return is_string_encoding_enabled(encode_level); }
 
 private:
-    static constexpr int ENCODE_INTEGER = 2;
-    static constexpr int ENCODE_STRING = 4;
-
     // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
     void _adjust(const int col_id);
     const int _session_encode_level;

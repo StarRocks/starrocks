@@ -18,9 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -32,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -78,7 +78,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
-        if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+        if (!isSuitableForTwoStageDistinct(context.getConnectContext(), input, aggOp, distinctCols.get())) {
             return List.of();
         }
 
@@ -103,7 +103,8 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setSplit()
                 .setPredicate(null)
-                .setLimit(localAggLimit)
+                .setLocalLimit(localAggLimit)
+                .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
@@ -122,7 +123,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         final String functionName = fnCall.getFnName();
         if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
             return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
+                    ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
             Function multiDistinctSumFn = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
@@ -134,7 +135,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 return fnCall;
             } else {
                 return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
-                        Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
+                        ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
                                 IS_NONSTRICT_SUPERTYPE_OF), false);
             }
 

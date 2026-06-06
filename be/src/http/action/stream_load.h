@@ -37,9 +37,9 @@
 #include <functional>
 #include <map>
 
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "http/http_handler.h"
-#include "runtime/client_cache.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/message_body_sink.h"
 
@@ -63,6 +63,11 @@ public:
 
     void on_chunk_data(HttpRequest* req) override;
     void free_handler_ctx(void* ctx) override;
+
+    // Auth (identity + table-level INSERT priv) is performed by FE as part of the
+    // loadTxnBegin/streamLoadPut RPC flow; skip the framework-level pre-check to
+    // avoid an extra FE round-trip per stream-load request.
+    bool need_auth() const override { return false; }
 
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);

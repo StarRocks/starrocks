@@ -39,16 +39,17 @@
 #include <thread>
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "gen_cpp/Types_types.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
-class ExecEnv;
+class MetricRegistry;
 
 class BrokerMgr {
 public:
-    BrokerMgr(ExecEnv* exec_env);
+    explicit BrokerMgr(MetricRegistry* metrics = nullptr);
     ~BrokerMgr();
     void init();
     const std::string& get_client_id(const TNetworkAddress& address);
@@ -56,12 +57,10 @@ public:
 private:
     void ping(const TNetworkAddress& addr);
     void ping_worker();
-
-    ExecEnv* _exec_env;
     std::string _client_id;
     std::mutex _mutex;
     std::unordered_set<TNetworkAddress> _broker_set;
-    bool _thread_stop;
+    bool _thread_stop{false};
     std::thread _ping_thread;
 };
 

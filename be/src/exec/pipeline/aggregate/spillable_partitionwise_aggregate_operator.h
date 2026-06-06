@@ -16,11 +16,11 @@
 #pragma once
 #include <memory>
 
+#include "compute_env/spill/spill_components.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
-#include "exec/spill/spill_components.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
@@ -49,7 +49,7 @@ class SpillablePartitionWiseAggregateSourceOperator final : public SourceOperato
 public:
     SpillablePartitionWiseAggregateSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                   int32_t driver_sequence,
-                                                  const AggregateBlockingSourceOperatorPtr non_pw_agg,
+                                                  AggregateBlockingSourceOperatorPtr non_pw_agg,
                                                   ConjugateOperatorPtr pw_agg)
             : SourceOperator(factory, id, "spillable_partitionwise_agg_source", plan_node_id, false, driver_sequence),
               _non_pw_agg(std::move(non_pw_agg)),
@@ -64,6 +64,8 @@ public:
     Status set_finished(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
+
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -126,6 +128,7 @@ public:
     void close(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }

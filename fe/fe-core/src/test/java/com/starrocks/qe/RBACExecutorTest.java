@@ -19,8 +19,8 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,9 +36,10 @@ import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -224,10 +225,10 @@ public class RBACExecutorTest {
         CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
 
         Type[] arg = new Type[1];
-        arg[0] = Type.INT;
-        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
+        arg[0] = IntegerType.INT;
+        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, IntegerType.INT,
                 false, TFunctionBinaryType.SRJAR,
-                "objectFile", "mainClass.getCanonicalName()", "", "");
+                "objectFile", "mainClass.getCanonicalName()", "", "", null);
         function.setChecksum("checksum");
 
         statement.setFunction(function);
@@ -237,6 +238,11 @@ public class RBACExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+
+        stmt = new ShowFunctionsStmt("db", false, false, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(4).contains("\"file\":\"objectFile\""));
 
         ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
@@ -248,6 +254,61 @@ public class RBACExecutorTest {
         stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
         resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+
+        stmt = new ShowFunctionsStmt("db", false, false, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(4).contains("\"file\":\"***\""));
+        Assertions.assertFalse(resultSet.getResultRows().get(0).get(4).contains("objectFile"));
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u2", "%"));
+        stmt = new ShowFunctionsStmt("db", false, false, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[]", resultSet.getResultRows().toString());
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant CREATE FUNCTION on DATABASE db to u2", ctx), ctx);
+        stmt = new ShowFunctionsStmt("db", false, false, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(4).contains("\"file\":\"objectFile\""));
+
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        String createGlobalSql = "CREATE GLOBAL FUNCTION GLOBAL_UDF_JSON_GET(int) RETURNS int " +
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
+        CreateFunctionStmt globalStatement =
+                (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createGlobalSql, ctx);
+        FunctionName globalFunctionName = FunctionName.createFnName("GLOBAL_UDF_JSON_GET");
+        globalFunctionName.setAsGlobalFunction();
+        Function globalFunction = ScalarFunction.createUdf(globalFunctionName, arg, IntegerType.INT,
+                false, TFunctionBinaryType.SRJAR,
+                "globalObjectFile", "globalMainClass.getCanonicalName()", "", "", null);
+        globalFunction.setChecksum("checksum");
+        globalStatement.setFunction(globalFunction);
+        DDLStmtExecutor.execute(globalStatement, ctx);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u3", "%"));
+        stmt = new ShowFunctionsStmt(null, false, true, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[]", resultSet.getResultRows().toString());
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant usage on global function global_udf_json_get(int) to u3", ctx), ctx);
+        stmt = new ShowFunctionsStmt(null, false, true, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(4).contains("\"file\":\"***\""));
+        Assertions.assertFalse(resultSet.getResultRows().get(0).get(4).contains("globalObjectFile"));
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u4", "%"));
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant CREATE GLOBAL FUNCTION on system to u4", ctx), ctx);
+        stmt = new ShowFunctionsStmt(null, false, true, true, null, null);
+        resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(4).contains("\"file\":\"globalObjectFile\""));
 
         stmt = new ShowFunctionsStmt("db", true, false, false, null, null);
         resultSet = ShowExecutor.execute(stmt, ctx);

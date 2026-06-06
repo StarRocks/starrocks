@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从 Microsoft Azure Storage 导入数据到 StarRocks，支持多种认证方式和导入方法。"
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---
@@ -52,9 +53,9 @@ StarRocks 支持通过以下方式从 Azure 导入数据：
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句直接从 Azure 查询数据。
+- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句直接从 Azure 查询数据。
 - 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 导入数据。
 
 ### 操作示例
 

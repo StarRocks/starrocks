@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将给定元素重复指定次数返回一个数组。"
 ---
 
 # array_repeat
@@ -33,8 +34,11 @@ array_repeat(element, count)
 
 **示例一**
 
-```plain text
-mysql> select array_repeat(1,5) as res;
+```sql
+select array_repeat(1,5) as res;
+```
+
+```sql
 +-------------+
 | res         |
 +-------------+
@@ -44,8 +48,11 @@ mysql> select array_repeat(1,5) as res;
 
 **示例二**
 
-```plain text
-mysql> select  array_repeat([1,2],3) as res;
+```sql
+select  array_repeat([1,2],3) as res;
+```
+
+```sql
 +-------------------+
 | res               |
 +-------------------+
@@ -55,8 +62,11 @@ mysql> select  array_repeat([1,2],3) as res;
 
 **示例三**
 
-```plain text
-mysql> select array_repeat(1,-1) as res;
+```sql
+select array_repeat(1,-1) as res;
+```
+
+```sql
 +------+
 | res  |
 +------+
@@ -66,8 +76,11 @@ mysql> select array_repeat(1,-1) as res;
 
 **示例四**
 
-```plain text
-mysql> select  array_repeat(null,3) as res;
+```sql
+select  array_repeat(null,3) as res;
+```
+
+```sql
 +------+
 | res  |
 +------+
@@ -77,10 +90,13 @@ mysql> select  array_repeat(null,3) as res;
 
 **示例五**
 
-```Plain
-mysql> CREATE TABLE IF NOT EXISTS test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
-mysql> INTO test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
-mysql> select array_repeat(COLA,COLB) from test;
+```sql
+CREATE TABLE IF NOT EXISTS test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
+INSERT INTO test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
+select array_repeat(COLA,COLB) from test;
+```
+
+```sql
 +--------------------------+
 | array_repeat(COLA, COLB) |
 +--------------------------+

@@ -14,6 +14,7 @@
 
 #include "storage/primary_key_recover.h"
 
+#include "column/chunk_factory.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
@@ -28,7 +29,8 @@ Status PrimaryKeyRecover::recover() {
     // 2. generate primary key schema
     MutableColumnPtr pk_column;
     auto pkey_schema = generate_pkey_schema();
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    ASSIGN_OR_RETURN(auto encoding_type, primary_key_encoding_type());
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
@@ -39,7 +41,7 @@ Status PrimaryKeyRecover::recover() {
     std::vector<uint32_t> rowids;
     rowids.reserve(DEFAULT_CHUNK_SIZE);
     PrimaryIndex::DeletesMap new_deletes;
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
     auto chunk = chunk_shared_ptr.get();
     // 3. scan all rowsets and segments to build primary index
     RETURN_IF_ERROR(rowset_iterator(
@@ -65,9 +67,8 @@ Status PrimaryKeyRecover::recover() {
                         std::vector<uint8_t> read_buffer(file_size);
                         RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
                         auto col = pk_column->clone();
-                        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
-                            return Status::InternalError("column deserialization failed");
-                        }
+                        const auto* end = read_buffer.data() + read_buffer.size();
+                        RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
                         RETURN_IF_ERROR(index.erase(*col, &new_deletes));
                         del_index++;
                     } else {
@@ -90,7 +91,8 @@ Status PrimaryKeyRecover::recover() {
                                 return st;
                             } else {
                                 pk_column->reset_column();
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                          encoding_type);
                                 // upsert and generate new deletes
                                 RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
                                 row_id_start += pk_column->size();

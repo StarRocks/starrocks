@@ -39,8 +39,8 @@ public class ConnectorAnalyzeTaskQueue {
     private final Map<String, ConnectorAnalyzeTask> runningTasks = Maps.newConcurrentMap();
 
     private final ExecutorService taskRunPool = ThreadPoolManager.newDaemonFixedThreadPool(
-            Config.connector_table_query_trigger_analyze_max_running_task_num,
-            Config.connector_table_query_trigger_analyze_max_running_task_num,
+            Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
+            Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
             "connector-trigger-analyze-pool", true);
 
     public boolean addPendingTask(String tableUUID, ConnectorAnalyzeTask task) {

@@ -36,17 +36,18 @@ package com.starrocks.alter;
 
 import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.jupiter.api.Assertions;
@@ -56,7 +57,7 @@ import java.util.List;
 
 public class MaterializedViewHandlerTest {
     @Test
-    public void testDifferentBaseTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDifferentBaseTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                        @Injectable Database db,
                                        @Injectable OlapTable olapTable) {
         new Expectations() {
@@ -78,7 +79,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testNotNormalTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testNotNormalTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                    @Injectable Database db,
                                    @Injectable OlapTable olapTable) {
         final String baseIndexName = "t1";
@@ -103,7 +104,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testErrorBaseIndexName(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testErrorBaseIndexName(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                        @Injectable Database db,
                                        @Injectable OlapTable olapTable) {
         final String baseIndexName = "t1";
@@ -115,7 +116,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = null;
             }
         };
@@ -130,13 +131,13 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testRollupReplica(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testRollupReplica(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                   @Injectable Database db,
                                   @Injectable OlapTable olapTable,
                                   @Injectable PhysicalPartition partition,
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
-        final Long baseIndexId = Long.valueOf(1);
+        final Long baseIndexMetaId = Long.valueOf(1);
         new Expectations() {
             {
                 createMaterializedViewStmt.getBaseIndexName();
@@ -145,12 +146,12 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
-                result = baseIndexId;
+                olapTable.getIndexMetaIdByName(baseIndexName);
+                result = baseIndexMetaId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getIndex(baseIndexId);
+                partition.getLatestIndex(baseIndexMetaId);
                 result = materializedIndex;
 
                 materializedIndex.getState();
@@ -168,7 +169,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testDuplicateMVName(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDuplicateMVName(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                     @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         new Expectations() {
@@ -190,12 +191,12 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testInvalidAggregateType(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testInvalidAggregateType(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                          @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String mvColumName = "mv_sum_k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, Type.BIGINT, AggregateType.SUM, null, false, null, true,
-                Sets.newHashSet());
+        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, IntegerType.BIGINT,
+                AggregateType.SUM, null, false, null, true, Sets.newHashSet());
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
         new Expectations() {
@@ -223,7 +224,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testInvalidKeysType(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testInvalidKeysType(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                     @Injectable OlapTable olapTable, @Injectable Database db) {
         new Expectations() {
             {
@@ -245,12 +246,12 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testDuplicateTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDuplicateTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                    @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        Column baseColumn1 = new Column(columnName1, Type.VARCHAR, false, AggregateType.NONE, "", "");
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.VARCHAR, AggregateType.NONE, null,
+        Column baseColumn1 = new Column(columnName1, VarcharType.VARCHAR, false, AggregateType.NONE, "", "");
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, VarcharType.VARCHAR, AggregateType.NONE, null,
                 false, null, true, Sets.newHashSet());
 
         mvColumnItem.setIsKey(true);
@@ -287,11 +288,11 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void checkInvalidPartitionKeyMV(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void checkInvalidPartitionKeyMV(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, null,
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, IntegerType.BIGINT, null, null,
                 false, null, true, Sets.newHashSet());
         mvColumnItem.setIsKey(false);
         mvColumnItem.setAggregationType(AggregateType.SUM, false);
@@ -334,15 +335,15 @@ public class MaterializedViewHandlerTest {
                 result = "table1";
                 olapTable.hasMaterializedIndex(mvName);
                 result = true;
-                olapTable.getIndexIdByName(mvName);
+                olapTable.getIndexMetaIdByName(mvName);
                 result = 1L;
-                olapTable.getSchemaHashByIndexId(1L);
+                olapTable.getSchemaHashByIndexMetaId(1L);
                 result = 1;
 
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getIndex(1L);
+                partition.getLatestIndex(1L);
                 result = materializedIndex;
             }
         };

@@ -19,8 +19,27 @@ function initCollapsibleProfile() {
   const profileElement = document.getElementById('profile');
   if (!profileElement) return;
   
-  const originalContent = profileElement.textContent;
-  const lines = originalContent.split('\n');
+  // Get original HTML content and convert to text while preserving newlines
+  const originalHTML = profileElement.innerHTML;
+  
+  // Convert HTML to text while preserving newlines
+  // Replace <br> tags with newlines, then strip other HTML tags
+  let originalText = originalHTML
+    .replace(/<br\s*\/?>/gi, '\n')  // Convert <br> to newlines
+    .replace(/<[^>]*>/g, '')        // Remove all other HTML tags
+    .replace(/&lt;/g, '<')          // Decode HTML entities
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  
+  // Store original content globally for copy/download functions
+  if (typeof originalProfileContent !== 'undefined') {
+    originalProfileContent = originalText;
+  }
+  
+  // Parse lines for collapsible view
+  const lines = originalText.split('\n');
   
   // Parse lines and build structure
   const parsedLines = [];

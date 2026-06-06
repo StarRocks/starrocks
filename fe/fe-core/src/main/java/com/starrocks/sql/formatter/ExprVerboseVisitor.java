@@ -14,10 +14,14 @@
 
 package com.starrocks.sql.formatter;
 
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.SlotRef;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class ExprVerboseVisitor extends ExprExplainVisitor {
@@ -28,6 +32,18 @@ public class ExprVerboseVisitor extends ExprExplainVisitor {
 
     public ExprVerboseVisitor(FormatOptions options) {
         super(options);
+    }
+
+    private static String getOrderByStringToExplain(FunctionParams functionParams) {
+        List<OrderByElement> orderByElements = functionParams.getOrderByElements();
+        if (orderByElements == null || orderByElements.isEmpty()) {
+            return "";
+        }
+
+        String orderByExplain = orderByElements.stream()
+                .map(ExprToSql::explain)
+                .collect(Collectors.joining(" "));
+        return " ORDER BY " + orderByExplain;
     }
 
     @Override
@@ -51,7 +67,7 @@ public class ExprVerboseVisitor extends ExprExplainVisitor {
             sb.append(node.getChildren().stream()
                     .limit(node.getChildren().size() - node.getFnParams().getOrderByElements().size())
                     .map(this::visit).collect(Collectors.joining(", ")));
-            sb.append(node.getFnParams().getOrderByStringToExplain());
+            sb.append(getOrderByStringToExplain(node.getFnParams()));
             sb.append(')');
         }
 

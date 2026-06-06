@@ -41,7 +41,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -57,7 +56,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
 
 public class RoutineLoadSchedulerTest {
 
@@ -115,7 +113,7 @@ public class RoutineLoadSchedulerTest {
 
         RoutineLoadScheduler routineLoadScheduler = new RoutineLoadScheduler();
         Deencapsulation.setField(routineLoadScheduler, "routineLoadManager", routineLoadManager);
-        routineLoadScheduler.runAfterCatalogReady();
+        routineLoadScheduler.runAfterLeaseValid();
 
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList =
                 Deencapsulation.getField(kafkaRoutineLoadJob, "routineLoadTaskInfoList");
@@ -140,7 +138,7 @@ public class RoutineLoadSchedulerTest {
                 times = 1;
             }
         };
-        routineLoadTaskScheduler.runAfterCatalogReady();
+        routineLoadTaskScheduler.runAfterLeaseValid();
     }
 
     public void functionTest(@Mocked GlobalStateMgr globalStateMgr,
@@ -180,10 +178,11 @@ public class RoutineLoadSchedulerTest {
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
         routineLoadTaskScheduler.setInterval(5000);
 
-        ExecutorService executorService =
-                ThreadPoolManager.newDaemonFixedThreadPool(2, 2, "routine-load-task-scheduler", false);
-        executorService.submit(routineLoadScheduler);
-        executorService.submit(routineLoadTaskScheduler);
+        // LeaderDaemon manages its own worker thread; .start() spawns a daemon thread that
+        // runs the loop. The previous ExecutorService.submit() pattern relied on the old
+        // FrontendDaemon implementing Runnable, which LeaderDaemon does not.
+        routineLoadScheduler.start();
+        routineLoadTaskScheduler.start();
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob1 = new KafkaRoutineLoadJob(1L, "test_custom_partition",
                  1L, 1L, "xxx", "test_1");

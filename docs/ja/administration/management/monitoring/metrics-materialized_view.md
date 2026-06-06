@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+description: "v3.1以降、StarRocks は非同期マテリアライズドビューのメトリクスを Prometheus で監視できます。"
+sidebar_position: 20
 ---
 
 # 非同期マテリアライズドビューの監視メトリクス

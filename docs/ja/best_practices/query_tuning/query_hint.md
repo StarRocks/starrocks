@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "クエリオプティマイザの実行方法を明示的に指示するための SET_VAR、SET_USER_VARIABLE、Join ヒント。"
 sidebar_position: 70
 ---
 
@@ -43,6 +44,17 @@ DISTRIBUTED BY HASH(`key`)
 BUCKETS 10 
 REFRESH ASYNC 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
+```
+
+ネストされたクエリでヒントを指定する:
+
+```SQL
+-- メインクエリでヒントを指定するには
+WITH t AS (SELECT region, sales_amount FROM sales_orders)  
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_planner_agg_stage = '2') */  
+       SUM(sales_amount) AS total_sales_amount  
+FROM t;
+
 ```
 
 ## ユーザー定義変数ヒント

@@ -22,6 +22,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;

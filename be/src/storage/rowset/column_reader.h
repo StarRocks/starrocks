@@ -39,21 +39,21 @@
 #include <memory>
 #include <utility>
 
-#include "column/datum.h"
+#include "base/concurrency/once.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
-#include "util/once.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -132,17 +132,30 @@ public:
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
     bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    // If the column's bloom-filter index was tombstoned via a lake
+    // metadata-only DROP, the footer bloom is stale and must not be
+    // interpreted as either "original" or "ngram" bloom until compaction
+    // rewrites the segment. dropped_table_indices on the tablet schema
+    // carries that signal. Both flavors share the same footer storage
+    // (_bloom_filter_index), so either tombstone disqualifies the footer.
+    bool _bloom_filter_index_dropped() const {
+        return _segment->tablet_schema().has_dropped_index(_column_unique_id, NGRAMBF) ||
+               _segment->tablet_schema().has_dropped_index(_column_unique_id, BLOOM_FILTER);
+    }
     bool has_original_bloom_filter_index() const {
-        return _bloom_filter_index != nullptr && (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
+        return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&
+               (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
     }
     bool has_ngram_bloom_filter_index() const {
-        return _bloom_filter_index != nullptr && _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
+        return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&
+               _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
     }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }
+    int32_t column_length() const { return _column_length; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
@@ -159,7 +172,8 @@ public:
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
-                           const IndexReadOptions& opts, CompoundNodeType pred_relation);
+                           const IndexReadOptions& opts, CompoundNodeType pred_relation,
+                           const Range<>* src_range = nullptr);
 
     // NOTE: RAW interface should be used carefully
     // Return all page-level zonemap
@@ -187,7 +201,7 @@ public:
     Status load_ordinal_index(const IndexReadOptions& opts);
 
     Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
-                                       const SegmentReadOptions& opts);
+                                       const SegmentReadOptions& opts, const IndexReadOptions& index_opt);
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
@@ -227,18 +241,33 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
+    // Build a fresh BitmapIndexReader backed by a standalone .idx file
+    // (Index Delta Group payload). Used when IndexReadOptions carries an
+    // IDG entry that supersedes the segment footer's bitmap meta. The
+    // returned iterator owns its file handle and reader; the cached
+    // _bitmap_index footer reader is left untouched.
+    // `encryption_meta` is the IDG entry's serialized EncryptionMetaPB
+    // (empty when encryption is off); when non-empty it is unwrapped and
+    // passed through RandomAccessFileOptions so that the .idx file is
+    // read as cleartext rather than ciphertext.
+    Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
+                                                 const std::string& encryption_meta, BitmapIndexIterator** iterator);
+
     // Determines the logical type to use when parsing zone map values for predicate filtering,
     // handling type mismatches between column and predicate types after fast schema evolution
     LogicalType _get_zone_map_parse_type(const ColumnPredicate* predicate) const;
     Status _parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    Status _parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 
     template <CompoundNodeType PredRelation>
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
-                            std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
+                            std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages,
+                            const Range<>* src_range);
 
-    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
+    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
+                                const IndexReadOptions& index_opt);
 
     NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
 
@@ -253,7 +282,8 @@ private:
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
-    LogicalType _column_child_type = TYPE_UNKNOWN;
+    [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
+    int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
     uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
@@ -266,6 +296,7 @@ private:
     std::unique_ptr<OrdinalIndexPB> _ordinal_index_meta;
     std::unique_ptr<BitmapIndexPB> _bitmap_index_meta;
     std::unique_ptr<BloomFilterIndexPB> _bloom_filter_index_meta;
+    std::unique_ptr<BuiltinInvertedIndexPB> _builtin_inverted_index_meta;
 
     std::unique_ptr<ZoneMapIndexReader> _zonemap_index;
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;

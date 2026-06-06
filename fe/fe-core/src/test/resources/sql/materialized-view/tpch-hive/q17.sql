@@ -20,10 +20,10 @@ where
 AGGREGATE ([GLOBAL] aggregate [{45: sum=sum(45: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{45: sum=sum(6: l_extendedprice)}] group by [[]] having [null]
-            PREDICATE cast(5: l_quantity as DECIMAL128(38,9)) < multiply(0.2, 145: avg)
-                ANALYTIC ({145: avg=avg(5: l_quantity)} [17: p_partkey] [] )
+            PREDICATE cast(5: l_quantity as DECIMAL128(38,9)) < multiply(0.2, 138: avg)
+                ANALYTIC ({138: avg=avg(5: l_quantity)} [17: p_partkey] [] )
                     TOP-N (order by [[17: p_partkey ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[17]
-                            SCAN (mv[lineitem_mv] columns[76: l_extendedprice, 78: l_partkey, 79: l_quantity, 92: p_brand, 93: p_container] predicate[92: p_brand = Brand#35 AND 93: p_container = JUMBO CASE])
+                            SCAN (mv[lineitem_mv] columns[80: l_extendedprice, 82: l_partkey, 83: l_quantity, 96: p_brand, 97: p_container] predicate[96: p_brand = Brand#35 AND 97: p_container = JUMBO CASE])
 [end]
 

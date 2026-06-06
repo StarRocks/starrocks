@@ -17,18 +17,20 @@
 #include <exprs/predicate.h>
 
 #include <atomic>
+#include <memory>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
 using HashJoiner = starrocks::HashJoiner;
+class PartialRuntimeFilterMerger;
 
 class HashJoinBuildOperator : public Operator {
 public:
@@ -59,7 +61,7 @@ public:
     }
 
     size_t output_amplification_factor() const override;
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
 protected:
     HashJoinerPtr _join_builder;
@@ -77,7 +79,7 @@ public:
                                  std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger,
                                  TJoinDistributionMode::type distribution_mode,
                                  SpillProcessChannelFactoryPtr spill_channel_factory);
-    ~HashJoinBuildOperatorFactory() override = default;
+    ~HashJoinBuildOperatorFactory() override;
     bool support_event_scheduler() const override { return true; }
 
     Status prepare(RuntimeState* state) override;

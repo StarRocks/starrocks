@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "join_hash_map_helper.h"
-#include "join_hash_table_descriptor.h"
+#include "base/phmap/phmap.h"
+#include "exec/join/join_hash_map_helper.h"
+#include "exec/join/join_hash_table_descriptor.h"
 
 namespace starrocks {
 

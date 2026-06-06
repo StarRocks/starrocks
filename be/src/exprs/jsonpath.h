@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <utility>
 
 #include "exprs/function_helper.h"
@@ -67,6 +69,7 @@ struct ArraySelectorSingle final : public ArraySelector {
 
     ArraySelectorSingle(int index) : index(index) { type = SINGLE; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
@@ -84,6 +87,7 @@ struct ArraySelectorSingle final : public ArraySelector {
 struct ArraySelectorWildcard final : public ArraySelector {
     ArraySelectorWildcard() { type = WILDCARD; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
@@ -96,6 +100,7 @@ struct ArraySelectorSlice final : public ArraySelector {
 
     ArraySelectorSlice(int left, int right) : left(left), right(right) { type = SLICE; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
@@ -117,7 +122,7 @@ struct JsonPathPiece {
     std::shared_ptr<ArraySelector> array_selector;
 
     JsonPathPiece(std::string key, std::shared_ptr<ArraySelector> selector)
-            : key(std::move(key)), array_selector(std::move(std::move(selector))) {}
+            : key(std::move(key)), array_selector(std::move(selector)) {}
 
     JsonPathPiece(std::string key, ArraySelector* selector) : key(std::move(key)), array_selector(selector) {}
 
@@ -158,3 +163,8 @@ struct JsonPath {
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::ArraySelectorType> : formatter<std::underlying_type_t<starrocks::ArraySelectorType>> {
+    auto format(starrocks::ArraySelectorType value, format_context& ctx) const -> format_context::iterator;
+};

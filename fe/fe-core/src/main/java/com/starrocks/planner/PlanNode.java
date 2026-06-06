@@ -39,10 +39,13 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.TreeNode;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
@@ -168,7 +171,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.limit = node.limit;
         this.tupleIds = Lists.newArrayList(node.tupleIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
-        this.conjuncts = Expr.cloneList(node.conjuncts, null);
+        this.conjuncts = ExprUtils.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
     }
@@ -525,7 +528,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));
         }
         for (Expr e : conjuncts) {
-            msg.addToConjuncts(e.treeToThrift());
+            msg.addToConjuncts(ExprToThrift.treeToThrift(e));
         }
         toThrift(msg);
         container.addToNodes(msg);
@@ -623,7 +626,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (exprs == null) {
             return "";
         }
-        return exprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
+        return exprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
     }
 
     protected String explainExpr(Expr... exprs) {
@@ -794,7 +797,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
-        return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
+        return (Expr expr) -> ExprUtils.isBoundByTupleIds(expr, getTupleIds());
     }
 
     private RoaringBitmap cachedSlotIds = null;
@@ -823,12 +826,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             return false;
         } else {
-            return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
+            return getSlotIds(descTbl).contains(ExprUtils.getUsedSlotIds(probeExpr));
         }
     }
 
     protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
-        if (expr.isBound(slot.getId())) {
+        if (ExprUtils.isBound(expr, slot.getId())) {
             ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
             ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
                     "any", true);
@@ -886,8 +889,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean accept = tryPushdownRuntimeFilterToChild(context, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
         RoaringBitmap slotIds = getSlotIds(descTbl);
-        boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
-                partitionByExprs.stream().allMatch(expr -> slotIds.contains(expr.getUsedSlotIds()));
+        boolean isBound = slotIds.contains(ExprUtils.getUsedSlotIds(probeExpr)) &&
+                partitionByExprs.stream().allMatch(expr -> slotIds.contains(ExprUtils.getUsedSlotIds(expr)));
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }

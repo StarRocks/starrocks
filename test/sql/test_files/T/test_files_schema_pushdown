@@ -1,0 +1,37 @@
+-- name: test_files_schema_pushdown
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Target table is BIGINT; FILES schema declares INT. Structural proof of
+-- "push-down skipped" lives in InsertAnalyzerFilesSchemaPushDownTest (Task 9);
+-- this integration test confirms the end-to-end INSERT completes successfully
+-- and the second query fires the validation error.
+create table t_sink_big (x BIGINT)
+distributed by hash(x) buckets 1 properties("replication_num" = "1");
+
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+-- Case A: default config-level push-down; INSERT must succeed with schema in place.
+insert into t_sink_big
+select k2 from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 INT");
+
+select count(*) from t_sink_big;
+
+-- Case B: enable_push_down_schema + FILES schema → validation error.
+insert into t_sink_big properties("enable_push_down_schema" = "true")
+select k2 from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 INT");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

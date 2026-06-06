@@ -14,7 +14,10 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Util;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -26,7 +29,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.starrocks.http.rest.RestBaseAction.WAREHOUSE_KEY;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -36,6 +38,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COMPRESSIO
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REPLICATED_STORAGE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_HEADER_LIST;
@@ -59,6 +62,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEOUT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEZONE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRANSMISSION_COMPRESSION_TYPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRIM_SPACE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 
 /**
@@ -241,7 +245,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<String> getWarehouse() {
-        return Optional.ofNullable(params.get(WAREHOUSE_KEY));
+        return Optional.ofNullable(params.get(HTTP_WAREHOUSE));
     }
 
     @Override
@@ -295,6 +299,21 @@ public class StreamLoadKvParams implements StreamLoadParams {
     @Override
     public Optional<Boolean> getStripOuterArray() {
         return getBoolParam(HTTP_STRIP_OUTER_ARRAY);
+    }
+
+    @Override
+    public Optional<TEnvelopeType> getEnvelope() throws StarRocksException {
+        String value = params.get(HTTP_ENVELOPE);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (value.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)) {
+            return Optional.of(TEnvelopeType.DEBEZIUM);
+        }
+        if (value.equalsIgnoreCase("none")) {
+            return Optional.of(TEnvelopeType.NONE);
+        }
+        throw new StarRocksException("Unknown envelope type: " + value);
     }
 
     public Optional<Boolean> getEnableBatchWrite() {
@@ -360,7 +379,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public String toString() {
-        return "params={" + params + '}';
+        return "params=" + params;
     }
 
     public static StreamLoadKvParams fromHttpHeaders(HttpHeaders httpHeaders) {

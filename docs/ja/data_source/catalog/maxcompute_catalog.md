@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.3 以降の MaxCompute catalog で、Alibaba Cloud MaxCompute からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 4
 ---
 
@@ -181,7 +182,7 @@ MaxCompute テーブルのスキーマを表示するには、次のいずれか
    USE <catalog_name>.<db_name>;
    ```
 
-3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します。
+3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用します。
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

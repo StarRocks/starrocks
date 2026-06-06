@@ -16,12 +16,13 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -34,6 +35,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,12 +74,17 @@ public class FileTableScanNode extends ScanNode {
 
     public void setupScanRangeLocations() throws Exception {
         List<RemoteFileDesc> files = fileTable.getFileDescs();
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null) {
+            sv = connectContext.getSessionVariable();
+        }
         for (RemoteFileDesc file : files) {
-            addScanRangeLocations(file);
+            addScanRangeLocations(file, sv);
         }
     }
 
-    private void addScanRangeLocations(RemoteFileDesc file) {
+    private void addScanRangeLocations(RemoteFileDesc file, SessionVariable sv) {
         for (RemoteFileBlockDesc blockDesc : file.getBlockDescs()) {
             TScanRangeLocations scanRangeLocs = new TScanRangeLocations();
 
@@ -98,10 +105,13 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
             hdfsScanRange.setModification_time(file.getModificationTime());
-            RemoteFileInputFormat fileFormat = fileTable.getFileFormat();
-            hdfsScanRange.setFile_format(fileFormat.toThrift());
+            HiveStorageFormat fileFormat = fileTable.getFileFormat();
+            hdfsScanRange.setFile_format(fileFormat.toFileFormatThrift());
             if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
+            }
+            if (fileFormat == HiveStorageFormat.AVRO) {
+                hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
             }
 
             TScanRange scanRange = new TScanRange();
@@ -180,6 +190,8 @@ public class FileTableScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

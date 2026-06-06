@@ -16,12 +16,13 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "runtime/chunk_helper.h"
 #include "storage/chunk_aggregator.h"
-#include "storage/chunk_helper.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -61,7 +62,7 @@ public:
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_child->init_encoded_schema(dict_maps));
-        _curr_chunk = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
+        ASSIGN_OR_RETURN(_curr_chunk, RuntimeChunkHelper::new_chunk_checked(encoded_schema(), _chunk_size));
         ASSIGN_OR_RETURN(_aggregator,
                          ChunkAggregator::create(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
                                                  _is_vertical_merge, _is_key));
@@ -71,7 +72,7 @@ public:
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
-        _curr_chunk = ChunkHelper::new_chunk(output_schema(), _chunk_size);
+        ASSIGN_OR_RETURN(_curr_chunk, RuntimeChunkHelper::new_chunk_checked(output_schema(), _chunk_size));
         ASSIGN_OR_RETURN(_aggregator,
                          ChunkAggregator::create(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
                                                  _is_vertical_merge, _is_key));

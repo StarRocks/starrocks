@@ -16,8 +16,8 @@
 
 #include <memory>
 
+#include "base/container/raw_container.h"
 #include "gutil/strings/substitute.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -78,6 +78,17 @@ void DelVector::init(int64_t version, const uint32_t* data, size_t length) {
     _version = version;
     if (length > 0) {
         _roaring = std::make_unique<Roaring>(length, data);
+    }
+    _update_stats();
+}
+
+void DelVector::union_with(int64_t version, const Roaring& src) {
+    _loaded = true;
+    _version = version;
+    if (_roaring) {
+        *_roaring |= src;
+    } else if (!src.isEmpty()) {
+        _roaring = std::make_unique<Roaring>(src);
     }
     _update_stats();
 }

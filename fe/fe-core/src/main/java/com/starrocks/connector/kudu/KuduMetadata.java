@@ -22,7 +22,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -42,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.Type;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
@@ -178,7 +178,7 @@ public class KuduMetadata implements ConnectorMetadata {
         if (!schemaEmulationEnabled) {
             if (DEFAULT_SCHEMA.equals(dbName)) {
                 return databases.computeIfAbsent(DEFAULT_SCHEMA,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             return null;
         }
@@ -189,7 +189,7 @@ public class KuduMetadata implements ConnectorMetadata {
                 return schemaTable != null && dbName.equals(schemaTable.first);
             })) {
                 return databases.computeIfAbsent(dbName,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             LOG.error("Kudu database {}.{} done not exist.", catalogName, dbName);
             return null;

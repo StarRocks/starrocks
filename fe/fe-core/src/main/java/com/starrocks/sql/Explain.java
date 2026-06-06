@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -59,6 +61,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -68,9 +72,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.ArrayList;
@@ -81,6 +82,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.SessionVariableConstants.AUTO;
 
 public class Explain {
     public static final Explain DEFAULT_EXPLAIN = new Explain(true, false, "    ", "    ");
@@ -193,7 +196,7 @@ public class Explain {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- SCAN [")
-                    .append(((OlapTable) scan.getTable()).getIndexNameById(scan.getSelectedIndexId()))
+                    .append(((OlapTable) scan.getTable()).getIndexNameByMetaId(scan.getSelectedIndexMetaId()))
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
@@ -452,6 +455,10 @@ public class Explain {
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
+            if (enableCosts && !AUTO.equalsIgnoreCase(aggregate.getNeededPreaggregationMode())) {
+                buildOperatorProperty(sb,
+                        "streaming_preaggregation_mode: " + aggregate.getNeededPreaggregationMode(), context.step);
+            }
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
                 String analyticCallString =
@@ -492,8 +499,9 @@ public class Explain {
                 String analyticCallString =
                         EXPR_PRINTER.print(entry.getKey()) + " := " +
                                 EXPR_PRINTER.print(entry.getValue())
-                                + " " + (analytic.getAnalyticWindow() == null ? AnalyticWindow.DEFAULT_WINDOW.toSql() :
-                                analytic.getAnalyticWindow().toSql());
+                                + " " + (analytic.getAnalyticWindow() == null
+                                ? ExprToSql.toSql(AnalyticWindow.DEFAULT_WINDOW)
+                                : ExprToSql.toSql(analytic.getAnalyticWindow()));
                 buildOperatorProperty(sb, analyticCallString, context.step);
             }
 
@@ -677,64 +685,6 @@ public class Explain {
         }
 
         @Override
-        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpression, ExplainContext context) {
-            OperatorStr child = visit(optExpression.inputAt(0), new ExplainContext(context.step + 1));
-            PhysicalStreamAggOperator aggregate = (PhysicalStreamAggOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder();
-            sb.append("- StreamAgg[").append(aggregate.getGroupBys().stream().map(EXPR_PRINTER::print)
-                    .collect(Collectors.joining(", "))).append("]");
-            sb.append(buildOutputColumns(aggregate, ""));
-            sb.append("\n");
-
-            buildCostEstimate(sb, optExpression, context.step);
-
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
-                String analyticCallString =
-                        EXPR_PRINTER.print(entry.getKey()) + " := " +
-                                EXPR_PRINTER.print(entry.getValue());
-                buildOperatorProperty(sb, analyticCallString, context.step);
-            }
-
-            buildCommonProperty(sb, aggregate, context.step);
-            return new OperatorStr(sb.toString(), context.step, Collections.singletonList(child));
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpression, ExplainContext context) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
-            OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
-
-            PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("- StreamJoin/").append(join.getJoinType());
-            if (!join.getJoinType().isCrossJoin()) {
-                sb.append(" [").append(EXPR_PRINTER.print(join.getOnPredicate())).append("]");
-            }
-            sb.append(buildOutputColumns(join, ""));
-            sb.append("\n");
-            buildCostEstimate(sb, optExpression, context.step);
-            buildCommonProperty(sb, join, context.step);
-            return new OperatorStr(sb.toString(), context.step, Arrays.asList(left, right));
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, ExplainContext context) {
-            PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
-
-            StringBuilder sb = new StringBuilder("- StreamScan [")
-                    .append(scan.getTable().getName())
-                    .append("]")
-                    .append(buildOutputColumns(scan,
-                            "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
-                                    .collect(Collectors.joining(", ")) + "]"))
-                    .append("\n");
-
-            buildCostEstimate(sb, optExpression, context.step);
-            buildCommonProperty(sb, scan, context.step);
-
-            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
-        }
-
-        @Override
         public OperatorStr visitPhysicalTableFunctionTableScan(OptExpression optExpr, ExplainContext context) {
             PhysicalTableFunctionTableScanOperator scan = (PhysicalTableFunctionTableScanOperator) optExpr.getOp();
             StringBuilder sb = new StringBuilder("- TableFunctionScan[")
@@ -748,6 +698,33 @@ public class Explain {
             buildCommonProperty(sb, scan, context.step);
 
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalConcatenater(OptExpression optExpression, ExplainContext context) {
+            PhysicalConcatenateOperator op = (PhysicalConcatenateOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- CONCATENATE\n");
+            return new OperatorStr(sb.toString(), context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalSplitProducer(OptExpression optExpression, ExplainContext context) {
+            PhysicalSplitProduceOperator op = (PhysicalSplitProduceOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- SplitProducer(splitId=").append(op.getSplitId()).append(")\n");
+            return new OperatorStr(sb.toString(), context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalSplitConsumer(OptExpression optExpression, ExplainContext context) {
+            PhysicalSplitConsumeOperator op = (PhysicalSplitConsumeOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- SplitConsumer(cteId=").append(op.getSplitId()).append(")\n");
+            return new OperatorStr(sb.toString(), context.step,
+                    buildChildOperatorStr(optExpression, context.step));
         }
     }
 

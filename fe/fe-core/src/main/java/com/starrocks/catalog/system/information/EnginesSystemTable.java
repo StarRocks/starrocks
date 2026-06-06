@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -31,12 +31,12 @@ public class EnginesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ENGINE", ScalarType.createVarchar(64))
-                        .column("SUPPORT", ScalarType.createVarchar(8))
-                        .column("COMMENT", ScalarType.createVarchar(80))
-                        .column("TRANSACTIONS", ScalarType.createVarchar(3))
-                        .column("XA", ScalarType.createVarchar(3))
-                        .column("SAVEPOINTS", ScalarType.createVarchar(3))
+                        .column("ENGINE", TypeFactory.createVarcharType(64))
+                        .column("SUPPORT", TypeFactory.createVarcharType(8))
+                        .column("COMMENT", TypeFactory.createVarcharType(80))
+                        .column("TRANSACTIONS", TypeFactory.createVarcharType(3))
+                        .column("XA", TypeFactory.createVarcharType(3))
+                        .column("SAVEPOINTS", TypeFactory.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_ENGINES);
     }
 }

@@ -34,8 +34,6 @@
 
 #pragma once
 
-#include <storage/flat_json_config.h>
-
 #include <memory> // for unique_ptr
 
 #include "column/vectorized_fwd.h"
@@ -44,15 +42,16 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
+#include "storage/primitive/flat_json_config.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
+#include "base/bit/bitmap.h"   // for BitmapChange
+#include "base/string/slice.h" // for OwnedSlice
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
-#include "util/bitmap.h"                 // for BitmapChange
-#include "util/slice.h"                  // for OwnedSlice
 
 namespace starrocks {
 
@@ -65,11 +64,13 @@ class Column;
 static const size_t dictionary_min_rowcount = 256;
 
 struct ColumnWriterOptions {
+    ColumnWriterOptions();
+
     // input and output parameter:
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
     // - output: encoding/indexes/dict_page members
     ColumnMetaPB* meta;
-    uint32_t data_page_size = config::data_page_size;
+    uint32_t data_page_size;
     uint32_t page_format = 2;
     // store compressed page only when space saving is above the threshold.
     // space saving = 1 - compressed_size / uncompressed_size
@@ -211,6 +212,7 @@ public:
     Status init() override;
 
     Status append(const Column& column) override;
+    Status append(const Column&, const Buffer<Slice>& data);
 
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const Column& column);
@@ -272,7 +274,7 @@ private:
         _data_size += 20;
     }
 
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+    Status _append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     Status _write_data_page(Page* page);
 
@@ -280,7 +282,7 @@ private:
     WritableFile* _wfile;
     uint32_t _curr_page_format;
     // total size of data page list
-    uint64_t _data_size;
+    uint64_t _data_size{0};
 
     // cached generated pages,
     PageHead _pages;
@@ -309,13 +311,14 @@ private:
 
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
-    bool _has_inverted_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    Buffer<Slice> _slice_buf;
 };
 
 } // namespace starrocks

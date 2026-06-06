@@ -15,7 +15,11 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_distinct_operator.h"
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
+#include "exec/pipeline/query_context.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -37,7 +41,7 @@ Status SpillablePartitionWiseDistinctSinkOperator::set_finishing(RuntimeState* s
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _distinct_op->aggregator()->spill_channel()->set_finishing_if_not_reuseable();
+        _distinct_op->aggregator()->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
@@ -82,19 +86,15 @@ void SpillablePartitionWiseDistinctSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_distinct_op->prepare(state));
+    RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     DCHECK(!_distinct_op->aggregator()->is_none_group_by_exprs());
     _distinct_op->aggregator()->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
-    }
-    if (state->enable_spill_partitionwise_agg_skew_elimination()) {
-        auto* distinct_op_factory =
-                dynamic_cast<AggregateDistinctBlockingSinkOperatorFactory*>(_distinct_op->get_factory());
-        _distinct_op->aggregator()->spiller()->options().opt_aggregator_params =
-                convert_to_aggregator_params(distinct_op_factory->aggregator_factory()->t_node());
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
@@ -192,6 +192,10 @@ Status SpillablePartitionWiseDistinctSinkOperatorFactory::prepare(RuntimeState* 
     _spill_options->wg = state->fragment_ctx()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+    if (state->enable_spill_partitionwise_agg_skew_elimination()) {
+        _spill_options->skew_chunk_compactor = make_spill_aggregate_skew_compactor(
+                convert_to_aggregator_params(_distinct_op_factory->aggregator_factory()->t_node()));
+    }
 
     return Status::OK();
 }
@@ -217,6 +221,14 @@ Status SpillablePartitionWiseDistinctSourceOperator::prepare(RuntimeState* state
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     RETURN_IF_ERROR(_non_pw_distinct->prepare(state));
     RETURN_IF_ERROR(_pw_distinct->prepare(state));
+    return Status::OK();
+}
+
+Status SpillablePartitionWiseDistinctSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_distinct->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_distinct->prepare_local_state(state));
+
     return Status::OK();
 }
 
@@ -343,7 +355,7 @@ StatusOr<ChunkPtr> SpillablePartitionWiseDistinctSourceOperator::_pull_spilled_c
                     state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_distinct->need_input() && !_pw_distinct->is_finished());
-                RETURN_IF_ERROR(_pw_distinct->push_chunk(state, std::move(maybe_chunk.value())));
+                RETURN_IF_ERROR(_pw_distinct->push_chunk(state, maybe_chunk.value()));
             } else if (maybe_chunk.status().is_end_of_file()) {
                 _curr_partition_eos = true;
                 RETURN_IF_ERROR(_pw_distinct->set_finishing(state));

@@ -258,6 +258,71 @@ public class AlterTableTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testLoadInitialOpenPartitionNumberProperty() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_load_initial_open_partition_number (\n" +
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"load_initial_open_partition_number\" = \"5\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getFullName();
+
+        // CREATE path: OlapTableFactory -> PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber
+        //              -> OlapTable.setLoadInitialOpenPartitionNumber -> TableProperty.build/get.
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(dbName, "test_load_initial_open_partition_number");
+        Assertions.assertEquals(5, table.getLoadInitialOpenPartitionNumber());
+        // OlapTable.getProperties() round-trips the persisted value.
+        Assertions.assertEquals("5",
+                    table.getProperties().get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER));
+
+        // ALTER path: AlterTableClauseAnalyzer -> LocalMetastore.alterLoadInitialOpenPartitionNumber.
+        String alterSql = "ALTER TABLE test_load_initial_open_partition_number " +
+                    "SET(\"load_initial_open_partition_number\" = \"10\");";
+        AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterStmt);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(dbName, "test_load_initial_open_partition_number");
+        Assertions.assertEquals(10, table.getLoadInitialOpenPartitionNumber());
+
+        // 0 is a valid value meaning "open all partitions".
+        String openAllSql = "ALTER TABLE test_load_initial_open_partition_number " +
+                    "SET(\"load_initial_open_partition_number\" = \"0\");";
+        AlterTableStmt openAllStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(openAllSql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, openAllStmt);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(dbName, "test_load_initial_open_partition_number");
+        Assertions.assertEquals(0, table.getLoadInitialOpenPartitionNumber());
+
+        // Negative values are rejected by PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber
+        // (at analysis time or in LocalMetastore.alterLoadInitialOpenPartitionNumber).
+        String negativeSql = "ALTER TABLE test_load_initial_open_partition_number " +
+                    "SET(\"load_initial_open_partition_number\" = \"-1\");";
+        assertThrows(AnalysisException.class, () -> {
+            AlterTableStmt bad = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(negativeSql, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, bad);
+        });
+
+        // Non-numeric values are rejected too.
+        String nonNumericSql = "ALTER TABLE test_load_initial_open_partition_number " +
+                    "SET(\"load_initial_open_partition_number\" = \"abc\");";
+        assertThrows(AnalysisException.class, () -> {
+            AlterTableStmt bad = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(nonNumericSql, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, bad);
+        });
+    }
+
+    @Test
     public void testAlterTablePartitionStorageMedium() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_partition_storage_medium (\n" +
                     "event_day DATE,\n" +
@@ -473,47 +538,5 @@ public class AlterTableTest extends StarRocksTestBase {
             logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
         }
-    }
-
-    @Test
-    public void testAlterTableEnableDynamicTablet() throws Exception {
-        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_enable_dynamic_tablet (\n" +
-                    "event_day DATE,\n" +
-                    "site_id INT DEFAULT '10',\n" +
-                    "city_code VARCHAR(100),\n" +
-                    "user_name VARCHAR(32) DEFAULT '',\n" +
-                    "pv BIGINT DEFAULT '0'\n" +
-                    ")\n" +
-                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                    "PARTITION BY RANGE(event_day)(\n" +
-                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
-                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
-                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
-                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
-                    ")\n" +
-                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
-                    "PROPERTIES(\n" +
-                    "\t\"replication_num\" = \"1\",\n" +
-                    "    \"storage_medium\" = \"SSD\",\n" +
-                    "    \"enable_dynamic_tablet\" = \"true\"\n" +
-                    ");");
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
-                "test_enable_dynamic_tablet");
-        Assertions.assertTrue(table.getEnableDynamicTablet());
-
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = "ALTER TABLE test_enable_dynamic_tablet SET(\"enable_dynamic_tablet\" = \"false\");";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
-
-        Assertions.assertFalse(table.getEnableDynamicTablet());
-
-        sql = "ALTER TABLE test_enable_dynamic_tablet SET(\"enable_dynamic_tablet\" = \"true\");";
-        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
-
-        Assertions.assertTrue(table.getEnableDynamicTablet());
     }
 }

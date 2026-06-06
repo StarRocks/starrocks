@@ -22,7 +22,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UseDbStmt;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 /**
  * This is a basic analyzer for some database statements, currently used by

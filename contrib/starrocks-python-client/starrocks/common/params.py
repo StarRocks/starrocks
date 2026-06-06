@@ -12,9 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import logging
 from typing import Final
 
-from starrocks.common.types import TableModel, TableType
+from starrocks.common.types import SystemRunMode, TableModel, TableType
+
+
+logger = logging.getLogger(__name__)
 
 
 DialectName: Final[str] = 'starrocks'
@@ -22,6 +28,24 @@ DialectName: Final[str] = 'starrocks'
 
 SRKwargsPrefix: Final[str] = 'starrocks_'
 """Prefix for StarRocks-specific kwargs."""
+
+
+class TableKind:
+    """Table kind constants.
+    Used in `table.info[TableInfoKey.TABLE_KIND]` to distinguish object types.
+    """
+    TABLE = "TABLE"
+    VIEW = "VIEW"
+    MATERIALIZED_VIEW = "MATERIALIZED_VIEW"
+
+
+class TableObjectInfoKey:
+    """Keys for the `info` dictionary on Table objects, used for storing
+    cross-dialect metadata about StarRocks objects like Views and MVs.
+    """
+    TABLE_KIND = "table_kind"
+    DEFINITION = "definition"
+    SELECTABLE = "_selectable"
 
 
 class AlterTableEnablement:
@@ -38,15 +62,28 @@ class AlterTableEnablement:
     PROPERTIES = True
 
 
+class AlterMVEnablement:
+    """Enablement for ALTER MATERIALIZED VIEW operations.
+    """
+    RENAME = True
+    KEY = False
+    COMMENT = False
+    PARTITION_BY = False
+    DISTRIBUTED_BY = False
+    ORDER_BY = False
+    REFRESH = True
+    PROPERTIES = True
+
+
 class TableInfoKey:
     """Centralizes starrocks_ prefixed kwargs for Table objects. Clean names without prefix."""
 
     # Individual key kwargs for clarity
-    KEY = 'KEY'  # Not in the options, but used for comparison
-    PRIMARY_KEY = 'PRIMARY_KEY'
-    DUPLICATE_KEY = 'DUPLICATE_KEY'
-    AGGREGATE_KEY = 'AGGREGATE_KEY'
-    UNIQUE_KEY = 'UNIQUE_KEY'
+    KEY = 'key'  # Not in the options, but used for comparison
+    PRIMARY_KEY = 'primary_key'
+    DUPLICATE_KEY = 'duplicate_key'
+    AGGREGATE_KEY = 'aggregate_key'
+    UNIQUE_KEY = 'unique_key'
 
     # Key type kwargs and their mapping to DDL strings
     KEY_KWARG_MAP = {
@@ -67,13 +104,17 @@ class TableInfoKey:
     }
 
     # Other table-level kwargs
-    ENGINE = 'ENGINE'
-    COMMENT = 'COMMENT'
-    PARTITION_BY = 'PARTITION_BY'
-    DISTRIBUTED_BY = 'DISTRIBUTED_BY'
-    BUCKETS = 'BUCKETS'
-    ORDER_BY = 'ORDER_BY'
-    PROPERTIES = 'PROPERTIES'
+    ENGINE = 'engine'
+    COMMENT = 'comment'
+    PARTITION_BY = 'partition_by'
+    DISTRIBUTED_BY = 'distributed_by'
+    BUCKETS = 'buckets'
+    ORDER_BY = 'order_by'
+    PROPERTIES = 'properties'
+    # for view only
+    SECURITY = 'security'
+    # for MV only
+    REFRESH = 'refresh'
 
 
 TableInfoKey.ALL = {
@@ -88,8 +129,8 @@ class ColumnAggInfoKey:
     - AGG_TYPE: specify the aggregate function for value columns (see ColumnAggType).
     """
 
-    IS_AGG_KEY = "IS_AGG_KEY"
-    AGG_TYPE = "AGG_TYPE"
+    IS_AGG_KEY = "is_agg_key"
+    AGG_TYPE = "agg_type"
 
 
 ColumnAggInfoKey.ALL = {
@@ -101,10 +142,10 @@ class TableInfoKeyWithPrefix:
     """Centralizes starrocks_ prefixed kwargs for Table objects. Full prefixed names."""
 
     # Individual key kwargs for clarity
-    PRIMARY_KEY = 'starrocks_PRIMARY_KEY'
-    DUPLICATE_KEY = 'starrocks_DUPLICATE_KEY'
-    AGGREGATE_KEY = 'starrocks_AGGREGATE_KEY'
-    UNIQUE_KEY = 'starrocks_UNIQUE_KEY'
+    PRIMARY_KEY = 'starrocks_primary_key'
+    DUPLICATE_KEY = 'starrocks_duplicate_key'
+    AGGREGATE_KEY = 'starrocks_aggregate_key'
+    UNIQUE_KEY = 'starrocks_unique_key'
 
     # Key type kwargs and their mapping to DDL strings
     KEY_KWARG_MAP = {
@@ -115,13 +156,17 @@ class TableInfoKeyWithPrefix:
     }
 
     # Other table-level kwargs
-    ENGINE = 'starrocks_ENGINE'
-    COMMENT = 'starrocks_COMMENT'
-    PARTITION_BY = 'starrocks_PARTITION_BY'
-    DISTRIBUTED_BY = 'starrocks_DISTRIBUTED_BY'
-    BUCKETS = 'starrocks_BUCKETS'
-    ORDER_BY = 'starrocks_ORDER_BY'
-    PROPERTIES = 'starrocks_PROPERTIES'
+    ENGINE = 'starrocks_engine'
+    COMMENT = 'starrocks_comment'
+    PARTITION_BY = 'starrocks_partition_by'
+    DISTRIBUTED_BY = 'starrocks_distributed_by'
+    BUCKETS = 'starrocks_buckets'
+    ORDER_BY = 'starrocks_order_by'
+    PROPERTIES = 'starrocks_properties'
+    # for view only
+    SECURITY = 'starrocks_security'
+    # for MV only
+    REFRESH = 'starrocks_refresh'
 
 
 TableInfoKeyWithPrefix.ALL = {
@@ -149,6 +194,50 @@ TablePropertyForFuturePartitions.ALL = {
 }
 
 
+class InvalidTableProperty:
+    """
+    Some properties are invalid in shared-nothing or shared-data architecture.
+    So we need to ignore them for comparision.
+    """
+    @staticmethod
+    def get_invalid_properties(run_mode: str):
+        if run_mode == SystemRunMode.SHARED_DATA:
+            return InvalidTablePropertyForSharedData.ALL
+        else:
+            return InvalidTablePropertyForSharedNothing.ALL
+
+    @staticmethod
+    def purify_dict(property_dict: dict, run_mode: str, table_name: str):
+        for invalid_property in InvalidTableProperty.get_invalid_properties(run_mode):
+            if invalid_property in property_dict:
+                logger.warning(f"Property {invalid_property} is not valid for {run_mode} mode"
+                               f"{' table: ' + table_name if table_name else ''}. It will be ignored.")
+                property_dict.pop(invalid_property)
+        return property_dict
+
+
+class InvalidTablePropertyForSharedNothing(InvalidTableProperty):
+    pass
+
+
+InvalidTablePropertyForSharedNothing.ALL = {
+    v for k, v in vars(InvalidTablePropertyForSharedNothing).items()
+        if not k.startswith("__") and isinstance(v, str)
+}
+
+
+class InvalidTablePropertyForSharedData(InvalidTableProperty):
+    STORAGE_MEDIUM = "storage_medium"
+    STORAGE_COOLDOWN_TIME = "storage_cooldown_time"
+    REPLICATED_STORAGE = "replicated_storage"
+
+
+InvalidTablePropertyForSharedData.ALL = {
+    v for k, v in vars(InvalidTablePropertyForSharedData).items()
+        if not k.startswith("__") and isinstance(v, str)
+}
+
+
 class ColumnAggInfoKeyWithPrefix:
     """StarRocks-specific Column.info keys for aggregate-model tables. Full prefixed names.
 
@@ -156,15 +245,10 @@ class ColumnAggInfoKeyWithPrefix:
     - AGG_TYPE: specify the aggregate function for value columns (see ColumnAggType).
     """
 
-    IS_AGG_KEY = "starrocks_IS_AGG_KEY"
-    AGG_TYPE = "starrocks_AGG_TYPE"
+    IS_AGG_KEY = "starrocks_is_agg_key"
+    AGG_TYPE = "starrocks_agg_type"
 
 
 ColumnAggInfoKeyWithPrefix.ALL = {
     k for k, v in vars(ColumnAggInfoKeyWithPrefix).items() if not callable(v) and not k.startswith("__")
 }
-
-
-ColumnSROptionsKey: str = "column_sr_options"
-"""Column StarRocks-specific options key, used to store StarRocks-specific options in the Column object.
-"""

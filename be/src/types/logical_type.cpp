@@ -16,7 +16,7 @@
 
 #include <algorithm>
 
-#include "column/type_traits.h"
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 
@@ -305,17 +305,6 @@ LogicalType scalar_field_type_to_logical_type(LogicalType field_type) {
     return ltype;
 }
 
-struct FixedLengthTypeGetter {
-    template <LogicalType ltype>
-    size_t operator()() {
-        return RunTimeFixedTypeLength<ltype>::value;
-    }
-};
-
-size_t get_size_of_fixed_length_type(LogicalType ltype) {
-    return type_dispatch_all(ltype, FixedLengthTypeGetter());
-}
-
 const std::vector<LogicalType>& sortable_types() {
     const static std::vector<LogicalType> kTypes{TYPE_BOOLEAN,   TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,
                                                  TYPE_BIGINT,    TYPE_LARGEINT,  TYPE_FLOAT,     TYPE_DOUBLE,
@@ -325,3 +314,8 @@ const std::vector<LogicalType>& sortable_types() {
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::LogicalType>::format(const starrocks::LogicalType value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::string_view>::format(starrocks::logical_type_to_string(value), ctx);
+}

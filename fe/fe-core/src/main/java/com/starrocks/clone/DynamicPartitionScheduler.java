@@ -45,8 +45,8 @@ import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -54,7 +54,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
@@ -73,9 +73,11 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
@@ -95,7 +97,7 @@ import java.util.Set;
  * Config.dynamic_partition_enable determine whether this feature is enable, Config.dynamic_partition_check_interval_seconds
  * determine how often the task is performed
  */
-public class DynamicPartitionScheduler extends FrontendDaemon {
+public class DynamicPartitionScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(DynamicPartitionScheduler.class);
     public static final String LAST_SCHEDULER_TIME = "lastSchedulerTime";
     public static final String LAST_UPDATE_TIME = "lastUpdateTime";
@@ -273,6 +275,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                         distColumnNames);
         } else if (distributionInfo instanceof RandomDistributionInfo) {
             distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
+        } else if (distributionInfo instanceof RangeDistributionInfo) {
+            distributionDesc = new RangeDistributionDesc();
         }
         return distributionDesc;
     }
@@ -380,7 +384,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 return true;
             }
 
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
                             "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
                 runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
@@ -497,11 +502,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public void runOnceForTest() {
-        runAfterCatalogReady();
+        runAfterLeaseValid();
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // Find all tables that need to be scheduled.
         long now = System.currentTimeMillis();
         long checkIntervalMs = Config.dynamic_partition_check_interval_seconds * 1000L;
@@ -523,5 +528,16 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         // partition_ttl_number and partition_ttl work for mv with
         // single column range partitioning(including expr partitioning).
         ttlPartitionScheduler.scheduleTTLPartition();
+    }
+
+    @Override
+    protected void onStopped() {
+        // The schedulable-table set and the lastFindingTime watermark are leader-session
+        // bookkeeping; findSchedulableTables() walks dbs/tables and re-registers when the next
+        // leader activates, so leftover entries can be dropped here without losing tables that
+        // were registered through SQL on this leader.
+        dynamicPartitionTableInfo.clear();
+        ttlPartitionScheduler.getTtlPartitionInfo().clear();
+        lastFindingTime = -1;
     }
 }

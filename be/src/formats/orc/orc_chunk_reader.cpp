@@ -21,23 +21,26 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/simd/simd.h"
+#include "base/time/timezone_utils.h"
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/stack_util.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
-#include "exprs/runtime_filter.h"
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "orc_schema_builder.h"
-#include "simd/simd.h"
+#include "runtime/rejected_record_writer.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
-#include "util/stack_util.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -45,14 +48,8 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
         : _src_slot_descriptors(std::move(src_slot_descriptors)),
           _read_chunk_size(chunk_size),
           _tzinfo(cctz::utc_time_zone()),
-          _tzoffset_in_seconds(0),
-          _drop_nanoseconds_in_datetime(false),
-          _broker_load_mode(true),
-          _strict_mode(true),
-          _broker_load_filter(nullptr),
-          _num_rows_filtered(0),
-          _error_message_counter(0),
-          _lazy_load_ctx(nullptr) {
+
+          _broker_load_filter(nullptr) {
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
@@ -94,8 +91,8 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
     name_set->clear();
     if (hive_column_names != nullptr && hive_column_names->size() > 0 && !use_orc_column_names) {
         // build hive column names index.
-        int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
-        for (int i = 0; i < size; i++) {
+        size_t size = std::min(hive_column_names->size(), static_cast<size_t>(root_type.getSubtypeCount()));
+        for (size_t i = 0; i < size; i++) {
             std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
             name_set->insert(col_name);
         }
@@ -512,7 +509,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
                 }
             }
         }
-        ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto* col = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         RETURN_IF_ERROR(_column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements));
     }
 
@@ -521,6 +518,14 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             size_t zero_count = SIMD::count_zero(_broker_load_filter->data(), _broker_load_filter->size());
             if (zero_count != 0) {
                 _num_rows_filtered = zero_count;
+                // Phase 4 of the rejected records feature: before the
+                // chunk is filtered, capture the offending rows. Unlike
+                // text formats, ORC has no raw line text we could log --
+                // but the columnar reader has already materialized every
+                // column value into the Chunk by this point, so we can
+                // emit a structured `{col: value, ...}` record for each
+                // rejected row and hand it to the Phase 3 sync daemon.
+                capture_rejected_rows_before_filter(chunk->get());
                 (*chunk)->filter(*_broker_load_filter);
             }
         } else {
@@ -529,6 +534,45 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
     }
 
     return Status::OK();
+}
+
+// Pure-logic helper extracted for testability: walk `filter` and for every
+// row whose mask byte is 0 (rejected), call writer->append_from_chunk.
+// Extracted from capture_rejected_rows_before_filter so unit tests can
+// exercise the per-row emit path without constructing a full OrcChunkReader.
+void orc_emit_rejected_rows(RejectedRecordWriter* writer, const Chunk& chunk,
+                            const std::vector<SlotDescriptor*>& src_slot_descriptors, const Filter& filter) {
+    std::vector<std::string> col_names;
+    col_names.reserve(src_slot_descriptors.size());
+    for (const auto* slot : src_slot_descriptors) {
+        col_names.emplace_back(slot != nullptr ? slot->col_name() : "");
+    }
+
+    const uint8_t* mask = filter.data();
+    const size_t n = filter.size();
+    for (size_t i = 0; i < n; ++i) {
+        if (mask[i] != 0) continue;
+        // source_info is kept minimal -- ORC doesn't have a per-row file
+        // offset in this path. The Phase 3 daemon enriches with the load
+        // label / file name from job metadata.
+        writer->append_from_chunk(chunk, i, col_names, "ORC_ROW_REJECTED", "Row filtered by ORC broker-load validation",
+                                  /*error_column=*/"", "{\"format\":\"orc\"}");
+    }
+}
+
+void OrcChunkReader::capture_rejected_rows_before_filter(Chunk* chunk) {
+    if (_state == nullptr || chunk == nullptr) {
+        return;
+    }
+    if (!_state->enable_log_rejected_record()) {
+        return;
+    }
+    auto* writer = RuntimeStateHelper::rejected_record_writer(_state);
+    if (writer == nullptr) {
+        return;
+    }
+
+    orc_emit_rejected_rows(writer, *chunk, _src_slot_descriptors, *_broker_load_filter);
 }
 
 ChunkPtr OrcChunkReader::_create_chunk(const std::vector<SlotDescriptor*>& src_slot_descriptors,
@@ -575,7 +619,7 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
         if (slot->is_nullable()) {
             // wrap nullable column if necessary
-            col = NullableColumn::wrap_if_necessary(col);
+            col = NullableColumn::wrap_if_necessary(std::move(col));
         }
 
         DCHECK_LE(col->size(), chunk_size);
@@ -634,7 +678,7 @@ Status OrcChunkReader::lazy_read_next(size_t numValues) {
     return Status::OK();
 }
 
-Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
+Status OrcChunkReader::lazy_seek_to(uint64_t rowInStripe) {
     try {
         // It may throw orc::ParseError exception
         _row_reader->lazyLoadSeekTo(rowInStripe);
@@ -1214,7 +1258,7 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
 StatusOr<MutableColumnPtr> OrcChunkReader::get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx) {
     int64_t start_pos = _row_reader->getRowNumber();
     auto num_rows = _batch->numElements;
-    MutableColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
+    auto filter_column = BooleanColumn::create(num_rows, 1);
     auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
 
     if (skip_rows_ctx == nullptr || !skip_rows_ctx->has_skip_rows()) {
@@ -1260,7 +1304,7 @@ Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<Slo
         uint64_t column_id = _root_mapping->get_orc_type_child_mapping(pos_in_src_slot_descs).orc_type->getColumnId();
 
         const Filter& dict_filter = (*it.second);
-        MutableColumnPtr data_filter = BooleanColumn::create(size);
+        auto data_filter = BooleanColumn::create(size);
         Filter& data = static_cast<BooleanColumn*>(data_filter.get())->get_data();
         DCHECK(data.size() == size);
 
@@ -1308,7 +1352,7 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    _state->append_error_msg_to_file("", error_msg);
+    RuntimeStateHelper::append_error_msg_to_file(_state, "", error_msg);
 }
 
 const orc::Type* OrcChunkReader::get_orc_type_by_slot_id(const SlotId& slot_id) const {

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -21,17 +22,15 @@
 #include <openssl/types.h>
 #endif
 #include <bvar/bvar.h>
+#ifdef __x86_64__
+#include <cpuid.h>
+#endif
 
-#include "common/config.h"
-#include "fmt/format.h"
+#include "base/format.h"
+#include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
 #include "io/input_stream.h"
-#include "util/defer_op.h"
-
-#ifdef __x86_64__
-extern "C" unsigned int OPENSSL_ia32cap_P[];
-#endif
 
 namespace starrocks {
 
@@ -43,7 +42,11 @@ bool openssl_supports_aesni() {
     }
 #endif
 #ifdef __x86_64__
-    return OPENSSL_ia32cap_P[1] & (1 << (57 - 32));
+    unsigned int eax, ebx, ecx, edx;
+    if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+        return ecx & (1 << 25); // bit 25 of ECX = AES-NI
+    }
+    return false;
 #else
     return false;
 #endif

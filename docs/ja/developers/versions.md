@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "バージョン命名規則、マイナーバージョンのリリース周期・保持期間。"
 sidebar_position: 1
 ---
 
@@ -51,8 +52,9 @@ StarRocks のすべてのプルリクエストは、**feature**、**enhancement*
 
 ```bash
 git switch branch-3.3
-cat .github.status
+cat .github/.status
 ```
+
 ```bash
 bugfix-only
 ```

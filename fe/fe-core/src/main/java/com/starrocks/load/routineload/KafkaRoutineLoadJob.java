@@ -66,18 +66,18 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
-import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
-import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -301,7 +301,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
                 // change job state to running
                 if (result.size() != 0) {
-                    unprotectUpdateState(JobState.RUNNING, null, false);
+                    unprotectUpdateState(JobState.RUNNING, null);
                 }
             } else {
                 LOG.debug("Ignore to divide routine load job while job state {}", state);
@@ -366,13 +366,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
 
         // For compatible reason, the default behavior of empty load is still returning
-        // "No partitions have data available for loading" and abort transaction.
+        // "No rows were imported from upstream" and abort transaction.
         // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
-                txnStatusChangeReason == TxnStatusChangeReason.NO_PARTITIONS) {
+                txnStatusChangeReason == TxnStatusChangeReason.NO_ROWS_IMPORTED) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "No partitions have data available for loading" may only be returned.
+            // If no data is imported, the error "No rows were imported from upstream" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the offset to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
@@ -423,69 +423,222 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         updateNewPartitionProgress();
     }
 
-    // if customKafkaPartition is not null, then return false immediately
-    // else if kafka partitions of topic has been changed, return true.
-    // else return false
-    // update current kafka partition at the same time
-    // current kafka partitions = customKafkaPartitions == 0 ? all of partition of kafka topic : customKafkaPartitions
+    // Refresh `currentKafkaPartitions` against the broker. The slow step is a FE -> BE brpc
+    // (KafkaUtil.getAllKafkaPartitions), so we must not hold the per-job writeLock across it -
+    // otherwise readers (admin RPCs, SHOW ROUTINE LOAD, processTimeoutTasks) stall for the
+    // full RPC plus retries. Three phases:
+    //   1. Snapshot brokerList/topic/state/configVersion under readLock.
+    //   2. Run convertCustomProperties (self-synchronized) and the brpc with no per-job lock.
+    //   3. Apply under writeLock, discarding the result if configVersion changed mid-flight.
     @Override
-    protected boolean unprotectNeedReschedule() throws StarRocksException {
-        // only running and need_schedule job need to be changed current kafka partitions
+    protected void refreshPartitionsIfNeeded() throws StarRocksException {
+        FetchSnapshot snapshot;
+        readLock();
+        try {
+            snapshot = takeFetchSnapshot();
+        } finally {
+            readUnlock();
+        }
+        if (snapshot == null) {
+            return;
+        }
+        switch (snapshot.kind) {
+            case PAUSED_AUTO_SCHEDULE:
+                applyPausedAutoSchedule();
+                return;
+            case CUSTOM_ONLY:
+                applyCustomPartitions(snapshot);
+                return;
+            case FETCH:
+                break;
+            default:
+                return;
+        }
+
+        List<Integer> newPartitions = null;
+        Exception fetchError = null;
+        try {
+            newPartitions = KafkaUtil.getAllKafkaPartitions(snapshot.brokerList, snapshot.topic,
+                    snapshotConvertedCustomProperties(), snapshot.computeResource);
+        } catch (Exception e) {
+            fetchError = e;
+        }
+
+        applyFetchResult(snapshot, newPartitions, fetchError);
+    }
+
+    // Phase 1 helper. Must be called with at least readLock held so the read of state,
+    // customKafkaPartitions, brokerList, topic, dataSourceConfigVersion is consistent.
+    // Returns null when the job is in a final state (STOPPED/CANCELLED) or any state that
+    // does not require partition refresh; callers must short-circuit the rest of the cycle
+    // in that case.
+    private FetchSnapshot takeFetchSnapshot() {
         if (this.state == JobState.RUNNING || this.state == JobState.NEED_SCHEDULE) {
-            if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
+            if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
+                // User pinned the partition list at CREATE time; no broker RPC needed.
+                return FetchSnapshot.customOnly(dataSourceConfigVersion);
+            }
+            return FetchSnapshot.fetch(brokerList, topic, computeResource, dataSourceConfigVersion);
+        }
+        if (this.state == JobState.PAUSED) {
+            // PAUSED jobs do not need partition info, but may be eligible for auto-resume.
+            return FetchSnapshot.pausedAutoSchedule();
+        }
+        return null;
+    }
+
+    // Phase 3 (fast path). For jobs created with PROPERTIES("kafka_partitions"=...) there is no
+    // broker RPC; we just copy the user-pinned list into currentKafkaPartitions. We still take
+    // writeLock and re-check configVersion + state because phase 1 ran under readLock and an
+    // ALTER ROUTINE LOAD could have landed in between - in that case we drop the assignment and
+    // let the next scheduler tick re-snapshot with the new config.
+    private void applyCustomPartitions(FetchSnapshot snapshot) {
+        writeLock();
+        try {
+            if (dataSourceConfigVersion != snapshot.configVersion) {
+                return;
+            }
+            if (this.state != JobState.RUNNING && this.state != JobState.NEED_SCHEDULE) {
+                return;
+            }
+            if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
                 currentKafkaPartitions = customKafkaPartitions;
-                return false;
-            } else {
-                List<Integer> newCurrentKafkaPartition;
-                try {
-                    newCurrentKafkaPartition = getAllKafkaPartitions();
-                } catch (Exception e) {
-                    String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                    LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                            .add("error_msg", msg)
-                            .build(), e);
-                    if (this.state == JobState.NEED_SCHEDULE) {
-                        unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
-                    }
-                    return false;
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // Phase 3 (PAUSED auto-resume). If a PAUSED job's pauseReason is recoverable (currently:
+    // REPLICA_FEW_ERR within ScheduleRule's retry/window budget), promote it back to
+    // NEED_SCHEDULE so the next RoutineLoadScheduler tick re-divides it into tasks. Pure FE
+    // state-machine work; no external calls, so the writeLock window is tiny.
+    private void applyPausedAutoSchedule() throws StarRocksException {
+        writeLock();
+        try {
+            if (this.state != JobState.PAUSED) {
+                return;
+            }
+            if (!ScheduleRule.isNeedAutoSchedule(this)) {
+                return;
+            }
+            LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                    .add("name", name)
+                    .add("current_state", this.state)
+                    .add("msg", "Job need to be rescheduled")
+                    .build());
+            unprotectUpdateProgress();
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void applyFetchResult(FetchSnapshot snapshot, List<Integer> newPartitions, Exception fetchError)
+            throws StarRocksException {
+        writeLock();
+        try {
+            if (dataSourceConfigVersion != snapshot.configVersion) {
+                // ALTER ROUTINE LOAD landed during the brpc; drop the stale fetch and let the
+                // next scheduler tick refetch with the new config.
+                return;
+            }
+            if (this.state != JobState.RUNNING && this.state != JobState.NEED_SCHEDULE) {
+                return;
+            }
+            if (fetchError != null) {
+                String msg = "Job failed to fetch all current partition with error [" + fetchError.getMessage() + "]";
+                LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("error_msg", msg)
+                        .build(), fetchError);
+                // Only PAUSE jobs that were waiting to be (re)scheduled; jobs already RUNNING
+                // keep their current tasks so a transient broker hiccup does not nuke an
+                // otherwise-healthy pipeline. The next scheduler tick will retry.
+                if (this.state == JobState.NEED_SCHEDULE) {
+                    unprotectUpdateState(JobState.PAUSED,
+                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                 }
-                if (currentKafkaPartitions.containsAll(newCurrentKafkaPartition)) {
-                    if (currentKafkaPartitions.size() > newCurrentKafkaPartition.size()) {
-                        currentKafkaPartitions = newCurrentKafkaPartition;
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                                    .add("current_kafka_partitions", Joiner.on(",").join(currentKafkaPartitions))
-                                    .add("msg", "current kafka partitions has been change")
-                                    .build());
-                        }
-                        return true;
-                    } else {
-                        return false;
-                    }
-                } else {
-                    currentKafkaPartitions = newCurrentKafkaPartition;
+                return;
+            }
+            // Diff currentKafkaPartitions vs newPartitions. Three cases:
+            //   1) current is a strict superset of new  -> partitions were removed
+            //      -> swap to the smaller list and reschedule
+            //   2) current equals new (same set, same size) -> no change
+            //   3) current is missing at least one of new -> partitions were added (or set was
+            //      replaced) -> swap to the new list and reschedule
+            boolean changed;
+            if (currentKafkaPartitions.containsAll(newPartitions)) {
+                if (currentKafkaPartitions.size() > newPartitions.size()) {
+                    currentKafkaPartitions = newPartitions;
                     if (LOG.isDebugEnabled()) {
                         LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                                 .add("current_kafka_partitions", Joiner.on(",").join(currentKafkaPartitions))
                                 .add("msg", "current kafka partitions has been change")
                                 .build());
                     }
-                    return true;
+                    changed = true;
+                } else {
+                    changed = false;
                 }
+            } else {
+                currentKafkaPartitions = newPartitions;
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                            .add("current_kafka_partitions", Joiner.on(",").join(currentKafkaPartitions))
+                            .add("msg", "current kafka partitions has been change")
+                            .build());
+                }
+                changed = true;
             }
-        } else if (this.state == JobState.PAUSED) {
-            boolean autoSchedule = ScheduleRule.isNeedAutoSchedule(this);
-            if (autoSchedule) {
-                LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, name)
-                        .add("current_state", this.state)
-                        .add("msg", "should be rescheduled")
+            if (changed) {
+                LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("msg", "Job need to be rescheduled")
                         .build());
+                unprotectUpdateProgress();
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
             }
-            return autoSchedule;
-        } else {
-            return false;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // Discriminator for the apply phase of refreshPartitionsIfNeeded.
+    //   FETCH                - state RUNNING/NEED_SCHEDULE, no custom partitions; needs broker RPC
+    //   CUSTOM_ONLY          - state RUNNING/NEED_SCHEDULE, user-pinned partitions; no RPC needed
+    //   PAUSED_AUTO_SCHEDULE - state PAUSED; evaluate ScheduleRule for auto-resume
+    private enum FetchSnapshotKind { FETCH, CUSTOM_ONLY, PAUSED_AUTO_SCHEDULE }
+
+    // Immutable snapshot of the inputs captured in phase 1 (readLock) and consumed unchanged
+    // through phase 2 (unlocked broker RPC) and phase 3 (writeLock apply). Carrying the values
+    // on a snapshot rather than re-reading the mutable fields keeps the RPC inputs stable, and
+    // pairing them with configVersion lets phase 3 detect a concurrent ALTER and discard the
+    // stale fetch result.
+    private static final class FetchSnapshot {
+        final FetchSnapshotKind kind;
+        final String brokerList;
+        final String topic;
+        final ComputeResource computeResource;
+        final long configVersion;
+
+        private FetchSnapshot(FetchSnapshotKind kind, String brokerList, String topic,
+                              ComputeResource computeResource, long configVersion) {
+            this.kind = kind;
+            this.brokerList = brokerList;
+            this.topic = topic;
+            this.computeResource = computeResource;
+            this.configVersion = configVersion;
+        }
+
+        static FetchSnapshot fetch(String brokerList, String topic, ComputeResource cr, long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.FETCH, brokerList, topic, cr, ver);
+        }
+
+        static FetchSnapshot customOnly(long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, null, ver);
+        }
+
+        static FetchSnapshot pausedAutoSchedule() {
+            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, null, 0L);
         }
     }
 
@@ -509,9 +662,21 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     private List<Integer> getAllKafkaPartitions() throws StarRocksException {
-        convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
-                ImmutableMap.copyOf(convertedCustomProperties), computeResource);
+                snapshotConvertedCustomProperties(), computeResource);
+    }
+
+    // Snapshot `convertedCustomProperties` for use in an unlocked RPC call. Holds the intrinsic
+    // monitor across convertCustomProperties(false) + ImmutableMap.copyOf so a concurrent ALTER
+    // ROUTINE LOAD running modifyDataSourceProperties (which calls customProperties.putAll +
+    // convertCustomProperties(true) under the same monitor) cannot rebuild the backing HashMap
+    // mid-iteration. All RPC paths that need the converted-properties map must go through this
+    // helper - direct ImmutableMap.copyOf(convertedCustomProperties) is racy outside the monitor.
+    private ImmutableMap<String, String> snapshotConvertedCustomProperties() throws DdlException {
+        synchronized (this) {
+            convertCustomProperties(false);
+            return ImmutableMap.copyOf(convertedCustomProperties);
+        }
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
@@ -534,6 +699,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        }
+
+        if (CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM.equalsIgnoreCase(stmt.getEnvelope())
+                && table instanceof OlapTable
+                && ((OlapTable) table).getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new StarRocksException("envelope=debezium is only supported on PRIMARY KEY tables");
         }
 
         // init kafka routine load job
@@ -566,7 +737,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // check file
                 if (!smallFileMgr.containsFile(dbId, KAFKA_FILE_CATALOG, file)) {
                     throw new DdlException("File " + file + " does not exist in db "
-                            + dbId + " with globalStateMgr: " + KAFKA_FILE_CATALOG);
+                            + dbId + " with catalog: " + KAFKA_FILE_CATALOG);
                 }
             }
         }
@@ -768,38 +939,55 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(maskedProperties);
     }
 
-
-
-
-
-
-    /**
-     * add extra parameter check for changing kafka offset
-     * 1. if customKafkaParition is specified, only the specific partitions can be modified
-     * 2. otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
-     */
     @Override
-    public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
-                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatementInfo originStatement,
-                          boolean isReplay) throws DdlException {
-        if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
-            List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
-            if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
-                for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
-                    if (!customKafkaPartitions.contains(pair.first)) {
-                        throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
-                    }
+    protected void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
+        if (!dataSourceProperties.hasAnalyzedProperties()) {
+            return;
+        }
+
+        // check kafka partition offsets
+        // If customKafkaPartition is specified, only the specific partitions can be modified
+        // otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
+        List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
+        if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
+            for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
+                if (!customKafkaPartitions.contains(pair.first)) {
+                    throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                 }
-            } else {
-                // check if partition is validate
-                try {
-                    checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
-                } catch (StarRocksException e) {
-                    throw new DdlException("The specified partition is not in the consumed partitions ", e);
+            }
+        } else {
+            // check if partition is validate
+            try {
+                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+            } catch (StarRocksException e) {
+                throw new DdlException("The specified partition is not in the consumed partitions ", e);
+            }
+        }
+
+        Map<String, String> changedProperties = dataSourceProperties.getCustomKafkaProperties();
+        // check kafka default offsets
+        if (changedProperties.containsKey(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS)) {
+            try {
+                CreateRoutineLoadStmt.getKafkaOffset(
+                        changedProperties.get(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
+        // check file existence
+        SmallFileMgr smallFileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
+        for (Map.Entry<String, String> entry : changedProperties.entrySet()) {
+            if (entry.getValue().startsWith("FILE:")) {
+                // convert FILE:file_name -> FILE:file_id:md5
+                String file = entry.getValue().substring(entry.getValue().indexOf(":") + 1);
+                // check file
+                if (!smallFileMgr.containsFile(dbId, KAFKA_FILE_CATALOG, file)) {
+                    throw new DdlException("File " + file + " does not exist in db "
+                            + dbId + " with catalog: " + KAFKA_FILE_CATALOG);
                 }
             }
         }
-        super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }
 
     @Override
@@ -819,8 +1007,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
 
         if (!customKafkaProperties.isEmpty()) {
-            this.customProperties.putAll(customKafkaProperties);
-            convertCustomProperties(true);
+            // Hold the intrinsic monitor across putAll + convertCustomProperties(true): the
+            // scheduler's lock-free refresh path reads customProperties via the synchronized
+            // convertCustomProperties(false); putAll outside the monitor would race that read.
+            synchronized (this) {
+                this.customProperties.putAll(customKafkaProperties);
+                convertCustomProperties(true);
+            }
         }
 
         if (dataSourceProperties.getConfluentSchemaRegistryUrl() != null) {
@@ -858,8 +1051,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
         // Update lag time metrics when Kafka transaction becomes visible
         if (Config.enable_routine_load_lag_time_metrics) {
             updateLagTimeMetricsFromProgress();
@@ -915,5 +1108,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             // Return empty map as fallback
             return Maps.newHashMap();
         }
+    }
+
+    protected Long getKafkaDefaultOffSet() {
+        return kafkaDefaultOffSet;
     }
 }

@@ -10,7 +10,7 @@ You can connect to StarRocks using a standard SQLAlchemy connection string.
 from sqlalchemy import create_engine, text
 
 # Format: starrocks://<User>:<Password>@<Host>:<Port>/<Database>
-engine = create_engine('starrocks://myname:pswd1234@localhost:9030/mydatabase')
+engine = create_engine('starrocks://root@localhost:9030/mydatabase')
 
 with engine.connect() as connection:
     rows = connection.execute(text("SELECT 1")).fetchall()
@@ -40,9 +40,9 @@ my_table = Table(
     Column('timestamp', DATETIME),
 
     # StarRocks-specific arguments
-    starrocks_PRIMARY_KEY='id',
-    starrocks_DISTRIBUTED_BY='HASH(id) BUCKETS 10',
-    starrocks_PROPERTIES={"replication_num": "1"}
+    starrocks_primary_key='id',
+    starrocks_distributed_by='HASH(id) BUCKETS 10',
+    starrocks_properties={"replication_num": "1"}
 )
 
 # Create the table in the database
@@ -74,16 +74,16 @@ class PageViewAggregates(Base):
     distinct_users = Column(BITMAP, starrocks_agg_type='BITMAP_UNION')
 
     __table_args__ = {
-        'starrocks_AGGREGATE_KEY': 'page_id, visit_date',
-        'starrocks_PARTITION_BY': 'date_trunc("day", visit_date)',
-        'starrocks_DISTRIBUTED_BY': 'HASH(page_id)',
-        'starrocks_PROPERTIES': {"replication_num": "1"}
+        'starrocks_aggregate_key': 'page_id, visit_date',
+        'starrocks_partition_by': 'date_trunc("day", visit_date)',
+        'starrocks_distributed_by': 'HASH(page_id)',
+        'starrocks_properties': {"replication_num": "1"}
     }
 
 # --- Data Insertion and Query Examples ---
 
 # Assuming `engine` is already created as shown in "Basic Operations"
-engine = create_engine('starrocks://myname:pswd1234@localhost:9030/mydatabase')
+engine = create_engine('starrocks://root@localhost:9030/mydatabase')
 
 Base.metadata.create_all(engine) # Create the table in the database
 

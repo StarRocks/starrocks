@@ -1,4 +1,4 @@
--- name: test_array_contains_with_const
+-- name: test_array_contains_with_const @mac
 CREATE TABLE t ( 
 pk bigint not null ,
 str string,

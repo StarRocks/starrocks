@@ -43,7 +43,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -68,6 +67,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -81,6 +81,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -141,7 +142,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         FINISHED, // task is finished
         CANCELLED, // task is failed
         TIMEOUT, // task is timeout
-        UNEXPECTED // other unexpected errors
+        UNEXPECTED, // other unexpected errors
+        EXPIRED // tablet will be erased soon
     }
 
     private Type type;
@@ -862,9 +864,16 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
+        // Intensive path: IX on DB + WRITE on this one table. The mutation is
+        // strictly tablet-local (tablet.addReplica) on a single known table.
+        // Concurrent DROP TABLE / DROP DATABASE still take DB WRITE and conflict
+        // with our IX, so the surrounding correctness invariants (no clone task
+        // for a dropped table) are preserved.
+        // Lock acquisition is outside the try so the finally cannot try to unlock
+        // a never-acquired lock if lockTableWithIntensiveDbLock itself throws.
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             if (tabletHealthStatus == TabletHealthStatus.REPLICA_MISSING
                     || tabletHealthStatus == TabletHealthStatus.REPLICA_RELOCATING
                     || tabletHealthStatus == TabletHealthStatus.LOCATION_MISMATCH
@@ -919,7 +928,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         }
 
         this.state = State.RUNNING;
@@ -937,9 +946,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
+        // Intensive path: IX on DB + WRITE on this one table. The mutation is
+        // tablet-local (tablet.addReplica) on a single known table; reads of
+        // partition / index / schema metadata are all on the same table.
+        // Lock acquisition is outside the try so the finally cannot try to unlock
+        // a never-acquired lock if lockTableWithIntensiveDbLock itself throws.
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(
                     globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId),
                     tblId);
@@ -950,9 +964,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (physicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "physical partition " + physicalPartitionId + " does not exist");
             }
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+            MaterializedIndex index = physicalPartition.getIndex(indexId);
+            if (index == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index " + indexId + " does not exist");
+            }
+            long indexMetaId = index.getMetaId();
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
             if (indexMeta == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index meta " + indexMetaId + " does not exist");
             }
             TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                     .setId(indexMeta.getSchemaId())
@@ -967,6 +986,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setIndexes(olapTable.getCopiedIndexes())
                     .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                     .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                    .setPrimaryKeyEncodingType(olapTable.getPrimaryKeyEncodingType())
                     .build().toTabletSchema();
 
             CreateReplicaTask task = CreateReplicaTask.newBuilder()
@@ -980,7 +1000,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setStorageMedium(TStorageMedium.HDD)
                     .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                    .setTabletType(olapTable.getPartitionInfo().getTabletType(physicalPartition.getParentId()))
+                    .setTabletType(TTabletType.TABLET_TYPE_DISK)
                     .setCompressionType(olapTable.getCompressionType())
                     .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)
@@ -997,7 +1017,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             state = State.RUNNING;
             return task;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tblId, LockType.WRITE);
         }
     }
 
@@ -1053,12 +1073,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
+
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tblId, LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
             if (olapTable == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
+                throw new SchedException(Status.UNRECOVERABLE, "table does not exist");
             }
 
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
@@ -1079,9 +1100,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
 
-            if (schemaHash != olapTable.getSchemaHashByIndexId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(index.getMetaId())) {
                 throw new SchedException(Status.UNRECOVERABLE, "schema hash is not consistent. index's: "
-                        + olapTable.getSchemaHashByIndexId(indexId)
+                        + olapTable.getSchemaHashByIndexMetaId(index.getMetaId())
                         + ", task's: " + schemaHash);
             }
 
@@ -1107,7 +1128,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
             throw e;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(dbId, tblId, LockType.WRITE);
         }
 
         if (request.isSetCopy_size()) {
@@ -1206,13 +1227,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 reportedTablet.getMin_readable_version());
 
         if (replica.getState() == ReplicaState.CLONE) {
-            replica.setState(ReplicaState.NORMAL);
-            tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info, wal -> {
+                replica.setState(ReplicaState.NORMAL);
+                tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
+            });
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
             // so, we keep it state unchanged, and log update replica
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info, wal -> {});
         }
         return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
                 reportedTablet.getMin_readable_version());

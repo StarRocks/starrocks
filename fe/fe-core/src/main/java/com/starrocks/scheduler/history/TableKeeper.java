@@ -20,6 +20,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
+import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
@@ -197,11 +198,13 @@ public class TableKeeper {
         private final List<TableKeeper> keeperList = Lists.newArrayList();
 
         TableKeeperDaemon() {
-            super("TableKeeper", Config.table_keeper_interval_second * 1000L);
+            super("table-keeper", Config.table_keeper_interval_second * 1000L);
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());
+            keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
+            keeperList.add(RejectedRecordsTable.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }

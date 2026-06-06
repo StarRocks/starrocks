@@ -23,8 +23,8 @@ import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDeltaLakeTable;
@@ -120,6 +120,10 @@ public class DeltaLakeTable extends Table {
         return metastoreTable.getCloudConfiguration();
     }
 
+    public void clearMetadata() {
+        this.deltaSnapshot = null;
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
@@ -142,7 +146,9 @@ public class DeltaLakeTable extends Table {
         tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
 
         List<LiteralExpr> keys = key.getKeys();
-        tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+        tPartition.setPartition_key_exprs(keys.stream()
+                .map(ExprToThrift::treeToThrift)
+                .collect(Collectors.toList()));
 
         THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
         tPartitionLocation.setPrefix_index(-1);
@@ -193,6 +199,10 @@ public class DeltaLakeTable extends Table {
     public String getTableIdentifier() {
         String uuid = this.deltaSnapshot.getMetadata().getId();
         return Joiner.on(":").join(tableName, uuid == null ? "" : uuid);
+    }
+
+    public MetastoreTable getMetastoreTable() {
+        return metastoreTable;
     }
 
     @Override

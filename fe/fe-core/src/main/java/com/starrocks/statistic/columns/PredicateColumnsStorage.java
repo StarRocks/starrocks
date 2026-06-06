@@ -15,7 +15,6 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
@@ -25,6 +24,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -32,9 +33,9 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
@@ -135,7 +136,9 @@ public class PredicateColumnsStorage {
     }
 
     public PredicateColumnsStorage() {
-        this.executor = SimpleExecutor.getRepoExecutor();
+        this.executor = new SimpleExecutor("predicate_column", TResultSinkType.HTTP_PROTOCAL);
+        // Set the DOP to 1 to reduce impact on normal queries
+        this.executor.setDop(1);
     }
 
     public PredicateColumnsStorage(SimpleExecutor executor) {
@@ -314,7 +317,7 @@ public class PredicateColumnsStorage {
          * "data": [field1, field2, field3]
          * }
          */
-        public static ColumnUsageJsonRecord fromJson(String json) {
+        public static ColumnUsageJsonRecord fromJson(String json) throws MetaNotFoundException {
             JsonElement object = JsonParser.parseString(json);
             JsonArray data = object.getAsJsonObject().get("data").getAsJsonArray();
             // String feId = data.get(0).getAsString();
@@ -326,7 +329,9 @@ public class PredicateColumnsStorage {
             String created = data.get(6).getAsString();
             ColumnFullId fullId = new ColumnFullId(dbId, tableId, columnId);
             Optional<Pair<TableName, ColumnId>> names = fullId.toNames();
-            Preconditions.checkState(names.isPresent(), "unable to find column: " + fullId);
+            if (names.isEmpty()) {
+                throw new MetaNotFoundException("column not found: " + fullId);
+            }
             TableName tableName = names.get().first;
             EnumSet<ColumnUsage.UseCase> useCases = ColumnUsage.fromUseCaseString(useCase);
             ColumnUsage usage = new ColumnUsage(fullId, tableName, useCases);
@@ -351,6 +356,8 @@ public class PredicateColumnsStorage {
                     List<ColumnUsage> records =
                             ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data);
                     res.addAll(records);
+                } catch (MetaNotFoundException ignored) {
+                    // ignore if the table/column not found
                 } catch (Exception e) {
                     LOG.warn("failed to deserialize ColumnUsage record: {}", jsonString, e);
                 }

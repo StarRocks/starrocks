@@ -14,12 +14,15 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.google.gson.reflect.TypeToken;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.persist.gson.GsonUtils;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -41,7 +44,9 @@ public class ProfileActionV2 extends RestBaseAction {
     }
 
     @Override
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String authorization = request.getAuthorizationHeader();
         String queryId = request.getSingleParameter("query_id");
         String isRequestAllStr = request.getSingleParameter("is_request_all_frontend", "false");
@@ -66,10 +71,18 @@ public class ProfileActionV2 extends RestBaseAction {
             // If the query profile is not found in the local fe's ProfileManager,
             // we will query other frontend nodes to get the query profile.
             String queryPath = String.format(QUERY_PLAN_URI, queryId);
-            List<String> profileList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);
+            List<String> profileList =
+                    fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);
             for (String profile : profileList) {
                 if (profile != null) {
-                    sendSuccessResponse(response, profile, request);
+                    RestBaseResultV2<String> queryProfileResult = GsonUtils.GSON.fromJson(
+                            profile,
+                            new TypeToken<RestBaseResultV2<String>>() {
+                            }.getType());
+                    if (queryProfileResult == null || queryProfileResult.getResult() == null) {
+                        continue;
+                    }
+                    sendSuccessResponse(response, queryProfileResult.getResult(), request);
                     return;
                 }
             }

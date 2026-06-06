@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "runtime/memory/allocator.h"
+#include "common/memory/allocator.h"
 
 namespace starrocks {
 

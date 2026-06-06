@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -220,6 +221,12 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select get_json_string(c2, 'f1') from extend_predicate3",
                         "get_json_string(2: c2, 'f1')",
                         ""
+                ),
+                // [22] With lambda function
+                Arguments.of(
+                        "SELECT * FROM extend_predicate " +
+                                "WHERE any_match(x -> get_json_double(x, '$.longitude') > 0, CAST(c2 AS ARRAY<JSON>)) ",
+                        "get_json_double", "any_match"
                 )
         );
     }
@@ -325,4 +332,83 @@ public class JsonPathRewriteTest extends PlanTestBase {
 
         );
     }
+
+    /*
+     * @see https://github.com/StarRocks/starrocks/issues/64124
+     * Test case for issue: transparent_mv_rewrite_mode conflicts with cbo_json_v2_rewrite
+     * This reproduces the bug where JsonPathRewriteRule creates extended columns based on
+     * the wrong table (MV table) when the scan operator has been rewritten to base table scan
+     */
+    @Test
+    public void testJsonPathRewriteWithTransparentMVRewrite() throws Exception {
+
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+
+        starRocksAssert.withTable("CREATE TABLE test_json_mv_base (\n" +
+                "  id INT,\n" +
+                "  user_object JSON,\n" +
+                "  ts DATETIME\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_json_mv\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "  'transparent_mv_rewrite_mode' = 'true',\n" +
+                "  'replication_num' = '1'\n" +
+                ")\n" +
+                "AS SELECT\n" +
+                "  id,\n" +
+                "  get_json_string(user_object, '$.custom.tier') AS user_object_custom_tier,\n" +
+                "  get_json_string(user_object, '$.custom.service') AS user_object_custom_service,\n" +
+                "  ts\n" +
+                "FROM test_json_mv_base;");
+
+        // Refresh MV to make it available for transparent rewrite
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_json_mv WITH SYNC MODE");
+
+        // Query MV - this should trigger transparent rewrite, then JSON path rewrite
+        // Without the fix, this will fail with NPE in DecodeCollector
+        String sql = "SELECT * FROM test_json_mv LIMIT 10";
+        String plan = getFragmentPlan(sql);
+
+        // Verify the plan is generated successfully
+        // The plan should use base table scan, not MV scan
+        assertContains(plan, "test_json_mv_base");
+
+        starRocksAssert.dropMaterializedView("test_json_mv");
+        starRocksAssert.dropTable("test_json_mv_base");
+    }
+
+    /**
+     * Verify that JsonPathRewriteRule uses ColumnId rather than the mutable column name
+     * when constructing extended column access paths for JSON columns that have been renamed.
+     */
+    @Test
+    public void testJsonPathRewriteWithRenamedJsonColumn() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+
+        starRocksAssert.withTable(
+                "create table json_rename (\n" +
+                        "  id int,\n" +
+                        "  j json\n" +
+                        ") properties('replication_num'='1')");
+        try {
+            starRocksAssert.ddl("alter table json_rename rename column j to j_new");
+            String sql = "select get_json_string(j_new, 'f1') from json_rename";
+            String verbosePlan = getVerboseExplain(sql);
+            // The ExtendedColumnAccessPath should still be rooted at the original ColumnId "j"
+            assertContains(verbosePlan, "ExtendedColumnAccessPath: [/j(varchar)/f1(varchar)]");
+        } finally {
+            starRocksAssert.dropTable("json_rename");
+        }
+    }
+
 }
+

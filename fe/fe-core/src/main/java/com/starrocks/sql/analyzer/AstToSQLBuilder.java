@@ -15,10 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.logging.log4j.LogManager;

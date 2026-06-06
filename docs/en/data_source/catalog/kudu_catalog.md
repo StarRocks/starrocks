@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks supports Kudu catalogs from v3.3 onwards."
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
@@ -182,7 +183,7 @@ You can use one of the following syntaxes to view the schema of a Kudu table:
    USE <catalog_name>.<db_name>;
    ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

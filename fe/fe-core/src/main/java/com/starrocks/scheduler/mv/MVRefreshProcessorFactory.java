@@ -14,37 +14,51 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.ivm.MVIVMBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
+import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 
 import java.util.Map;
 
 public class MVRefreshProcessorFactory {
     public static final MVRefreshProcessorFactory INSTANCE = new MVRefreshProcessorFactory();
 
-    public BaseMVRefreshProcessor newProcessor(Database db, MaterializedView mv,
-                                               MvTaskRunContext mvContext,
-                                               IMaterializedViewMetricsEntity mvEntity) {
+    public MVRefreshProcessor newProcessor(Database db, MaterializedView mv,
+                                           MvTaskRunContext mvContext,
+                                           IMaterializedViewMetricsEntity mvEntity) {
         MaterializedView.RefreshMode refreshMode = mv.getCurrentRefreshMode();
         switch (refreshMode) {
             case INCREMENTAL:
-                return new MVIVMBasedRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
+                // Route through the hybrid processor when any base table lacks a TVR baseline so
+                // PCT can rebuild it. Otherwise run pure IVM with strict semantics (no fallback).
+                if (needsPctBaselineRebuild(mv)) {
+                    return new MVHybridRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
+                }
+                return new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
             case AUTO:
-                return new MVHybridBasedRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
-            case FULL: {
-                // full refresh
-                Map<String, String> props = mvContext.getProperties();
-                props.put(TaskRun.FORCE, "true");
-                return new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
-            }
+                return new MVHybridRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
             default:
-                return new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
+                return new MVPCTRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
         }
+    }
+
+    private static boolean needsPctBaselineRebuild(MaterializedView mv) {
+        // True for the genuine first refresh and also after MVMetaVersionRepairer rewrites a
+        // BaseTableInfo key without updating baseTableInfoTvrVersionRangeMap, which would
+        // otherwise leave pure IVM throwing "No checkpoint found" with no fallback.
+        Map<BaseTableInfo, TvrVersionRange> tvrMap = mv.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap();
+        for (BaseTableInfo info : mv.getBaseTableInfos()) {
+            if (!tvrMap.containsKey(info)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -24,6 +24,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
         starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
+        starRocksAssert.getCtx().getSessionVariable().setEnableGlobalLateMaterialization(false);
     }
 
     @Test
@@ -755,6 +756,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testAggFunction() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(v1) from t0";
         assertPlanContains(sql, "output: count(1: v1)");
 
@@ -1228,7 +1230,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testCastRowDataType() throws Exception {
         String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
-        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<`X` bigint(20), `Y` double>)");
     }
 
     @Test
@@ -1261,6 +1263,6 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testRegexpReplace() throws Exception {
         String sql = "select regexp_replace('123', '321')";
-        assertPlanContains(sql, "regexp_replace('123', '321', '')");
+        assertPlanContains(sql, "<slot 2> : '123'");
     }
 }

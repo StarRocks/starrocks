@@ -14,11 +14,11 @@
 
 #include "cache/disk_space_monitor.h"
 
+#include "base/concurrency/await.h"
 #include "cache/datacache_utils.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
 #include "common/statusor.h"
-#include "util/await.h"
-#include "util/thread.h"
+#include "common/thread/thread.h"
 
 namespace starrocks {
 
@@ -272,7 +272,7 @@ void DiskSpaceMonitor::start() {
     }
     _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
-    Thread::set_thread_name(_adjust_datacache_thread, "adjust_disk_cache");
+    Thread::set_thread_name(_adjust_datacache_thread, "adj_disk_cache");
 }
 
 void DiskSpaceMonitor::stop() {
@@ -307,7 +307,11 @@ void DiskSpaceMonitor::_adjust_datacache_callback() {
         lck.unlock();
 
         int64_t kWaitTimeout = config::datacache_disk_adjust_interval_seconds * 1000 * 1000;
-        static const int64_t kCheckInterval = 1000 * 1000;
+#ifdef BE_TEST
+        static const int64_t kCheckInterval = 10 * 1000; // 10ms for faster shutdown in test environment
+#else
+        static const int64_t kCheckInterval = 1000 * 1000; // 1 second
+#endif
         auto cond = [this]() { return is_stopped(); };
         auto ret = Awaitility().timeout(kWaitTimeout).interval(kCheckInterval).until(cond);
         if (ret) {

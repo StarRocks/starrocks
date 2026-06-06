@@ -14,9 +14,12 @@
 
 #include "storage/lake/compaction_task.h"
 
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 
@@ -39,6 +42,13 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         auto metadata = _tablet.metadata();
         if (metadata->enable_persistent_index() &&
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
+            // For parallel compaction subtasks, skip SST compaction here.
+            // SST compaction will be executed once after all subtasks complete,
+            // in TabletParallelCompactionManager::get_merged_txn_log.
+            // This avoids multiple subtasks competing to compact the same SST files.
+            if (_context->subtask_id >= 0) {
+                return Status::OK();
+            }
             RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(metadata, txn_log));
             if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
                 size_t total_input_sstable_file_size = 0;
@@ -70,31 +80,81 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->set_overlapped(true);
     } else {
         op_compaction->set_new_segment_offset(0);
-        for (auto& file : writer->files()) {
-            op_compaction->mutable_output_rowset()->add_segments(file.path);
-            op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-            op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
+        for (const auto& file : writer->segments()) {
+            uint32_t segment_idx = op_compaction->output_rowset().segment_metas_size();
+            file.to_proto(segment_idx, op_compaction->mutable_output_rowset()->add_segment_metas());
         }
-        op_compaction->set_new_segment_count(writer->files().size());
+        op_compaction->set_new_segment_count(writer->segments().size());
         op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
         op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
         op_compaction->mutable_output_rowset()->set_overlapped(false);
         op_compaction->mutable_output_rowset()->set_next_compaction_offset(0);
         for (auto& sst : writer->ssts()) {
-            auto* file_meta = op_compaction->add_ssts();
-            file_meta->set_name(sst.path);
-            file_meta->set_size(sst.size.value());
-            file_meta->set_encryption_meta(sst.encryption_meta);
+            to_file_meta_pb(sst, op_compaction->add_ssts());
+        }
+        for (auto& sst_range : writer->sst_ranges()) {
+            op_compaction->add_sst_ranges()->CopyFrom(sst_range);
+        }
+        // Record lcrm file metadata in transaction log if it exists
+        // WHY: During parallel pk index execution, mapper files are stored on remote storage
+        // (.lcrm extension). Recording metadata in txn log enables:
+        // 1. Light publish optimization - skip re-reading compaction data during publish
+        // 2. Performance - file size avoids expensive S3/HDFS get_size() calls
+        // 3. Lifecycle management - metadata tracked for proper GC cleanup
+        // CONSTRAINT: Only applies to remote storage files (.lcrm), not local files (.crm)
+        if (is_lcrm(writer->lcrm_file().path)) {
+            to_file_meta_pb(writer->lcrm_file(), op_compaction->mutable_lcrm_file());
         }
     }
+    // Fresh uid: a compaction output is a new logical rowset and must not dedup
+    // with the input rowsets it supersedes (it leaves their split family). Use
+    // set_ (always re-mint), not ensure_ (mint-if-absent): the output is derived
+    // from inputs, so it must never alias an input's uid even if one is ever
+    // copied in. Matches tablet_parallel_compaction_manager's merged output.
+    tablet_reshard_helper::set_rowset_uid(op_compaction->mutable_output_rowset());
     return Status::OK();
 }
 
-bool CompactionTask::should_enable_pk_parallel_execution(int64_t input_bytes) {
+CompactionTask::SstStats CompactionTask::compute_sst_stats(const std::vector<FileInfo>& writer_ssts,
+                                                           const TxnLogPB* txn_log) {
+    SstStats stats;
+    // SST output from eager PK index build
+    stats.output_files = static_cast<int32_t>(writer_ssts.size());
+    for (const auto& sst : writer_ssts) {
+        stats.output_bytes += sst.size.value_or(0);
+    }
+    // SST input/output from PK index major compaction
+    if (txn_log != nullptr && txn_log->has_op_compaction()) {
+        const auto& op = txn_log->op_compaction();
+        stats.input_files = op.input_sstables_size();
+        for (const auto& sst : op.input_sstables()) {
+            stats.input_bytes += sst.filesize();
+        }
+        for (const auto& sst : op.output_sstables()) {
+            stats.output_files += 1;
+            stats.output_bytes += sst.filesize();
+        }
+        if (op.has_output_sstable()) {
+            stats.output_files += 1;
+            stats.output_bytes += op.output_sstable().filesize();
+        }
+    }
+    return stats;
+}
+
+void CompactionTask::collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log) {
+    auto stats = compute_sst_stats(writer->ssts(), txn_log);
+    _sst_input_files = stats.input_files;
+    _sst_input_bytes = stats.input_bytes;
+    _sst_output_files = stats.output_files;
+    _sst_output_bytes = stats.output_bytes;
+}
+
+bool CompactionTask::should_enable_pk_index_eager_build(int64_t input_bytes) {
     if (_tablet.get_schema()->keys_type() != KeysType::PRIMARY_KEYS) {
         return false;
     }
-    // pk parallel execution is only work when all conditions are met:
+    // Eager PK index build only works when all conditions are met:
     // 1. whether use cloud native index
     // 2. whether use light compaction publish
     // 3. whether input_bytes is large enough
@@ -104,7 +164,7 @@ bool CompactionTask::should_enable_pk_parallel_execution(int64_t input_bytes) {
     bool use_light_compaction_publish = config::enable_light_pk_compaction_publish &&
                                         StorageEngine::instance()->get_persistent_index_store(_tablet.id()) != nullptr;
     return use_cloud_native_index && use_light_compaction_publish &&
-           input_bytes >= config::pk_parallel_execution_threshold_bytes;
+           input_bytes >= config::pk_index_eager_build_threshold_bytes;
 }
 
 } // namespace starrocks::lake

@@ -1,0 +1,256 @@
+-- name: test_push_down_heavy_exprs
+create table t0 (
+c0 string
+) properties("replication_num"="1");
+-- result:
+-- !result
+insert into t0 with cte as (
+select i from table(generate_series(1,10000)) t(i)
+)
+select concat(i, ".", "foo", case i%3 when 0 then ".bar" when 1 then ".buzz" else "" end, ".xxxx") c0 
+from cte;
+-- result:
+-- !result
+create table result (
+fp bigint 
+) properties("replication_num"="1");
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "^\\d+(\\.foo\.b\\w+).*$", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=true)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "^\\d+(\\.foo\.b\\w+).*$", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=false)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "\\d+(\\.foo\.b\\w+).*", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=true)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, "\\d+(\\.foo\.b\\w+).*", "\\1") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=false)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, ".*foo.bar*", "deadbeef") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=true)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+insert into result 
+with cte as (
+select distinct regexp_replace(c0, ".*foo.bar*", "deadbeef") as c0 from t0 
+)
+select /*+SET_VAR(push_down_heavy_exprs=false)*/sum(murmur_hash3_32(cte.c0)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+CREATE TABLE IF NOT EXISTS tbl_transaction_001 (
+    id              BIGINT          COMMENT 'Primary Key',
+    field_date_1    DATE            COMMENT 'Date Field 1',
+    field_int_1     INT             COMMENT 'Integer Field 1',
+    field_varchar_1 VARCHAR(100)    COMMENT 'Varchar Field 1',
+    field_varchar_2 VARCHAR(50)     COMMENT 'Varchar Field 2 (Category)',
+    field_varchar_3 VARCHAR(100)    COMMENT 'Varchar Field 3 (Foreign Key)',
+    field_text_1    VARCHAR(2000)   COMMENT 'Text Field 1 (JSON Data)'
+)
+COMMENT 'Test Table: Generic Transaction Table'
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (1, DATE '2025-12-24', 1, 'DATA_001', 'VALUE_ALPHA', 'FK_001',
+     '{
+        "key_json_1": "RESULT_A_001",
+        "key_json_2": "[\"pattern_match_1\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (2, DATE '2025-12-24', 1, 'DATA_002', 'VALUE_GAMMA', 'FK_002',
+     '{
+        "key_json_1": "NULL",
+        "key_json_2": "[\"pattern_match_2\"]",
+        "key_json_3": "RESULT_B_001"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (3, DATE '2025-12-25', 1, 'DATA_003', 'VALUE_BETA', 'FK_003',
+     '{
+        "key_json_1": "RESULT_A_002",
+        "key_json_2": "[\"pattern_match_1\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (4, DATE '2025-12-25', 1, 'DATA_004', 'VALUE_BETA', 'FK_004',
+     '{
+        "key_json_1": "NULL",
+        "key_json_2": "[\"pattern_match_2\"]",
+        "key_json_3": "RESULT_B_002"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (5, DATE '2025-12-24', 1, 'DATA_005', 'VALUE_DELTA', '',
+     '{
+        "key_json_1": "NULL",
+        "key_json_2": "[\"other_pattern\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (6, DATE '2025-12-24', 1, 'DATA_006', 'VALUE_ALPHA', '',
+     '{
+        "key_json_1": "RESULT_A_003",
+        "key_json_2": "[\"pattern_match_1\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (7, DATE '2025-12-24', 1, 'DATA_007', 'VALUE_ALPHA', '0',
+     '{
+        "key_json_1": "RESULT_A_004",
+        "key_json_2": "[\"pattern_match_1\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (8, DATE '2025-12-24', 2, 'DATA_008', 'VALUE_ALPHA', 'FK_008',
+     '{
+        "key_json_1": "RESULT_A_005",
+        "key_json_2": "[\"pattern_match_1\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (9, DATE '2025-12-20', 1, 'DATA_009', 'VALUE_ALPHA', 'FK_009',
+     '{
+        "key_json_1": "RESULT_A_006",
+        "key_json_2": "[\"pattern_match_1\"]",
+        "key_json_3": "NULL"
+      }');
+-- result:
+-- !result
+INSERT INTO tbl_transaction_001
+    (id, field_date_1, field_int_1, field_varchar_1, field_varchar_2, field_varchar_3, field_text_1)
+VALUES
+    (10, DATE '2025-12-25', 1, 'DATA_010', 'VALUE_BETA', 'FK_010',
+     '{
+        "key_json_1": "RESULT_A_007",
+        "key_json_2": "[\"pattern_match_1\",\"pattern_match_2\"]",
+        "key_json_3": "RESULT_B_003"
+      }');
+-- result:
+-- !result
+SELECT DISTINCT CASE
+        /* Condition A */
+        WHEN field_varchar_2 = 'VALUE_ALPHA'
+             AND COALESCE(
+                    NULLIF(NULLIF(field_varchar_3, ''), '0'),
+                    ''
+                ) NOT IN ('', '0')
+             AND COALESCE(
+                    NULLIF(
+                        GET_JSON_OBJECT(field_text_1, '$.key_json_1'),
+                        '0'
+                    ),
+                    ''
+                ) <> ''
+             AND REGEXP_REPLACE(
+                    GET_JSON_OBJECT(field_text_1, '$.key_json_2'),
+                    '^\\[\\"|\\"]$',
+                    ''
+                 ) LIKE '%pattern_match_1%'
+        THEN GET_JSON_OBJECT(field_text_1, '$.key_json_1')
+
+        /* Condition B */
+        WHEN COALESCE(
+                    NULLIF(
+                        GET_JSON_OBJECT(field_text_1, '$.key_json_3'),
+                        '0'
+                    ),
+                    ''
+                ) <> ''
+             AND REGEXP_REPLACE(
+                    GET_JSON_OBJECT(field_text_1, '$.key_json_2'),
+                    '^\\[\\"|\\"]$',
+                    ''
+                 ) LIKE '%pattern_match_2%'
+        THEN GET_JSON_OBJECT(field_text_1, '$.key_json_3')
+
+        /* Default Value */
+        ELSE '0'
+    END AS result_field_1
+FROM tbl_transaction_001
+WHERE field_date_1 BETWEEN '2025-12-23' AND '2025-12-25'
+  AND field_int_1 = 1
+  /* Filter: valid foreign_key and category in specific list */
+  AND IF(
+        COALESCE(
+            NULLIF(NULLIF(field_varchar_3, ''), '0'),
+            ''
+        ) NOT IN ('', '0')
+        AND field_varchar_2 IN ('VALUE_ALPHA', 'VALUE_BETA'),
+        1,
+        0
+    ) = 1;
+-- result:
+0
+-- !result

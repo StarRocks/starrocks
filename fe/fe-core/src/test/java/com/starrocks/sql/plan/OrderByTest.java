@@ -34,6 +34,7 @@ class OrderByTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -73,7 +74,7 @@ class OrderByTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains(
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
-                        + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, "
+                        + "(slot_id:1, tuple_id:2), output_scale:-1, "
                         + "has_nullable_child:false, is_nullable:true, is_monotonic:true"));
     }
 
@@ -618,6 +619,35 @@ class OrderByTest extends PlanTestBase {
                 "  |  order by: [1, VARCHAR, false] ASC\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+    }
+
+    @Test
+    void testTopNFilterWithDifferentGroupByOrder() throws Exception {
+        // When ORDER BY column differs from the first GROUP BY column,
+        // the TopN runtime filter must use the correct exprOrder to match
+        // the group-by column index. Previously exprOrder was hardcoded to 0,
+        // causing a type mismatch crash (DATE vs DATETIME) or wrong results.
+        String sql;
+        String plan;
+
+        // ORDER BY second group-by column (id_datetime) which has different type from first (id_date)
+        sql = "select id_date, id_datetime, count(*) from test_all_type_not_null " +
+                "group by id_date, id_datetime order by id_datetime limit 10;";
+        plan = getVerboseExplain(sql);
+        // The TopN filter should probe on id_datetime, not id_date
+        assertContains(plan, "probe_expr = (8: id_datetime)");
+
+        // ORDER BY first group-by column should still work
+        sql = "select id_date, id_datetime, count(*) from test_all_type_not_null " +
+                "group by id_date, id_datetime order by id_date limit 10;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "probe_expr = (9: id_date)");
+
+        // ORDER BY a column not in GROUP BY should not generate TopN RF
+        sql = "select t1a, count(*) cnt from test_all_type_not_null " +
+                "group by t1a order by cnt limit 10;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "build runtime filters");
     }
 
     @Test

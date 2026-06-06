@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.function;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -28,13 +29,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -48,12 +53,14 @@ import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -64,6 +71,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.type.VarcharType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -72,7 +80,10 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.Field;
@@ -82,15 +93,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
-import static com.starrocks.catalog.PrimitiveType.VARCHAR;
+import static com.starrocks.type.PrimitiveType.BOOLEAN;
+import static com.starrocks.type.PrimitiveType.VARCHAR;
 
 /**
  * Meta functions can be used to inspect the content of in-memory structures, for debug purpose.
  */
 public class MetaFunctions {
+
+    private static final Logger LOG = LogManager.getLogger(MetaFunctions.class);
 
     public static Table inspectExternalTable(TableName tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
@@ -147,26 +161,33 @@ public class MetaFunctions {
     public static ConstantOperator inspectMvMeta(ConstantOperator mvName) {
         TableName tableName = TableName.fromString(mvName.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
+        Database db = dbTable.getLeft();
         Table table = dbTable.getRight();
         if (!table.isMaterializedView()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
     }
 
     static class MVRefreshInfoMeta {
+        @SerializedName(value = "mvName")
+        private final String mvName;
+        @SerializedName(value = "mvToRefreshPartitions")
+        private final Set<String> mvToRefreshPartitions;
         // base table to refresh info
         @SerializedName(value = "tableToUpdatePartitions")
         private final Map<String, Set<String>> tableToUpdatePartitions;
+        @SerializedName(value = "tablePartitionInfos")
+        private final Map<String, String> tablePartitionInfos;
         // olap table info
         @SerializedName("baseOlapTableVisibleVersionMap")
         private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap;
@@ -175,10 +196,16 @@ public class MetaFunctions {
         private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableInfoVisibleVersionMap;
 
         public MVRefreshInfoMeta(
+                String mvName,
+                Set<String> mvToRefreshPartitions,
                 Map<String, Set<String>> tableToUpdatePartitions,
+                Map<String, String> tablePartitionInfos,
                 Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap,
                 Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap) {
+            this.mvName = mvName;
+            this.mvToRefreshPartitions = mvToRefreshPartitions;
             this.tableToUpdatePartitions = tableToUpdatePartitions;
+            this.tablePartitionInfos = tablePartitionInfos;
             this.baseOlapTableVisibleVersionMap = baseTableVisibleVersionMap;
             this.baseExternalTableInfoVisibleVersionMap = baseTableInfoVisibleVersionMap;
         }
@@ -193,17 +220,41 @@ public class MetaFunctions {
         }
         TableName tableName = TableName.fromString(mvName.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
+        Database db = dbTable.getLeft();
         Table table = dbTable.getRight();
         if (!table.isMaterializedView()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
-        Locker locker = new Locker();
         MaterializedView mv = (MaterializedView) table;
+        String json = inspectMVRefreshInfo(db, mv);
+        return ConstantOperator.createVarchar(json);
+    }
+
+    public static String inspectMVRefreshInfo(Database db, MaterializedView mv) {
+        Locker locker = new Locker();
+        // Compute mvToRefreshPartitions before acquiring the lock to avoid holding the lock
+        // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan).
+        Set<String> mvToRefreshPartitions;
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
+                    mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
+            if (mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
+                // For a full refresh, getMVToRefreshPCells() is empty by design (no partition-level tracking).
+                // Use the MV's actual partition names so callers can see which partitions need refreshing.
+                mvToRefreshPartitions = mv.getPartitionNames();
+            } else {
+                mvToRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
+            mvToRefreshPartitions = Sets.newHashSet();
+        }
+        locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+        try {
             Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
             Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
+            Map<String, String> tablePartitionInfos = Maps.newHashMap();
             for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                 Table baseTable = MvUtils.getTableChecked(baseTableInfo);
                 Set<String> toUpdatePartitions = null;
@@ -216,6 +267,8 @@ public class MetaFunctions {
                     tableToUpdatePartitions.put(baseTable.getName(), toUpdatePartitions);
                 }
                 tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
+                String partitionInfo = getTablePartitionInfo(baseTable);
+                tablePartitionInfos.put(baseTable.getName(), partitionInfo);
             }
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
@@ -230,13 +283,16 @@ public class MetaFunctions {
                     externalVisibleVersionMap.entrySet().stream()
                             .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
                             .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
-            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(tableToUpdatePartitions,
+
+            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(mv.getName(),
+                    mvToRefreshPartitions,
+                    tableToUpdatePartitions,
+                    tablePartitionInfos,
                     baseOlapTableVisibleVersionMap,
                     baseExternalTableVisibleVersionMap);
-            String json = meta.inspect();
-            return ConstantOperator.createVarchar(json);
+            return meta.inspect();
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
     }
 
@@ -247,81 +303,126 @@ public class MetaFunctions {
         }
         TableName tableName = TableName.fromString(input.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
+        Database db = dbTable.getLeft();
         Table table = dbTable.getRight();
         if (table == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not a table");
         }
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
-
-            JsonObject obj = new JsonObject();
-            if (table instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) table;
-                olapTable.getPartitions()
-                        .stream()
-                        .forEach(partition -> {
-                            MaterializedView.BasePartitionInfo basePartitionInfo =
-                                    new MaterializedView.BasePartitionInfo(partition.getId(),
-                                            partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                                            partition.getDefaultPhysicalPartition().getVisibleVersionTime());
-                            obj.add(partition.getName(), GsonUtils.GSON.toJsonTree(basePartitionInfo));
-                        });
-            } else {
-                Map<String, PartitionInfo> partitionNameWithPartitionInfo =
-                        ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
-                partitionNameWithPartitionInfo.entrySet()
-                        .stream()
-                        .map(entry -> Pair.of(entry.getKey(),
-                                MaterializedView.BasePartitionInfo.fromExternalTable(entry.getValue())))
-                        .forEach(pair -> {
-                            obj.add(pair.getLeft(),
-                                    pair.getRight() == null ? JsonNull.INSTANCE : GsonUtils.GSON.toJsonTree(pair.getRight()));
-                        });
-            }
-            String json = obj.toString();
+            String json = getTablePartitionInfo(table);
             return ConstantOperator.createVarchar(json);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
     }
 
+    private static String getTablePartitionInfo(Table table) {
+        JsonObject obj = new JsonObject();
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            olapTable.getPartitions()
+                    .stream()
+                    .forEach(partition -> {
+                        MaterializedView.BasePartitionInfo basePartitionInfo =
+                                new MaterializedView.BasePartitionInfo(partition.getId(),
+                                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                                        partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+                        obj.add(partition.getName(), GsonUtils.GSON.toJsonTree(basePartitionInfo));
+                    });
+        } else {
+            Map<String, PartitionInfo> partitionNameWithPartitionInfo =
+                    ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
+            partitionNameWithPartitionInfo.entrySet()
+                    .stream()
+                    .map(entry -> Pair.of(entry.getKey(),
+                            MaterializedView.BasePartitionInfo.fromExternalTable(entry.getValue())))
+                    .forEach(pair -> {
+                        obj.add(pair.getLeft(),
+                                pair.getRight() == null ? JsonNull.INSTANCE : GsonUtils.GSON.toJsonTree(pair.getRight()));
+                    });
+        }
+        return obj.toString();
+    }
+
     /**
-     * Return related materialized-views of a table, in JSON array format
+     * Return related materialized-views of a table, in nested JSON array format
+     * This function recursively traverses the MV hierarchy to get all nested MVs
      */
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectRelatedMv(ConstantOperator name) {
         TableName tableName = TableName.fromString(name.getVarchar());
-        Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
+        JsonArray array = new JsonArray();
+        Set<MvId> visited = Sets.newHashSet();
+
+        Optional<Database> mayDb;
         if (table.isNativeTableOrMaterializedView()) {
             mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
         } else {
             mayDb = Optional.empty();
         }
+        Optional<Long> dbId = mayDb.map(Database::getId);
+        collectRelatedMvsRecursively(dbId, table, array, 0, visited);
 
+        String json = array.toString();
+        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Helper method to recursively collect all related MVs in nested structure
+     * @param table The table to get related MVs from
+     * @param array The JSON array to add results to
+     * @param level The depth level in the MV hierarchy (0 for direct, 1 for nested, etc.)
+     */
+    private static void collectRelatedMvsRecursively(Optional<Long> optDbId, Table table,
+                                                     JsonArray array, int level,
+                                                     Set<MvId> visited) {
+        Set<MvId> relatedMvs;
+
+        // use locker to get the related mvs
         Locker locker = new Locker();
         try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
+            optDbId.ifPresent(dbId -> locker.lockTableWithIntensiveDbLock(dbId, table.getId(), LockType.READ));
+            // get table's related mvs
+            relatedMvs = table.getRelatedMaterializedViews();
+        } finally {
+            optDbId.ifPresent(dbId -> locker.unLockTableWithIntensiveDbLock(dbId, table.getId(), LockType.READ));
+        }
 
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            JsonArray array = new JsonArray();
-            for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
-                        .map(Table::getName)
-                        .orElse(null);
-                JsonObject obj = new JsonObject();
-                obj.add("id", new JsonPrimitive(mv.getId()));
-                obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
-
-                array.add(obj);
+        for (MvId mvId : SetUtils.emptyIfNull(relatedMvs)) {
+            if (visited.contains(mvId)) {
+                continue;
+            }
+            visited.add(mvId);
+            // Get the database for this MV using its dbId from mvId
+            long mvDbId = mvId.getDbId();
+            Optional<Database> mayMvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mvDbId);
+            if (!mayMvDb.isPresent()) {
+                continue;
             }
 
-            String json = array.toString();
-            return ConstantOperator.createVarchar(json);
-        } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
+            Optional<Table> mayMvTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .mayGetTable(mvDbId, mvId.getId());
+            if (!mayMvTable.isPresent()) {
+                continue;
+            }
+
+            Table mvTable = mayMvTable.get();
+
+            String mvName = mvTable.getName();
+            JsonObject obj = new JsonObject();
+            obj.add("id", new JsonPrimitive(mvId.getId()));
+            obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
+            obj.add("level", new JsonPrimitive(level));
+
+            // Create nested related_mvs array
+            JsonArray nestedMvs = new JsonArray();
+            collectRelatedMvsRecursively(Optional.of(mvDbId), mvTable, nestedMvs, level + 1,  visited);
+            obj.add("related_mvs", nestedMvs);
+            array.add(obj);
         }
     }
 
@@ -512,6 +613,110 @@ public class MetaFunctions {
         return getQueryDump(query, ConstantOperator.createBoolean(false));
     }
 
+    /**
+     * Look up a finished query by its query_id in {@link QueryDetailQueue} and produce a
+     * query dump for it. Operational requirements: {@code enable_collect_query_detail_info}
+     * must be set (default off) so detail rows are populated; the query must have run on
+     * this FE; and the cache window controlled by {@code query_detail_cache_time_nanosecond}
+     * (default 30s) must not have expired.
+     *
+     * <p>Limitations: per-FE in-memory only, lost on restart, not visible across FE nodes.
+     * Queries whose SQL was desensitized at record time
+     * ({@code enable_sql_desensitize_in_log=true}) cannot be re-dumped. Access is
+     * restricted: the caller's full {@link UserIdentity} (user + host) must match the
+     * original executor's, or hold system-level OPERATE privilege.
+     */
+    @ConstantFunction(name = "get_query_dump_from_query_id", argTypes = {VARCHAR, BOOLEAN},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDumpFromQueryId(ConstantOperator queryId, ConstantOperator enableMock) {
+        if (!Config.enable_collect_query_detail_info) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: query detail collection is disabled."
+                            + " Set FE config enable_collect_query_detail_info=true (e.g."
+                            + " ADMIN SET FRONTEND CONFIG ('enable_collect_query_detail_info' = 'true'))"
+                            + " before running queries you intend to dump.");
+        }
+        if (Config.enable_sql_desensitize_in_log) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: SQL desensitization is enabled, so recorded SQL"
+                            + " is rewritten to a digest form and cannot be re-dumped. Set FE config"
+                            + " enable_sql_desensitize_in_log=false before running queries you intend"
+                            + " to dump.");
+        }
+        String id = queryId.getVarchar();
+        QueryDetail detail = lookupQueryDetailByQueryId(id);
+        if (detail == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: query_id not found in query detail queue: " + id
+                            + ". The query may have run on a different FE, or the cache window"
+                            + " (query_detail_cache_time_nanosecond, default 30s) has expired.");
+        }
+        checkQueryDumpAccess(detail);
+        String sql = detail.getSql();
+        if (StringUtils.isEmpty(sql) || "this is a desensitized sql".equals(sql)) {
+            // Defense in depth: the row may have been recorded while desensitization was
+            // on and only flipped off afterwards.
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: original sql not retained for query_id: " + id
+                            + ". The recorded SQL was desensitized at the time the query ran.");
+        }
+        String catalog = StringUtils.isNotEmpty(detail.getCatalog()) ? detail.getCatalog() : "";
+        String database = StringUtils.isNotEmpty(detail.getDatabase()) ? detail.getDatabase() : "";
+        com.starrocks.common.Pair<HttpResponseStatus, String> statusAndRes =
+                QueryDumper.dumpQuery(catalog, database, sql, enableMock.getBoolean());
+        if (statusAndRes.first != HttpResponseStatus.OK) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "get_query_dump_from_query_id: " + statusAndRes.second);
+        }
+        return ConstantOperator.createVarchar(statusAndRes.second);
+    }
+
+    @ConstantFunction(name = "get_query_dump_from_query_id", argTypes = {VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDumpFromQueryId(ConstantOperator queryId) {
+        return getQueryDumpFromQueryId(queryId, ConstantOperator.createBoolean(false));
+    }
+
+    private static QueryDetail lookupQueryDetailByQueryId(String queryId) {
+        for (QueryDetail detail : QueryDetailQueue.TOTAL_QUERIES) {
+            if (queryId.equalsIgnoreCase(detail.getQueryId())) {
+                return detail;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Allow looking up a query detail by query_id only when the caller's full
+     * {@link UserIdentity} (user + host) matches the original executor's, or the caller
+     * holds system-level OPERATE privilege. Username-only match would let two distinct
+     * accounts that share a username but differ on host (e.g. {@code 'alice'@'1.1.1.1'}
+     * vs {@code 'alice'@'2.2.2.2'}) read each other's SQL and the schema / statistics
+     * that the resulting dump would expose. We therefore compare against the
+     * {@code userIdentity} field populated by {@link com.starrocks.qe.StmtExecutor};
+     * the {@code user} field is only the qualifiedUser (no host) and is unsafe for
+     * authorization.
+     */
+    private static void checkQueryDumpAccess(QueryDetail detail) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            UserIdentity currentIdentity = ctx.getCurrentUserIdentity();
+            if (currentIdentity != null && StringUtils.isNotEmpty(detail.getUserIdentity())
+                    && currentIdentity.toString().equals(detail.getUserIdentity())) {
+                return;
+            }
+        }
+        try {
+            Authorizer.checkSystemAction(ctx, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    ctx == null ? null : ctx.getCurrentUserIdentity(),
+                    ctx == null ? null : ctx.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+    }
+
     public static class LookupRecord {
 
         @SerializedName("data")
@@ -607,12 +812,28 @@ public class MetaFunctions {
         String column = columnName.getVarchar();
 
         CacheDictManager instance = CacheDictManager.getInstance();
-        Optional<ColumnDict> dict = instance.getGlobalDictSync(table.getId(), ColumnId.create(column));
+        Optional<ColumnDict> dict = instance.getGlobalDictSync(table, ColumnId.create(column));
         if (dict.isEmpty()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         } else {
             return ConstantOperator.createVarchar(dict.get().toJson());
         }
+    }
+
+    /**
+     * Return the query ID of the last executed query in the current session.
+     */
+    @ConstantFunction(name = "last_query_id", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator lastQueryId() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        UUID lastQueryId = connectContext.getLastQueryId();
+        if (lastQueryId == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        return ConstantOperator.createVarchar(lastQueryId.toString());
     }
 
 }

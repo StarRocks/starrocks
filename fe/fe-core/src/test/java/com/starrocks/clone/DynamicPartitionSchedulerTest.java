@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -55,7 +56,7 @@ import java.util.TimeZone;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
-public class DynamicPartitionSchedulerTest {
+public class DynamicPartitionSchedulerTest extends StarRocksTestBase {
     private static final Logger LOG = LogManager.getLogger(DynamicPartitionSchedulerTest.class);
 
     private static ConnectContext connectContext;
@@ -235,7 +236,7 @@ public class DynamicPartitionSchedulerTest {
         tbl.getTableProperty().setPartitionTTLNumber(3);
 
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
-        dynamicPartitionScheduler.runAfterCatalogReady();
+        dynamicPartitionScheduler.runAfterLeaseValid();
 
         Assertions.assertEquals(3, tbl.getPartitions().size());
     }
@@ -311,7 +312,7 @@ public class DynamicPartitionSchedulerTest {
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
-        Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
+        Map<String, Range<PartitionKey>> rangePartitionMap = toRangeMap(tbl.getRangePartitionMap());
 
         Assertions.assertFalse(rangePartitionMap.containsKey("p20230327"));
         Assertions.assertTrue(rangePartitionMap.containsKey("p20230328"));
@@ -356,7 +357,7 @@ public class DynamicPartitionSchedulerTest {
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
-        Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
+        Map<String, Range<PartitionKey>> rangePartitionMap = toRangeMap(tbl.getRangePartitionMap());
 
         Assertions.assertFalse(rangePartitionMap.containsKey("p20230327"));
         Assertions.assertTrue(rangePartitionMap.containsKey("p20230328"));

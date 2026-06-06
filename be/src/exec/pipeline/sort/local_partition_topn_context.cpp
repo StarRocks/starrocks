@@ -19,18 +19,20 @@
 #include <utility>
 
 #include "exec/chunks_sorter_topn.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key,
-                                                     bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
-                                                     const std::vector<TSlotId>& t_pre_agg_output_slot_id,
-                                                     const std::vector<ExprContext*>& sort_exprs,
-                                                     std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-                                                     std::string sort_keys, int64_t offset, int64_t partition_limit,
-                                                     const TTopNType::type topn_type)
+LocalPartitionTopnContext::LocalPartitionTopnContext(
+        const std::vector<TExpr>& t_partition_exprs, bool has_outer_join_child, bool enable_pre_agg,
+        const std::vector<TExpr>& t_pre_agg_exprs, const std::vector<TSlotId>& t_pre_agg_output_slot_id,
+        const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+        std::string sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
-          _has_nullable_key(has_nullable_key),
+          _has_nullable_key(has_outer_join_child),
+          _has_outer_join_child(has_outer_join_child),
           _enable_pre_agg(enable_pre_agg),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -43,9 +45,9 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t
 }
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
@@ -91,9 +93,9 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(state->obj_pool(), desc.nodes, nullptr, &node_idx,
-                                                                   &expr, &ctx, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_from_thrift_nodes(state->obj_pool(), desc.nodes, &node_idx, &expr,
+                                                                       state, true));
+            ExprContext* ctx = state->obj_pool()->add(new ExprContext(expr));
             _pre_agg->_agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -105,6 +107,7 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
 
         // Collect arg_typedescs for aggregate function.
         std::vector<FunctionContext::TypeDesc> arg_typedescs;
+        arg_typedescs.reserve(fn.arg_types.size());
         for (auto& type : fn.arg_types) {
             arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
         }
@@ -112,20 +115,23 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         _pre_agg->_agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
         state->obj_pool()->add(_pre_agg->_agg_fn_ctxs[i]);
 
+        const bool has_nullable_child = _has_outer_join_child || desc.nodes[0].has_nullable_child;
+        AggFunctionTypes agg_fn_type = {return_type, serde_type, arg_typedescs, has_nullable_child,
+                                        desc.nodes[0].is_nullable};
         bool is_input_nullable = false;
         const AggregateFunction* func = nullptr;
-        if (fn.name.function_name == "count") {
+        const bool is_count_fn = fn.name.function_name == "count";
+        if (is_count_fn) {
             return_type.type = TYPE_BIGINT;
             arg_type.type = TYPE_BIGINT;
             serde_type.type = TYPE_BIGINT;
-            is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child);
-            _pre_agg->_agg_fn_types[i] = {serde_type, false, false};
+            agg_fn_type = {return_type, serde_type, arg_typedescs, false, false};
+            // Keep count function selection consistent with Aggregator's intermediate-output path.
+            is_input_nullable = !fn.arg_types.empty() && has_nullable_child;
         } else {
-            // For nullable aggregate function(sum, max, min, avg),
-            // we should always use nullable aggregate function.
-            is_input_nullable = true;
-            _pre_agg->_agg_fn_types[i] = {serde_type, is_input_nullable, desc.nodes[0].is_nullable};
+            is_input_nullable = agg_fn_type.use_nullable_fn(true);
         }
+        _pre_agg->_agg_fn_types[i] = std::move(agg_fn_type);
 
         func = get_window_function(fn.name.function_name, arg_type.type, return_type.type, is_input_nullable,
                                    fn.binary_type, state->func_version());
@@ -155,8 +161,8 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
     }
 
     for (const auto& ctx : _pre_agg->_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
-        RETURN_IF_ERROR(Expr::open(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::open(ctx, state));
     }
 
     return Status::OK();
@@ -283,13 +289,12 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
     return chunk;
 }
 
-Columns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {
-    Columns agg_result_columns(_pre_agg->_agg_fn_types.size());
+MutableColumns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {
+    MutableColumns agg_result_columns(_pre_agg->_agg_fn_types.size());
     for (size_t i = 0; i < _pre_agg->_agg_fn_types.size(); ++i) {
-        // For count, count distinct, bitmap_union_int such as never return null function,
-        // we need to create a not-nullable column.
-        agg_result_columns[i] = ColumnHelper::create_column(_pre_agg->_agg_fn_types[i].result_type,
-                                                            _pre_agg->_agg_fn_types[i].is_nullable);
+        const bool is_count_fn = _pre_agg->_t_pre_agg_exprs[i].nodes[0].fn.name.function_name == "count";
+        const bool is_result_nullable = is_count_fn ? false : _pre_agg->_agg_fn_types[i].is_result_nullable<true>();
+        agg_result_columns[i] = ColumnHelper::create_column(_pre_agg->_agg_fn_types[i].serde_type, is_result_nullable);
         agg_result_columns[i]->reserve(num_rows);
     }
     return agg_result_columns;
@@ -301,7 +306,7 @@ void LocalPartitionTopnContext::output_agg_result(Chunk* chunk, bool eos, bool i
 
     auto agg_state = _pre_agg->_managed_fn_states[_sorter_index]->mutable_data();
 
-    Columns agg_result_columns = _create_agg_result_columns(chunk->num_rows());
+    MutableColumns agg_result_columns = _create_agg_result_columns(chunk->num_rows());
 
     if (is_first_chunk) {
         for (size_t i = 0; i < _pre_agg->_agg_fn_ctxs.size(); i++) {
@@ -333,11 +338,11 @@ void LocalPartitionTopnContext::output_agg_result(Chunk* chunk, bool eos, bool i
 
 Status LocalPartitionTopnContext::output_agg_streaming(Chunk* chunk) {
     RETURN_IF_ERROR(_evaluate_agg_input_columns(chunk));
-    Columns agg_result_column = _create_agg_result_columns(chunk->num_rows());
+    MutableColumns agg_result_column = _create_agg_result_columns(chunk->num_rows());
     for (size_t i = 0; i < _pre_agg->_agg_fn_ctxs.size(); i++) {
         auto slot_id = _pre_agg->_t_pre_agg_output_slot_id[i];
         _pre_agg->_agg_functions[i]->convert_to_serialize_format(
-                _pre_agg->_agg_fn_ctxs[i], _pre_agg->_agg_input_columns[i], chunk->num_rows(), &agg_result_column[i]);
+                _pre_agg->_agg_fn_ctxs[i], _pre_agg->_agg_input_columns[i], chunk->num_rows(), agg_result_column[i]);
         chunk->append_column(std::move(agg_result_column[i]), slot_id);
     }
     return Status::OK();
@@ -353,7 +358,7 @@ Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
             // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
             if (j == 0) {
                 _pre_agg->_agg_input_columns[i][j] =
-                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
             } else {
                 // if function has at least two argument, unpack const column selectively
                 // for function like corr, FE forbid second args to be const, we will always unpack const column for it
@@ -362,7 +367,7 @@ Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
                     _pre_agg->_agg_input_columns[i][j] = std::move(col);
                 } else {
                     _pre_agg->_agg_input_columns[i][j] =
-                            ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                            ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
                 }
             }
             _pre_agg->_agg_input_raw_columns[i][j] = _pre_agg->_agg_input_columns[i][j].get();
@@ -405,8 +410,8 @@ LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driv
 }
 
 Status LocalPartitionTopnContextFactory::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::prepare(_sort_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_sort_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_sort_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_sort_exprs, state));
     return Status::OK();
 }
 

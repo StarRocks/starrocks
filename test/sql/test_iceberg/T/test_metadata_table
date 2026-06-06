@@ -33,6 +33,11 @@ select record_count,lower_bounds from iceberg_sql_test_${uuid0}.iceberg_db_${uui
 -- iceberg snapshots table
 select operation from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$snapshots order by operation;
 
+-- iceberg properties table
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$properties;
+select count(*) > 0 from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$properties;
+select `key`, `value` from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$properties where `key` = 'location';
+
 -- iceberg partitions table
 create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} (k1 int, p1 int, p2 int) partition by (p1, p2);
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 1,1,2;
@@ -76,6 +81,11 @@ select operation from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_
 
 -- iceberg partitions table
 select record_count,file_count from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$partitions;
+
+-- iceberg properties table
+desc iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$properties;
+select count(*) > 0 from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$properties;
+select `key`, `value` from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$properties where `key` = 'location';
 
 drop table iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 drop database iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0};

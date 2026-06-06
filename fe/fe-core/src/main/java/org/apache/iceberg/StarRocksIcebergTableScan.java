@@ -25,6 +25,7 @@ import com.starrocks.connector.iceberg.AsyncIterable;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.qe.ConnectContext;
@@ -85,11 +86,18 @@ public class StarRocksIcebergTableScan
     private final long localPlanningMaxSlotSize;
     private ConnectContext connectContext;
     private final IcebergTableName icebergTableName;
+    private IcebergMetricsReporter metricsReporter;
+    private static final String READ_SPLIT_TARGET_SIZE = "read.split.target-size";
 
-    public static TableScanContext newTableScanContext(Table table) {
+    public static TableScanContext newTableScanContext(Table table, StarRocksIcebergTableScanContext scanContext) {
         if (table instanceof BaseTable) {
             MetricsReporter reporter = ((BaseTable) table).reporter();
-            return ImmutableTableScanContext.builder().metricsReporter(reporter).build();
+            ImmutableTableScanContext.Builder builder = ImmutableTableScanContext.builder();
+            builder = builder.metricsReporter(reporter);
+            if (scanContext.getFileSplitSize() > 0) {
+                builder.putOptions(READ_SPLIT_TARGET_SIZE, String.valueOf(scanContext.getFileSplitSize()));
+            }
+            return builder.build();
         } else {
             return TableScanContext.empty();
         }
@@ -124,7 +132,18 @@ public class StarRocksIcebergTableScan
 
     @Override
     protected TableScan newRefinedScan(Table newTable, Schema newSchema, TableScanContext newContext) {
-        return new StarRocksIcebergTableScan(newTable, newSchema, newContext, scanContext);
+        StarRocksIcebergTableScan scan = new StarRocksIcebergTableScan(newTable, newSchema, newContext, scanContext);
+        scan.metricsReporter = this.metricsReporter;
+        return scan;
+    }
+
+    @Override
+    public TableScan metricsReporter(MetricsReporter reporter) {
+        if (reporter instanceof IcebergMetricsReporter) {
+            this.metricsReporter = (IcebergMetricsReporter) reporter;
+        }
+        TableScan scan = super.metricsReporter(reporter);
+        return scan;
     }
 
     @Override
@@ -233,8 +252,8 @@ public class StarRocksIcebergTableScan
         Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
         if (deleteFileCache != null) {
             for (ManifestFile manifestFile : deleteManifests) {
-                Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(manifestFile.path());
-                if (deleteFiles != null && !deleteFiles.isEmpty()) {
+                Set<DeleteFile> deleteFiles = getCompleteCachedFiles(deleteFileCache, manifestFile);
+                if (deleteFiles != null) {
                     scanMetrics().scannedDeleteManifests().increment();
                     int entrySize = deleteFiles.size();
                     if (filter() != null && filter() != Expressions.alwaysTrue()) {
@@ -251,7 +270,7 @@ public class StarRocksIcebergTableScan
                     matchingCachedDeleteFiles.addAll(deleteFiles);
                 } else {
                     deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
-                    metaFileCacheMap.computeIfAbsent(icebergTableName, 
+                    metaFileCacheMap.computeIfAbsent(icebergTableName,
                             t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
                     deleteManifestWithoutCache.add(manifestFile);
                 }
@@ -267,14 +286,16 @@ public class StarRocksIcebergTableScan
         List<Pair<ManifestFile, Set<DataFile>>> dataManifestWithCache = new ArrayList<>();
         List<ManifestFile> dataManifestWithoutCache = new ArrayList<>();
         for (ManifestFile manifestFile : dataManifests) {
-            Set<DataFile> dataFiles = dataFileCache.getIfPresent(manifestFile.path());
-            if (dataFiles != null && !dataFiles.isEmpty()) {
-                dataManifestWithCache.add(new Pair(manifestFile, dataFiles));
+            Set<DataFile> dataFiles = getCompleteCachedFiles(dataFileCache, manifestFile);
+            if (dataFiles != null) {
                 scanMetrics().scannedDataManifests().increment();
+                if (!dataFiles.isEmpty()) {
+                    dataManifestWithCache.add(new Pair(manifestFile, dataFiles));
+                }
             } else {
                 if (!onlyReadCache) {
                     dataFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
-                    metaFileCacheMap.computeIfAbsent(icebergTableName, 
+                    metaFileCacheMap.computeIfAbsent(icebergTableName,
                             t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
                 }
                 dataManifestWithoutCache.add(manifestFile);
@@ -360,8 +381,8 @@ public class StarRocksIcebergTableScan
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
         manifestFiles.forEach(manifestFile -> {
             dataFileCache.put(manifestFile.path(), Sets.newHashSet());
-            metaFileCacheMap.computeIfAbsent(icebergTableName, 
-                            t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
+            metaFileCacheMap.computeIfAbsent(icebergTableName,
+                    t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
         });
         this.deleteFileIndex = DeleteFileIndex.builderFor(new ArrayList<>()).build();
 
@@ -382,8 +403,8 @@ public class StarRocksIcebergTableScan
         Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
         if (deleteFileCache != null) {
             for (ManifestFile manifestFile : deleteManifests) {
-                Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(manifestFile.path());
-                if (deleteFiles != null && !deleteFiles.isEmpty()) {
+                Set<DeleteFile> deleteFiles = getCompleteCachedFiles(deleteFileCache, manifestFile);
+                if (deleteFiles != null) {
                     deleteFiles = deleteFiles.stream()
                             .filter(f -> f.content() == fileContent)
                             .collect(Collectors.toSet());
@@ -405,7 +426,7 @@ public class StarRocksIcebergTableScan
                     matchingCachedDeleteFiles.addAll(deleteFiles);
                 } else {
                     deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
-                    metaFileCacheMap.computeIfAbsent(icebergTableName, 
+                    metaFileCacheMap.computeIfAbsent(icebergTableName,
                             t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
                     deleteManifestWithoutCache.add(manifestFile);
                 }
@@ -522,5 +543,49 @@ public class StarRocksIcebergTableScan
 
     private int liveFilesCount(ManifestFile manifest) {
         return manifest.existingFilesCount() + manifest.addedFilesCount();
+    }
+
+    public IcebergTableName getIcebergTableName() {
+        return icebergTableName;
+    }
+
+    public IcebergMetricsReporter getMetricsReporter() {
+        return metricsReporter;
+    }
+
+    static Integer expectedLiveFilesCount(ManifestFile manifest) {
+        Integer existingFilesCount = manifest.existingFilesCount();
+        Integer addedFilesCount = manifest.addedFilesCount();
+        if (existingFilesCount == null || addedFilesCount == null) {
+            return null;
+        }
+        return existingFilesCount + addedFilesCount;
+    }
+
+    static boolean isCompleteCachedFiles(ManifestFile manifest, Set<?> files) {
+        if (files == null) {
+            return false;
+        }
+
+        Integer expectedLiveFilesCount = expectedLiveFilesCount(manifest);
+        if (expectedLiveFilesCount == null) {
+            // Without manifest counts, keep the previous "non-empty means usable" behavior,
+            // but still reject empty placeholders so they don't look like valid cache hits.
+            return !files.isEmpty();
+        }
+
+        return files.size() == expectedLiveFilesCount;
+    }
+
+    static <F> Set<F> getCompleteCachedFiles(Cache<String, Set<F>> cache, ManifestFile manifest) {
+        Set<F> files = cache.getIfPresent(manifest.path());
+        if (isCompleteCachedFiles(manifest, files)) {
+            return files;
+        }
+
+        if (files != null) {
+            cache.invalidate(manifest.path());
+        }
+        return null;
     }
 }

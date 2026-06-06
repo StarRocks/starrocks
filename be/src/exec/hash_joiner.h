@@ -17,20 +17,21 @@
 #include <memory>
 #include <utility>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "compute_env/spill/spiller.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/spiller.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 
@@ -143,6 +144,14 @@ inline bool has_post_probe(TJoinOp::type join_type) {
            join_type == TJoinOp::FULL_OUTER_JOIN;
 }
 
+inline bool support_partitioned(TJoinOp::type join_type, bool has_other_conjuncts) {
+    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
+           join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::FULL_OUTER_JOIN ||
+           (join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && !has_other_conjuncts);
+}
+
 inline bool is_spillable(TJoinOp::type join_type) {
     return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
            join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
@@ -164,6 +173,7 @@ struct HashJoinProbeMetrics {
 };
 
 struct HashJoinBuildMetrics {
+    RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* build_ht_timer = nullptr;
     RuntimeProfile::Counter* copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* build_runtime_filter_timer = nullptr;
@@ -174,7 +184,6 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
     RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
     RuntimeProfile::Counter* partition_nums = nullptr;
-    std::string* hash_map_type_info = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -261,13 +270,7 @@ public:
 
     size_t runtime_in_filter_row_limit() const { return 1024; }
 
-    size_t runtime_bloom_filter_row_limit() const {
-        uint64_t runtime_join_filter_pushdown_limit = 1024000;
-        if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
-            runtime_join_filter_pushdown_limit = _runtime_state->query_options().runtime_join_filter_pushdown_limit;
-        }
-        return runtime_join_filter_pushdown_limit;
-    }
+    size_t runtime_bloom_filter_row_limit() const;
 
     // hash table param.
     // this function only valid in hash_joiner_builder
@@ -374,7 +377,7 @@ private:
                 key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(chunk->num_rows(), 0);
+                const_column->data_column()->as_mutable_raw_ptr()->assign(chunk->num_rows(), 0);
                 key_columns.emplace_back(const_column->data_column());
             } else {
                 key_columns.emplace_back(std::move(column_ptr));

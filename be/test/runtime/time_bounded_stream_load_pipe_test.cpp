@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 
 namespace starrocks {
 
@@ -44,7 +44,7 @@ PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, read_buffer_finish) {
         char c = '0' + j;
         buf1->put_bytes(&c, sizeof(c));
     }
-    buf1->flip();
+    buf1->flip_to_read();
     ASSERT_OK(pipe.append(std::move(buf1)));
 
     auto ret = pipe.read();
@@ -78,7 +78,7 @@ PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, read_data_finish) {
         char c = '0' + j;
         buf1->put_bytes(&c, sizeof(c));
     }
-    buf1->flip();
+    buf1->flip_to_read();
     ASSERT_OK(pipe.append(std::move(buf1)));
 
     char read_buf[128];

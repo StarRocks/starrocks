@@ -15,13 +15,17 @@
 import logging
 
 import pytest
-from sqlalchemy import BigInteger, Column, Date, DateTime, Double, Integer, MetaData, String, Table
+from sqlalchemy import BigInteger, Column, Date, DateTime, Integer, MetaData, String, Table
+try:
+    from sqlalchemy import Double
+except ImportError:
+    from sqlalchemy import Float as Double
 from sqlalchemy.dialects import registry
 from sqlalchemy.schema import CreateTable
 
 from starrocks.common.params import ColumnAggInfoKeyWithPrefix
 from starrocks.common.types import ColumnAggType
-from test.unit.test_utils import normalize_sql
+from test.test_utils import normalize_sql
 
 
 class TestCreateTableCompiler:
@@ -45,7 +49,6 @@ class TestCreateTableCompiler:
         sql = self._compile_table(tbl)
         expected = """
             CREATE TABLE engine_comment_tbl(k1 INTEGER)
-            ENGINE=OLAP
             DUPLICATE KEY(k1)
             COMMENT 'A simple table comment.'
             DISTRIBUTED BY HASH(k1)
@@ -110,7 +113,7 @@ class TestCreateTableCompiler:
     def test_column_attributes(self):
         self.logger.info("Testing various column attributes")
         tbl = Table('col_attr_tbl', self.metadata,
-                    Column('k1', Integer, primary_key=True),
+                    Column('k1', Integer, primary_key=True, autoincrement=False),
                     Column('k2', BigInteger, autoincrement=True),
                     Column('k3', String(50), nullable=True),
                     starrocks_distributed_by='HASH(k1)',
@@ -133,7 +136,7 @@ class TestCreateTableCompiler:
                     Column('k1', Integer),
                     Column('v1', Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
                     Column('v2', String(50), **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.REPLACE}),
-                    starrocks_aggregate_key='k1')
+                    starrocks_AGGREGATE_KEY='k1')
         sql = self._compile_table(tbl)
         expected = """
             CREATE TABLE agg_tbl(
@@ -218,7 +221,7 @@ class TestCreateTableCompiler:
             CREATE TABLE generated_col_tbl(
                 k1 INTEGER,
                 k2 VARCHAR(50),
-                k3 INTEGER AS left(k2, 10)
+                k3 INTEGER AS (left(k2, 10))
             )
             DISTRIBUTED BY HASH(k1)
         """
@@ -347,7 +350,6 @@ class TestCreateTableCompiler:
                 city VARCHAR(50) DEFAULT 'Unknown',
                 revenue DOUBLE DEFAULT '0.0'
             )
-            ENGINE=OLAP
             AGGREGATE KEY(user_id, event_date)
             COMMENT 'A comprehensive table'
             PARTITION BY RANGE(event_date) (START ("2023-01-01") END ("2024-01-01") EVERY (INTERVAL 1 MONTH))

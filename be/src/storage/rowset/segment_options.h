@@ -14,40 +14,39 @@
 
 #pragma once
 
-#include <unordered_map>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
-#include "column/column_access_path.h"
-#include "column/datum.h"
-#include "fs/fs.h"
 #include "runtime/global_dict/types.h"
-#include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
+#include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/record_predicate/record_predicate.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
-#include "storage/tablet_schema.h"
 
 namespace starrocks {
-class Condition;
-struct OlapReaderStatistics;
+class ColumnAccessPath;
+class DeltaColumnGroupLoader;
+class DelvecLoader;
+
+namespace lake {
+class IndexDeltaGroupLoader;
+} // namespace lake
+class ObjectPool;
 class RuntimeProfile;
 class TabletSchema;
-class DeltaColumnGroupLoader;
-} // namespace starrocks
-
-namespace starrocks {
-
-class ColumnAccessPath;
-class ColumnPredicate;
-struct RowidRangeOption;
-using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+class Status;
+struct OlapReaderStatistics;
 struct ShortKeyRangeOption;
-using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 struct VectorSearchOption;
+
+using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class SegmentReadOptions {
@@ -57,22 +56,29 @@ public:
     // Specified ranges outside the segment, is used to support parallel-reading within a tablet
     std::vector<SeekRange> ranges;
 
+    // Use to filter the data by range distribution key
+    std::optional<SeekRange> tablet_range;
+
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
     RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
 
-    RecordPredicateSPtr record_predicate;
-
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // rowset base segment id
     uint32_t rowset_id = 0;
+    uint32_t dynamic_rss_id_base = 0;
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    // Lake-only: resolves IndexDeltaGroup (.idx) entries visible at `version`.
+    // Readers prefer IDG-backed indexes over footer-embedded ones. Nullptr
+    // leaves the reader on the original footer path (existing behaviour).
+    std::shared_ptr<lake::IndexDeltaGroupLoader> idg_loader;
     std::string rowset_path;
 
     // REQUIRED (null is not allowed)
@@ -101,11 +107,11 @@ public:
 
     const std::atomic<bool>* is_cancelled = nullptr;
 
-    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<std::unique_ptr<ColumnAccessPath>>* column_access_paths = nullptr;
 
     RowsetId rowsetid;
 
-    TabletSchemaCSPtr tablet_schema = nullptr;
+    std::shared_ptr<const TabletSchema> tablet_schema = nullptr;
 
     bool asc_hint = true;
 
@@ -114,6 +120,7 @@ public:
     bool has_preaggregation = true;
 
     bool use_vector_index = false;
+    bool belonged_to_cloud_native = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 
@@ -123,8 +130,7 @@ public:
     TTableSampleOptions sample_options;
 
     bool enable_join_runtime_filter_pushdown = false;
-
-    bool read_by_generated_column_adding = false;
+    bool enable_predicate_col_late_materialize = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

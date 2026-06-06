@@ -17,15 +17,15 @@ package com.starrocks.connector;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.partitiontraits.BenchmarkPartitionTraits;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.connector.partitiontraits.HivePartitionTraits;
@@ -37,9 +37,8 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +74,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
+                    .put(Table.TableType.BENCHMARK, BenchmarkPartitionTraits::new)
                     .build();
 
     protected Table table;
@@ -132,10 +132,35 @@ public abstract class ConnectorPartitionTraits {
         return buildWithCache(ctx, null, table);
     }
 
+    /**
+     * Build traits with a pinned version range. Subclasses that support snapshot-aware partition
+     * operations (currently Iceberg) will use the pinned snapshot instead of the live one.
+     * Other connectors store the range but ignore it in their partition methods.
+     */
+    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
+        ConnectorPartitionTraits traits = build(table);
+        if (pinnedVersionRange != null) {
+            traits.setPinnedVersionRange(pinnedVersionRange);
+        }
+        return traits;
+    }
+
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;
+    }
+
+    // When set, subclasses that support snapshot-aware partition operations (e.g. Iceberg)
+    // use this version range instead of the live snapshot. Other connectors ignore it.
+    protected TvrVersionRange pinnedVersionRange;
+
+    public void setPinnedVersionRange(TvrVersionRange range) {
+        this.pinnedVersionRange = range;
+    }
+
+    public TvrVersionRange getPinnedVersionRange() {
+        return pinnedVersionRange;
     }
 
     public Table getTable() {
@@ -178,21 +203,6 @@ public abstract class ConnectorPartitionTraits {
      * Get partition columns
      */
     public abstract List<Column> getPartitionColumns();
-
-    /**
-     * Get partition range map with the specified partition column and expression
-     *
-     * @apiNote it must be a range-partitioned table
-     */
-    public abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
-            throws AnalysisException;
-
-    /**
-     * Get the list-map with specified partition column and expression
-     *
-     * @apiNote it must be a list-partitioned table
-     */
-    public abstract Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 

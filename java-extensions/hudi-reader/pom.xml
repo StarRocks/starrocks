@@ -22,6 +22,13 @@
             <artifactId>jni-connector</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>hadoop-ext</artifactId>
+            <version>1.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -59,6 +66,12 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
         <dependency>
             <groupId>org.apache.hudi</groupId>
@@ -80,6 +93,10 @@
                 <exclusion>
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>lz4-java</artifactId>
+                    <groupId>org.lz4</groupId>
                 </exclusion>
             </exclusions>
         </dependency>

@@ -18,20 +18,19 @@ package com.starrocks.scheduler.mv.pct;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
@@ -54,7 +53,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
+    public Expr generatePartitionPredicate(Table table, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) {
         // do nothing
         return null;
@@ -63,7 +62,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Expr generateMVPartitionPredicate(TableName tableName,
-                                             Set<String> mvPartitionNames) throws AnalysisException {
+                                             PCellSortedSet mvPartitionNames) throws AnalysisException {
         return null;
     }
 
@@ -83,7 +82,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         // non-partitioned materialized view
-        if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
+        if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv, queryRewriteParams)) {
             return getNonPartitionedMVPartitionsToRefresh();
         }
         return PCellSortedSet.of();

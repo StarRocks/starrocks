@@ -53,6 +53,12 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LAST_REFRESH_PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_REFRESH_JOB_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"WAREHOUSE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_TRIGGER", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_POLICY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"RESOURCE_GROUP", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -100,7 +106,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
         if (slot_id < 1 || slot_id > std::size(SchemaMaterializedViewsScanner::_s_tbls_columns)) {
             return Status::InternalError("Invalid slot id: " + std::to_string(slot_id));
         }
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
 
         switch (slot_id) {
         case 1: {
@@ -111,7 +117,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             } catch (const std::exception& e) {
                 // ingore exception
             }
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&value);
             break;
         }
         case 2: {
@@ -119,9 +125,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.database_name) {
                 const std::string* str = &info.database_name;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -130,9 +136,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.name) {
                 const std::string* str = &info.name;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -141,9 +147,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.refresh_type) {
                 const std::string* str = &info.refresh_type;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -152,9 +158,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.is_active) {
                 const std::string* str = &info.is_active;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -163,9 +169,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.inactive_reason) {
                 const std::string* str = &info.inactive_reason;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -174,9 +180,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.partition_type) {
                 const std::string* db_name = &info.partition_type;
                 Slice value(db_name->c_str(), db_name->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -185,12 +191,12 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.task_id) {
                 try {
                     int64_t value = std::stoll(info.task_id);
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&value);
                 } catch (const std::exception& e) {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -199,39 +205,39 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.task_name) {
                 const std::string* str = &info.task_name;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
         case 10: {
             // LAST_REFRESH_START_TIME
             if (info.__isset.last_refresh_start_time) {
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 DateTimeValue t;
                 if (!t.from_date_str(info.last_refresh_start_time.data(), info.last_refresh_start_time.size())) {
                     nullable_column->append_nulls(1);
                 } else {
-                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                 }
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
         case 11: {
             // LAST_REFRESH_FINISHED_TIME
             if (info.__isset.last_refresh_finished_time) {
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 DateTimeValue t;
                 if (!t.from_date_str(info.last_refresh_finished_time.data(), info.last_refresh_finished_time.size())) {
                     nullable_column->append_nulls(1);
                 } else {
-                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                 }
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -240,12 +246,12 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_duration) {
                 try {
                     double value = std::stod(info.last_refresh_duration);
-                    fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&value);
                 } catch (const std::exception& e) {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -254,9 +260,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_state) {
                 const std::string* str = &info.last_refresh_state;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -265,9 +271,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_force_refresh) {
                 const std::string* str = &info.last_refresh_force_refresh;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -276,9 +282,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_start_partition) {
                 const std::string* str = &info.last_refresh_start_partition;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -287,9 +293,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_end_partition) {
                 const std::string* str = &info.last_refresh_end_partition;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -298,9 +304,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_base_refresh_partitions) {
                 const std::string* str = &info.last_refresh_base_refresh_partitions;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -309,9 +315,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_mv_refresh_partitions) {
                 const std::string* str = &info.last_refresh_mv_refresh_partitions;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -320,9 +326,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_error_code) {
                 const std::string* str = &info.last_refresh_error_code;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -331,9 +337,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_error_message) {
                 const std::string* str = &info.last_refresh_error_message;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -343,15 +349,15 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
                 if (info.__isset.rows) {
                     try {
                         int64_t value = std::stoll(info.rows);
-                        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                        fill_column_with_slot<TYPE_BIGINT>(column, (void*)&value);
                     } catch (const std::exception& e) {
-                        fill_data_column_with_null(column.get());
+                        fill_data_column_with_null(column);
                     }
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -360,9 +366,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.text) {
                 const std::string* db_name = &info.text;
                 Slice value(db_name->c_str(), db_name->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -371,9 +377,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.extra_message) {
                 const std::string* str = &info.extra_message;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -382,9 +388,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.query_rewrite_status) {
                 const std::string* str = &info.query_rewrite_status;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -393,24 +399,24 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.creator) {
                 const std::string* str = &info.creator;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
         case 26: {
             // LAST_REFRESH_PROCESS_TIME
             if (info.__isset.last_refresh_process_time) {
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 DateTimeValue t;
                 if (!t.from_date_str(info.last_refresh_process_time.data(), info.last_refresh_process_time.size())) {
                     nullable_column->append_nulls(1);
                 } else {
-                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                 }
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -419,9 +425,79 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.__isset.last_refresh_job_id) {
                 const std::string* str = &info.last_refresh_job_id;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 28: {
+            // LAST_REFRESH_TIME
+            if (info.__isset.last_refresh_time) {
+                auto* nullable_column = down_cast<NullableColumn*>(column);
+                DateTimeValue t;
+                if (!t.from_date_str(info.last_refresh_time.data(), info.last_refresh_time.size())) {
+                    nullable_column->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
+                }
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 29: {
+            // WAREHOUSE
+            if (info.__isset.warehouse) {
+                const std::string* str = &info.warehouse;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 30: {
+            // REFRESH_MODE
+            if (info.__isset.refresh_mode) {
+                const std::string* str = &info.refresh_mode;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 31: {
+            // REFRESH_TRIGGER
+            if (info.__isset.refresh_trigger) {
+                const std::string* str = &info.refresh_trigger;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 32: {
+            // REFRESH_POLICY
+            if (info.__isset.refresh_policy) {
+                const std::string* str = &info.refresh_policy;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 33: {
+            // RESOURCE_GROUP
+            if (info.__isset.resource_group) {
+                const std::string* str = &info.resource_group;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
             }
             break;
         }

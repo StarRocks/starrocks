@@ -39,26 +39,33 @@
 #include <utility>
 #include <vector>
 
-#include "exec/sorting/sorting.h"
+#include "base/failpoint/fail_point.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
+#include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
+#include "storage/metadata_util.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/failpoint/fail_point.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -110,7 +117,7 @@ struct MergeElement {
 bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
-        _swap_chunk = ChunkHelper::new_chunk(new_schema, chunk->num_rows());
+        _swap_chunk = ChunkFactory::new_chunk(new_schema, chunk->num_rows());
         if (_swap_chunk == nullptr) {
             LOG(WARNING) << "allocate swap chunk for sort failed";
             return false;
@@ -186,7 +193,7 @@ Status HeapChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* ro
     _make_heap(chunk_arr);
     size_t nread = 0;
     Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    ChunkPtr tmp_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(&new_schema, config::vector_chunk_size, 0));
     }
@@ -312,25 +319,25 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
     }
 
     Schema read_schema = ChunkHelper::convert_schema(base_tablet_schema, all_ref_columns_ids);
-    ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, config::vector_chunk_size);
+    ChunkPtr read_chunk = ChunkFactory::new_chunk(read_schema, config::vector_chunk_size);
 
     auto new_tablet_schema = new_tablet->tablet_schema();
     Schema new_schema = ChunkHelper::convert_schema(new_tablet_schema, new_columns_ids);
-    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
 
     OlapReaderStatistics stats;
     RowsetReleaseGuard guard(src_rowset->shared_from_this());
-    auto res = src_rowset->get_segment_iterators2(read_schema, base_tablet_schema, nullptr, version, &stats,
-                                                  base_tablet->data_dir()->get_meta());
+    auto res = src_rowset->get_segment_iterators2(read_schema, base_tablet_schema, MetaLoadMode::DCG_ONLY, version,
+                                                  &stats);
     if (!res.ok()) {
         return res.status();
     }
 
-    auto seg_iterators = res.value();
+    const auto& seg_iterators = res.value();
 
     // Fetch the new columns value into the new_chunk
     for (int idx = 0; idx < seg_iterators.size(); ++idx) {
-        auto seg_iterator = seg_iterators[idx];
+        const auto& seg_iterator = seg_iterators[idx];
         if (seg_iterator.get() == nullptr) {
             std::stringstream ss;
             ss << "Failed to get segment iterator, segment id: " << idx;
@@ -362,7 +369,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         }
 
         // Write cols file with current new_chunk
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(new_tablet->schema_hash_path()));
+        ASSIGN_OR_RETURN(const auto& fs, FileSystemFactory::CreateSharedFromString(new_tablet->schema_hash_path()));
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
@@ -415,7 +422,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
     auto cur_base_tablet_schema = !base_tablet_schema ? base_tablet->tablet_schema() : base_tablet_schema;
     Schema base_schema =
             ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
-    ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+    ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
     auto new_tschema = new_tablet->tablet_schema();
     std::vector<ColumnId> cids;
     for (size_t i = 0; i < new_tschema->num_columns(); i++) {
@@ -425,9 +432,9 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
-    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     bool bg_worker_stopped = false;
@@ -513,7 +520,12 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
+
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (new_tschema->keys_type() == KeysType::PRIMARY_KEYS) {
+        ASSIGN_OR_RETURN(pk_encoding_type, new_tschema->primary_key_encoding_type_or_error());
+    }
 
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
     // set max memtable size to 4G since some column has limit size, it will make invalid data
@@ -521,7 +533,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
     auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink, max_buffer_size,
                                                 CurrentThread::mem_tracker());
-    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type), alter_msg_header() + "failed to prepare mem table");
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -549,12 +561,13 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type),
+                                      alter_msg_header() + "failed to prepare mem table");
             VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
 #endif
-        ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+        ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
         if (auto status = reader->do_get_next(base_chunk.get()); !status.ok()) {
             if (is_eos = status.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header() << "failed to get next chunk, status is:" << status.to_string();
@@ -566,7 +579,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             break;
         }
 
-        ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, base_chunk->num_rows());
+        ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, base_chunk->num_rows());
 
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
             std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
@@ -588,13 +601,14 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             LOG(WARNING) << msg;
             return res.status();
         }
-        auto full = res.value();
+        const auto& full = res.value();
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type),
+                                      alter_msg_header() + "failed to prepare mem table");
         }
 
         mem_pool->clear();
@@ -724,7 +738,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
     // Create a new tablet schema, should merge with dropped columns in light schema change
     TabletSchemaCSPtr base_tablet_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
+        auto columns_copy = request.columns;
+
+        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
+        if (!preprocess_status.ok()) {
+            LOG(WARNING) << "Failed to preprocess default_expr in SchemaChange: " << preprocess_status.to_string();
+        }
+
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), columns_copy);
     } else {
         base_tablet_schema = base_tablet->tablet_schema();
     }
@@ -786,8 +807,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
-                                                   chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                          chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
 
@@ -1115,6 +1136,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             // new added dcgs info for every segment in rowset.
             DeltaColumnGroupList dcgs;
             std::vector<int> last_dcg_counts;
+            last_dcg_counts.reserve(sc_params.rowsets_to_change[i]->num_segments());
             for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
                 // check the lastest historical_dcgs version if it is equal to schema change version
                 // of the rowset. If it is, we should merge the dcg info.

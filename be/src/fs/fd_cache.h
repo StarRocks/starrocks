@@ -14,10 +14,8 @@
 
 #pragma once
 
-#include <algorithm>
 #include <string_view>
 
-#include "common/config.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -28,10 +26,7 @@ class FdCache {
 public:
     struct Handle {};
 
-    static FdCache* Instance() {
-        static FdCache cache(std::max<size_t>(4096, config::file_descriptor_cache_capacity));
-        return &cache;
-    }
+    static FdCache* Instance();
 
     ~FdCache();
 

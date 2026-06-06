@@ -26,18 +26,24 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "base/string/string_parser.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
-#include "common/utils.h"
+#include "common/util/debug_util.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "http/http_auth.h"
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
-#include "http/utils.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -46,26 +52,13 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
-#include "util/metrics.h"
-#include "util/misc.h"
-#include "util/starrocks_metrics.h"
-#include "util/string_parser.hpp"
-#include "util/thrift_rpc_helper.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
-
-METRIC_DEFINE_INT_COUNTER(transaction_streaming_load_requests_total, MetricUnit::REQUESTS);
-METRIC_DEFINE_INT_COUNTER(transaction_streaming_load_bytes, MetricUnit::BYTES);
-METRIC_DEFINE_INT_COUNTER(transaction_streaming_load_duration_ms, MetricUnit::MILLISECONDS);
-METRIC_DEFINE_INT_GAUGE(transaction_streaming_load_current_processing, MetricUnit::REQUESTS);
 
 #ifndef BE_TEST
 static uint32_t interval = 30;
@@ -74,14 +67,6 @@ static uint32_t interval = 1;
 #endif
 
 TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_requests_total",
-                                                             &transaction_streaming_load_requests_total);
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_bytes",
-                                                             &transaction_streaming_load_bytes);
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_duration_ms",
-                                                             &transaction_streaming_load_duration_ms);
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_current_processing",
-                                                             &transaction_streaming_load_current_processing);
     _transaction_clean_thread = std::thread([this] {
 #ifdef GOOGLE_PROFILER
         ProfilerRegisterThread();
@@ -92,7 +77,7 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
             nap_sleep(interval, [this] { return _is_stopped.load(); });
         }
     });
-    Thread::set_thread_name(_transaction_clean_thread, "transaction_clean");
+    Thread::set_thread_name(_transaction_clean_thread, "txn_clean");
 }
 
 TransactionMgr::~TransactionMgr() {
@@ -173,11 +158,12 @@ Status TransactionMgr::list_transactions(const HttpRequest* req, std::string* re
 }
 
 Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* resp) {
-    auto label = req->header(HTTP_LABEL_KEY);
+    const auto& label = req->header(HTTP_LABEL_KEY);
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
-        ctx = new StreamLoadContext(_exec_env, &transaction_streaming_load_current_processing);
+        ctx = new StreamLoadContext(_exec_env,
+                                    &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
         std::lock_guard<std::mutex> l(ctx->lock);
         st = _begin_transaction(req, ctx);
@@ -204,7 +190,7 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
 }
 
 Status TransactionMgr::rollback_transaction(const HttpRequest* req, std::string* resp) {
-    auto label = req->header(HTTP_LABEL_KEY);
+    const auto& label = req->header(HTTP_LABEL_KEY);
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
@@ -334,7 +320,7 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     // 4. put load stream context
     RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put(ctx->label, ctx));
 
-    transaction_streaming_load_requests_total.increment(1);
+    StreamLoadMetrics::instance()->transaction_streaming_load_requests_total.increment(1);
 
     return Status::OK();
 }
@@ -347,7 +333,7 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
     if (ctx->body_sink != nullptr) {
         // 1. finish stream pipe & wait it done
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
-            ctx->buffer->flip();
+            ctx->buffer->flip_to_read();
             RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }
@@ -374,8 +360,9 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
 
     ctx->last_active_ts = UnixSeconds();
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
-    transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
-    transaction_streaming_load_bytes.increment(ctx->receive_bytes);
+    auto* metrics = StreamLoadMetrics::instance();
+    metrics->transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
+    metrics->transaction_streaming_load_bytes.increment(ctx->receive_bytes);
 
     return Status::OK();
 }

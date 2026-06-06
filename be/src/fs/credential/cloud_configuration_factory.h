@@ -25,6 +25,7 @@ namespace starrocks {
 // Credential for AWS s3
 static const std::string AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
 static const std::string AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
+static const std::string AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE = "aws.s3.use_web_identity_token_file";
 static const std::string AWS_S3_ACCESS_KEY = "aws.s3.access_key";
 static const std::string AWS_S3_SECRET_KEY = "aws.s3.secret_key";
 static const std::string AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
@@ -61,6 +62,13 @@ static const std::string AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
 static const std::string AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
 static const std::string AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
 static const std::string AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
+
+// Credentials for Huawei OBS
+static const std::string HUAWEI_OBS_ACCESS_KEY = "fs.obs.access_key";
+static const std::string HUAWEI_OBS_SECRET_KEY = "fs.obs.secret_key";
+static const std::string HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
+static const std::string HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
+static const std::string HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
 
 class CloudConfigurationFactory {
 public:

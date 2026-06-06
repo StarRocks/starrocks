@@ -14,12 +14,8 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionUtil;
@@ -28,28 +24,13 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergPartitionData;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.optimizer.OptimizerFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.VarcharType;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -62,22 +43,32 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.types.Comparators;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.UUIDUtil;
 import org.apache.orc.ColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
+import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.api.Binary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -108,17 +99,17 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(SOURCE_TABLE, Type.VARCHAR, false),
-                        new NamedArgument(LOCATION, Type.VARCHAR, false),
-                        new NamedArgument(FILE_FORMAT, Type.VARCHAR, false),
-                        new NamedArgument(RECURSIVE, Type.BOOLEAN, false)
+                        new NamedArgument(SOURCE_TABLE, VarcharType.VARCHAR, false),
+                        new NamedArgument(LOCATION, VarcharType.VARCHAR, false),
+                        new NamedArgument(FILE_FORMAT, VarcharType.VARCHAR, false),
+                        new NamedArgument(RECURSIVE, BooleanType.BOOLEAN, false)
                 ),
                 IcebergTableOperation.ADD_FILES
         );
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         // Validate arguments - either source_table or location must be provided, but not both
         ConstantOperator sourceTableArg = args.get(SOURCE_TABLE);
         ConstantOperator tableLocationArg = args.get(LOCATION);
@@ -177,6 +168,8 @@ public class AddFilesProcedure extends IcebergTableProcedure {
             LOGGER.error("Failed to execute add_files procedure", e);
             throw new StarRocksConnectorException("Failed to add files: %s", e.getMessage(), e);
         }
+
+        return null;
     }
 
     private void addFilesFromLocation(IcebergTableProcedureContext context, Table table, Transaction transaction,
@@ -372,6 +365,10 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                 Map<Integer, Long> nullValueCounts = new HashMap<>();
                 Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
                 Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+                Map<Integer, Object> lowerValues = new HashMap<>();
+                Map<Integer, Object> upperValues = new HashMap<>();
+                Map<Integer, Type> fieldTypes = new HashMap<>();
+                Map<Integer, Comparator<Object>> comparators = new HashMap<>();
                 Set<Integer> missingStats = new HashSet<>();
 
                 Schema schema = table.schema();
@@ -392,21 +389,39 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                             long valueCount = columnMeta.getValueCount();
                             valueCounts.merge(fieldId, valueCount, Long::sum);
                             // null counts
-                            if (columnMeta.getStatistics() != null && !columnMeta.getStatistics().isEmpty()) {
-                                if (columnMeta.getStatistics().getNumNulls() >= 0) {
-                                    nullValueCounts.merge(fieldId, columnMeta.getStatistics().getNumNulls(), Long::sum);
+                            Statistics<?> columnStats = columnMeta.getStatistics();
+                            if (columnStats != null && !columnStats.isEmpty()) {
+                                if (columnStats.getNumNulls() >= 0) {
+                                    nullValueCounts.merge(fieldId, columnStats.getNumNulls(), Long::sum);
                                 }
 
                                 // Min/Max values
-                                if (columnMeta.getStatistics().hasNonNullValue()) {
-                                    // Store min/max values as ByteBuffers
-                                    if (!lowerBounds.containsKey(fieldId) || ByteBuffer.wrap(columnMeta.getStatistics().
-                                            getMinBytes()).compareTo(lowerBounds.get(fieldId)) < 0) {
-                                        lowerBounds.put(fieldId, ByteBuffer.wrap(columnMeta.getStatistics().getMinBytes()));
+                                if (columnStats.hasNonNullValue()) {
+                                    Comparator<Object> comparator = comparators.get(fieldId);
+                                    if (comparator == null) {
+                                        comparator = tryGetComparator(field.type());
+                                        if (comparator == null) {
+                                            missingStats.add(fieldId);
+                                            continue;
+                                        }
+                                        comparators.put(fieldId, comparator);
                                     }
 
-                                    if (!upperBounds.containsKey(fieldId)) {
-                                        upperBounds.put(fieldId, ByteBuffer.wrap(columnMeta.getStatistics().getMaxBytes()));
+                                    Object minValue = tryConvertStatValue(field.type(), columnStats.genericGetMin());
+                                    Object maxValue = tryConvertStatValue(field.type(), columnStats.genericGetMax());
+                                    if (minValue == null || maxValue == null) {
+                                        missingStats.add(fieldId);
+                                        continue;
+                                    }
+
+                                    fieldTypes.put(fieldId, field.type());
+                                    Object existingMin = lowerValues.get(fieldId);
+                                    if (existingMin == null || comparator.compare(minValue, existingMin) < 0) {
+                                        lowerValues.put(fieldId, minValue);
+                                    }
+                                    Object existingMax = upperValues.get(fieldId);
+                                    if (existingMax == null || comparator.compare(maxValue, existingMax) > 0) {
+                                        upperValues.put(fieldId, maxValue);
                                     }
                                 }
                             } else {
@@ -420,6 +435,25 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                     nullValueCounts.remove(fieldId);
                     lowerBounds.remove(fieldId);
                     upperBounds.remove(fieldId);
+                    lowerValues.remove(fieldId);
+                    upperValues.remove(fieldId);
+                    fieldTypes.remove(fieldId);
+                    comparators.remove(fieldId);
+                }
+
+                for (Map.Entry<Integer, Object> entry : lowerValues.entrySet()) {
+                    int fieldId = entry.getKey();
+                    Type fieldType = fieldTypes.get(fieldId);
+                    if (fieldType != null) {
+                        lowerBounds.put(fieldId, Conversions.toByteBuffer(fieldType, entry.getValue()));
+                    }
+                }
+                for (Map.Entry<Integer, Object> entry : upperValues.entrySet()) {
+                    int fieldId = entry.getKey();
+                    Type fieldType = fieldTypes.get(fieldId);
+                    if (fieldType != null) {
+                        upperBounds.put(fieldId, Conversions.toByteBuffer(fieldType, entry.getValue()));
+                    }
                 }
 
                 return new Metrics(recordCount, columnSizes, valueCounts, nullValueCounts,
@@ -448,11 +482,11 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                 ColumnStatistics[] columnStats = orcReader.getStatistics();
 
                 // Extract statistics for each column
-                for (int colId = 0; colId < columnStats.length; colId++) {
+                for (int colId = 1; colId < columnStats.length; colId++) {
                     ColumnStatistics stats = columnStats[colId];
 
                     // Map ORC column to Iceberg field
-                    String columnName = getColumnNameFromOrcSchema(orcSchema, colId);
+                    String columnName = getColumnNameFromOrcSchema(orcSchema, colId - 1);
                     if (columnName != null) {
                         Types.NestedField field = schema.findField(columnName);
                         if (field != null) {
@@ -485,6 +519,143 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         } catch (Exception e) {
             LOGGER.warn("Failed to get column name for ORC column ID: {}", columnId);
         }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    static Comparator<Object> tryGetComparator(Type type) {
+        if (type == null || !type.isPrimitiveType()) {
+            return null;
+        }
+        try {
+            return (Comparator<Object>) Comparators.forType(type.asPrimitiveType());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static Object tryConvertStatValue(Type fieldType, Object statValue) {
+        if (fieldType == null || statValue == null) {
+            return null;
+        }
+
+        switch (fieldType.typeId()) {
+            case BOOLEAN:
+                return statValue instanceof Boolean ? statValue : null;
+            case INTEGER:
+            case DATE:
+                if (statValue instanceof Integer v) {
+                    return v;
+                }
+                if (statValue instanceof Long v) {
+                    if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) {
+                        return v.intValue();
+                    }
+                }
+                return null;
+            case LONG:
+            case TIME:
+            case TIMESTAMP:
+            case TIMESTAMP_NANO:
+                if (statValue instanceof Long v) {
+                    return v;
+                }
+                if (statValue instanceof Integer v) {
+                    return v.longValue();
+                }
+                return null;
+            case FLOAT:
+                if (statValue instanceof Float v) {
+                    return v;
+                }
+                if (statValue instanceof Double v) {
+                    return v.floatValue();
+                }
+                return null;
+            case DOUBLE:
+                if (statValue instanceof Double v) {
+                    return v;
+                }
+                if (statValue instanceof Float v) {
+                    return v.doubleValue();
+                }
+                return null;
+            case STRING:
+                if (statValue instanceof CharSequence value) {
+                    return value.toString();
+                }
+                if (statValue instanceof Binary binary) {
+                    return binary.toStringUsingUTF8();
+                }
+                if (statValue instanceof byte[] bytes) {
+                    return new String(bytes, StandardCharsets.UTF_8);
+                }
+                return null;
+            case UUID:
+                if (statValue instanceof java.util.UUID uuid) {
+                    return uuid;
+                }
+                if (statValue instanceof Binary binary) {
+                    return UUIDUtil.convert(binary.getBytes());
+                }
+                if (statValue instanceof byte[] bytes) {
+                    return UUIDUtil.convert(bytes);
+                }
+                if (statValue instanceof ByteBuffer buffer) {
+                    return UUIDUtil.convert(buffer.duplicate());
+                }
+                return null;
+            case FIXED:
+            case BINARY:
+            case GEOMETRY:
+            case GEOGRAPHY:
+                if (statValue instanceof ByteBuffer buffer) {
+                    return buffer.duplicate();
+                }
+                if (statValue instanceof Binary binary) {
+                    return ByteBuffer.wrap(binary.getBytes());
+                }
+                if (statValue instanceof byte[] bytes) {
+                    return ByteBuffer.wrap(bytes);
+                }
+                return null;
+            case DECIMAL:
+                if (fieldType instanceof Types.DecimalType decimalType) {
+                    return tryConvertDecimalStatValue(decimalType, statValue);
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    static BigDecimal tryConvertDecimalStatValue(Types.DecimalType decimalType, Object statValue) {
+        if (statValue == null) {
+            return null;
+        }
+
+        int scale = decimalType.scale();
+        if (statValue instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (statValue instanceof Integer v) {
+            return BigDecimal.valueOf(v.longValue(), scale);
+        }
+        if (statValue instanceof Long v) {
+            return BigDecimal.valueOf(v, scale);
+        }
+        if (statValue instanceof Binary binary) {
+            return new BigDecimal(new BigInteger(binary.getBytes()), scale);
+        }
+        if (statValue instanceof byte[] bytes) {
+            return new BigDecimal(new BigInteger(bytes), scale);
+        }
+        if (statValue instanceof ByteBuffer buffer) {
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.duplicate().get(bytes);
+            return new BigDecimal(new BigInteger(bytes), scale);
+        }
+
         return null;
     }
 
@@ -531,7 +702,8 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         }
 
         // Use Hive table partition pruning to get filtered partition names
-        List<PartitionKey> filteredPartitionKeys = getFilteredPartitionKeys(context, sourceHiveTable);
+        List<PartitionKey> filteredPartitionKeys = PartitionUtil.getFilteredPartitionKeys(context.context(),
+                sourceHiveTable, context.clause().getWhere());
         GetRemoteFilesParams.Builder paramsBuilder;
         List<GetRemoteFilesParams> paramsList = new ArrayList<>();
         if (filteredPartitionKeys == null) {
@@ -561,7 +733,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                         getRemoteFiles(sourceHiveTable, params);
                 partitionRemoteFiles.add(Pair.create(params.getPartitionKeys() == null ? "" :
                                 params.getPartitionKeys().stream().map(partitionKey ->
-                                        PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
+                                                PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
                                         collect(Collectors.joining()),
                         remoteFiles));
             }
@@ -604,100 +776,5 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         appendFiles.commit();
         LOGGER.info("Successfully added {} files from source Hive table {} to Iceberg table",
                 dataFiles.size(), sourceTable);
-    }
-
-    /**
-     * Get filtered partition keys based on WHERE clause predicate using Hive partition pruning
-     * Reuses key logic from OptExternalPartitionPruner
-     *
-     * @param context         The procedure context containing WHERE clause
-     * @param sourceHiveTable The source Hive table
-     * @return List of filtered partition keys, or null if no filtering is needed
-     */
-    private List<PartitionKey> getFilteredPartitionKeys(IcebergTableProcedureContext context,
-                                                        com.starrocks.catalog.Table sourceHiveTable) {
-        try {
-            Expr whereExpr = context.clause().getWhere();
-            List<Column> partitionColumns = sourceHiveTable.getPartitionColumns();
-
-            if (partitionColumns.isEmpty()) {
-                LOGGER.info("Source table is not partitioned, WHERE clause will be ignored");
-                return null;
-            }
-
-            // Create column reference mappings for reusing OptExternalPartitionPruner logic
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            Map<Column, ColumnRefOperator> columnToColRefMap = new HashMap<>();
-            Map<ColumnRefOperator, Column> colRefToColumnMap = new HashMap<>();
-
-            // Create a simple mock operator that provides the necessary interface
-            LogicalHiveScanOperator hiveScanOperator = makeSourceTableHiveScanOperator(sourceHiveTable, columnToColRefMap,
-                    colRefToColumnMap, columnRefFactory, whereExpr, context);
-
-            OptExternalPartitionPruner.prunePartitions(OptimizerFactory.initContext(context.context(), columnRefFactory),
-                    hiveScanOperator);
-
-            ScanOperatorPredicates scanOperatorPredicates = hiveScanOperator.getScanOperatorPredicates();
-            if (!scanOperatorPredicates.getNonPartitionConjuncts().isEmpty() ||
-                    !scanOperatorPredicates.getNoEvalPartitionConjuncts().isEmpty()) {
-                LOGGER.warn("WHERE clause contains non-partition predicates or can not eval predicates, " +
-                                "non-partition predicates: {}, no-eval partition predicates: {}. ",
-                        Joiner.on(", ").join(scanOperatorPredicates.getNonPartitionConjuncts()),
-                        Joiner.on(", ").join(scanOperatorPredicates.getNoEvalPartitionConjuncts()));
-                throw new StarRocksConnectorException("WHERE clause contains non-partition predicates or can not eval " +
-                        "predicates, only simple partition predicates are supported for partition pruning. " +
-                        "Non-partition predicates: %s, no-eval partition predicates: %s",
-                        Joiner.on(", ").join(scanOperatorPredicates.getNonPartitionConjuncts()),
-                        Joiner.on(", ").join(scanOperatorPredicates.getNoEvalPartitionConjuncts()));
-            }
-
-            List<PartitionKey> partitionKeys = Lists.newArrayList();
-            scanOperatorPredicates.getSelectedPartitionIds().stream()
-                    .map(id -> scanOperatorPredicates.getIdToPartitionKey().get(id))
-                    .filter(Objects::nonNull)
-                    .forEach(partitionKeys::add);
-            LOGGER.info("Partition pruning selected {} partitions, select partitions : {}", partitionKeys.size(),
-                    Joiner.on(", ").join(partitionKeys));
-
-            return partitionKeys;
-        } catch (Exception e) {
-            LOGGER.warn("Failed to perform partition pruning, Error: {}", e.getMessage());
-            throw new StarRocksConnectorException("Failed to perform partition pruning: %s", e.getMessage(), e);
-        }
-    }
-
-    private LogicalHiveScanOperator makeSourceTableHiveScanOperator(com.starrocks.catalog.Table sourceTable,
-                                                                    Map<Column, ColumnRefOperator> columnToColRefMap,
-                                                                    Map<ColumnRefOperator, Column> colRefToColumnMap,
-                                                                    ColumnRefFactory columnRefFactory,
-                                                                    Expr whereExpr, IcebergTableProcedureContext context) {
-        List<ColumnRefOperator> columnRefOperators = new ArrayList<>();
-        for (Column column : sourceTable.getBaseSchema()) {
-            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
-                    column.getType(), column.isAllowNull());
-            colRefToColumnMap.put(columnRef, column);
-            columnToColRefMap.put(column, columnRef);
-            columnRefOperators.add(columnRef);
-        }
-
-        ScalarOperator scalarOperator = null;
-        if (whereExpr != null) {
-            // Create scope with table columns for expression analysis
-            TableName sourceTableName = new TableName(sourceTable.getCatalogName(),
-                    sourceTable.getCatalogDBName(), sourceTable.getCatalogTableName());
-            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(columnRefOperators.stream()
-                    .map(col -> new Field(col.getName(), col.getType(), sourceTableName, null))
-                    .collect(Collectors.toList())));
-            // Analyze the WHERE expression
-            ExpressionAnalyzer.analyzeExpression(whereExpr, new AnalyzeState(), scope, context.context());
-
-            // Create expression mapping for conversion
-            ExpressionMapping expressionMapping = new ExpressionMapping(scope, columnRefOperators);
-
-            // Convert Expr to ScalarOperator
-            scalarOperator = SqlToScalarOperatorTranslator.translate(whereExpr, expressionMapping, columnRefFactory);
-        }
-        return new LogicalHiveScanOperator(sourceTable, colRefToColumnMap, columnToColRefMap,
-                Operator.DEFAULT_LIMIT, scalarOperator);
     }
 }

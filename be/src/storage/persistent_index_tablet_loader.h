@@ -18,8 +18,8 @@
 
 #include "column/schema.h"
 #include "common/status.h"
-#include "storage/edit_version.h"
 #include "storage/persistent_index.h"
+#include "storage/primitive/edit_version.h"
 #include "storage/rowset/segment.h"
 
 namespace starrocks {
@@ -30,7 +30,7 @@ class DataDir;
 class PersistentIndexTabletLoader : public TabletLoader {
 public:
     PersistentIndexTabletLoader(Tablet* tablet) : _tablet(tablet) {}
-    ~PersistentIndexTabletLoader() = default;
+    ~PersistentIndexTabletLoader() override = default;
     starrocks::Schema generate_pkey_schema() override;
     DataDir* data_dir() override;
     TTabletId tablet_id() override;

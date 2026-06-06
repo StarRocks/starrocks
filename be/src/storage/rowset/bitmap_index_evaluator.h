@@ -17,7 +17,7 @@
 #include "bitmap_index_reader.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
 

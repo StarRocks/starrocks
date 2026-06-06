@@ -16,17 +16,19 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index.h"
+#include "storage/primitive/chunk_iterator.h"
 
 namespace starrocks {
 
 class Tablet;
 class HashIndex;
+class ParallelPublishContext;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -53,6 +55,7 @@ public:
     //
     // [thread-safe]
     void unload();
+    void unload_without_lock();
 
     // Whether index is normally loaded
     bool is_loaded();
@@ -72,6 +75,23 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
+
+    // support parallel upsert with thread pool
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat = nullptr,
+                  ParallelPublishContext* ctx = nullptr);
+
+    // Parallel-publish overload that upserts an arbitrary subset of rows by absolute rowids:
+    // pks[i] is upserted at (rssid, rowids[i]). The active-memtable write happens synchronously
+    // in the caller; the SST/inactive-memtable lookup of replaced old values is submitted to
+    // ctx->token. Each call requires its own slot in `ctx` (caller must `extend_slots()` first).
+    //
+    // Replaced old rowids are appended to `ctx->deletes` under `ctx->mutex` by the lookup task.
+    // Caller is expected to drive `ctx->token->wait()` and `flush_memtable()` once all upsert
+    // submissions are done.
+    //
+    // Only supported on cloud-native persistent index (returns NotSupported otherwise).
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
+                  ParallelPublishContext* ctx);
 
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
@@ -162,12 +182,14 @@ public:
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
-        _status = st;
+        _status = std::move(st);
     }
 
     // Return the pointer of specific position of slice array.
-    static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
-                                              std::vector<Slice>* key_slices);
+    static StatusOr<const Slice*> build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
+                                                        uint32_t idx_end, Buffer<Slice>* key_slices);
+
+    bool need_rebuild() const;
 
 protected:
     void _set_schema(const Schema& pk_schema);
@@ -185,6 +207,9 @@ private:
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                                         uint32_t idx_end, IOStat* stat, ParallelPublishContext* ctx);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 

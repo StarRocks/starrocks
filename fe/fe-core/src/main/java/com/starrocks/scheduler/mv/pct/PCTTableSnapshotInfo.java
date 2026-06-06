@@ -15,24 +15,25 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ListPartitionDiffer;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -54,12 +55,24 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
     // partition's base info to be used in `updateMeta`
     private Map<String, MaterializedView.BasePartitionInfo> refreshedPartitionInfos = Maps.newHashMap();
 
+    // Pinned snapshot; non-null means updatePCTExternalPartitionInfos reads partition info at the
+    // frozen snapshot instead of the live current snapshot.
+    private TvrVersionRange pinnedRange;
+
     public PCTTableSnapshotInfo(BaseTableInfo baseTableInfo, Table baseTable) {
         super(baseTableInfo, baseTable);
     }
 
     public Map<String, MaterializedView.BasePartitionInfo> getRefreshedPartitionInfos() {
         return refreshedPartitionInfos;
+    }
+
+    public TvrVersionRange getPinnedRange() {
+        return pinnedRange;
+    }
+
+    public void setPinnedRange(TvrVersionRange pinnedRange) {
+        this.pinnedRange = pinnedRange;
     }
 
     @Override
@@ -116,13 +129,14 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 return !snapShotOlapTable.getVisiblePartitionNames().equals(partitionNames);
             } else if (snapshotPartitionInfo.isListPartition()) {
                 OlapTable snapshotOlapTable = (OlapTable) baseTable;
-                Map<String, PListCell> snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
-                Map<String, PListCell> currentPartitionMap = snapshotOlapTable.getListPartitionItems();
+                PCellSortedSet snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
+                PCellSortedSet currentPartitionMap = snapshotOlapTable.getListPartitionItems();
                 return ListPartitionDiffer.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap);
             } else {
-                Map<String, Range<PartitionKey>> snapshotPartitionMap = snapShotOlapTable.getRangePartitionMap();
-                Map<String, Range<PartitionKey>> currentPartitionMap = ((OlapTable) table).getRangePartitionMap();
-                return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                PCellSortedSet snapshotPartitionMap = snapShotOlapTable.getRangePartitionMap();
+                PCellSortedSet currentPartitionMap = ((OlapTable) table).getRangePartitionMap();
+                return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap,
+                    currentPartitionMap);
             }
         } else if (ConnectorPartitionTraits.isSupported(baseTable.getType())) {
             if (baseTable.isUnPartitioned()) {
@@ -139,6 +153,13 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             if (!partitionTableAndColumns.containsKey(baseTable)) {
                 return false;
             }
+            // In pinned mode, we're locked to a specific snapshot — partition-level DDL at newer
+            // snapshots is irrelevant to what we'll scan. Skip the comparison entirely.
+            TvrVersionRange frozen = mv.getRefreshScheme().getAsyncRefreshContext()
+                    .getTempBaseTableInfoTvrDeltaMap().get(baseTableInfo);
+            if (frozen != null) {
+                return false;
+            }
             List<Column> partitionColumns = partitionTableAndColumns.get(baseTable);
             Preconditions.checkArgument(partitionColumns.size() == 1,
                     "Only support one partition column in range partition");
@@ -148,10 +169,10 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 return false;
             }
             Expr rangePartitionExpr = rangePartitionExprOpt.get();
-            Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                    baseTable, partitionColumn, rangePartitionExpr);
-            Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                    table, partitionColumn, rangePartitionExpr);
+            PCellSortedSet snapshotPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
+                    baseTable, partitionColumn, rangePartitionExpr).cells();
+            PCellSortedSet currentPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
+                    table, partitionColumn, rangePartitionExpr).cells();
             return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
         } else {
             return false;
@@ -159,9 +180,11 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
     }
 
     private static MaterializedView.BasePartitionInfo toBasePartitionInfo(Partition partition) {
-        return new MaterializedView.BasePartitionInfo(partition.getId(),
-                partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
+        return new MaterializedView.BasePartitionInfo(
+                partition.getId(),
+                defaultPartition.getVisibleVersion(),
+                defaultPartition.getVisibleVersionTime());
     }
 
     private void updatePCTOlapPartitionInfos(OlapTable olapTable,
@@ -190,21 +213,29 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
         // different in selectedPartitionNames and partitions and will lead to infinite partition refresh.
         Collections.sort(refreshedPartitionNames);
 
-        List<com.starrocks.connector.PartitionInfo> partitions = GlobalStateMgr.getCurrentState()
-                .getMetadataMgr()
-                .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames);
+        // When pinnedRange is set, read partition info at the frozen snapshot.
+        List<com.starrocks.connector.PartitionInfo> partitions;
+        if (pinnedRange != null) {
+            ConnectorMetadataRequestContext rc = new ConnectorMetadataRequestContext();
+            rc.setTableVersionRange(pinnedRange);
+            partitions = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr()
+                    .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames, rc);
+        } else {
+            partitions = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr()
+                    .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames);
+        }
         if (partitions.size() != refreshedPartitionNames.size()) {
             LOG.warn("Partition names size {} does not match partitions size {} for table {}",
                     refreshedPartitionNames.size(), partitions.size(), table.getName());
             return;
         }
         for (int index = 0; index < refreshedPartitionNames.size(); ++index) {
-            long modifiedTime = partitions.get(index).getModifiedTime();
             String partitionName = refreshedPartitionNames.get(index);
             Preconditions.checkArgument(partitionName != null, "name should not be null");
-
-            MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                    -1, modifiedTime, modifiedTime);
+            MaterializedView.BasePartitionInfo basePartitionInfo = MaterializedView.BasePartitionInfo.fromExternalTable(
+                    partitions.get(index));
             if (Config.enable_mv_automatic_repairing_for_broken_base_tables) {
                 MVPCTMetaRepairer.collectTableRepairInfo(table, partitionName, basePartitionInfo);
             }

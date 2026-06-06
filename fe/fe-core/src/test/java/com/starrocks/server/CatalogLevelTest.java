@@ -21,7 +21,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -32,6 +31,7 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -114,7 +114,7 @@ public class CatalogLevelTest {
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
         com.starrocks.catalog.Table icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
                 "resource_name", "iceberg_db", "iceberg_table", "",
-                Lists.newArrayList(new Column("col1", Type.LARGEINT)), tbl, Maps.newHashMap());
+                Lists.newArrayList(new Column("col1", IntegerType.LARGEINT)), tbl, Maps.newHashMap());
 
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {

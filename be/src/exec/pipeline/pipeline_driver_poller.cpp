@@ -16,9 +16,19 @@
 
 #include <chrono>
 
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
+#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec/pipeline/primitives/driver_state.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/logconfig.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -44,6 +54,7 @@ void PipelineDriverPoller::shutdown() {
 }
 
 void PipelineDriverPoller::run_internal() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
 
     {
@@ -84,7 +95,7 @@ void PipelineDriverPoller::run_internal() {
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
                 WARN_IF_POLLER_TIMEOUT(driver->to_readable_string());
-                if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
+                if (!driver->is_query_never_expired() && driver->query_runtime_state()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                     // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -96,9 +107,11 @@ void PipelineDriverPoller::run_internal() {
                         LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
                         driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
                     }
+                    auto query_id = driver->query_runtime_state()->query_id();
+                    size_t timeout = driver->query_runtime_state()->get_query_expire_seconds();
+                    hook_on_query_timeout(query_id, timeout);
                     driver->fragment_ctx()->cancel(
-                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds",
-                                                         driver->query_ctx()->get_query_expire_seconds())));
+                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (driver->fragment_ctx()->is_canceled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
@@ -124,18 +137,6 @@ void PipelineDriverPoller::run_internal() {
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
-                } else if (driver->is_epoch_finishing()) {
-                    if (driver->is_still_epoch_finishing()) {
-                        ++driver_it;
-                    } else {
-                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                                       : DriverState::EPOCH_FINISH);
-                        remove_blocked_driver(_local_blocked_drivers, driver_it);
-                        ready_drivers.emplace_back(driver);
-                    }
-                } else if (driver->is_epoch_finished()) {
-                    remove_blocked_driver(_local_blocked_drivers, driver_it);
-                    ready_drivers.emplace_back(driver);
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
@@ -200,48 +201,6 @@ void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     driver->_pending_timer_sw->reset();
     driver->driver_acct().clean_local_queue_infos();
     _cond.notify_one();
-}
-
-void PipelineDriverPoller::park_driver(const DriverRawPtr driver) {
-    std::unique_lock<std::mutex> lock(_global_parked_mutex);
-    VLOG_ROW << "Add to parked driver:" << driver->to_readable_string();
-    _parked_drivers.push_back(driver);
-}
-
-// activate the parked driver from poller
-size_t PipelineDriverPoller::activate_parked_driver(const ConstDriverPredicator& predicate_func) {
-    std::vector<DriverRawPtr> ready_drivers;
-
-    {
-        std::unique_lock<std::mutex> lock(_global_parked_mutex);
-        for (auto driver_it = _parked_drivers.begin(); driver_it != _parked_drivers.end();) {
-            auto driver = *driver_it;
-            if (predicate_func(driver)) {
-                VLOG_ROW << "Active parked driver:" << driver->to_readable_string();
-                driver->set_driver_state(DriverState::READY);
-                ready_drivers.push_back(driver);
-                driver_it = _parked_drivers.erase(driver_it);
-            } else {
-                driver_it++;
-            }
-        }
-    }
-
-    _driver_queue->put_back(ready_drivers);
-    return ready_drivers.size();
-}
-
-size_t PipelineDriverPoller::calculate_parked_driver(const ConstDriverPredicator& predicate_func) const {
-    size_t parked_driver_num = 0;
-    auto driver_it = _parked_drivers.begin();
-    while (driver_it != _parked_drivers.end()) {
-        auto driver = *driver_it;
-        if (predicate_func(driver)) {
-            parked_driver_num += 1;
-        }
-        driver_it++;
-    }
-    return parked_driver_num;
 }
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {

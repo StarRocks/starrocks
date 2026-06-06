@@ -16,7 +16,6 @@ package com.starrocks.statistic;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -24,6 +23,7 @@ import com.starrocks.statistic.sample.ColumnSampleManager;
 import com.starrocks.statistic.sample.ColumnStats;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.statistic.sample.TabletSampleManager;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -61,7 +61,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     db.getId(), table.getName(), db.getFullName(), columnSampleManager.getComplexTypeStats());
             context.getSessionVariable().setExprChildrenLimit(
                     Math.max(Config.expr_children_limit, columnSampleManager.getComplexTypeStats().size()));
-            collectStatisticSync(complexTypeColsTask, context);
+            collectStatisticSync(complexTypeColsTask, context, analyzeStatus);
         }
 
         List<List<ColumnStats>> columnStatsBatchList = columnSampleManager.splitPrimitiveTypeStats();
@@ -81,7 +81,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     db.getId(), table.getName(), db.getFullName(), columnStatsBatch, tabletSampleManager);
             context.getSessionVariable().setExprChildrenLimit(
                     Math.max(Config.expr_children_limit, sampleInfo.getMaxSampleTabletNum()));
-            collectStatisticSync(primitiveTypeColsTask, context);
+            collectStatisticSync(primitiveTypeColsTask, context, analyzeStatus);
 
             double progress = finishedTaskNum * 1.0 / totalTaskNum;
             if (progress >= recordStagePoint) {

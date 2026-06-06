@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "五个内置StarRocks角色的参考：db_admin、cluster_admin、user_admin、security_admin和public。"
 sidebar_position: 25
 sidebar_label: "内置角色"
 ---
@@ -42,7 +43,7 @@ import ClusterAdmin from '../../../_assets/commonMarkdown/role_cluster_admin.mdx
 
 ## `security_admin`
 
-`security_admin` 是内置的安全管理员。它可用于管理安全集成和组提供者。
+`security_admin` 是内置的安全管理员。它可用于管理安全集成和 Group Provider。
 
 - 专注于系统安全的管理
 - 能够管理与安全相关的配置和策略

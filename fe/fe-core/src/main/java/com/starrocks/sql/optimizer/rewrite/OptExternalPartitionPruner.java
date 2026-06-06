@@ -29,7 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
@@ -40,7 +40,7 @@ import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -60,6 +60,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
@@ -331,7 +333,7 @@ public class OptExternalPartitionPruner {
                 } else {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
-                                    table.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
+                                    table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
@@ -356,7 +358,7 @@ public class OptExternalPartitionPruner {
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
                     LiteralExpr literal = literals.get(i);
-                    if (Expr.IS_NULL_LITERAL.apply(literal)) {
+                    if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
                         columnToNullPartitions.get(columnRefOperator).add(partitionId);
                         continue;
                     }
@@ -410,15 +412,16 @@ public class OptExternalPartitionPruner {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
             }
 
-            int scanHivePartitionNumLimit = context.getSessionVariable().getScanHivePartitionNumLimit();
-            if (scanHivePartitionNumLimit > 0 && !table.isUnPartitioned()
-                    && selectedPartitionIds.size() > scanHivePartitionNumLimit) {
-                String msg = "Exceeded the limit of " + scanHivePartitionNumLimit + " max scan hive external partitions";
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of " + scanLakePartitionNumLimit + " max scan hive external partitions";
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
@@ -431,7 +434,8 @@ public class OptExternalPartitionPruner {
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
             GetRemoteFilesParams params =
-                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames)
+                            .setTableVersionRange(operator.getTvrVersionRange()).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;
@@ -448,6 +452,24 @@ public class OptExternalPartitionPruner {
             long rowCount = getRowCount(splits);
             if (rowCount > 0) {
                 scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
+
+            //check scan partition num
+            Set<BinaryRow> selectedPartitions = new HashSet<>();
+            for (Split split : splits) {
+                if (split instanceof DataSplit) {
+                    DataSplit dataSplit = (DataSplit) split;
+                    selectedPartitions.add(dataSplit.partition());
+                }
+            }
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && selectedPartitions.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
+                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
+                        ", number of partitions to be scanned: " + selectedPartitions.size() +
+                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
             }
         }
     }

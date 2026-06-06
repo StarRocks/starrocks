@@ -24,8 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "base/json/easy_json.h"
 #include "http/http_handler.h"
-#include "util/easy_json.h"
 
 namespace starrocks {
 
@@ -43,6 +43,11 @@ public:
     ~WebPageHandler() override;
 
     void handle(HttpRequest* req) override;
+
+    // BE Web UI pages (/, /varz, /memz, /mem_tracker, /logs, /proc_profile) plus
+    // the static-file fallback (/static/*). Operator-debug surface: callers need
+    // SYSTEM OPERATE privilege, matching the pprof and ioprofile policy.
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
     // Register a route 'path' to be rendered via template.
     // The appropriate template to use is determined by 'path'.

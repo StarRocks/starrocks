@@ -1,10 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "fe_locks provides information about metadata locks in StarRocks FE."
 ---
 
 # fe_locks
 
-`fe_locks` provides information about metadata locks in StarRocks FE.
+`fe_locks` provides information about metadata locks in StarRocks FE. It is one of the system-defined views in the [`sys`](./sys.md) database.
 
 The following fields are provided in `fe_locks`:
 
@@ -26,15 +27,10 @@ The following fields are provided in `fe_locks`:
 
 ## Lock Types
 
-- **DATABASE**: Database-level locks (when `lock_manager_enabled` is false).
-- **TABLE**: Table-level locks (when `lock_manager_enabled` is true).
+- **DATABASE**: Database-level locks.
+- **TABLE**: Table-level locks.
 
-## Configuration
-
-The behavior of `fe_locks` depends on the `lock_manager_enabled` configuration parameter:
-
-- When `lock_manager_enabled = true`: Uses the new Lock Manager for centralized lock management with table-level granularity.
-- When `lock_manager_enabled = false`: Uses traditional database-level locking.
+StarRocks manages metadata locks through the Lock Manager, which provides centralized lock management with table-level granularity.
 
 ## Examples
 
@@ -42,7 +38,7 @@ The behavior of `fe_locks` depends on the `lock_manager_enabled` configuration p
 
 ```sql
 SELECT lock_object, lock_mode, hold_time_ms, thread_info
-FROM information_schema.fe_locks 
+FROM sys.fe_locks 
 WHERE hold_time_ms > 10000  -- Locks held for more than 10 seconds
 ORDER BY hold_time_ms DESC;
 ```
@@ -51,7 +47,7 @@ ORDER BY hold_time_ms DESC;
 
 ```sql
 SELECT lock_object, COUNT(*) as lock_count
-FROM information_schema.fe_locks 
+FROM sys.fe_locks 
 WHERE granted = true
 GROUP BY lock_object
 HAVING COUNT(*) > 1;
@@ -61,7 +57,7 @@ HAVING COUNT(*) > 1;
 
 ```sql
 SELECT lock_object, waiter_list
-FROM information_schema.fe_locks 
+FROM sys.fe_locks 
 WHERE waiter_list != '';
 ```
 

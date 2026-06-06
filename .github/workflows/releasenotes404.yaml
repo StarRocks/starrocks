@@ -12,7 +12,7 @@ jobs:
       issues: write # required for peter-evans/create-issue-from-file
     steps:
         # Get this repo
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Link Checker
         id: lychee

@@ -30,9 +30,7 @@ SET(SOURCE_FILES
         hash/hash.cc
         hash/jenkins.cc
         int128.cc
-        once.cc
         ref_counted.cc
-        spinlock_internal.cc
         stringprintf.cc
         strings/ascii_ctype.cc
         strings/charset.cc
@@ -58,7 +56,7 @@ endif()
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
-add_library(Gutil STATIC ${SOURCE_FILES})
+ADD_BE_LIB(Gutil ${SOURCE_FILES})
 
 set_target_properties(Gutil PROPERTIES COMPILE_FLAGS "-funsigned-char -Wno-deprecated -Wno-char-subscripts")
 # target_link_libraries(Gutil glog protobuf rt)

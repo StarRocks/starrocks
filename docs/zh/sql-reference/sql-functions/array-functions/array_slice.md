@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据指定的偏移量和长度从数组中截取片段。"
 ---
 
 # array_slice

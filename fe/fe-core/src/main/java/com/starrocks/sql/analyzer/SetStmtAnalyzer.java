@@ -20,10 +20,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.IndexParams;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -31,6 +28,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -55,6 +53,7 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -66,6 +65,10 @@ import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -97,6 +100,12 @@ public class SetStmtAnalyzer {
             throw new SemanticException("No variable name in set statement.");
         }
 
+        // Validate that the variable exists
+        if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(variable)) {
+            String similarVars = GlobalStateMgr.getCurrentState().getVariableMgr().findSimilarVarNames(variable);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable, similarVars);
+        }
+
         Expr unResolvedExpression = var.getUnResolvedExpression();
         LiteralExpr resolvedExpression;
 
@@ -107,7 +116,7 @@ public class SetStmtAnalyzer {
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {
-            Expr e = Expr.analyzeAndCastFold(unResolvedExpression);
+            Expr e = ExprUtils.analyzeAndCastFold(unResolvedExpression);
             if (!e.isConstant()) {
                 throw new SemanticException("Set statement only support constant expr.");
             }
@@ -209,6 +218,22 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_FORMAT)) {
+            try {
+                SessionVariable.BinaryEncodingFormat.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_LEVEL)) {
+            try {
+                SessionVariable.BinaryEncodingLevel.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
@@ -334,9 +359,44 @@ public class SetStmtAnalyzer {
             PlanMode.fromName(resolvedExpression.getStringValue());
         }
 
+
+        // check connector_sink_sort_scope
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SORT_SCOPE)) {
+            try {
+                com.starrocks.connector.ConnectorSinkSortScope.fromName(resolvedExpression.getStringValue());
+            } catch (Exception e) {
+                throw new SemanticException(String.format("Unsupported connector_sink_sort_scope: %s, " +
+                        "valid values are: none, file, host", resolvedExpression.getStringValue()));
+            }
+        }
+
         // check populate datacache mode
         if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
             DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check connector sink shuffle mode
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_MODE)) {
+            ConnectorSinkShuffleMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD, 1L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO)) {
+            String val = resolvedExpression.getStringValue();
+            double ratio;
+            try {
+                ratio = Double.parseDouble(val);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("failed to parse %s value %s",
+                        SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, val));
+            }
+            if (Double.isNaN(ratio) || Double.isInfinite(ratio) || ratio <= 0) {
+                throw new SemanticException(String.format("%s should be a positive finite number, got %s",
+                        SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, val));
+            }
         }
 
         // count_distinct_implementation
@@ -546,18 +606,18 @@ public class SetStmtAnalyzer {
     public static void calcuteUserVariable(UserVariable userVariable) {
         Expr expression = userVariable.getUnevaluatedExpression();
         if (expression instanceof NullLiteral) {
-            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+            userVariable.setEvaluatedExpression(NullLiteral.create(StringType.STRING));
         } else {
             Expr foldedExpression;
-            foldedExpression = Expr.analyzeAndCastFold(expression);
+            foldedExpression = ExprUtils.analyzeAndCastFold(expression);
 
-            if (foldedExpression.isLiteral()) {
+            if (ExprUtils.isLiteral(foldedExpression)) {
                 userVariable.setEvaluatedExpression(foldedExpression);
             } else {
                 SelectList selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
 
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(StringType.STRING));
                 List<List<Expr>> rows = new ArrayList<>();
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));

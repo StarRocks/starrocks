@@ -20,10 +20,10 @@
 
 #include <boost/locale/encoding_utf.hpp>
 
+#include "base/string/faststring.h"
 #include "common/status.h"
 #include "storage/index/index_descriptor.h"
 #include "types/logical_type.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 
@@ -41,9 +41,9 @@ namespace starrocks {
 template <LogicalType field_type>
 class CLuceneInvertedWriterImpl : public CLuceneInvertedWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
 
-    explicit CLuceneInvertedWriterImpl(const std::string& field_name, const std::string& directory,
+    explicit CLuceneInvertedWriterImpl(const std::string& field_name, std::string directory,
                                        const TabletIndex* inverted_index)
             : _directory(std::move(directory)), _inverted_index(inverted_index) {
         _parser_type = get_inverted_index_parser_type_from_string(
@@ -51,11 +51,7 @@ public:
         _field_name = std::wstring(field_name.begin(), field_name.end());
     }
 
-    uint64_t size() const override { return _index_writer->numRamDocs(); }
-
-    uint64_t estimate_buffer_size() const override { return _index_writer->ramSizeInBytes(); }
-
-    uint64_t total_mem_footprint() const override { return _index_writer->ramSizeInBytes(); }
+    uint64_t size() const override { return _index_writer->ramSizeInBytes(); }
 
     Status init() override {
         try {
@@ -190,7 +186,7 @@ public:
         }
     }
 
-    Status finish() override {
+    Status finish(WritableFile* wfile, ColumnMetaPB* meta) override {
         lucene::store::Directory* dir = nullptr;
         lucene::store::IndexOutput* null_bitmap_out = nullptr;
         lucene::store::IndexOutput* data_out = nullptr;

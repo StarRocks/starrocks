@@ -15,7 +15,7 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
 
-public class TabletCollector extends FrontendDaemon {
+public class TabletCollector extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletCollector.class);
     private static final long CHECK_INTERVAL_MS = 100;
 
@@ -41,13 +41,13 @@ public class TabletCollector extends FrontendDaemon {
     private final Set<Long> queuedBeIds;
 
     public TabletCollector() {
-        super("TabletCollector", CHECK_INTERVAL_MS);
+        super("tablet-collector", CHECK_INTERVAL_MS);
         collectQueue = new PriorityQueue<>();
         queuedBeIds = new HashSet<>();
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (RunMode.isSharedDataMode()) {
             return;
         }
@@ -55,6 +55,14 @@ public class TabletCollector extends FrontendDaemon {
         updateQueue();
 
         collect(collectQueue.poll());
+    }
+
+    @Override
+    protected synchronized void onStopped() {
+        // Both are leader-session bookkeeping: which BEs we've already enqueued and the
+        // priority of next collection. On re-election the queue is rebuilt from updateQueue().
+        collectQueue.clear();
+        queuedBeIds.clear();
     }
 
     private void updateQueue() {

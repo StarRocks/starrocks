@@ -20,19 +20,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Pair;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTraceExtension;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksTestExtension;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,8 +51,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@ExtendWith(MVTraceExtension.class)
 @State(Scope.Thread) // Add State annotation with appropriate scope
+@ExtendWith(StarRocksTestExtension.class)
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
@@ -92,6 +92,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.getCtx().getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @BeforeEach
@@ -353,7 +355,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
             TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         }
         taskManager.executeTaskSync(task);
     }

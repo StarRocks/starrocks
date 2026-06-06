@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
@@ -25,7 +26,7 @@ class HyperLogLog;
 class BitmapValue;
 class PercentileValue;
 class JsonValue;
-class VariantValue;
+class VariantRowValue;
 
 class DateValue;
 class TimestampValue;
@@ -56,6 +57,7 @@ class MapColumn;
 class StructColumn;
 class NullableColumn;
 class ConstColumn;
+class AdaptiveNullableColumn;
 
 template <typename T>
 class FixedLengthColumn;
@@ -111,7 +113,7 @@ using PercentileColumn = ObjectColumn<PercentileValue>;
 using JsonColumnBase = ObjectColumn<JsonValue>;
 class JsonColumn;
 
-using VariantColumnBase = ObjectColumn<VariantValue>;
+using VariantColumnBase = ObjectColumn<VariantRowValue>;
 class VariantColumn;
 
 class MapColumn;

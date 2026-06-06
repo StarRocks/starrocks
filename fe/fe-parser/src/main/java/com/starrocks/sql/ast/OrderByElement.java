@@ -1,0 +1,153 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast;
+
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Combination of expr and ASC/DESC, and nulls ordering.
+ */
+public class OrderByElement implements ParseNode {
+    private Expr expr;
+    private final boolean isAsc;
+
+    // Represents the NULLs ordering specified: true when "NULLS FIRST", false when
+    // "NULLS LAST", and null if not specified.
+    private final Boolean nullsFirstParam;
+
+    private final NodePosition pos;
+    
+    // Flag to indicate if this is an "ORDER BY ALL" element that needs to be expanded
+    private final boolean isOrderByAll;
+
+    public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam) {
+        this(expr, isAsc, nullsFirstParam, NodePosition.ZERO, false);
+    }
+
+    public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam, NodePosition pos) {
+        this(expr, isAsc, nullsFirstParam, pos, false);
+    }
+    
+    public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam, NodePosition pos, boolean isOrderByAll) {
+        this.pos = pos;
+        this.expr = expr;
+        this.isAsc = isAsc;
+        this.nullsFirstParam = nullsFirstParam;
+        this.isOrderByAll = isOrderByAll;
+    }
+
+    public void setExpr(Expr e) {
+        this.expr = e;
+    }
+
+    public Expr getExpr() {
+        return expr;
+    }
+
+    public boolean getIsAsc() {
+        return isAsc;
+    }
+
+    public Boolean getNullsFirstParam() {
+        return nullsFirstParam;
+    }
+    
+    public boolean isOrderByAll() {
+        return isOrderByAll;
+    }
+
+    public OrderByElement clone() {
+        return new OrderByElement(expr.clone(), isAsc, nullsFirstParam, pos, isOrderByAll);
+    }
+
+    /**
+     * Returns a new list of OrderByElements with the same (cloned) expressions but the
+     * ordering direction reversed (asc becomes desc, nulls first becomes nulls last, etc.)
+     */
+    public static List<OrderByElement> reverse(List<OrderByElement> src) {
+        List<OrderByElement> result = Lists.newArrayListWithCapacity(src.size());
+
+        for (int i = 0; i < src.size(); ++i) {
+            OrderByElement element = src.get(i);
+            OrderByElement reverseElement =
+                    new OrderByElement(element.getExpr().clone(), !element.isAsc,
+                            !nullsFirst(element.nullsFirstParam));
+            result.add(reverseElement);
+        }
+
+        return result;
+    }
+
+    /**
+     * Extracts the order-by exprs from the list of order-by elements and returns them.
+     */
+    public static List<Expr> getOrderByExprs(List<OrderByElement> src) {
+        List<Expr> result = Lists.newArrayListWithCapacity(src.size());
+
+        for (OrderByElement element : src) {
+            result.add(element.getExpr());
+        }
+
+        return result;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(expr, isAsc, nullsFirstParam);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+
+        if (obj.getClass() != this.getClass()) {
+            return false;
+        }
+
+        OrderByElement o = (OrderByElement) obj;
+        return expr.equals(o.expr) && isAsc == o.isAsc && nullsFirstParam == o.nullsFirstParam;
+    }
+
+    /**
+     * Compute nullsFirst.
+     *
+     * @param nullsFirstParam True if "NULLS FIRST", false if "NULLS LAST", or null if
+     *                        the NULLs order was not specified.
+     * @return Returns true if nulls are ordered first or false if nulls are ordered last.
+     * Independent of isAsc.
+     */
+    public static boolean nullsFirst(Boolean nullsFirstParam) {
+        Preconditions.checkNotNull(nullsFirstParam);
+        return nullsFirstParam;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitOrderByElement(this, context);
+    }
+}

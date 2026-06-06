@@ -20,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.time.Instant;
 
 public class TemporaryGCPAccessTokenProvider implements AccessTokenProvider {
     private static final Logger LOG = LogManager.getLogger(TemporaryGCPAccessTokenProvider.class);
@@ -68,7 +69,7 @@ public class TemporaryGCPAccessTokenProvider implements AccessTokenProvider {
             LOG.warn("GCP Access token has expired. Please refresh the token.");
             return null;
         }
-        return new AccessToken(accessToken, expirationTimeMs);
+        return new AccessToken(accessToken, Instant.ofEpochMilli(expirationTimeMs));
     }
 
     @Override

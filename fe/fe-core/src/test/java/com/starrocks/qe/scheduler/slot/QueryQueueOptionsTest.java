@@ -25,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class QueryQueueOptionsTest extends SchedulerTestBase {
@@ -77,10 +78,10 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
             final int numBEs = 2;
             final int concurrencyLevel = Config.query_queue_v2_concurrency_level;
 
-            BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, numCores);
-            BackendResourceStat.getInstance().setMemLimitBytesOfBe(1, memLimitBytes);
-            BackendResourceStat.getInstance().setNumHardwareCoresOfBe(2, numCores);
-            BackendResourceStat.getInstance().setMemLimitBytesOfBe(2, memLimitBytes);
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 2, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 2, memLimitBytes);
             Config.enable_query_queue_v2 = true;
             QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
 

@@ -35,13 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -51,10 +47,10 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.utframe.UtFrameUtils.PseudoImage;
-import mockit.Expectations;
-import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,33 +63,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class VariableMgrTest {
     private static final Logger LOG = LoggerFactory.getLogger(VariableMgrTest.class);
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private EditLog editLog;
 
-    private VariableMgr variableMgr = new VariableMgr();
+
     @BeforeEach
     public void setUp() {
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
+        // Initialize test environment
+        UtFrameUtils.setUpForPersistTest();
+    }
 
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getVariableMgr();
-                minTimes = 0;
-                result = variableMgr;
-            }
-        };
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -263,6 +243,36 @@ public class VariableMgrTest {
     }
 
     @Test
+    public void testBinaryEncodingVariables() throws IllegalAccessException, DdlException {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable sessionVariable = variableMgr.newSessionVariable();
+
+        SystemVariable formatVar =
+                new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_FORMAT, new StringLiteral("BASE64"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(formatVar)), null);
+        variableMgr.setSystemVariable(sessionVariable, formatVar, false);
+        Assertions.assertEquals("base64", sessionVariable.getBinaryEncodingFormat());
+
+        SystemVariable levelVar =
+                new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_LEVEL, new StringLiteral("ALL"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(levelVar)), null);
+        variableMgr.setSystemVariable(sessionVariable, levelVar, false);
+        Assertions.assertEquals("all", sessionVariable.getBinaryEncodingLevel());
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            SystemVariable invalidFormat =
+                    new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_FORMAT, new StringLiteral("foo"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(invalidFormat)), null);
+        });
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            SystemVariable invalidLevel =
+                    new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_LEVEL, new StringLiteral("foo"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(invalidLevel)), null);
+        });
+    }
+
+    @Test
     public void testReadOnly() {
         assertThrows(DdlException.class, () -> {
             VariableMgr variableMgr = new VariableMgr();
@@ -331,7 +341,7 @@ public class VariableMgrTest {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
 
         Assertions.assertEquals("autocommit", desc.getName());
-        Assertions.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assertions.assertEquals(IntegerType.BIGINT, desc.getType());
         Assertions.assertEquals((long) desc.getValue(), 1);
     }
 }

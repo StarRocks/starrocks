@@ -19,7 +19,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -33,7 +33,7 @@ public class CreatePipeStmt extends DdlStmt {
     private final Map<String, String> properties;
     private final InsertStmt insertStmt;
     private String insertSql;
-    private TableName targetTable;
+    private TableRef targetTableRef;
     private FilePipeSource pipeSource;
 
     public CreatePipeStmt(boolean ifNotExists, boolean orReplace,
@@ -76,12 +76,24 @@ public class CreatePipeStmt extends DdlStmt {
         return insertStmt;
     }
 
-    public TableName getTargetTable() {
-        return targetTable;
+    public TableRef getTargetTableRef() {
+        return targetTableRef;
     }
 
-    public void setTargetTable(TableName targetTable) {
-        this.targetTable = targetTable;
+    public void setTargetTableRef(TableRef targetTableRef) {
+        this.targetTableRef = targetTableRef;
+    }
+
+    public String getCatalogName() {
+        return targetTableRef == null ? null : targetTableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return targetTableRef == null ? null : targetTableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return targetTableRef == null ? null : targetTableRef.getTableName();
     }
 
     public void setDataSource(FilePipeSource source) {

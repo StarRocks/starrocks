@@ -48,22 +48,26 @@ import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -83,12 +87,9 @@ import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.FunctionRef;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
@@ -102,7 +103,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -115,7 +115,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
-public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
+public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
@@ -150,11 +150,13 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     private GlobalStateMgr globalStateMgr;
 
     public BackupHandler() {
-        // for persist
+        // for persist - LeaderDaemon requires a name; the worker thread is never started for
+        // the deserialization-only instance (start() requires globalStateMgr to be non-null).
+        super("backup-handler", 3000L);
     }
 
     public BackupHandler(GlobalStateMgr globalStateMgr) {
-        super("backupHandler", 3000L);
+        super("backup-handler", 3000L);
         this.globalStateMgr = globalStateMgr;
     }
 
@@ -210,7 +212,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!isInit) {
             if (!init()) {
                 return;
@@ -220,6 +222,23 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
             job.setGlobalStateMgr(globalStateMgr);
             job.run();
+        }
+    }
+
+    @Override
+    protected void onStopped() {
+        // dbIdToBackupOrRestoreJob is persistent state (saved/loaded via image and replayed
+        // through the editlog) - the next leader resumes those jobs from the same map. Only
+        // drop the per-leader-session init flag so the new leader re-validates backup/restore
+        // tmp directories before resuming jobs.
+        isInit = false;
+        // repoMgr was started by start(); stop its ping loop so it does not keep talking to
+        // remote storage after demotion. The same instance is reused on re-election; its
+        // persisted repo maps remain intact across the stop/start cycle.
+        try {
+            repoMgr.stopGracefully(Config.leader_demotion_drain_timeout_sec * 1000L);
+        } catch (Throwable t) {
+            LOG.warn("stop repoMgr failed", t);
         }
     }
 
@@ -234,9 +253,13 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
         BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties(), stmt.hasBroker());
         long repoId = globalStateMgr.getNextId();
-        Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), stmt.getLocation(), storage);
+        String location = stmt.getLocation();
+        while (location.endsWith("/")) {
+            location = location.substring(0, location.length() - 1);
+        }
+        Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), location, storage);
 
-        Status st = repoMgr.addAndInitRepoIfNotExist(repo, false);
+        Status st = repoMgr.addAndInitRepoIfNotExist(repo);
         if (!st.ok()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                     "Failed to create repository: " + st.getErrMsg());
@@ -260,7 +283,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 }
             }
 
-            Status st = repoMgr.removeRepo(repo.getName(), false /* not replay */);
+            Status st = repoMgr.removeRepo(repo.getName());
             if (!st.ok()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Failed to drop repository: " + st.getErrMsg());
@@ -513,12 +536,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         List<Function> allFunctions = Lists.newArrayList();
 
-        if (!stmt.withOnClause() || stmt.allFunction()) {
+        if (!stmt.containsExternalCatalog() && (!stmt.withOnClause() || stmt.allFunction())) {
             for (Map.Entry<String, List<Function>> entry : db.getNameToFunction().entrySet()) {
                 List<Function> fns = entry.getValue();
                 allFunctions.addAll(fns);
             }
-        } else {
+        } else if (!stmt.containsExternalCatalog()) {
             for (FunctionRef fnRef : stmt.getFnRefs()) {
                 String functionName = fnRef.getFunctionName();
 
@@ -538,13 +561,17 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         }
         backupJob.setBackupCatalogs(backupCatalogs);
 
-        // write log
-        globalStateMgr.getEditLog().logBackupJob(backupJob);
-
-        // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, backupJob);
+        addBackupJob(backupJob);
 
         LOG.info("finished to submit backup job: {}", backupJob);
+    }
+
+    protected void addBackupJob(BackupJob backupJob) {
+        // write log
+        globalStateMgr.getEditLog().logBackupJob(backupJob, wal -> {
+            // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
+            dbIdToBackupOrRestoreJob.put(backupJob.dbId, backupJob);
+        });
     }
 
     private Catalog getCatalog(String catalogName) throws DdlException {
@@ -582,8 +609,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             checkAndFilterRestoreCatalogsInBackupMeta(stmt, backupMeta);
         }
 
-        // Create a restore job
-        RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
@@ -605,15 +630,21 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             replicationNum = Integer.parseInt(replicationNumProp);
         }
 
-        restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+        // Create a restore job
+        RestoreJob  restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 dbId, dbName, jobInfo, stmt.allowLoad(), replicationNum,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
-        globalStateMgr.getEditLog().logRestoreJob(restoreJob);
-
-        // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, restoreJob);
+        addRestoreJob(restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
+    }
+
+    protected void addRestoreJob(RestoreJob restoreJob) {
+        // write log
+        globalStateMgr.getEditLog().logRestoreJob(restoreJob, wal -> {
+            // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
+            dbIdToBackupOrRestoreJob.put(restoreJob.dbId, restoreJob);
+        });
     }
 
     protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
@@ -953,9 +984,9 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
-        return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+    public long estimateSize() {
+        return Estimator.estimate(repoMgr)
+                + Estimator.estimate(dbIdToBackupOrRestoreJob, 5, 20);
     }
 
     public Map<Long, Long> getRunningBackupRestoreCount() {

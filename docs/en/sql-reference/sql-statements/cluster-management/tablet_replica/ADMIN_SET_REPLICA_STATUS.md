@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SET REPLICA STATUS is used to set the status of the specified replicas."
 ---
 
 # ADMIN SET REPLICA STATUS

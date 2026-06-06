@@ -1,0 +1,21 @@
+-- name: test_hive_table_format_openx_json
+
+create external catalog hive_catalog_${uuid0} PROPERTIES (
+    "type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json order by c1 asc;
+
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json where c1>1 order by c1 asc;
+
+select count(*) from hive_catalog_${uuid0}.hive_oss_db.t_openx_json;
+
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json_partition order by dt asc;
+
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json_snappy order by c1 asc;
+
+drop catalog hive_catalog_${uuid0};

@@ -17,6 +17,7 @@
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
@@ -26,6 +27,7 @@
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 
@@ -167,16 +169,26 @@ std::string Tablet::root_location() const {
     return _location_provider->root_location(_id);
 }
 
-Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
+Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+                           const TableSchemaKeyPB* schema_key) {
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
+    if (schema_key != nullptr) {
+        op_write->mutable_schema_key()->CopyFrom(*schema_key);
+    }
     auto rowset = op_write->mutable_rowset();
     rowset->set_overlapped(false);
     rowset->set_num_rows(0);
     rowset->set_data_size(0);
     rowset->mutable_delete_predicate()->CopyFrom(delete_predicate);
+    // A delete-predicate rowset still needs a uid to satisfy the reshard-merge
+    // invariant (every rowset must carry one). The uid is per-tablet and independent
+    // across siblings; MERGE dedups predicate rowsets by version (one txn == one
+    // predicate), not uid, so independent per-tablet deletes still collapse to one.
+    // This is a freshly built delete-predicate rowset, so always assign a uid.
+    tablet_reshard_helper::set_rowset_uid(rowset);
     return put_txn_log(std::move(txn_log));
 }
 

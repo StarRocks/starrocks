@@ -4,7 +4,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/olap/rowset")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/olap/rowset")
 
-add_library(Rowset STATIC
+ADD_BE_LIB(Rowset
     unique_rowset_id_generator.cpp
     rowset.cpp
     rowset_factory.cpp

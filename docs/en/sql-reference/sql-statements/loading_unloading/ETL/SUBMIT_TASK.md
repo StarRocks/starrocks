@@ -1,6 +1,9 @@
 ---
 displayed_sidebar: docs
+description: "SUBMIT TASK submits an ETL statement as an asynchronous task."
 ---
+
+import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -15,11 +18,11 @@ Supported statements include:
 
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
 - [INSERT](../INSERT.md) (from v3.0 onwards)
-- [CACHE SELECT](../../../../data_source/data_cache_warmup.md) (from v3.3 onwards)
+- [CACHE SELECT](../../../../data_source/block_cache_warmup.md) (from v3.3 onwards)
 
 You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
 
-You can drop an asynchronous task using [DROP TASK](DROP_TASK.md).
+You can modify an asynchronous task using [ALTER TASK](ALTER_TASK.md), or drop an asynchronous task using [DROP TASK](DROP_TASK.md).
 
 ## Syntax
 
@@ -29,12 +32,22 @@ SUBMIT TASK <task_name>
 [PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
+
 ## PROPERTIES
 
-You can add `session.` with session variables to change the Task running connect context configurations.
+You can add the `session.` prefix before session variables to change the task running context configurations.
 
+| **Property** | **Type** | **Description** |
+| ------------ | -------- | --------------- |
+| `session.query_timeout` | Integer | The timeout duration of a query. Unit: Seconds. Value range: 1 to 259200. Default: `300`. From v3.4.0 onwards, this variable does not apply to INSERT operations. |
+| `session.insert_timeout` | Integer | The timeout duration of an INSERT operation. Unit: Seconds. Default: `14400`. Supported from v3.4.0 onwards. |
+| `session.enable_profile` | Boolean | Whether to enable query profiling for the task. Default: `false`. |
+| `session.new_planner_optimize_timeout` | Integer | The timeout duration of the query optimizer. Unit: Milliseconds. Default: `3000`. |
+
+<PropertyWarehouse />
 
 For example, the following statement submits a task named `test_task` with session properties which enables query profile and increase query timeout:
+
 ```SQL
 SUBMIT TASK test_task
 PROPERTIES (
@@ -43,6 +56,7 @@ PROPERTIES (
 )
 AS insert into t2 select * from t1;
 ```
+
 ## Parameters
 
 | **Parameter**      | **Required** | **Description**                                                                                     |
@@ -51,6 +65,14 @@ AS insert into t2 select * from t1;
 | schedule_start     | No      | The start time for the scheduled task.                                                                 |
 | schedule_interval  | No      | The interval at which the scheduled task is executed, with a minimum interval of 10 seconds.          |
 | etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../../loading_unloading/INSERT.md). |
+
+## Return value
+
+- `TaskName`: The name of the task.
+- `Status`: The status of the task. Valid values:
+  - `SUBMITTED`: The task has been submitted.
+  - `REJECTED`: The task has been rejected.
+  - `FAILED`: The task has failed.
 
 ## Usage notes
 

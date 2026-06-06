@@ -19,11 +19,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -34,6 +34,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.DefaultColumnStats;
 import com.starrocks.statistic.base.MultiColumnStats;
+import com.starrocks.type.DateType;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
@@ -69,7 +70,7 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
 
         for (Partition partition : ((OlapTable) table).getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
         }
     }
 
@@ -82,8 +83,8 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
     public void testFullMultiColumnHyperJob() {
         List<String> columnNames = List.of("c1", "c2", "c3");
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(connectContext, db, table, List.of(columnNames),
-                StatsConstants.AnalyzeType.FULL, List.of(StatsConstants.StatisticsType.MCDISTINCT), null);
+        List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(1L, connectContext, db, table,
+                List.of(columnNames), StatsConstants.AnalyzeType.FULL, List.of(StatisticsType.MCDISTINCT), null);
 
         Assertions.assertEquals(1, jobs.size());
 
@@ -97,8 +98,8 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
     public void testSampleMultiColumnHyperJob() {
         List<String> columnNames = List.of("c1", "c2", "c3");
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(connectContext, db, table, List.of(columnNames),
-                StatsConstants.AnalyzeType.SAMPLE, List.of(StatsConstants.StatisticsType.MCDISTINCT), new HashMap<>());
+        List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(1L, connectContext, db, table,
+                List.of(columnNames), StatsConstants.AnalyzeType.SAMPLE, List.of(StatisticsType.MCDISTINCT), new HashMap<>());
         Assertions.assertEquals(1, jobs.size());
         String sql = ((MultiColumnQueryJob) jobs.get(0)).buildStatisticsQuery();
         String expectedSql = "WITH base_cte_table as (SELECT murmur_hash3_32(coalesce(`c1`, ''), " +
@@ -133,7 +134,7 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
 
         HyperStatisticsCollectJob job = new MultiColumnHyperStatisticsCollectJob(db, table, null, columnNames, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
-                List.of(StatsConstants.StatisticsType.MCDISTINCT), List.of(columnNames));
+                List.of(StatisticsType.MCDISTINCT), List.of(columnNames));
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         AnalyzeStatus status = new NativeAnalyzeStatus(1, 1, 1, columnNames, StatsConstants.AnalyzeType.FULL,
@@ -147,7 +148,7 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testColumnStats() {
-        DefaultColumnStats defaultColumnStats = new DefaultColumnStats("c1", Type.DATE, 1);
+        DefaultColumnStats defaultColumnStats = new DefaultColumnStats("c1", DateType.DATE, 1);
         Assertions.assertEquals(1, defaultColumnStats.getColumnId());
         Assertions.assertEquals("", defaultColumnStats.getMax());
         Assertions.assertEquals("", defaultColumnStats.getMin());

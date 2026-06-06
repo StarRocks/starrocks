@@ -20,14 +20,20 @@
 
 #include <string>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -111,7 +117,7 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
                         if (driver_info.is_fragment_cancelled) {
                             is_fragment_cancelled = true;
                         }
-                        status = std::move(driver_info.fragment_status);
+                        status = driver_info.fragment_status;
                     }
 
                     rapidjson::Document fragment_obj;

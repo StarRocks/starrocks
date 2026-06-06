@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXPLAIN ANALYZE executes a SQL statement and returns its query profile with per-operator execution statistics."
 ---
 
 # EXPLAIN ANALYZE
@@ -22,7 +23,7 @@ EXPLAIN ANALYZE <statement>
 
 ## 参数说明
 
-`statement`：需要查询 Query Profile 的 SQL 语句。支持 [SELECT](../../table_bucket_part_index/SELECT.md) 和 [INSERT INTO](../../loading_unloading/INSERT.md)。
+`statement`：需要查询 Query Profile 的 SQL 语句。支持 [SELECT](../../table_bucket_part_index/SELECT/SELECT.md) 和 [INSERT INTO](../../loading_unloading/INSERT.md)。
 
 ## 使用说明
 

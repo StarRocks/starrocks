@@ -18,15 +18,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.List;
@@ -81,10 +83,6 @@ public class AggStateUtils {
             return false;
         }
         String fnName = aggFunc.functionName();
-        // count only support count(col)
-        if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && aggFunc.getArgs().length == 0 && !isAggIf) {
-            return false;
-        }
         if (ONLY_NUMERIC_ARGUMENT_FUNCTIONS_L1.contains(fnName) &&
                 Stream.of(aggFunc.getArgs()).anyMatch(t -> !t.canApplyToNumeric())) {
             return false;
@@ -284,7 +282,7 @@ public class AggStateUtils {
                 // but we can still get the agg state function from its name
                 Function dsHllCountDistinctAgg = FunctionAnalyzer.getAnalyzedAggregateFunction(session,
                         FunctionSet.DS_HLL_COUNT_DISTINCT, new FunctionParams(false, Lists.newArrayList()),
-                        new Type[] {Type.VARCHAR}, new Boolean[] {false}, pos);
+                        new Type[] {VarcharType.VARCHAR}, new Boolean[] {false}, pos);
                 if (dsHllCountDistinctAgg != null && dsHllCountDistinctAgg instanceof AggregateFunction) {
                     return (AggregateFunction) dsHllCountDistinctAgg.copy();
                 }

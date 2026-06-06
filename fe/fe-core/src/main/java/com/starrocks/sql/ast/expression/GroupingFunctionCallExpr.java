@@ -58,7 +58,7 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
         childrenReseted = false;
     }
 
-    public GroupingFunctionCallExpr(FunctionName functionName, FunctionParams params) {
+    public GroupingFunctionCallExpr(String functionName, FunctionParams params) {
         super(functionName, params);
         childrenReseted = false;
     }
@@ -73,25 +73,24 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
         return new GroupingFunctionCallExpr(this);
     }
 
-    // set child to virtual slot
-    public void resetChild(VirtualSlotRef virtualSlot) {
-        ArrayList<Expr> newChildren = new ArrayList<>();
-        newChildren.add(virtualSlot);
-        realChildren = new ArrayList<>();
-        realChildren.addAll(children);
-        children = newChildren;
-        childrenReseted = true;
+    boolean isChildrenResetedForReset() {
+        return childrenReseted;
     }
 
-    @Override
-    public Expr reset() {
-        if (childrenReseted) {
-            children = new ArrayList<>();
-            children.addAll(realChildren);
-        }
-        childrenReseted = false;
-        realChildren = null;
-        return super.reset();
+    List<Expr> getRealChildrenForReset() {
+        return realChildren;
+    }
+
+    void setChildrenResetedForReset(boolean value) {
+        childrenReseted = value;
+    }
+
+    void setRealChildrenForReset(List<Expr> children) {
+        realChildren = children;
+    }
+
+    void setChildrenForReset(List<Expr> newChildren) {
+        children = new ArrayList<>(newChildren);
     }
 
     // get the origin children of the expr

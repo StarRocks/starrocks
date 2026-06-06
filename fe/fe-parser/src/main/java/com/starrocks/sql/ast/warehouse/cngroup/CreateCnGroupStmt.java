@@ -53,10 +53,4 @@ public class CreateCnGroupStmt extends CnGroupStmtBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateCNGroupStatement(this, context);
     }
-
-    @Override
-    public String toSql() {
-        // TODO:
-        return "";
-    }
 }

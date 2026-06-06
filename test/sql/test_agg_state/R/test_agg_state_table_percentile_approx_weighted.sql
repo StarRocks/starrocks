@@ -46,7 +46,8 @@ CREATE TABLE test_agg_state_percentile_approx_weighted(
   c14 percentile_approx_weighted(double, bigint, double)
 )
 AGGREGATE KEY(c1)
-DISTRIBUTED BY HASH(c1) BUCKETS 3;
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
 INSERT INTO test_agg_state_percentile_approx_weighted
@@ -156,4 +157,84 @@ SELECT percentile_approx_weighted_merge(c2),
 FROM test_agg_state_percentile_approx_weighted;
 -- result:
 353.83734130859375	346.5999755859375	11.0	444.0	1111.0	11111.0	1.0	None	100.0
+-- !result
+CREATE TABLE t_array (
+    k int,
+    v double,
+    w bigint
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_array values
+    (1, 10.0, 1),
+    (2, 20.0, 2),
+    (3, 30.0, 3),
+    (4, 40.0, 4),
+    (5, 50.0, 5),
+    (6, 60.0, 6),
+    (7, 70.0, 7),
+    (8, 80.0, 8),
+    (9, 90.0, 9),
+    (10, 100.0, 10);
+-- result:
+-- !result
+CREATE TABLE test_agg_state_percentile_approx_weighted_array(
+  c1 VARCHAR(10),
+  c2 percentile_approx_weighted(double, bigint, array<double>),
+  c3 percentile_approx_weighted(double, bigint, array<double>),
+  c4 percentile_approx_weighted(double, bigint, array<double>)
+)
+AGGREGATE KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_agg_state_percentile_approx_weighted_array
+SELECT 
+  'test',
+  percentile_approx_weighted_state(v, w, array<double>[0.25, 0.5, 0.75]),
+  percentile_approx_weighted_state(v, w, [0.0, 0.5, 1.0]),
+  percentile_approx_weighted_state(v, w, [0.1, 0.25, 0.5, 0.75, 0.9], 2048)
+FROM t_array;
+-- result:
+-- !result
+SELECT c1,
+  percentile_approx_weighted_merge(c2),
+  percentile_approx_weighted_merge(c3),
+  percentile_approx_weighted_merge(c4)
+FROM test_agg_state_percentile_approx_weighted_array
+GROUP BY c1;
+-- result:
+test	[52.272727966308594,74,90.78947448730469]	[10,74,100]	[32.85714340209961,52.272727966308594,74,90.78947448730469,99.47368621826172]
+-- !result
+INSERT INTO t_array values
+    (11, 110.0, 11),
+    (12, 120.0, 12),
+    (13, 130.0, 13),
+    (14, 140.0, 14),
+    (15, 150.0, 15);
+-- result:
+-- !result
+INSERT INTO test_agg_state_percentile_approx_weighted_array
+SELECT 
+  'test2',
+  percentile_approx_weighted_state(v, w, [0.25, 0.5, 0.75]),
+  percentile_approx_weighted_state(v, w, array<double>[0.0, 0.5, 1.0]),
+  percentile_approx_weighted_state(v, w, [0.1, 0.25, 0.5, 0.75, 0.9], 2048)
+FROM t_array;
+-- result:
+-- !result
+SELECT c1,
+  percentile_approx_weighted_merge(c2),
+  percentile_approx_weighted_merge(c3),
+  percentile_approx_weighted_merge(c4)
+FROM test_agg_state_percentile_approx_weighted_array
+GROUP BY c1 ORDER BY c1;
+-- result:
+test	[52.272727966308594,74,90.78947448730469]	[10,74,100]	[32.85714340209961,52.272727966308594,74,90.78947448730469,99.47368621826172]
+test2	[77.33333587646484,109.52381134033203,134.07408142089844]	[10,109.52381134033203,150]	[48.88888931274414,77.33333587646484,109.52381134033203,134.07408142089844,146.89654541015625]
 -- !result

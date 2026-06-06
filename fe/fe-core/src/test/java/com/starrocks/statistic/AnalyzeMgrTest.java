@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
@@ -26,7 +27,6 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -91,6 +91,7 @@ public class AnalyzeMgrTest {
     @Test
     public void testAnalyzeMgrBasicStatsPersist() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().clear();
         Table table =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 

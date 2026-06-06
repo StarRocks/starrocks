@@ -23,6 +23,7 @@ import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -74,11 +75,22 @@ public class LogicalSlot {
     private Optional<ExtraMessage> extraMessage = Optional.empty();
 
     private State state = State.CREATED;
+    private final SessionVariableConstants.ExecMode execMode;
 
     public LogicalSlot(TUniqueId slotId, String requestFeName,
                        long warehouseId, long groupId, int numPhysicalSlots,
                        long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
                        int numFragments, int pipelineDop) {
+        this(slotId, requestFeName, warehouseId, groupId, numPhysicalSlots,
+                expiredPendingTimeMs, expiredAllocatedTimeMs, feStartTimeMs,
+                numFragments, pipelineDop, SessionVariableConstants.ExecMode.getDefault());
+    }
+
+    public LogicalSlot(TUniqueId slotId, String requestFeName,
+                       long warehouseId, long groupId, int numPhysicalSlots,
+                       long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
+                       int numFragments, int pipelineDop,
+                       SessionVariableConstants.ExecMode execMode) {
         this.slotId = slotId;
         this.requestFeName = requestFeName;
         this.warehouseId = warehouseId;
@@ -90,6 +102,7 @@ public class LogicalSlot {
         this.startTimeMs = System.currentTimeMillis();
         this.numFragments = numFragments;
         this.pipelineDop = pipelineDop;
+        this.execMode = execMode;
     }
 
     public State getState() {
@@ -226,6 +239,10 @@ public class LogicalSlot {
         return warehouseName.orElse("");
     }
 
+    public boolean isETLExec() {
+        return execMode == SessionVariableConstants.ExecMode.ETL;
+    }
+
     @Override
     public String toString() {
         return "LogicalSlot{" +
@@ -238,6 +255,7 @@ public class LogicalSlot {
                 ", expiredAllocatedTimeMs=" + TimeUtils.longToTimeString(expiredAllocatedTimeMs) +
                 ", feStartTimeMs=" + TimeUtils.longToTimeString(feStartTimeMs) +
                 ", startTimeMs=" + TimeUtils.longToTimeString(startTimeMs) +
+                ", execMode=" + execMode +
                 ", state=" + state +
                 '}';
     }

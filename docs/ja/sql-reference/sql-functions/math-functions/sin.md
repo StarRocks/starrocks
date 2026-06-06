@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x のサイン（ラジアン単位）を返します。"
 ---
 
 # sin

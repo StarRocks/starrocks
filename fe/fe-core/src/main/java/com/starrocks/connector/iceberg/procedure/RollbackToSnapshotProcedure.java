@@ -14,10 +14,11 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.IntegerType;
 
 import java.util.List;
 import java.util.Map;
@@ -38,24 +39,25 @@ public class RollbackToSnapshotProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(SNAPSHOT_ID, Type.BIGINT, true)
+                        new NamedArgument(SNAPSHOT_ID, IntegerType.BIGINT, true)
                 ),
                 IcebergTableOperation.ROLLBACK_TO_SNAPSHOT
         );
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (args.size() != 1) {
             throw new StarRocksConnectorException("invalid args. rollback snapshot must contain `snapshot id`");
         }
 
         long snapshotId = Optional.ofNullable(args.get(SNAPSHOT_ID))
-                .flatMap(arg -> arg.castTo(Type.BIGINT))
+                .flatMap(arg -> arg.castTo(IntegerType.BIGINT))
                 .map(ConstantOperator::getBigint)
                 .orElseThrow(() ->
                         new StarRocksConnectorException("invalid argument type for %s, expected BIGINT", SNAPSHOT_ID));
 
         context.transaction().manageSnapshots().rollbackTo(snapshotId).commit();
+        return null;
     }
 }

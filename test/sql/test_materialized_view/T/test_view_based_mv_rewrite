@@ -46,7 +46,7 @@ select v4, total, c5, c6 from t2 join agg_view_1 on c4 = v4;
 
 refresh materialized view mv_1 with sync mode;
 
-function: check_hit_materialized_view("select v4, total, c5, c6 from t2 join agg_view_1 on c4 = v4", "mv_1")
+function: print_hit_materialized_view("select v4, total, c5, c6 from t2 join agg_view_1 on c4 = v4", "mv_1")
 
 -- name: test_agg_join_on_single_tables_rewrite
 CREATE TABLE t1 (
@@ -60,4 +60,4 @@ create view v1 as select k1,sum(v1) as sum_v1 from t1 group by k1;
 create materialized view mv_2 refresh manual as select v1.k1,v1.sum_v1,t1.v1 from v1 join t1 on v1.k1=t1.k1;
 refresh materialized view mv_2 with sync mode;
 set enable_view_based_mv_rewrite = true;
-function: check_hit_materialized_view("select v1.k1,v1.sum_v1,t1.v1 from v1 join t1 on v1.k1=t1.k1 order by 1,3;", "mv_2")
+function: print_hit_materialized_view("select v1.k1,v1.sum_v1,t1.v1 from v1 join t1 on v1.k1=t1.k1 order by 1,3;", "mv_2")

@@ -50,6 +50,7 @@ import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -139,7 +140,7 @@ public class HiveTableTest {
         Assertions.assertEquals("hive_table", hiveTable.getCatalogTableName());
         Assertions.assertEquals(hdfsPath, hiveTable.getTableLocation());
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
-        Assertions.assertEquals(new Column("col1", Type.INT, true), hiveTable.getPartitionColumns().get(0));
+        Assertions.assertEquals(new Column("col1", IntegerType.INT, true), hiveTable.getPartitionColumns().get(0));
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertFalse(hiveTable.isUnPartitioned());
 
@@ -297,6 +298,9 @@ public class HiveTableTest {
 
             Assertions.assertTrue(table instanceof HiveTable);
             HiveTable hiveTable = (HiveTable) table;
+            if (targetFormat.equals("AVRO")) {
+                hiveTable.setAvroSchemaJson("{\"type\":\"record\",\"name\":\"T\",\"fields\":[]}");
+            }
             List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
             TTableDescriptor tTableDescriptor = hiveTable.toThrift(partitions);
 
@@ -304,6 +308,12 @@ public class HiveTableTest {
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getSerde_lib(), serde);
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_names(), "col2");
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_types(), "INT");
+            if (targetFormat.equals("AVRO")) {
+                Assertions.assertEquals("{\"type\":\"record\",\"name\":\"T\",\"fields\":[]}",
+                        tTableDescriptor.getHdfsTable().getAvro_schema_json());
+            } else {
+                Assertions.assertFalse(tTableDescriptor.getHdfsTable().isSetAvro_schema_json());
+            }
         }
     }
 

@@ -28,12 +28,15 @@
 #include "udf/java/java_udf.h"
 
 namespace starrocks {
-void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
+Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, int row_num, jvalue val,
+                     bool error_if_overflow);
 
 class JavaWindowFunction final : public JavaUDAFAggregateFunction {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        ctx->udaf_ctxs()->_func->reset(data(state).handle);
+        auto* udaf_ctx = get_java_udaf_context(ctx);
+        DCHECK(udaf_ctx != nullptr);
+        udaf_ctx->_func->reset(data(state).handle);
     }
 
     std::string get_name() const override { return "java_window"; }
@@ -63,8 +66,10 @@ public:
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
-        ctx->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end, frame_start,
-                                                     frame_end, num_args, args.data());
+        auto* udaf_ctx = get_java_udaf_context(ctx);
+        DCHECK(udaf_ctx != nullptr);
+        udaf_ctx->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end, frame_start,
+                                             frame_end, num_args, args.data());
         // release input cols
         for (int i = 0; i < num_args; ++i) {
             env->DeleteLocalRef(args[i]);
@@ -74,13 +79,18 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        jvalue val = ctx->udaf_ctxs()->_func->finalize(this->data(state).handle);
+        auto* udaf_ctx = get_java_udaf_context(ctx);
+        DCHECK(udaf_ctx != nullptr);
+        jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         // insert values to column
         JNIEnv* env = helper.getEnv();
-        MethodTypeDescriptor desc = {(LogicalType)ctx->get_return_type().type, true};
+        const auto& return_type = ctx->get_return_type();
+        const bool error_if_overflow = ctx->error_if_overflow();
         int sz = end - start;
         for (int i = 0; i < sz; ++i) {
-            assign_jvalue(desc, dst, start + i, val);
+            auto st = assign_jvalue(return_type, true, dst, start + i, val, error_if_overflow);
+            SET_FUNCTION_CONTEXT_ERR(st, ctx);
+            if (!st.ok()) break;
         }
         env->DeleteLocalRef(val.l);
     }

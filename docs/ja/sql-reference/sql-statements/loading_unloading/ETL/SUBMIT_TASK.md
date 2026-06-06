@@ -1,6 +1,9 @@
 ---
 displayed_sidebar: docs
+description: "ETL ステートメントを非同期タスクとして送信し、バックグラウンドで実行またはスケジュール実行します。"
 ---
+
+import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -17,11 +20,11 @@ ETL ステートメントを非同期タスクとして送信します。
 
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (v3.0 以降)
 - [INSERT](../INSERT.md) (v3.0 以降)
-- [CACHE SELECT](../../../../data_source/data_cache_warmup.md) (v3.3 以降)
+- [CACHE SELECT](../../../../data_source/block_cache_warmup.md) (v3.3 以降)
 
-タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#usage-notes)を参照してください。
+タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#使用上の注意)を参照してください。
 
-非同期タスクを削除するには [DROP TASK](DROP_TASK.md) を使用できます。
+非同期タスクを変更するには [ALTER TASK](ALTER_TASK.md) を使用でき、非同期タスクを削除するには [DROP TASK](DROP_TASK.md) を使用できます。
 
 ## 構文
 
@@ -31,9 +34,19 @@ SUBMIT TASK <task_name>
 [PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
+
 ## PROPERTIES
 
 `session.` プレフィックスを持つセッション変数を追加することで、タスク実行時の接続コンテキスト設定を変更できます。
+
+| **プロパティ** | **型** | **説明** |
+| -------------- | ------ | -------- |
+| `session.query_timeout` | Integer | クエリのタイムアウト時間。単位: 秒。値の範囲: 1 から 259200。デフォルト: `300`。v3.4.0 以降、この変数は INSERT 操作には適用されません。 |
+| `session.insert_timeout` | Integer | INSERT 操作のタイムアウト時間。単位: 秒。デフォルト: `14400`。v3.4.0 以降でサポートされています。 |
+| `session.enable_profile` | Boolean | タスクのクエリプロファイルを有効にするかどうか。デフォルト: `false`。 |
+| `session.new_planner_optimize_timeout` | Integer | クエリオプティマイザのタイムアウト時間。単位: ミリ秒。デフォルト: `3000`。 |
+
+<PropertyWarehouse />
 
 例えば、以下のステートメントは、クエリプロファイルを有効にし、クエリタイムアウトを増加させるセッションプロパティを持つ `test_task` という名前のタスクを送信します：
 
@@ -54,6 +67,14 @@ AS insert into t2 select * from t1;
 | schedule_start     | いいえ      | スケジュールされたタスクの開始時間です。                                                                 |
 | schedule_interval  | いいえ      | スケジュールされたタスクが実行される間隔で、最小間隔は10秒です。          |
 | etl_statement      | はい     | 非同期タスクとして送信したい ETL ステートメントです。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) と [INSERT](../../loading_unloading/INSERT.md) の非同期タスクの送信をサポートしています。 |
+
+## 戻り値
+
+- `TaskName`: タスクの名前。
+- `Status`: タスクのステータス。有効な値：
+  - `SUBMITTED`: タスクが送信されました。
+  - `REJECTED`: タスクが却下されました。
+  - `FAILED`: タスクが失敗しました。
 
 ## 使用上の注意
 

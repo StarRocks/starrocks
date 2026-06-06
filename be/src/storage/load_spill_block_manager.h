@@ -14,10 +14,14 @@
 
 #pragma once
 
-#include "exec/spill/block_manager.h"
-#include "exec/spill/dir_manager.h"
-#include "exec/spill/input_stream.h"
-#include "util/threadpool.h"
+#include <utility>
+
+#include "common/thread/threadpool.h"
+#include "compute_env/spill/block_group.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/dir_manager.h"
+#include "fmt/format.h"
+#include "storage/lake/location_provider.h"
 
 namespace starrocks {
 
@@ -25,8 +29,8 @@ class ThreadPoolToken;
 
 class LoadSpillBlockMergeExecutor {
 public:
-    LoadSpillBlockMergeExecutor() {}
-    ~LoadSpillBlockMergeExecutor() {}
+    LoadSpillBlockMergeExecutor() = default;
+    ~LoadSpillBlockMergeExecutor() = default;
     Status init();
 
     ThreadPool* get_thread_pool() { return _merge_pool.get(); }
@@ -34,37 +38,77 @@ public:
 
     std::unique_ptr<ThreadPoolToken> create_token();
 
+    std::unique_ptr<ThreadPoolToken> create_tablet_internal_parallel_merge_token();
+
 private:
-    // ThreadPool for merge.
+    // The _merge_pool is used for executing merge tasks at the tablet level.
+    // For large tablets, tasks within a single tablet are further subdivided,
+    // and the _tablet_internal_parallel_merge_pool is responsible for executing
+    // these internal-tablet sub-tasks.
+    //
+    // The reason these two thread pools are not unified is that tasks in _merge_pool
+    // depend on the completion of tasks in _tablet_internal_parallel_merge_pool.
+    // Merging them into a single pool would create a circular dependency,
+    // leading to potential deadlocks.
     std::unique_ptr<ThreadPool> _merge_pool;
+    // ThreadPool for internal-tablet parallel merge
+    std::unique_ptr<ThreadPool> _tablet_internal_parallel_merge_pool;
+};
+
+// Wrapper for block group with slot index for parallel flush ordering
+// When parallel flush is enabled, multiple memtables flush concurrently to block groups.
+// The slot_idx preserves the original submission order so that blocks can be merged
+// in the correct sequence, ensuring data consistency and version ordering.
+struct BlockGroupPtrWithSlot {
+    spill::BlockGroupPtr block_group;
+    // Slot index assigned when the memtable flush task was submitted.
+    // Used to sort block groups before merging to restore original order.
+    int64_t slot_idx = -1;
 };
 
 class LoadSpillBlockContainer {
 public:
-    void append_block(const spill::BlockPtr& block);
-    void create_block_group();
+    void append_block(spill::BlockGroup* block_group, const spill::BlockPtr& block);
+    spill::BlockGroup* create_block_group(int64_t slot_idx);
     bool empty();
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
-    std::vector<spill::BlockGroup>& block_groups() { return _block_groups; }
+    std::vector<BlockGroupPtrWithSlot>& block_groups() { return _block_groups; }
+    std::mutex* block_groups_mutex() { return &_mutex; }
     size_t total_bytes() const { return _total_bytes; }
 
 private:
     // Mutex for the container.
     std::mutex _mutex;
     // Blocks generated when loading. Each block group contains multiple blocks which are ordered.
-    std::vector<spill::BlockGroup> _block_groups;
+    std::vector<BlockGroupPtrWithSlot> _block_groups;
     // total groups bytes
     size_t _total_bytes = 0;
 };
 
 class LoadSpillBlockManager {
 public:
-    // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
+    // |enable_flat_layout| selects the Lake flat-layout mode (see lake::kLoadSpillTxnsDirectoryName
+    // for the full schema). It bundles three coupled behaviors that always travel together:
+    //   (a) write under load_spill_txns/ instead of load_spill/;
+    //   (b) inject the "<txn_id_hex>_<load_id>_<frag_id>_<seq>" name prefix;
+    //   (c) skip per-file deletion on release (reclaimed by merge hot-delete + vacuum_full).
+    // Requires non-zero |txn_id|. When false, falls back to the legacy <root>/load_spill/
+    // layout used by non-Lake callers (e.g. SpillPartitionChunkWriter).
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
-                          const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs)
-            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(fs) {
-        _remote_spill_path = remote_spill_path + "/load_spill";
+                          const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs,
+                          bool enable_flat_layout = false, int64_t txn_id = 0)
+            : _load_id(load_id),
+              _fragment_instance_id(fragment_instance_id),
+              _fs(std::move(fs)),
+              _enable_flat_layout(enable_flat_layout),
+              _txn_id(txn_id) {
+        if (enable_flat_layout) {
+            DCHECK(txn_id != 0) << "flat layout mode requires non-zero txn_id";
+            _remote_spill_path = remote_spill_path + "/" + lake::kLoadSpillTxnsDirectoryName;
+        } else {
+            _remote_spill_path = remote_spill_path + "/" + lake::kLoadSpillDirectoryName;
+        }
     }
 
     // Default destructor.
@@ -74,6 +118,11 @@ public:
     Status init();
 
     bool is_initialized() const { return _initialized; }
+
+    // Delete the remote spill parent directory (e.g. <remote_spill_path>/<load_id>).
+    // Called in destructor after all spill blocks have been released, so that individual
+    // container destructors only delete their own files and this method cleans up the directory.
+    Status clear_parent_path();
 
     // acquire Block from BlockManager
     StatusOr<spill::BlockPtr> acquire_block(size_t block_size, bool force_remote = false);
@@ -100,6 +149,8 @@ private:
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
     std::unique_ptr<LoadSpillBlockContainer> _block_container; // Container for blocks.
     bool _initialized = false;                                 // Whether the manager is initialized.
+    bool _enable_flat_layout = false;                          // Lake-write flat layout mode.
+    int64_t _txn_id = 0;                                       // Lake write txn id; 0 for non-Lake callers.
 };
 
 } // namespace starrocks

@@ -20,3 +20,20 @@ oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
 drop security integration oidc;
 -- result:
 -- !result
+
+-- name: test_ldap_security_integration_with_bind_dn_pattern
+create security integration ldap_pattern properties("type"="authentication_ldap_simple", "authentication_ldap_simple_server_host"="localhost", "authentication_ldap_simple_server_port"="389", "authentication_ldap_simple_bind_dn_pattern"="uid=${USER},ou=People,dc=example,dc=com");
+-- result:
+-- !result
+[UC]show create security integration ldap_pattern;
+-- result:
+-- !result
+alter security integration ldap_pattern set ("authentication_ldap_simple_bind_dn_pattern"="cn=${USER},ou=Staff,dc=example,dc=com");
+-- result:
+-- !result
+[UC]show create security integration ldap_pattern;
+-- result:
+-- !result
+drop security integration ldap_pattern;
+-- result:
+-- !result

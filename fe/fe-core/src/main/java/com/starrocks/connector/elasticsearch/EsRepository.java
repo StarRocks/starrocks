@@ -60,7 +60,7 @@ public class EsRepository extends FrontendDaemon {
     private Map<Long, EsRestClient> esClients;
 
     public EsRepository() {
-        super("es repository", Config.es_state_sync_interval_second * 1000);
+        super("es-repository", Config.es_state_sync_interval_second * 1000);
         esTables = Maps.newConcurrentMap();
         esClients = Maps.newConcurrentMap();
     }

@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 3
-description: Data Lakehouse with Apache Iceberg
+description: "Quick start guide for querying Apache Iceberg data lakes with StarRocks."
 toc_max_heading_level: 2
 keywords: [ 'iceberg' ]
 ---
@@ -26,7 +26,7 @@ Once you have Docker installed, save the yaml below into a file named docker-com
 services:
 
   starrocks-fe:
-    image: starrocks/fe-ubuntu:3.3.5
+    image: starrocks/fe-ubuntu:4.0-latest
     hostname: starrocks-fe
     container_name: starrocks-fe
     user: root
@@ -49,7 +49,7 @@ services:
       retries: 3
 
   starrocks-be:
-    image: starrocks/be-ubuntu:3.3.5
+    image: starrocks/be-ubuntu:4.0-latest
     command:
       - /bin/bash
       - -c
@@ -79,6 +79,7 @@ services:
       iceberg_net:
     environment:
       - HOST_TYPE=FQDN
+      - AWS_EC2_METADATA_DISABLED=true
 
   rest:
     image: apache/iceberg-rest-fixture
@@ -162,8 +163,7 @@ PROPERTIES
   "aws.s3.access_key"="admin",
   "aws.s3.secret_key"="password",
   "aws.s3.endpoint"="http://minio:9000",
-  "aws.s3.enable_path_style_access"="true",
-  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"  
+  "aws.s3.enable_path_style_access"="true"
 );
 ```
 

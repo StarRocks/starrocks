@@ -18,17 +18,19 @@
 
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -80,7 +82,11 @@ protected:
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
-        return std::make_unique<JsonScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+        auto scanner = std::make_unique<JsonScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+        EXPECT_EQ("json", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
     ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
@@ -138,11 +144,12 @@ protected:
     }
 
     std::shared_ptr<RuntimeState> create_runtime_state() {
+        ExecEnv* exec_env = ExecEnv::GetInstance();
         TQueryOptions query_options;
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        std::shared_ptr<RuntimeState> runtime_state =
-                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+                fragment_id, query_options, query_globals, &exec_env->query_execution_services(), exec_env);
         TUniqueId id;
         runtime_state->init_mem_trackers(id);
         return runtime_state;
@@ -206,6 +213,7 @@ TEST_F(JsonScannerTest, test_array_json) {
 
     ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
     ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
+    ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(JsonScannerTest, test_json_without_path) {
@@ -238,6 +246,113 @@ TEST_F(JsonScannerTest, test_json_without_path) {
 
     EXPECT_EQ("['reference', 'NigelRees', 'SayingsoftheCentury', 8.95]", chunk->debug_row(0));
     EXPECT_EQ("['fiction', 'EvelynWaugh', 'SwordofHonour', 12.99]", chunk->debug_row(1));
+    ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
+}
+
+TEST_F(JsonScannerTest, test_debezium_json_load) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/debezium_test.json";
+    std::string json_data = R"(
+        {"payload": {"before": null, "after": {"id": 1, "name": "a"}, "op": "c"}}
+        {"payload": {"before": {"id": 2, "name": "b"}, "after": null, "op": "d"}}
+    )";
+    write_json_to_file(filename, json_data);
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_TINYINT); // for __op
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__isset.envelope = true;
+    range.envelope = TEnvelopeType::DEBEZIUM;
+    range.__set_path(filename);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"id", "name", "__op"});
+
+    ASSERT_OK(scanner->open());
+
+    auto st2 = scanner->get_next();
+    ASSERT_OK(st2);
+
+    ChunkPtr chunk = st2.value();
+    ASSERT_EQ(2, chunk->num_rows());
+    ASSERT_EQ(3, chunk->num_columns());
+
+    // Row 1: id=1, name=a, __op=0 (upsert)
+    EXPECT_EQ("[1, 'a', 0]", chunk->debug_row(0));
+    // Row 2: id=2, name=b, __op=1 (delete)
+    EXPECT_EQ("[2, 'b', 1]", chunk->debug_row(1));
+}
+
+TEST_F(JsonScannerTest, test_debezium_json_load_with_jsonpath_shorter_than_slots) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/debezium_test_jsonpath_shorter.json";
+    std::string json_data = R"({"payload": {"before": null, "after": {"id": 1, "name": "a"}, "op": "c"}})";
+    write_json_to_file(filename, json_data);
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_TINYINT); // for __op
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__isset.envelope = true;
+    range.envelope = TEnvelopeType::DEBEZIUM;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.id", "$.name"])";
+    range.__set_path(filename);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"id", "name", "__op"});
+
+    ASSERT_OK(scanner->open());
+    auto st = scanner->get_next();
+    ASSERT_OK(st);
+    ChunkPtr chunk = st.value();
+
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[1, 'a', 0]", chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_debezium_json_load_with_missing_op_jsonpath) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/debezium_test_jsonpath_missing_op.json";
+    std::string json_data = R"({"payload": {"before": {"id": 2, "name": "b"}, "after": null, "op": "d"}})";
+    write_json_to_file(filename, json_data);
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_TINYINT); // for __op
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__isset.envelope = true;
+    range.envelope = TEnvelopeType::DEBEZIUM;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.id", "$.name", "$.missing_op"])";
+    range.__set_path(filename);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"id", "name", "__op"});
+
+    ASSERT_OK(scanner->open());
+    auto st = scanner->get_next();
+    ASSERT_OK(st);
+    ChunkPtr chunk = st.value();
+
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[2, 'b', 1]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
@@ -573,11 +688,8 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
 
     auto scanner = create_json_scanner(types, ranges, {"value"});
 
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
-
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSERT_OK(scanner->open());
+    ASSIGN_OR_ASSERT_FAIL(auto chunk, scanner->get_next());
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 

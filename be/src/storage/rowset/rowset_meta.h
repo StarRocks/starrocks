@@ -149,6 +149,10 @@ public:
 
     void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 
+    void set_merge_condition(const std::string& merge_condition) {
+        _rowset_meta_pb->mutable_txn_meta()->set_merge_condition(merge_condition);
+    }
+
     bool empty() const { return _rowset_meta_pb->empty(); }
 
     PUniqueId load_id() const { return _rowset_meta_pb->load_id(); }
@@ -289,9 +293,9 @@ public:
         return false;
     }
 
-    const string& get_segment_encryption_meta(int segment_id) const;
-    const string& get_uptfile_encryption_meta(int upt_file_id) const;
-    const string& get_delfile_encryption_meta(int del_file_id) const;
+    const std::string& get_segment_encryption_meta(int segment_id) const;
+    const std::string& get_uptfile_encryption_meta(int upt_file_id) const;
+    const std::string& get_delfile_encryption_meta(int del_file_id) const;
 
 private:
     bool _deserialize_from_pb(std::string_view value) {

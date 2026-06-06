@@ -14,15 +14,17 @@
 
 #include "connector/file_connector.h"
 
-#include "exec/exec_node.h"
+#include "connector/file_scan_metrics.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/avro_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
@@ -84,8 +86,10 @@ Status FileDataSource::_create_scanner() {
     }
     if (_runtime_state->enable_log_rejected_record() &&
         _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
-        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
-        return Status::InternalError("only support csv/json format to log rejected record");
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_PARQUET &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_ORC) {
+        return Status::InternalError("only support csv/json/parquet/orc format to log rejected record");
     }
     // create scanner object and open
     if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
@@ -149,7 +153,7 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         _counter.filtered_rows_read += before_rows;
         // eval conjuncts
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         _counter.num_rows_read += (*chunk)->num_rows();
         _counter.num_rows_unselected += (before_rows - (*chunk)->num_rows());
         _counter.num_bytes_read += (*chunk)->bytes_usage();
@@ -202,6 +206,11 @@ void FileDataSource::_init_counter() {
 void FileDataSource::_update_counter() {
     _runtime_state->update_num_rows_load_filtered(_counter.num_rows_filtered);
     _runtime_state->update_num_rows_load_unselected(_counter.num_rows_unselected);
+    // update the file scan metrics all together
+    auto* metric_repo = FileScanMetrics::instance();
+    if (metric_repo != nullptr) {
+        metric_repo->update(_scanner->file_format(), _scanner->scan_type(), _counter);
+    }
 
     COUNTER_UPDATE(_scanner_total_timer, _counter.total_ns);
     COUNTER_UPDATE(_scanner_fill_timer, _counter.fill_ns);

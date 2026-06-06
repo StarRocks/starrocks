@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.clone.BalanceStat.BalanceType;
+import com.starrocks.common.Range;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -97,24 +98,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     @SerializedName(value = "id")
     private long id;
+    @SerializedName(value = "metaId")
+    private long metaId = 0L;
     @SerializedName(value = "state")
     private IndexState state;
     @SerializedName(value = "rowCount")
     private long rowCount;
 
-    // Virtual buckets in order.
-    // There is a tablet id for each virtual bucket,
-    // which means this virtual bucket's data is stored in this tablet.
-    // We divide data into virtual buckets and then arrange these virtual buckets
-    // into physical buckets, which are tablets.
-    // Each virtual bucket is associated with a tablet. Multiple virtual buckets are
-    // allowed to be associated with the same tablet.
-    @SerializedName(value = "virtualBuckets")
-    private List<Long> virtualBuckets;
-
     private Map<Long, Tablet> idToTablets;
-
-    // Since virtual buckets keeps the order, this can be deprecated if idToTablets persists
     @SerializedName(value = "tablets")
     private List<Tablet> tablets;
 
@@ -145,19 +136,28 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this(id, state, 0, shardGroupId);
     }
 
+    public MaterializedIndex(long id, long metaId, @Nullable IndexState state, long shardGroupId) {
+        this(id, metaId, state, 0, shardGroupId);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
+        this(id, id, state, visibleTxnId, shardGroupId);
+    }
+
     /**
      * Construct a new instance of {@link MaterializedIndex}.
      * <p>
      * {@code visibleTxnId} will be ignored if {@code state} is not {@code IndexState.SHADOW}
      *
      * @param id           the id of the index
+     * @param metaId       the meta id of the index
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
-    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
+    public MaterializedIndex(long id, long metaId, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
+        this.metaId = metaId;
         this.state = state == null ? IndexState.NORMAL : state;
-        this.virtualBuckets = new ArrayList<>();
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
@@ -199,21 +199,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return shardGroupId;
     }
 
-    // The virtual buckets are in order
-    public List<Long> getVirtualBuckets() {
-        return virtualBuckets;
-    }
-
-    public void setVirtualBuckets(List<Long> virtualBuckets) {
-        this.virtualBuckets = virtualBuckets;
-    }
-
     public List<Tablet> getTablets() {
         return tablets;
     }
 
-    // With virtual buckets, the order of tablets is irrelevant
-    public List<Long> getTabletIds() {
+    public List<Long> getTabletIdsInOrder() {
         List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
@@ -226,7 +216,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void clearTabletsForRestore() {
-        virtualBuckets.clear();
         idToTablets.clear();
         tablets.clear();
     }
@@ -236,7 +225,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean updateInvertedIndex) {
-        virtualBuckets.add(tablet.getId());
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
         if (updateInvertedIndex) {
@@ -244,12 +232,26 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
     }
 
-    public void setIdForRestore(long idxId) {
-        this.id = idxId;
+    public Tablet removeTablet(long tabletId) {
+        Tablet tablet = idToTablets.remove(tabletId);
+        if (tablet != null) {
+            tablets.remove(tablet);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
+        }
+        return tablet;
+    }
+
+    public void setIdForRestore(long idxMetaId) {
+        this.id = idxMetaId;
+        this.metaId = idxMetaId;
     }
 
     public long getId() {
         return id;
+    }
+
+    public long getMetaId() {
+        return metaId;
     }
 
     public void setState(IndexState state) {
@@ -307,19 +309,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
     }
 
-    public List<Integer> getVirtualBucketsByTabletId(long tabletId) {
-        List<Integer> virtualBucketIndexes = new ArrayList<>();
-        for (int i = 0; i < virtualBuckets.size(); ++i) {
-            if (virtualBuckets.get(i).longValue() == tabletId) {
-                virtualBucketIndexes.add(i);
-            }
-        }
-        return virtualBucketIndexes;
-    }
-
-    // With virtual buckets, the order index of tablets is irrelevant.
-    // Keep this method only for colocate table in shared-nothing mode,
-    // in which we do not implement tablet split and merge and virtual buckets are the same with tabletIds.
     public int getTabletOrderIdx(long tabletId) {
         int idx = 0;
         for (Tablet tablet : tablets) {
@@ -347,12 +336,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return getBalanceStat().getBalanceType();
     }
 
-
-
-
     @Override
     public int hashCode() {
-        return Objects.hashCode(virtualBuckets, idToTablets);
+        return Objects.hashCode(idToTablets);
     }
 
     @Override
@@ -364,20 +350,19 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             return false;
         }
         MaterializedIndex other = (MaterializedIndex) obj;
-        return virtualBuckets.equals(other.virtualBuckets) && idToTablets.equals(other.idToTablets)
-                && state.equals(other.state) && (rowCount == other.rowCount) && (visibleTxnId == other.visibleTxnId);
+        return idToTablets.equals(other.idToTablets) && state.equals(other.state) && (rowCount == other.rowCount)
+                && (visibleTxnId == other.visibleTxnId);
     }
 
     @Override
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
+        buffer.append("index meta id: ").append(metaId).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
-        buffer.append("virtual buckets size: ").append(virtualBuckets.size()).append("; ");
-        buffer.append("virtual buckets: ").append(virtualBuckets).append("; ");
         buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("tablets: [");
         for (Tablet tablet : tablets) {
@@ -394,16 +379,61 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         for (Tablet tablet : tablets) {
             idToTablets.put(tablet.getId(), tablet);
         }
+        if (metaId == 0L) {
+            metaId = id;
+        }
+        // Share adjacent tablet range bounds to reduce memory usage
+        shareAdjacentTabletRangeBounds();
+    }
 
-        // Build "virtualBuckets" from "tablets" when upgrading from old versions
-        // Before StarRocks didn't have virtual buckets, it would be empty when loading
-        // from the previous image.
-        // In this situation, the virtual bucket is equivalent to the physical tablet.
-        // So just fill the virtual buckets with the physical tablets.
-        if (virtualBuckets.isEmpty()) {
-            for (Tablet tablet : tablets) {
-                virtualBuckets.add(tablet.getId());
+    /**
+     * Shares adjacent tablet range bounds to reduce memory usage.
+     * For adjacent tablets where upperBound[i-1] equals lowerBound[i],
+     * makes them share the same Tuple object instance.
+     *
+     * <p>This method validates that adjacent tablet ranges are continuous:
+     * the previous tablet's upper bound must equal the current tablet's lower bound,
+     * and neither bound can be null.
+     *
+     * <p>For non-range distribution tables, TabletRange may be null, in which case
+     * this method skips processing for those tablets.
+     *
+     * <p>This method should be called after deserialization or tablet split
+     * operations to optimize memory usage.
+     *
+     * @throws IllegalStateException if adjacent tablet ranges are not continuous
+     *         or if any bound is null (when both TabletRanges are non-null)
+     */
+    public void shareAdjacentTabletRangeBounds() {
+        for (int i = 1; i < tablets.size(); i++) {
+            Tablet prevTablet = tablets.get(i - 1);
+            Tablet currTablet = tablets.get(i);
+
+            TabletRange prevTabletRange = prevTablet.getRange();
+            TabletRange currTabletRange = currTablet.getRange();
+            // Skip if either TabletRange is null (non-range distribution tables)
+            if (prevTabletRange == null || currTabletRange == null) {
+                break;
             }
+
+            Range<Tuple> prevRange = prevTabletRange.getRange();
+            Range<Tuple> currRange = currTabletRange.getRange();
+
+            Tuple prevUpperBound = prevRange.getUpperBound();
+            Tuple currLowerBound = currRange.getLowerBound();
+
+            // Validate range continuity
+            if (prevUpperBound == null || currLowerBound == null || !prevUpperBound.equals(currLowerBound)) {
+                continue;
+            }
+
+            // Share the same Tuple object: use prevUpperBound as the shared bound
+            Range<Tuple> newRange = Range.of(
+                    prevUpperBound,  // Share the same Tuple object
+                    currRange.getUpperBound(),
+                    currRange.isLowerBoundIncluded(),
+                    currRange.isUpperBoundIncluded());
+            currTablet.setRange(new TabletRange(newRange));
         }
     }
 }

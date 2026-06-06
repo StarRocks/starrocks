@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #ifdef __x86_64__
 #include <glog/logging.h>
 #include <immintrin.h>

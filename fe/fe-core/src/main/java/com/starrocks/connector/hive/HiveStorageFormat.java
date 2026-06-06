@@ -14,7 +14,9 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.THdfsFileFormat;
 
 import java.util.Map;
 
@@ -27,6 +29,7 @@ import static com.starrocks.connector.hive.HiveClassNames.LAZY_BINARY_COLUMNAR_S
 import static com.starrocks.connector.hive.HiveClassNames.LAZY_SIMPLE_SERDE_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.OPENXJSON_SERDE_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_OUTPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_SERDE_CLASS;
@@ -72,19 +75,40 @@ public enum HiveStorageFormat {
             SEQUENCE_INPUT_FORMAT_CLASS,
             SEQUENCE_OUTPUT_FORMAT_CLASS
     ),
+    OPENXJSON(
+            OPENXJSON_SERDE_CLASS,
+            TEXT_INPUT_FORMAT_CLASS,
+            HIVE_IGNORE_KEY_OUTPUT_FORMAT_CLASS
+    ),
     UNSUPPORTED("UNSUPPORTED", "UNSUPPORTED", "UNSUPPORTED");
 
     private final String serde;
     private final String inputFormat;
     private final String outputFormat;
 
-    public static HiveStorageFormat get(String format) {
-        for (HiveStorageFormat storageFormat : HiveStorageFormat.values()) {
-            if (storageFormat.name().equalsIgnoreCase(format)) {
-                return storageFormat;
-            }
+    private static final ImmutableMap<String, HiveStorageFormat> FORMAT_MAP;
+    private static final ImmutableMap<String, HiveStorageFormat> FORMAT_SERDE_MAP;
+
+    static {
+        ImmutableMap.Builder<String, HiveStorageFormat> formatMapBuilder = ImmutableMap.builder();
+        for (HiveStorageFormat format : values()) {
+            formatMapBuilder.put(format.name().toLowerCase(), format);
         }
-        return UNSUPPORTED;
+        FORMAT_MAP = formatMapBuilder.build();
+
+        ImmutableMap.Builder<String, HiveStorageFormat> formatSerdeMapBuilder = ImmutableMap.builder();
+        for (HiveStorageFormat format : values()) {
+            formatSerdeMapBuilder.put(format.inputFormat + ":" + format.serde, format);
+        }
+        FORMAT_SERDE_MAP = formatSerdeMapBuilder.build();
+    }
+
+    public static HiveStorageFormat get(String name) {
+        return FORMAT_MAP.getOrDefault(name.toLowerCase(), UNSUPPORTED);
+    }
+
+    public static HiveStorageFormat get(String inputFormat, String serde) {
+        return FORMAT_SERDE_MAP.getOrDefault(inputFormat + ":" + serde, UNSUPPORTED);
     }
 
     public static void check(Map<String, String> properties) {
@@ -93,7 +117,7 @@ public enum HiveStorageFormat {
                     "Please use 'file_format' instead of 'format' in the table properties");
         }
 
-        String fileFormat = properties.getOrDefault(FILE_FORMAT, "parquet");
+        String fileFormat = properties.getOrDefault(FILE_FORMAT, PARQUET.name());
         HiveStorageFormat storageFormat = get(fileFormat);
         if (storageFormat == UNSUPPORTED) {
             throw new StarRocksConnectorException("Unsupported hive storage format %s", fileFormat);
@@ -117,4 +141,21 @@ public enum HiveStorageFormat {
     public String getOutputFormat() {
         return outputFormat;
     }
+
+    public THdfsFileFormat toFileFormatThrift() {
+        return switch (this) {
+            case PARQUET -> THdfsFileFormat.PARQUET;
+            case ORC -> THdfsFileFormat.ORC;
+            case TEXTFILE, OPENXJSON -> THdfsFileFormat.TEXT;
+            case AVRO -> THdfsFileFormat.AVRO;
+            case RCBINARY, RCTEXT -> THdfsFileFormat.RC_FILE;
+            case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
+            default -> THdfsFileFormat.UNKNOWN;
+        };
+    }
+
+    public boolean isTextFormat() {
+        return this == HiveStorageFormat.TEXTFILE;
+    }
+
 }

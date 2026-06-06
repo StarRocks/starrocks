@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
@@ -47,7 +48,15 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
-import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -83,7 +92,8 @@ public class OlapTableTest {
             if (table.getType() != TableType.OLAP) {
                 continue;
             }
-            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3, new MvRestoreContext());
+            RestoreJob restoreJob = new RestoreJob();
+            restoreJob.resetIdsForRestore(GlobalStateMgr.getCurrentState(), (OlapTable) table, db, 3, new MvRestoreContext());
         }
     }
 
@@ -157,11 +167,11 @@ public class OlapTableTest {
         PeriodDuration duration1 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
+        p2.pushColumn(LiteralExprFactory.create(LocalDate.now().toString(), DateType.DATE), PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
         OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
@@ -169,7 +179,7 @@ public class OlapTableTest {
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
-        Partition partition = new Partition(1, 11, "p1", null, null);
+        Partition partition = new Partition(1, 11, "p1", new MaterializedIndex(), null);
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         new MockUp<Range<PartitionKey>>() {
@@ -193,11 +203,11 @@ public class OlapTableTest {
         PeriodDuration duration2 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration2).toString(), Type.DATE),
+        p2.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration2).toString(), DateType.DATE),
                 PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
@@ -206,7 +216,7 @@ public class OlapTableTest {
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
-        Partition partition = new Partition(1, 11, "p1", null, null);
+        Partition partition = new Partition(1, 11, "p1", new MaterializedIndex(), null);
         Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
@@ -234,7 +244,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", new MaterializedIndex(), null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -247,7 +257,7 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
-        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", new MaterializedIndex(), null);
 
         // cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -273,7 +283,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", new MaterializedIndex(), null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -286,7 +296,7 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28  hour"));
-        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", new MaterializedIndex(), null);
 
         // cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -311,7 +321,7 @@ public class OlapTableTest {
         listPartitionInfo.setValues(1L, values1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", new MaterializedIndex(), null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -323,7 +333,7 @@ public class OlapTableTest {
         List<String> values2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         listPartitionInfo.setValues(2L, values2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
-        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", new MaterializedIndex(), null);
 
         // cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -353,7 +363,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition = new Partition(1L, 11, "p1", null, null);
+        Partition partition = new Partition(1L, 11, "p1", new MaterializedIndex(), null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition));
@@ -367,7 +377,7 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
-        Partition partition2 = new Partition(2L, 21, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", new MaterializedIndex(), null);
 
         // cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -389,22 +399,11 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, 11, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", new MaterializedIndex(), null);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         // cache is valid
         Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
-    }
-
-    @Test
-    public void testGetPhysicalPartitionByName() {
-        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
-        List<Table> tables = db.getTables();
-        for (Table table : tables) {
-            OlapTable olapTable = (OlapTable) table;
-            PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
-            Assertions.assertNull(partition);
-        }
     }
 
     @Test
@@ -419,13 +418,13 @@ public class OlapTableTest {
         schema.add(k3);
 
         Index index1 = new Index(1L, "index1", Lists.newArrayList(ColumnId.create("k1"), ColumnId.create("k2")),
-                                 IndexDef.IndexType.BITMAP, "comment", null);
+                IndexDef.IndexType.BITMAP, "comment", null);
 
         Index index2 = new Index(2L, "index2", Lists.newArrayList(ColumnId.create("k2"), ColumnId.create("k3")),
-                                 IndexDef.IndexType.BITMAP, "comment", null);
+                IndexDef.IndexType.BITMAP, "comment", null);
 
         Index index3 = new Index(3L, "index3", Lists.newArrayList(ColumnId.create("k4")), IndexDef.IndexType.BITMAP,
-                                 "comment", null);
+                "comment", null);
         indexesInTable.add(index1);
         indexesInTable.add(index2);
         indexesInTable.add(index3);
@@ -513,6 +512,165 @@ public class OlapTableTest {
         Assertions.assertEquals("true", result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
         Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
         Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+    }
+
+    @Test
+    public void testIsRangeDistribution() throws AnalysisException {
+        // Test case 1: Table with RangeDistributionInfo
+        Database db = new Database(1L, "test_db");
+        
+        // Create columns for the table
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("k2", VarcharType.VARCHAR));
+        columns.add(new Column("v1", FloatType.DOUBLE));
+        
+        // Create range distribution info
+        List<Column> partitionColumns = Lists.newArrayList(columns.get(0)); // k1 as partition column
+        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo();
+        
+        // Create hash distribution info for comparison
+        HashDistributionInfo hashDistInfo = new HashDistributionInfo(1, Lists.newArrayList(columns.get(0)));
+        
+        // Create range partition info
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
+        
+        // Test with range distribution table
+        OlapTable rangeTable = new OlapTable(1L, "range_table", columns, 
+                KeysType.AGG_KEYS, rangePartitionInfo, rangeDistInfo);
+        Assertions.assertTrue(rangeTable.isRangeDistribution());
+        
+        // Test with hash distribution table
+        OlapTable hashTable = new OlapTable(2L, "hash_table", columns,
+                KeysType.AGG_KEYS, rangePartitionInfo, hashDistInfo);
+        Assertions.assertFalse(hashTable.isRangeDistribution());
+        
+        // Test with random distribution table
+        RandomDistributionInfo randomDistInfo = new RandomDistributionInfo(10);
+        OlapTable randomTable = new OlapTable(3L, "random_table", columns,
+                KeysType.AGG_KEYS, rangePartitionInfo, randomDistInfo);
+        Assertions.assertFalse(randomTable.isRangeDistribution());
+    }
+
+    @Test
+    public void testIsRangeDistributionWithNullDistribution() {
+        // Test edge case: table with null distribution info (should not happen in practice)
+        OlapTable tableWithNullDist = new OlapTable();
+        // Since defaultDistributionInfo is null by default
+        Assertions.assertFalse(tableWithNullDist.isRangeDistribution());
+    }
+
+    @Test 
+    public void testIsRangeDistributionAfterSetDistribution() {
+        OlapTable table = new OlapTable();
+        
+        // Initially no distribution
+        Assertions.assertFalse(table.isRangeDistribution());
+        
+        // Set range distribution
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT));
+        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo();
+        table.setDefaultDistributionInfo(rangeDistInfo);
+        Assertions.assertTrue(table.isRangeDistribution());
+        
+        // Change to hash distribution
+        HashDistributionInfo hashDistInfo = new HashDistributionInfo(1, columns);
+        table.setDefaultDistributionInfo(hashDistInfo);
+        Assertions.assertFalse(table.isRangeDistribution());
+    }
+
+    @Test
+    public void testGetPrimaryKeyEncodingType() {
+        OlapTable nonPrimaryKeyTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.AGG_KEYS;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE,
+                nonPrimaryKeyTable.getPrimaryKeyEncodingType());
+
+        OlapTable primaryKeyNonCloudTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return false;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1,
+                primaryKeyNonCloudTable.getPrimaryKeyEncodingType());
+
+        OlapTable primaryKeyCloudHashTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Override
+            public boolean isRangeDistribution() {
+                return false;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1,
+                primaryKeyCloudHashTable.getPrimaryKeyEncodingType());
+
+        OlapTable primaryKeyCloudRangeTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Override
+            public boolean isRangeDistribution() {
+                return true;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2,
+                primaryKeyCloudRangeTable.getPrimaryKeyEncodingType());
+
+        // Test persisted primaryKeyEncodingType overrides computed value
+        OlapTable cloudHashTableWithPersistedV2 = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Override
+            public boolean isRangeDistribution() {
+                return false;
+            }
+        };
+        // Without persisted value, cloud hash table returns V1 (legacy fallback)
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1,
+                cloudHashTableWithPersistedV2.getPrimaryKeyEncodingType());
+        // After setting persisted value to V2, it should return V2
+        cloudHashTableWithPersistedV2.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2,
+                cloudHashTableWithPersistedV2.getPrimaryKeyEncodingType());
+
+        // Non-PK table should always return NONE regardless of persisted value
+        nonPrimaryKeyTable.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE,
+                nonPrimaryKeyTable.getPrimaryKeyEncodingType());
     }
 
 }

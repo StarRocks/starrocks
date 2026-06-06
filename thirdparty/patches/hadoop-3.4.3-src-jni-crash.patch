@@ -1,0 +1,31 @@
+diff --git a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/exception.c b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/exception.c
+index fec9a103..f1e85c02 100644
+--- a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/exception.c
++++ b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/exception.c
+@@ -179,8 +179,12 @@ int printExceptionAndFreeV(JNIEnv *env, jthrowable exc, int noPrintFlags,
+     // pending exception. Instead, use ExceptionUtils.
+     rootCause = getExceptionUtilString(env, exc, "getRootCauseMessage");
+     stackTrace = getExceptionUtilString(env, exc, "getStackTrace");
++    if (rootCause == NULL || stackTrace ==NULL) {
++    	setTLSExceptionStrings(className, "cannot get stack trace");
++    } else {
++    	setTLSExceptionStrings(rootCause, stackTrace);
++    }
+     // Save the exception details in the thread-local state.
+-    setTLSExceptionStrings(rootCause, stackTrace);
+ 
+     if (!noPrint) {
+         vfprintf(stderr, fmt, ap);
+diff --git a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
+index 3c5f5f12..13fe6604 100644
+--- a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
++++ b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
+@@ -889,7 +889,7 @@ void setTLSExceptionStrings(const char *rootCause, const char *stackTrace)
+     THREAD_LOCAL_STORAGE_GET_QUICK(&state);
+     if (!state) {
+         mutexLock(&jvmMutex);
+-        if (threadLocalStorageGet(&state)) {
++        if (threadLocalStorageGet(&state)||!state) {
+             mutexUnlock(&jvmMutex);
+             return;
+         }

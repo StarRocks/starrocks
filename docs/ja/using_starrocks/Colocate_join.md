@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Colocate Join は StarRocks でバケット化キーをジョイン列に設定してネットワーク伝送なしのローカルジョインを実行します。"
 sidebar_position: 40
 ---
 

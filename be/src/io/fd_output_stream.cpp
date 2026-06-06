@@ -18,11 +18,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/io_error.h"
 #include "io/io_profiler.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
@@ -41,7 +41,7 @@ private:
     const int fd_;
 };
 
-FdOutputStream::FdOutputStream(int fd) : _fd(fd), _sync_file_on_close(false), _closed(false), _sync_dir() {}
+FdOutputStream::FdOutputStream(int fd) : _fd(fd), _sync_dir() {}
 
 FdOutputStream::~FdOutputStream() {
     auto st = FdOutputStream::close();

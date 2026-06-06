@@ -17,10 +17,11 @@
 #include <chrono>
 #include <thread>
 
-#include "compaction_manager.h"
+#include "common/config_compaction_fwd.h"
+#include "common/thread/thread.h"
+#include "runtime/current_thread.h"
 #include "storage/data_dir.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "storage/storage_metrics.h"
 
 using namespace std::chrono_literals;
 
@@ -44,6 +45,24 @@ void CompactionManager::stop() {
     }
 }
 
+bool CompactionManager::check_if_exceed_max_task_num() {
+    bool exceed = false;
+    if (config::max_compaction_concurrency == 0) {
+        LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
+        exceed = true;
+    }
+    std::lock_guard lg(_tasks_mutex);
+    size_t running_tasks_num = 0;
+    for (const auto& it : _running_tasks) {
+        running_tasks_num += it.second.size();
+    }
+    if (running_tasks_num >= _max_task_num) {
+        VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
+        exceed = true;
+    }
+    return exceed;
+}
+
 void CompactionManager::schedule() {
     auto st = ThreadPoolBuilder("up_candidates")
                       .set_min_threads(1)
@@ -53,7 +72,7 @@ void CompactionManager::schedule() {
     DCHECK(st.ok());
 
     _dispatch_update_candidate_thread = std::thread([this] { _dispatch_worker(); });
-    Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
+    Thread::set_thread_name(_dispatch_update_candidate_thread, "disp_upd_cand");
 
     st = ThreadPoolBuilder("compact_pool")
                  .set_min_threads(1)
@@ -61,13 +80,14 @@ void CompactionManager::schedule() {
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
     DCHECK(st.ok());
-    REGISTER_THREAD_POOL_METRICS(compact_pool, _compaction_pool);
+    StorageMetrics::instance()->register_thread_pool_metrics("compact_pool", _compaction_pool.get());
 
     _scheduler_thread = std::thread([this] { _schedule(); });
     Thread::set_thread_name(_scheduler_thread, "compact_sched");
 }
 
 void CompactionManager::_schedule() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     LOG(INFO) << "start compaction scheduler";
     while (!_stop.load(std::memory_order_consume)) {
         ++_round;
@@ -85,9 +105,9 @@ void CompactionManager::_schedule() {
 
 void CompactionManager::submit_compaction_task(const CompactionCandidate& compaction_candidate) {
     if (compaction_candidate.type == CompactionType::BASE_COMPACTION) {
-        StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(compaction_candidate.score);
+        StorageMetrics::instance()->tablet_base_max_compaction_score.set_value(compaction_candidate.score);
     } else {
-        StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(compaction_candidate.score);
+        StorageMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(compaction_candidate.score);
     }
     auto task_id = next_compaction_task_id();
     VLOG(2) << "submit task to compaction pool"
@@ -96,9 +116,10 @@ void CompactionManager::submit_compaction_task(const CompactionCandidate& compac
             << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
             << ", candidates_size:" << candidates_size();
     auto manager = this;
-    auto tablet = std::move(compaction_candidate.tablet);
+    auto tablet = compaction_candidate.tablet;
     auto type = compaction_candidate.type;
     auto st = _compaction_pool->submit_func([tablet, task_id, manager, type] {
+        SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
         auto compaction_task = tablet->create_compaction_task();
         if (compaction_task != nullptr) {
             CompactionCandidate candidate;
@@ -163,9 +184,9 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             for (auto& candidate : candidates) {
                 if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
                     if (iter->type == CompactionType::BASE_COMPACTION) {
-                        StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
+                        StorageMetrics::instance()->wait_base_compaction_task_num.increment(-1);
                     } else {
-                        StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
+                        StorageMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
                     }
                     iter = _compaction_candidates.erase(iter);
                     has_erase = true;
@@ -184,9 +205,9 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
                 VLOG(2) << "update candidate " << candidate.tablet->tablet_id() << " type "
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
                 if (candidate.type == CompactionType::BASE_COMPACTION) {
-                    StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(1);
+                    StorageMetrics::instance()->wait_base_compaction_task_num.increment(1);
                 } else {
-                    StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(1);
+                    StorageMetrics::instance()->wait_cumulative_compaction_task_num.increment(1);
                 }
                 _compaction_candidates.emplace(std::move(candidate));
             }
@@ -206,9 +227,9 @@ void CompactionManager::remove_candidate(int64_t tablet_id) {
     for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
         if (tablet_id == iter->tablet->tablet_id()) {
             if (iter->type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
+                StorageMetrics::instance()->wait_base_compaction_task_num.increment(-1);
             } else {
-                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
+                StorageMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
             }
             iter = _compaction_candidates.erase(iter);
             break;
@@ -328,9 +349,9 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
             _compaction_candidates.erase(iter);
             _last_score = candidate->score;
             if (candidate->type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
+                StorageMetrics::instance()->wait_base_compaction_task_num.increment(-1);
             } else {
-                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
+                StorageMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
             }
             return true;
         }
@@ -341,6 +362,7 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
 }
 
 void CompactionManager::_dispatch_worker() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     while (!_stop.load(std::memory_order_consume)) {
         {
             std::lock_guard lock(_dispatch_mutex);
@@ -448,12 +470,12 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     }
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _cumulative_compaction_concurrency++;
-        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
+        StorageMetrics::instance()->cumulative_compaction_request_total.increment(1);
+        StorageMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
     } else {
         _base_compaction_concurrency++;
-        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
+        StorageMetrics::instance()->base_compaction_request_total.increment(1);
+        StorageMetrics::instance()->running_base_compaction_task_num.increment(1);
     }
     return true;
 }
@@ -470,10 +492,10 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
             if (size > 0) {
                 if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
                     _cumulative_compaction_concurrency--;
-                    StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(-1);
+                    StorageMetrics::instance()->running_cumulative_compaction_task_num.increment(-1);
                 } else {
                     _base_compaction_concurrency--;
-                    StarRocksMetrics::instance()->running_base_compaction_task_num.increment(-1);
+                    StorageMetrics::instance()->running_base_compaction_task_num.increment(-1);
                 }
             }
             if (iter->second.empty()) {

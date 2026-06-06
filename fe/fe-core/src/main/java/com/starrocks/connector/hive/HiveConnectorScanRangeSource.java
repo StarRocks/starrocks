@@ -34,6 +34,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -83,6 +84,15 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             // ConnectContext sometimes will be nullptr, we need to cover it up
             forceScheduleLocal = ConnectContext.get().getSessionVariable().getForceScheduleLocal();
         }
+    }
+
+    public void reset() {
+        remoteFileInfoSource = null;
+        iterator = null;
+        buffer = null;
+        hasMoreOutput = true;
+        backendSplitFile = true;
+        backendSplitCount = 0;
     }
 
     public void setup() {
@@ -181,7 +191,7 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
                     dataCacheOptions.add(null);
                     if (!op.isConstantRef()) {
                         LOG.warn(String.format("ConstFolding failed for expr: %s, rewrite scalarOperator is %s",
-                                rewritedExpr.toMySql(), op.debugString()));
+                                ExprToSql.toMySql(rewritedExpr), op.debugString()));
                     }
                 }
             }
@@ -295,6 +305,12 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             PartitionAttachment attachment = (PartitionAttachment) remoteFileInfo.getAttachment();
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
+            SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+            ConnectContext connectContext = ConnectContext.get();
+            if (connectContext != null) {
+                sv = connectContext.getSessionVariable();
+            }
+
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(fileDesc.getFileName());
             hdfsScanRange.setOffset(offset);
@@ -307,6 +323,10 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setFile_format(fileFormat.toThrift());
             if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+            }
+
+            if (fileFormat == RemoteFileInputFormat.AVRO) {
+                hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
             }
 
             if (attachment.dataCacheOptions != null) {

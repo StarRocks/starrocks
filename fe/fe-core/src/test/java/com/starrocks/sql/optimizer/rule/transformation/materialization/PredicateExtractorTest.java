@@ -19,13 +19,16 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -36,35 +39,35 @@ import java.util.Map;
 
 public class PredicateExtractorTest {
     private static Map<ScalarType, List<ScalarOperator>> DATA = ImmutableMap.<ScalarType, List<ScalarOperator>>builder()
-            .put(Type.TINYINT, Lists.newArrayList(ConstantOperator.createTinyInt((byte) 10),
+            .put(IntegerType.TINYINT, Lists.newArrayList(ConstantOperator.createTinyInt((byte) 10),
                     ConstantOperator.createTinyInt((byte) 20), ConstantOperator.createTinyInt((byte) 30),
                     ConstantOperator.createTinyInt((byte) 50), ConstantOperator.createTinyInt((byte) 50)))
-            .put(Type.SMALLINT, Lists.newArrayList(ConstantOperator.createSmallInt((short) 10),
+            .put(IntegerType.SMALLINT, Lists.newArrayList(ConstantOperator.createSmallInt((short) 10),
                     ConstantOperator.createSmallInt((short) 20), ConstantOperator.createSmallInt((short) 30),
                     ConstantOperator.createSmallInt((short) 50), ConstantOperator.createSmallInt((short) 50)))
-            .put(Type.INT, Lists.newArrayList(ConstantOperator.createInt(10),
+            .put(IntegerType.INT, Lists.newArrayList(ConstantOperator.createInt(10),
                     ConstantOperator.createInt(20), ConstantOperator.createInt(30),
                     ConstantOperator.createInt(50), ConstantOperator.createInt(50)))
-            .put(Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(10),
+            .put(IntegerType.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(10),
                     ConstantOperator.createBigint(20), ConstantOperator.createBigint(30),
                     ConstantOperator.createBigint(50), ConstantOperator.createBigint(50)))
-            .put(Type.LARGEINT, Lists.newArrayList(ConstantOperator.createLargeInt(BigInteger.valueOf(10)),
+            .put(IntegerType.LARGEINT, Lists.newArrayList(ConstantOperator.createLargeInt(BigInteger.valueOf(10)),
                     ConstantOperator.createLargeInt(BigInteger.valueOf(20)),
                     ConstantOperator.createLargeInt(BigInteger.valueOf(30)),
                     ConstantOperator.createLargeInt(BigInteger.valueOf(50)),
                     ConstantOperator.createLargeInt(BigInteger.valueOf(50))))
-            .put(Type.FLOAT, Lists.newArrayList(ConstantOperator.createFloat(10),
+            .put(FloatType.FLOAT, Lists.newArrayList(ConstantOperator.createFloat(10),
                     ConstantOperator.createFloat(20), ConstantOperator.createFloat(30),
                     ConstantOperator.createFloat(50), ConstantOperator.createFloat(50)))
-            .put(Type.DOUBLE, Lists.newArrayList(ConstantOperator.createDouble(10),
+            .put(FloatType.DOUBLE, Lists.newArrayList(ConstantOperator.createDouble(10),
                     ConstantOperator.createDouble(20), ConstantOperator.createDouble(30),
                     ConstantOperator.createDouble(50), ConstantOperator.createDouble(50)))
-            .put(Type.DATE, Lists.newArrayList(ConstantOperator.createDate(LocalDateTime.of(2023, 9, 10, 0, 0)),
+            .put(DateType.DATE, Lists.newArrayList(ConstantOperator.createDate(LocalDateTime.of(2023, 9, 10, 0, 0)),
                     ConstantOperator.createDate(LocalDateTime.of(2023, 9, 11, 0, 0)),
                     ConstantOperator.createDate(LocalDateTime.of(2023, 9, 12, 0, 0)),
                     ConstantOperator.createDate(LocalDateTime.of(2023, 9, 15, 0, 0)),
                     ConstantOperator.createDate(LocalDateTime.of(2023, 9, 15, 0, 0))))
-            .put(Type.DATETIME, Lists.newArrayList(ConstantOperator.createDatetime(LocalDateTime.of(2023, 9, 10, 0, 0)),
+            .put(DateType.DATETIME, Lists.newArrayList(ConstantOperator.createDatetime(LocalDateTime.of(2023, 9, 10, 0, 0)),
                     ConstantOperator.createDatetime(LocalDateTime.of(2023, 9, 11, 0, 0)),
                     ConstantOperator.createDatetime(LocalDateTime.of(2023, 9, 12, 0, 0)),
                     ConstantOperator.createDatetime(LocalDateTime.of(2023, 9, 15, 0, 0)),
@@ -106,7 +109,7 @@ public class PredicateExtractorTest {
     @Test
     public void testColumnPredicate() {
         {
-            ColumnRefOperator col1 = new ColumnRefOperator(1, Type.INT, "col1", false);
+            ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "col1", false);
             Range<ConstantOperator> range1 = Range.atLeast(ConstantOperator.createInt(10));
             TreeRangeSet<ConstantOperator> columnRange1 = TreeRangeSet.create();
             columnRange1.add(range1);
@@ -125,7 +128,7 @@ public class PredicateExtractorTest {
         }
 
         {
-            ColumnRefOperator col1 = new ColumnRefOperator(1, Type.INT, "col1", false);
+            ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "col1", false);
             Range<ConstantOperator> range1 = Range.atLeast(ConstantOperator.createInt(100));
             TreeRangeSet<ConstantOperator> columnRange1 = TreeRangeSet.create();
             columnRange1.add(range1);

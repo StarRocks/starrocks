@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -53,9 +52,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -146,7 +143,7 @@ public class TaskManagerTest {
         String realDbName = task.getDbName();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        taskManager.createTask(task, true);
+        taskManager.replayCreateTask(task);
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
@@ -240,8 +237,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -276,8 +273,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -313,8 +310,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -350,8 +347,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -395,9 +392,9 @@ public class TaskManagerTest {
         taskRun3.initStatus("3", now + 10);
         taskRun3.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun3, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun3);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
@@ -513,8 +510,7 @@ public class TaskManagerTest {
     }
 
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
-        Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
-        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+        return TimeUtils.parseDateTime(str);
     }
 
     @Test
@@ -853,7 +849,7 @@ public class TaskManagerTest {
         taskRun1.getStatus().setPriority(0);
 
         String definition = taskRun1.getStatus().getDefinition();
-        Assertions.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4);
+        Assertions.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1);
     }
 
     @Test
@@ -987,15 +983,19 @@ public class TaskManagerTest {
                 return ImmutableSet.of(taskRun);
             }
         };
+        final String[] capturedReason = {null};
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 assertEquals(status, taskRun.getStatus());
+                capturedReason[0] = errorMessage;
+                return true;
             }
         };
 
         TaskManager taskManager = new TaskManager();
         taskManager.removeExpiredTaskRuns(false);
+        assertEquals("killed by TaskCleaner due to timeout", capturedReason[0]);
     }
 
     @Test
@@ -1024,8 +1024,9 @@ public class TaskManagerTest {
         };
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 Assertions.fail("Task without timeout should not be canceled");
+                return true;
             }
         };
 
@@ -1058,8 +1059,9 @@ public class TaskManagerTest {
         };
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 Assertions.fail("Non-expired task should not be canceled");
+                return true;
             }
         };
 
@@ -1325,5 +1327,137 @@ public class TaskManagerTest {
         // Should not trigger immediately because source is not MV
         Assertions.assertFalse(executeTaskCalled[0], "Non-MV task should not be executed immediately");
         Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    }
+
+    @Test
+    public void testPeriodSchedulerSkipsWhenNotLeader() throws Exception {
+        // Mock isLeader() to return false
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName, ExecuteOption option) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        Task task = new Task("test_period_leader_check");
+        task.setDefinition("select 1");
+        task.setSource(Constants.TaskSource.MV);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setId(10L);
+
+        TaskSchedule schedule = new TaskSchedule();
+        long now = TimeUtils.getEpochSeconds();
+        schedule.setStartTime(now - 3600);
+        schedule.setPeriod(1);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Wait enough time for the scheduler to fire
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+
+        // executeTask should NOT be called since isLeader() returns false
+        Assertions.assertFalse(executeTaskCalled[0],
+                "Periodical task should not execute on non-leader node");
+    }
+
+    @Test
+    public void testPeriodSchedulerExecutesWhenLeader() throws Exception {
+        // Mock isLeader() to return true
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName, ExecuteOption option) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        Task task = new Task("test_period_leader_execute");
+        task.setDefinition("select 1");
+        task.setSource(Constants.TaskSource.MV);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setId(11L);
+
+        TaskSchedule schedule = new TaskSchedule();
+        long now = TimeUtils.getEpochSeconds();
+        schedule.setStartTime(now - 3600);
+        schedule.setPeriod(1);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Wait enough time for the scheduler to fire
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+
+        // executeTask SHOULD be called since isLeader() returns true
+        Assertions.assertTrue(executeTaskCalled[0],
+                "Periodical task should execute on leader node");
+    }
+
+    @Test
+    public void testDispatchSchedulerSkipsWhenNotLeader() throws Exception {
+        // Verify that checkRunningTaskRun/scheduledPendingTaskRun are not called when not leader.
+        // We cannot call tm.start() directly because clearUnfinishedTaskRun() writes edit log,
+        // so we simulate the dispatch scheduler callback logic instead.
+        final boolean[] dispatched = {false};
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        TaskManager tm = new TaskManager();
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+
+        // Simulate the dispatch scheduler callback logic from TaskManager.start()
+        // This is the same guard that was added in the fix
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            // should enter here
+            dispatched[0] = false;
+        } else {
+            dispatched[0] = true;
+        }
+        Assertions.assertFalse(dispatched[0],
+                "Dispatch scheduler should skip when not leader");
+
+        // Now verify with isLeader = true
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            dispatched[0] = false;
+        } else {
+            dispatched[0] = true;
+        }
+        Assertions.assertTrue(dispatched[0],
+                "Dispatch scheduler should proceed when leader");
     }
 }

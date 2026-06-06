@@ -16,11 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.PrimitiveType;
 
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -50,7 +50,7 @@ public class PartitionFunctionChecker {
             return false;
         }
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-        String fnNameString = fnExpr.getFnName().getFunction();
+        String fnNameString = fnExpr.getFunctionName();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             return false;
         }
@@ -68,7 +68,7 @@ public class PartitionFunctionChecker {
         } else if (child1 instanceof FunctionCallExpr) {
             // date_trunc('hour', time_slice(dt, 'minute'))
             FunctionCallExpr funcExpr = (FunctionCallExpr) child1;
-            String name = funcExpr.getFnName().getFunction();
+            String name = funcExpr.getFunctionName();
             if (name.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
                 return checkTimeSlice(funcExpr, fmt);
             } else if (name.equalsIgnoreCase(FunctionSet.STR2DATE)) {
@@ -113,7 +113,7 @@ public class PartitionFunctionChecker {
         }
 
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-        String fnNameString = fnExpr.getFnName().getFunction();
+        String fnNameString = fnExpr.getFunctionName();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.STR2DATE)) {
             return false;
         }

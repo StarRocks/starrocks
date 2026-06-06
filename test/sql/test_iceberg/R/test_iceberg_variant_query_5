@@ -1,0 +1,494 @@
+-- name: test_iceberg_variant_query_5
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/warehouse/");
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/warehouse/iceberg_variant > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+-- result:
+-- !result
+CREATE TABLE variant_analytics_users (
+    user_id INT,
+    variant_profile VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+CREATE TABLE variant_analytics_orders (
+    order_id INT,
+    variant_order VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+CREATE TABLE variant_analytics_logs (
+    log_id INT,
+    variant_log VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+CREATE TABLE variant_analytics_events (
+    event_id INT,
+    variant_event VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_users/data/00000-4481-6663e105-7590-4b0d-a12e-532e70997c54-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_users/data/00000-4481-6663e105-7590-4b0d-a12e-532e70997c54-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_orders/data/00000-5092-2040b2d3-ece5-4a3e-921d-5c6fe199d84e-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_orders/data/00000-5092-2040b2d3-ece5-4a3e-921d-5c6fe199d84e-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table variant_analytics_users execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_users/data/00000-4481-6663e105-7590-4b0d-a12e-532e70997c54-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_analytics_orders execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_orders/data/00000-5092-2040b2d3-ece5-4a3e-921d-5c6fe199d84e-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_analytics_logs execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_analytics_events execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+SELECT 'Query 1: Filter by VARIANT string field equality' AS test_description;
+-- result:
+Query 1: Filter by VARIANT string field equality
+-- !result
+SELECT
+    user_id,
+    get_variant_string(variant_profile, '$.name') as name,
+    get_variant_string(variant_profile, '$.status') as status,
+    get_variant_int(variant_profile, '$.age') as age
+FROM variant_analytics_users
+WHERE get_variant_string(variant_profile, '$.status') = 'active'
+ORDER BY user_id;
+-- result:
+1	Alice	active	28
+2	Bob	active	35
+4	Diana	active	41
+5	Eve	active	29
+7	Grace	active	26
+8	Henry	active	38
+10	Jack	active	27
+-- !result
+SELECT 'Query 2: Filter by VARIANT numeric field comparison' AS test_description;
+-- result:
+Query 2: Filter by VARIANT numeric field comparison
+-- !result
+SELECT
+    user_id,
+    get_variant_string(variant_profile, '$.name') as name,
+    get_variant_int(variant_profile, '$.age') as age,
+    get_variant_string(variant_profile, '$.status') as status
+FROM variant_analytics_users
+WHERE get_variant_int(variant_profile, '$.age') > 30
+ORDER BY user_id;
+-- result:
+2	Bob	35	active
+4	Diana	41	active
+6	Frank	33	suspended
+8	Henry	38	active
+9	Ivy	31	inactive
+-- !result
+SELECT 'Query 3: Filter by VARIANT string LIKE pattern' AS test_description;
+-- result:
+Query 3: Filter by VARIANT string LIKE pattern
+-- !result
+SELECT
+    user_id,
+    get_variant_string(variant_profile, '$.name') as name,
+    get_variant_string(variant_profile, '$.email') as email
+FROM variant_analytics_users
+WHERE get_variant_string(variant_profile, '$.email') LIKE '%@example.com'
+ORDER BY user_id;
+-- result:
+1	Alice	alice@example.com
+2	Bob	bob@example.com
+4	Diana	diana@example.com
+6	Frank	frank@example.com
+7	Grace	grace@example.com
+9	Ivy	ivy@example.com
+10	Jack	jack@example.com
+-- !result
+SELECT 'Query 4: Filter with IS NULL check on VARIANT field' AS test_description;
+-- result:
+Query 4: Filter with IS NULL check on VARIANT field
+-- !result
+SELECT
+    log_id,
+    get_variant_string(variant_log, '$.level') as log_level,
+    get_variant_string(variant_log, '$.error_type') as error_type,
+    CASE
+        WHEN get_variant_string(variant_log, '$.error_type') IS NULL THEN 'NO_ERROR'
+        ELSE get_variant_string(variant_log, '$.error_type')
+    END as error_status
+FROM variant_analytics_logs
+WHERE get_variant_string(variant_log, '$.error_type') IS NULL
+ORDER BY log_id;
+-- result:
+1	INFO	None	NO_ERROR
+4	WARN	None	NO_ERROR
+6	INFO	None	NO_ERROR
+9	INFO	None	NO_ERROR
+-- !result
+SELECT 'Query 5: Filter with multiple AND conditions on VARIANT fields' AS test_description;
+-- result:
+Query 5: Filter with multiple AND conditions on VARIANT fields
+-- !result
+SELECT
+    user_id,
+    get_variant_string(variant_profile, '$.name') as name,
+    get_variant_int(variant_profile, '$.age') as age,
+    get_variant_string(variant_profile, '$.status') as status,
+    get_variant_double(variant_profile, '$.score') as score
+FROM variant_analytics_users
+WHERE get_variant_int(variant_profile, '$.age') > 25
+  AND get_variant_string(variant_profile, '$.status') = 'active'
+  AND get_variant_double(variant_profile, '$.score') >= 85.0
+ORDER BY user_id;
+-- result:
+1	Alice	28	active	85.5
+2	Bob	35	active	92.3
+4	Diana	41	active	88.1
+5	Eve	29	active	95.7
+7	Grace	26	active	89.4
+10	Jack	27	active	91.0
+-- !result
+SELECT 'Query 6: Filter with OR conditions on VARIANT fields' AS test_description;
+-- result:
+Query 6: Filter with OR conditions on VARIANT fields
+-- !result
+SELECT
+    user_id,
+    get_variant_string(variant_profile, '$.name') as name,
+    get_variant_string(variant_profile, '$.country') as country
+FROM variant_analytics_users
+WHERE get_variant_string(variant_profile, '$.country') = 'USA'
+   OR get_variant_string(variant_profile, '$.country') = 'UK'
+ORDER BY user_id;
+-- result:
+1	Alice	USA
+3	Charlie	USA
+4	Diana	UK
+6	Frank	USA
+7	Grace	UK
+8	Henry	USA
+10	Jack	UK
+-- !result
+SELECT 'Query 7: COUNT aggregation on VARIANT column' AS test_description;
+-- result:
+Query 7: COUNT aggregation on VARIANT column
+-- !result
+SELECT
+    COUNT(*) as total_users,
+    COUNT(CASE WHEN get_variant_string(variant_profile, '$.status') = 'active' THEN 1 END) as active_users,
+    COUNT(CASE WHEN get_variant_string(variant_profile, '$.status') = 'inactive' THEN 1 END) as inactive_users
+FROM variant_analytics_users;
+-- result:
+10	7	2
+-- !result
+SELECT 'Query 8: SUM aggregation on VARIANT numeric field' AS test_description;
+-- result:
+Query 8: SUM aggregation on VARIANT numeric field
+-- !result
+SELECT
+    SUM(get_variant_double(variant_order, '$.amount')) as total_revenue,
+    COUNT(*) as order_count,
+    SUM(get_variant_double(variant_order, '$.amount')) / COUNT(*) as avg_order_value
+FROM variant_analytics_orders;
+-- result:
+1092.26	10	109.226
+-- !result
+SELECT 'Query 9: AVG aggregation on VARIANT numeric field' AS test_description;
+-- result:
+Query 9: AVG aggregation on VARIANT numeric field
+-- !result
+SELECT
+    AVG(get_variant_double(variant_profile, '$.score')) as avg_score,
+    AVG(get_variant_int(variant_profile, '$.age')) as avg_age
+FROM variant_analytics_users
+WHERE get_variant_string(variant_profile, '$.status') = 'active';
+-- result:
+88.35714285714286	32.0
+-- !result
+SELECT 'Query 10: MIN/MAX aggregation on VARIANT fields' AS test_description;
+-- result:
+Query 10: MIN/MAX aggregation on VARIANT fields
+-- !result
+SELECT
+    MIN(get_variant_int(variant_profile, '$.age')) as youngest_age,
+    MAX(get_variant_int(variant_profile, '$.age')) as oldest_age,
+    MIN(get_variant_double(variant_profile, '$.score')) as min_score,
+    MAX(get_variant_double(variant_profile, '$.score')) as max_score
+FROM variant_analytics_users;
+-- result:
+22	41	67.8	95.7
+-- !result
+SELECT 'Query 11: GROUP BY on VARIANT extracted field' AS test_description;
+-- result:
+Query 11: GROUP BY on VARIANT extracted field
+-- !result
+SELECT
+    get_variant_string(variant_profile, '$.status') as status,
+    COUNT(*) as user_count,
+    AVG(get_variant_double(variant_profile, '$.score')) as avg_score
+FROM variant_analytics_users
+GROUP BY get_variant_string(variant_profile, '$.status')
+ORDER BY status;
+-- result:
+active	7	88.35714285714286
+inactive	2	75.35
+suspended	1	71.2
+-- !result
+SELECT 'Query 12: GROUP BY multiple VARIANT fields' AS test_description;
+-- result:
+Query 12: GROUP BY multiple VARIANT fields
+-- !result
+SELECT
+    get_variant_string(variant_profile, '$.country') as country,
+    get_variant_string(variant_profile, '$.status') as status,
+    COUNT(*) as user_count,
+    AVG(get_variant_int(variant_profile, '$.age')) as avg_age
+FROM variant_analytics_users
+GROUP BY
+    get_variant_string(variant_profile, '$.country'),
+    get_variant_string(variant_profile, '$.status')
+ORDER BY country, status;
+-- result:
+Canada	active	2	32.0
+Canada	inactive	1	31.0
+UK	active	3	31.333333333333332
+USA	active	2	33.0
+USA	inactive	1	22.0
+USA	suspended	1	33.0
+-- !result
+SELECT 'Query 13: ORDER BY on VARIANT extracted field' AS test_description;
+-- result:
+Query 13: ORDER BY on VARIANT extracted field
+-- !result
+SELECT
+    user_id,
+    get_variant_string(variant_profile, '$.name') as name,
+    get_variant_double(variant_profile, '$.score') as score
+FROM variant_analytics_users
+ORDER BY get_variant_double(variant_profile, '$.score') DESC
+LIMIT 5;
+-- result:
+5	Eve	95.7
+2	Bob	92.3
+10	Jack	91.0
+7	Grace	89.4
+4	Diana	88.1
+-- !result
+SELECT 'Query 14: JOIN tables on VARIANT extracted field' AS test_description;
+-- result:
+Query 14: JOIN tables on VARIANT extracted field
+-- !result
+SELECT
+    u.user_id,
+    get_variant_string(u.variant_profile, '$.name') as user_name,
+    get_variant_string(u.variant_profile, '$.email') as email,
+    o.order_id,
+    get_variant_double(o.variant_order, '$.amount') as order_amount,
+    get_variant_string(o.variant_order, '$.product') as product
+FROM variant_analytics_users u
+JOIN variant_analytics_orders o
+    ON u.user_id = get_variant_int(o.variant_order, '$.user_id')
+ORDER BY u.user_id, o.order_id;
+-- result:
+1	Alice	alice@example.com	101	150.5	Laptop
+1	Alice	alice@example.com	103	89.99	Mouse
+1	Alice	alice@example.com	108	125.0	Chair
+2	Bob	bob@example.com	102	45.99	Book
+2	Bob	bob@example.com	106	299.99	Monitor
+2	Bob	bob@example.com	110	34.99	Cable
+3	Charlie	charlie@test.com	105	12.5	Notebook
+4	Diana	diana@example.com	104	210.0	Desk
+5	Eve	eve@test.org	107	67.8	Keyboard
+7	Grace	grace@example.com	109	55.5	Lamp
+-- !result
+SELECT 'Query 15: Analyze error logs by type and service' AS test_description;
+-- result:
+Query 15: Analyze error logs by type and service
+-- !result
+SELECT
+    get_variant_string(variant_log, '$.level') as log_level,
+    get_variant_string(variant_log, '$.error_type') as error_type,
+    get_variant_string(variant_log, '$.service') as service,
+    COUNT(*) as error_count
+FROM variant_analytics_logs
+WHERE get_variant_string(variant_log, '$.level') = 'ERROR'
+GROUP BY
+    get_variant_string(variant_log, '$.level'),
+    get_variant_string(variant_log, '$.error_type'),
+    get_variant_string(variant_log, '$.service')
+ORDER BY error_count DESC;
+-- result:
+ERROR	ValidationError	api	2
+ERROR	MemoryError	worker	1
+ERROR	TimeoutError	api	1
+ERROR	ConnectionError	api	1
+ERROR	ConnectionError	worker	1
+-- !result
+SELECT 'Query 16: Compute e-commerce conversion funnel' AS test_description;
+-- result:
+Query 16: Compute e-commerce conversion funnel
+-- !result
+WITH events AS (
+    SELECT
+        get_variant_string(variant_event, '$.user_id') as user_id,
+        get_variant_string(variant_event, '$.event_type') as event_type,
+        get_variant_int(variant_event, '$.timestamp') as ts
+    FROM variant_analytics_events
+)
+SELECT
+    COUNT(DISTINCT CASE WHEN event_type = 'page_view' THEN user_id END) as users_viewed,
+    COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN user_id END) as users_added_cart,
+    COUNT(DISTINCT CASE WHEN event_type = 'purchase' THEN user_id END) as users_purchased,
+    ROUND(COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN user_id END) * 100.0 /
+          NULLIF(COUNT(DISTINCT CASE WHEN event_type = 'page_view' THEN user_id END), 0), 2) as cart_conversion_rate,
+    ROUND(COUNT(DISTINCT CASE WHEN event_type = 'purchase' THEN user_id END) * 100.0 /
+          NULLIF(COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN user_id END), 0), 2) as purchase_conversion_rate
+FROM events;
+-- result:
+6	4	3	66.67	75.00
+-- !result
+SELECT 'Query 17: Aggregate revenue by product category' AS test_description;
+-- result:
+Query 17: Aggregate revenue by product category
+-- !result
+SELECT
+    get_variant_string(variant_order, '$.category') as category,
+    COUNT(*) as order_count,
+    SUM(get_variant_double(variant_order, '$.amount')) as total_revenue,
+    AVG(get_variant_double(variant_order, '$.amount')) as avg_order_value,
+    MIN(get_variant_double(variant_order, '$.amount')) as min_order,
+    MAX(get_variant_double(variant_order, '$.amount')) as max_order
+FROM variant_analytics_orders
+GROUP BY get_variant_string(variant_order, '$.category')
+ORDER BY total_revenue DESC;
+-- result:
+Electronics	5	643.27	128.654	34.99	299.99
+Furniture	3	390.5	130.16666666666666	55.5	210.0
+Books	1	45.99	45.99	45.99	45.99
+Stationery	1	12.5	12.5	12.5	12.5
+-- !result
+SELECT 'Query 18: Join users with their order summary' AS test_description;
+-- result:
+Query 18: Join users with their order summary
+-- !result
+SELECT
+    u.user_id,
+    get_variant_string(u.variant_profile, '$.name') as user_name,
+    get_variant_string(u.variant_profile, '$.country') as country,
+    COUNT(o.order_id) as order_count,
+    COALESCE(SUM(get_variant_double(o.variant_order, '$.amount')), 0) as total_spent
+FROM variant_analytics_users u
+LEFT JOIN variant_analytics_orders o
+    ON u.user_id = get_variant_int(o.variant_order, '$.user_id')
+GROUP BY
+    u.user_id,
+    get_variant_string(u.variant_profile, '$.name'),
+    get_variant_string(u.variant_profile, '$.country')
+ORDER BY total_spent DESC;
+-- result:
+2	Bob	Canada	3	380.97
+1	Alice	USA	3	365.49
+4	Diana	UK	1	210.0
+5	Eve	Canada	1	67.8
+7	Grace	UK	1	55.5
+3	Charlie	USA	1	12.5
+10	Jack	UK	0	0.0
+9	Ivy	Canada	0	0.0
+8	Henry	USA	0	0.0
+6	Frank	USA	0	0.0
+-- !result
+SELECT 'Query 19: Event type distribution and metrics' AS test_description;
+-- result:
+Query 19: Event type distribution and metrics
+-- !result
+SELECT
+    get_variant_string(variant_event, '$.event_type') as event_type,
+    COUNT(*) as event_count,
+    COUNT(DISTINCT get_variant_string(variant_event, '$.user_id')) as unique_users,
+    MIN(get_variant_int(variant_event, '$.timestamp')) as first_event_ts,
+    MAX(get_variant_int(variant_event, '$.timestamp')) as last_event_ts
+FROM variant_analytics_events
+GROUP BY get_variant_string(variant_event, '$.event_type')
+ORDER BY event_count DESC;
+-- result:
+page_view	8	6	1705820000	1705820780
+add_to_cart	5	4	1705820060	1705820840
+purchase	3	3	1705820120	1705820900
+-- !result
+SELECT 'Query 20: Complex filtering with GROUP BY and HAVING' AS test_description;
+-- result:
+Query 20: Complex filtering with GROUP BY and HAVING
+-- !result
+SELECT
+    get_variant_string(variant_profile, '$.country') as country,
+    COUNT(*) as user_count,
+    AVG(get_variant_double(variant_profile, '$.score')) as avg_score,
+    AVG(get_variant_int(variant_profile, '$.age')) as avg_age
+FROM variant_analytics_users
+WHERE get_variant_string(variant_profile, '$.status') IN ('active', 'inactive')
+GROUP BY get_variant_string(variant_profile, '$.country')
+HAVING COUNT(*) >= 2
+ORDER BY avg_score DESC;
+-- result:
+Canada	3	90.3	31.666666666666668
+UK	3	89.5	31.333333333333332
+USA	3	76.60000000000001	29.333333333333332
+-- !result
+drop table variant_analytics_users force;
+-- result:
+-- !result
+drop table variant_analytics_orders force;
+-- result:
+-- !result
+drop table variant_analytics_logs force;
+-- result:
+-- !result
+drop table variant_analytics_events force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

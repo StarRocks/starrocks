@@ -47,7 +47,7 @@ INSERT INTO `store_sales` (
 create materialized view test_mv1 as select  ss_store_sk,SUM(ss_ext_list_price) from store_sales GROUP BY ss_store_sk ;
 function: wait_materialized_view_finish()
 
-function: check_hit_materialized_view("select ss_store_sk,SUM(ss_ext_list_price) from store_sales where  ss_store_sk=50001 GROUP BY ss_store_sk;", "test_mv1")
+function: print_hit_materialized_view("select ss_store_sk,SUM(ss_ext_list_price) from store_sales where  ss_store_sk=50001 GROUP BY ss_store_sk;", "test_mv1")
 select ss_store_sk, SUM(ss_ext_list_price) from store_sales where  ss_store_sk=50001 GROUP BY ss_store_sk order by 1;
 
 drop table store_sales;

@@ -17,10 +17,13 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
+#include <new>
+#include <utility>
 #include <vector>
 
-#include "util/spinlock.h"
+#include "base/concurrency/spinlock.h"
 
 namespace starrocks {
 
@@ -40,10 +43,22 @@ public:
 
     template <class T>
     T* add(T* t) {
+        std::unique_ptr<T> uniq(t);
         // TODO: Consider using a lock-free structure.
         std::lock_guard<SpinLock> l(_lock);
         _objects.emplace_back(Element{t, [](void* obj) { delete reinterpret_cast<T*>(obj); }});
+        uniq.release();
         return t;
+    }
+
+    // Construct T via placement new in |buf| and register a destructor-only
+    // cleanup (memory is owned externally, e.g. by a MemPool).
+    template <class T, class... Args>
+    T* emplace(void* buf, Args&&... args) {
+        auto* obj = new (buf) T(std::forward<Args>(args)...);
+        std::lock_guard<SpinLock> l(_lock);
+        _objects.emplace_back(Element{obj, [](void* p) { reinterpret_cast<T*>(p)->~T(); }});
+        return obj;
     }
 
     void clear() {

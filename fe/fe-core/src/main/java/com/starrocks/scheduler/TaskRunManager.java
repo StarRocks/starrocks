@@ -16,9 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
@@ -84,12 +82,10 @@ public class TaskRunManager implements MemoryTrackable {
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
-        if (!arrangeTaskRun(taskRun, false)) {
+        if (!arrangeTaskRun(taskRun)) {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
-        // Only log create task run status when it's not rejected and created.
-        GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
@@ -99,6 +95,10 @@ public class TaskRunManager implements MemoryTrackable {
      * NOTE: This method is not thread safe, the caller should ensure the thread safety.
      */
     public boolean killRunningTaskRun(TaskRun taskRun, boolean force) {
+        return killRunningTaskRun(taskRun, force, "killed manually");
+    }
+
+    public boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
         if (taskRun == null) {
             return false;
         }
@@ -121,10 +121,86 @@ public class TaskRunManager implements MemoryTrackable {
         } finally {
             // if it's force, remove it from running TaskRun map no matter it's killed or not
             if (force) {
-                // remove it from running TaskRun map
-                taskRunScheduler.removeRunningTask(taskRun.getTaskId());
+                archiveForceKilledTaskRun(taskRun, errorMessage);
             }
         }
+    }
+
+    /**
+     * Archive a force-killed running task run so its history is not lost. This mirrors
+     * {@link #checkRunningTaskRun()}'s WAL archive but is triggered by the kill path, which would
+     * otherwise just drop the run from the running map.
+     *
+     * The caller must hold taskRunLock so this is atomic against checkRunningTaskRun. We first verify
+     * (identity check) that this exact run is still the one in the running map, because the caller may
+     * be iterating a stale snapshot; only then do we remove/archive by taskId.
+     *
+     * Three cases (leader only, after the identity check):
+     *  - Already archived (defense-in-depth: checkRunningTaskRun handled it): just remove.
+     *  - Already in a finish state but not yet archived (the run completed naturally before we killed
+     *    it; its executor set a finish state (SUCCESS/FAILED/SKIPPED)): archive with that real terminal
+     *    state, not FAILED, so a completed run is never lost or mislabeled.
+     *  - Still RUNNING (the actual force kill): archive as FAILED with the kill reason.
+     *
+     * Followers must not write edit logs; they obtain the record by replaying the leader's
+     * RUNNING->finish edit log (see TaskManager#replayUpdateTaskRun).
+     *
+     * The run's executor thread may still be alive after a force kill and could later mutate the live
+     * TaskRunStatus, so we archive a deep-copy snapshot (not the live reference) and do NOT mutate the
+     * live status here. History/scheduler mutation happens only inside the WAL callback so an edit-log
+     * failure leaves memory unchanged.
+     */
+    private void archiveForceKilledTaskRun(TaskRun taskRun, String errorMessage) {
+        long taskId = taskRun.getTaskId();
+        // Identity check (the caller must hold taskRunLock): removeTimeoutTaskRuns iterates a snapshot
+        // taken before locking, so by now checkRunningTaskRun may have archived this run AND a newer
+        // run for the same taskId may have been scheduled. Only act if this exact run is still the
+        // running one; otherwise removeRunningTask(taskId) would drop the newer run.
+        if (taskRunScheduler.getRunningTaskRun(taskId) != taskRun) {
+            LOG.info("skip archiving force-killed task run, it is no longer the running task run for taskId:{}, queryId:{}",
+                    taskId, taskRun.getStatus() == null ? null : taskRun.getStatus().getQueryId());
+            return;
+        }
+        TaskRunStatus status = taskRun.getStatus();
+        if (status == null || !GlobalStateMgr.getCurrentState().isLeader()
+                || taskRunHistory.getTask(status.getQueryId()) != null) {
+            // cannot archive (no status), follower (archives via replay), or already archived
+            // (defense-in-depth): just remove. Identity already verified above, so this is safe.
+            taskRunScheduler.removeRunningTask(taskId);
+            return;
+        }
+        // If the run was still RUNNING when we killed it, record it as FAILED with the kill reason.
+        // If it had already reached a finish state on its own (its executor set SUCCESS/FAILED/SKIPPED
+        // before checkRunningTaskRun archived it), keep that real terminal state, error, and finish
+        // time -- we must never relabel a naturally finished run with the kill reason.
+        final boolean killedWhileRunning = !status.getState().isFinishState();
+        final Constants.TaskRunState finalState =
+                killedWhileRunning ? Constants.TaskRunState.FAILED : status.getState();
+        final long finishTime = (!killedWhileRunning && status.getFinishTime() > 0)
+                ? status.getFinishTime() : System.currentTimeMillis();
+
+        // Archive a deep-copy snapshot rather than the live status, because the executor thread may
+        // still mutate the live status concurrently. The snapshot already carries the natural
+        // terminal state, error, and finish time; only a run we killed while still running overrides
+        // them with the kill reason. The edit-log change is then derived from this snapshot so the
+        // journal (used for follower replay) and the in-memory history carry identical values.
+        TaskRunStatus archivedStatus = TaskRunStatus.fromJson(status.toJSON());
+        archivedStatus.setState(finalState);
+        archivedStatus.setFinishTime(finishTime);
+        if (killedWhileRunning) {
+            archivedStatus.setErrorCode(-1);
+            archivedStatus.setErrorMessage(errorMessage);
+        }
+        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, archivedStatus,
+                Constants.TaskRunState.RUNNING, finalState);
+        LOG.info("archive force-killed task run from state RUNNING to {}, queryId:{}, taskId:{}",
+                finalState, archivedStatus.getQueryId(), taskId);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+            // Mutate shared state only inside the WAL callback, so an edit-log failure leaves memory
+            // unchanged.
+            taskRunScheduler.removeRunningTask(taskId);
+            taskRunHistory.addHistory(archivedStatus);
+        });
     }
 
     /**
@@ -149,6 +225,10 @@ public class TaskRunManager implements MemoryTrackable {
      * NOTE: This method is not thread safe, caller should take lock if necessary.
      */
     public boolean killTaskRun(Long taskId, boolean force) {
+        return killTaskRun(taskId, force, "killed manually");
+    }
+
+    public boolean killTaskRun(Long taskId, boolean force, String errorMessage) {
         // kill all pending task runs of the task id
         killPendingTaskRuns(taskId);
         // kill the running task run
@@ -156,14 +236,14 @@ public class TaskRunManager implements MemoryTrackable {
         if (taskRun == null) {
             return false;
         }
-        return killRunningTaskRun(taskRun, force);
+        return killRunningTaskRun(taskRun, force, errorMessage);
     }
 
     // At present, only the manual and automatic tasks of the materialized view have different priorities.
     // The manual priority is higher. For manual tasks, we do not merge operations.
     // For automatic tasks, we will compare the definition, and if they are the same,
     // we will perform the merge operation.
-    public boolean arrangeTaskRun(TaskRun taskRun, boolean isReplay) {
+    public boolean arrangeTaskRun(TaskRun taskRun) {
         if (!tryTaskRunLock()) {
             return false;
         }
@@ -225,35 +305,27 @@ public class TaskRunManager implements MemoryTrackable {
 
             // recheck it again to avoid pending task run is too much
             long validPendingCount = taskRunScheduler.getPendingQueueCount();
-            if (validPendingCount >= Config.task_runs_queue_length || !taskRunScheduler.addPendingTaskRun(taskRun)) {
+            if (validPendingCount >= Config.task_runs_queue_length) {
                 LOG.warn("failed to offer task: {}", taskRun);
                 return false;
             }
+            GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(taskRun.getStatus(),
+                    wal -> taskRunScheduler.addPendingTaskRun(taskRun));
 
-            // if it 's not replay, update the status of the old TaskRun to MERGED in FOLLOWER/LEADER.
-            // if it is replay, no need to update the status of the old TaskRun because follower FE cannot
-            // update edit log.
-            if (!isReplay) {
-                // TODO: support batch update to reduce the number of edit logs.
-                for (TaskRun oldTaskRun : mergedTaskRuns) {
-                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    // update the state of the old TaskRun to MERGED in FOLLOWER
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
-                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+            // TODO: support batch update to reduce the number of edit logs.
+            for (TaskRun oldTaskRun : mergedTaskRuns) {
+                final long finishTime = System.currentTimeMillis();
+                // update the state of the old TaskRun to MERGED in FOLLOWER
+                TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
+                        oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
+                statusChange.setFinishTime(finishTime);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
                     // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setFinishTime(finishTime);
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
                     taskRunHistory.addHistory(oldTaskRun.getStatus());
-                }
-            } else {
-                for (TaskRun oldTaskRun : mergedTaskRuns) {
-                    // update the state of the old TaskRun to MERGED in LEADER
-                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
-                    taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
-                    taskRunHistory.addHistory(oldTaskRun.getStatus());
-                }
+                });
             }
         } finally {
             taskRunUnlock();
@@ -274,13 +346,22 @@ public class TaskRunManager implements MemoryTrackable {
 
             Future<?> future = taskRun.getFuture();
             if (future.isDone()) {
-                taskRunScheduler.removeRunningTask(taskId);
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
 
-                taskRunHistory.addHistory(taskRun.getStatus());
+                //defense code
+                if (!taskRun.getStatus().getState().isFinishState()) {
+                    LOG.warn("TaskRun future is done but state is still {} (not finish state), " +
+                            "likely a transient race between kill/cancel path and async execution thread; " +
+                            "will retry on next scheduler tick. queryId={}, taskId={}",
+                            taskRun.getStatus().getState(), taskRun.getStatus().getQueryId(), taskId);
+                    continue;
+                }
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+                    taskRunScheduler.removeRunningTask(taskId);
+                    taskRunHistory.addHistory(taskRun.getStatus());
+                });
             }
         }
     }
@@ -290,11 +371,6 @@ public class TaskRunManager implements MemoryTrackable {
         taskRunScheduler.scheduledPendingTaskRun(pendingTaskRun -> {
             if (taskRunExecutor.executeTaskRun(pendingTaskRun)) {
                 LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
-                long taskId = pendingTaskRun.getTaskId();
-                // RUNNING state persistence is for FE FOLLOWER update state
-                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                        Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
             } else {
                 LOG.warn("failed to scheduled task-run {}", pendingTaskRun);
             }
@@ -338,15 +414,6 @@ public class TaskRunManager implements MemoryTrackable {
         return ImmutableMap.of("PendingTaskRun", validPendingCount,
                 "RunningTaskRun", (long) taskRunScheduler.getRunningTaskCount(),
                 "HistoryTaskRun", taskRunHistory.getTaskRunCount());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> taskRunSamples = taskRunHistory.getSamplesForMemoryTracker();
-        long size = taskRunScheduler.getPendingQueueCount()
-                + taskRunScheduler.getRunningTaskCount()
-                + taskRunHistory.getTaskRunCount();
-        return Lists.newArrayList(Pair.create(taskRunSamples, size));
     }
 
     /**

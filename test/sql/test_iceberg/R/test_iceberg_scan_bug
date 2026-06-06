@@ -1,0 +1,15 @@
+-- name: test_iceberg_scan_bug
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_scan_bug$files;
+-- result:
+0	oss://starrocks-ci-test/dla_test_data/iceberg/t_scan_bug_new/data/00000-0-614af1fa-d44f-4be0-ae46-14d0c5418439-0-00001.parquet	PARQUET	0	1	407	{1:39}	{1:1}	{1:0}	{}	{1:"1"}	{1:"1"}	[4]	0	None	None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_scan_bug;
+-- result:
+1
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

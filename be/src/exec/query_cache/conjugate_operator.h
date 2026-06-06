@@ -15,7 +15,7 @@
 #pragma once
 #include <memory>
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::query_cache {
 class ConjugateOperator;
@@ -43,6 +43,7 @@ public:
                       pipeline::OperatorPtr source_op);
     ~ConjugateOperator() override = default;
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool has_output() const override;
     bool need_input() const override;
@@ -50,9 +51,6 @@ public:
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override;
     Status set_cancelled(RuntimeState* state) override;
-    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
-    RuntimeFilterProbeCollector* runtime_bloom_filters() override;
-    const RuntimeFilterProbeCollector* runtime_bloom_filters() const override;
     void set_precondition_ready(RuntimeState* state) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -69,6 +67,9 @@ public:
     ~ConjugateOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override;
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:

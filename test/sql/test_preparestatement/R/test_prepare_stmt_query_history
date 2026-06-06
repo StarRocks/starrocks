@@ -1,0 +1,148 @@
+-- name: test_prepare_stmt_query_history @sequential
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base;
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base;
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base;
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 bigint NULL,
+    c_1 int,
+    c_2 int,
+    c_3 int,
+    c_4 int
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 
+select
+    idx, idx + 1, idx + 2, idx + 3, idx + 4
+from __row_util;
+-- result:
+-- !result
+function: execute_with_prepared_connection("use db_${uuid0}")
+-- result:
+
+-- !result
+function: execute_with_prepared_connection("set audit_execute_stmt = true")
+-- result:
+
+-- !result
+function: execute_with_prepared_connection("set enable_async_profile = false")
+-- result:
+
+-- !result
+function: execute_prepared_sql("SELECT k1, c_1, c_2, c_3, c_4 FROM t1 WHERE (c_1 = ? AND c_2 = ?) OR (c_3 = ? AND c_4 = ?)", [100, 101, 102, 103])
+-- result:
+99	100	101	102	103
+-- !result
+[UC]function: query_id=execute_with_prepared_connection("SELECT last_query_id()")
+-- result:
+-- !result
+[UC]function: execute_detail=wait_for_query_detail("${query_id}")
+-- result:
+-- !result
+WITH w1 as (SELECT parse_json('${execute_detail}') detail)
+SELECT 
+    detail->'command' AS command,
+    regexp_extract(detail->'profile' , 'Query ID: (.*?)\n', 1) = '${query_id}' AS is_correct_query_id_from_profile
+FROM w1;
+-- result:
+"MySQL.COM_STMT_EXECUTE"	1
+-- !result
+WITH w1 as (SELECT parse_json('${execute_detail}') detail)
+SELECT 
+    detail->'sql' as query
+FROM w1;
+-- result:
+[REGEX]"SELECT `\w+`\.`t1`\.`k1`, `\w+`\.`t1`\.`c_1`, `\w+`\.`t1`\.`c_2`, `\w+`\.`t1`\.`c_3`, `\w+`\.`t1`\.`c_4`\\nFROM `\w+`\.`t1`\\nWHERE \(\(`\w+`\.`t1`\.`c_1` = 100\) AND \(`\w+`\.`t1`\.`c_2` = 101\)\) OR \(\(`\w+`\.`t1`\.`c_3` = 102\) AND \(`\w+`\.`t1`\.`c_4` = 103\)\)"
+-- !result
+[UC]prepared_stmt_id=WITH w1 as (SELECT parse_json('${execute_detail}') detail) SELECT detail->'preparedStmtId' preparedStmtId FROM w1;
+-- result:
+-- !result
+[UC]function: prepare_detail=wait_for_prepared_stmt_detail(${prepared_stmt_id})
+-- result:
+-- !result
+WITH w1 as (
+    SELECT parse_json('${prepare_detail}') detail
+)
+SELECT 
+    detail->'command' AS command,
+    detail->'queryId' != '${query_id}' AS is_correct_query_id,
+    detail->'profile' as profile
+FROM w1;
+-- result:
+"MySQL.COM_STMT_PREPARE"	1	None
+-- !result
+WITH w1 as (
+    SELECT parse_json('${prepare_detail}') detail
+)
+SELECT 
+    detail->'sql' as query
+FROM w1;
+-- result:
+"SELECT k1, c_1, c_2, c_3, c_4 FROM t1 WHERE (c_1 = ? AND c_2 = ?) OR (c_3 = ? AND c_4 = ?)"
+-- !result
+function: execute_with_prepared_connection("set audit_execute_stmt = false")
+-- result:
+
+-- !result
+function: execute_prepared_sql("SELECT k1, c_1, c_2, c_3, c_4 FROM t1 WHERE (c_1 = ? AND c_2 = ?) OR (c_3 = ? AND c_4 = ?)", [100, 101, 102, 103])
+-- result:
+99	100	101	102	103
+-- !result
+[UC]function: assert_prepared_stmt_details()
+-- result:
+-- !result
+admin set frontend config ("enable_collect_query_detail_info" = "false");
+-- result:
+-- !result
+drop database db_${uuid0} FORCE;
+-- result:
+-- !result

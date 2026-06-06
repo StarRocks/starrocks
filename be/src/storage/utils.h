@@ -51,8 +51,10 @@
 #include <string>
 #include <vector>
 
+#include "base/types/int128.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "platform/path_rw.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 
@@ -89,10 +91,6 @@ Status gen_timestamp_string(std::string* out_string);
 Status move_to_trash(const std::filesystem::path& tablet_id_path);
 
 Status copy_dir(const std::string& src_dir, const std::string& dst_dir);
-
-bool check_datapath_rw(const std::string& path);
-
-Status read_write_test_file(const std::string& test_file_path);
 
 class Errno {
 public:

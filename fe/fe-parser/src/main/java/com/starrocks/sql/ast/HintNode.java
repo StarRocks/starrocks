@@ -30,7 +30,7 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     public static final String HINT_ANALYTIC_SORT = "sort";
     public static final String HINT_ANALYTIC_HASH = "hash";
     public static final String HINT_ANALYTIC_SKEW = "skewed";
-
+    public static final String HINT_ANALYTIC_SKEW_EXPLICIT = HINT_JOIN_SKEW;
     protected final NodePosition pos;
 
     protected final String hintStr;
@@ -46,7 +46,6 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
 
     public abstract Map<String, String> getValue();
 
-    @Override
     public String toSql() {
         return hintStr;
     }

@@ -53,9 +53,9 @@ function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
-function: check_hit_materialized_view("select ss_store_sk,SUM(ss_ext_list_price) from store_sales where  ss_store_sk=50001 GROUP BY ss_store_sk;", "test_mv1")
+function: print_hit_materialized_view("select ss_store_sk,SUM(ss_ext_list_price) from store_sales where  ss_store_sk=50001 GROUP BY ss_store_sk;", "test_mv1")
 -- result:
-None
+True
 -- !result
 select ss_store_sk, SUM(ss_ext_list_price) from store_sales where  ss_store_sk=50001 GROUP BY ss_store_sk order by 1;
 -- result:

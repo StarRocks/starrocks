@@ -18,12 +18,12 @@
 #include <memory>
 #include <numeric>
 
+#include "compute_env/spill/input_stream.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/cross_join_node.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/input_stream.h"
-#include "exec/spill/spill_components.h"
-#include "exec/spill/spiller.hpp"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "exprs/expr.h"
 #include "fmt/format.h"
 #include "runtime/runtime_state.h"
@@ -173,6 +173,7 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
         auto* pool = state->obj_pool();
         ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(pool, _rf_descs, one_row_chunk.get(),
                                                                          _rf_conjuncts_ctx));
+        RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, rfs));
         _rf_hub->set_collector(_plan_node_id,
                                std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
     } else {

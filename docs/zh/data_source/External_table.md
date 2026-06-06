@@ -1,16 +1,25 @@
 ---
 displayed_sidebar: docs
+description: "External tables are no longer recommended in StarRocks; use External Catalog instead for querying Hive, Iceberg, and Hudi data sources."
 ---
 
 # 外部表
 
-StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部表外，其他外部表功能已经废弃。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+:::note
 
-> **NOTICE**
->
-> * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
-> * 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
-> * 从 3.2.9、3.3.1 版本起，对于查询 Oracle 和 SQLServer 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
+外部表功能除特定边缘使用场景外已不推荐使用，未来版本可能弃用。在常规场景中管理和查询外部数据源的数据时，建议使用 [External Catalog](./catalog/catalog_overview.md)。
+
+- 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+
+- 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
+
+- 从 3.2.9、3.3.1 版本起，对于查询 Oracle 和 SQLServer 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
+
+- 外部表功能的设计初衷是协助将数据导入至 StarRocks，而非作为常规操作对外部系统执行高效查询。更高效的解决方案是将数据直接导入至 StarRocks。
+
+:::
+
+StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部表外，其他外部表功能已经废弃。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见 [Data Cache](data_cache.md)。
 
@@ -127,7 +136,7 @@ PROPERTIES (
 
 * `password`：目标数据库用户登录密码。
 
-* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
+* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
 
     > **说明**
     >

@@ -16,26 +16,18 @@
 
 #include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/orlp/pdqsort.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
-#include "exec/sorting/sort_permute.h"
+#include "column/runtime_type_traits.h"
+#include "common/runtime_profile.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/orlp/pdqsort.h"
-#include "util/runtime_profile.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
-
-void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
-    chunk = cnk;
-    order_by_columns.reserve(sort_exprs->size());
-    for (ExprContext* expr_ctx : (*sort_exprs)) {
-        order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
-    }
-}
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
@@ -95,17 +87,17 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 // if this ConstColumn is the first column of the chunk.
                 // Case 2: an expression may generate a constant column for one Chunk, but a
                 // non-constant one for another Chunk, we replace them all by non-constant columns.
-                auto* const_col = down_cast<ConstColumn*>(col.get());
+                auto* const_col = down_cast<const ConstColumn*>(col.get());
                 const auto& data_col = const_col->data_column();
                 auto new_col = data_col->clone_empty();
                 new_col->append(*data_col, 0, 1);
                 new_col->assign(row_num, 0);
                 if (order_by_types[i].is_nullable) {
                     ColumnPtr nullable_column =
-                            NullableColumn::create(ColumnPtr(std::move(new_col)), NullColumn::create(row_num, 0));
-                    materialize_chunk->append_column(nullable_column, slots_in_row_descriptor[i]->id());
+                            NullableColumn::create(std::move(new_col), NullColumn::create(row_num, 0));
+                    materialize_chunk->append_column(std::move(nullable_column), slots_in_row_descriptor[i]->id());
                 } else {
-                    materialize_chunk->append_column(ColumnPtr(std::move(new_col)), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
                 }
             }
         } else {
@@ -113,7 +105,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (!col->is_nullable() && order_by_types[i].is_nullable) {
                 col = NullableColumn::create(col, NullColumn::create(col->size(), 0));
             }
-            materialize_chunk->append_column(col, slots_in_row_descriptor[i]->id());
+            materialize_chunk->append_column(std::move(col), slots_in_row_descriptor[i]->id());
         }
     }
 

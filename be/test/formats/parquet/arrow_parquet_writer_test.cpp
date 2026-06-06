@@ -16,7 +16,7 @@
 #include <gtest/gtest.h>
 #include <parquet/api/writer.h>
 
-#include "util/slice.h"
+#include "base/string/slice.h"
 
 namespace starrocks::parquet {
 namespace {

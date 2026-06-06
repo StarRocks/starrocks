@@ -142,7 +142,7 @@ REFRESH DEFERRED MANUAL
 AS SELECT k1,v1 FROM t1;
 -- result:
 -- !result
-refresh MATERIALIZED VIEW mv3 PARTITION start ('2023-02-01') end ('2023-05-01') with sync mode;
+REFRESH MATERIALIZED VIEW mv3 PARTITION start ('2023-02-01') end ('2023-05-01') with sync mode;
 -- result:
 -- !result
 ALTER MATERIALIZED VIEW mv3 INACTIVE;

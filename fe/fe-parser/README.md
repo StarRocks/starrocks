@@ -76,6 +76,7 @@ StarRocks follows a SQL dialect broadly aligned with common analytics systems an
 
 ## References
 - Frontend overview: `fe/fe-core/src/main/java/com/starrocks/`
+- Type system: `fe/fe-type/` (package `com.starrocks.type`)
 - AST: `com.starrocks.sql.ast`
 - Analyzer: `com.starrocks.sql.analyzer`
 - Optimizer: `com.starrocks.sql.optimizer`

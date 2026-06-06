@@ -14,24 +14,30 @@
 
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 
-#include "exec/sort_exec_exprs.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
+#include "common/config_exec_flow_fwd.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
+#include "compute_env/sorting/sorted_chunks_merger.h"
+#include "exec/pipeline/query_context.h"
+#include "exprs/sort_exec_exprs.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/sorted_chunks_merger.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
-    auto query_statistic_recv = state->query_recv();
-    _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
+    auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
+    auto* query_execution_services = state->query_execution_services();
+    _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, 1, true);
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _stream_recvr->attach_observer(state, this->observer());
-    _stream_recvr->attach_query_ctx(state->query_ctx());
-    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
+    _stream_recvr->attach_query_ctx(state->query_ctx()->get_shared_ptr());
+    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs->lhs_ordering_expr_ctxs(),
+                                                     _sort_exec_exprs->is_constant_lhs_ordering(), &_is_asc_order,
+                                                     &_nulls_first);
 }
 
 void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
@@ -102,7 +108,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             *chunk = tmp_chunk->clone_empty_with_slot(rewind_size);
             for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
                 const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
-                ColumnPtr& dest = (*chunk)->get_column_by_index(c);
+                auto* dest = (*chunk)->get_column_raw_ptr_by_index(c);
                 dest->append(*src, offset_in_chunk, rewind_size);
                 // resize constant column as same as other non-constant columns, so Chunk::num_rows()
                 // can return a right number if this ConstColumn is the first column of the chunk.

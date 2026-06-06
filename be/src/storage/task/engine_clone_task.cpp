@@ -42,9 +42,17 @@
 
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
-#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/network/network_util.h"
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
+#include "common/config_http_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "engine_storage_migration_task.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
@@ -53,18 +61,13 @@
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
-#include "util/network_util.h"
-#include "util/string_parser.hpp"
-#include "util/thrift_rpc_helper.h"
 
 using std::set;
 using std::stringstream;
@@ -232,7 +235,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                                                                 &store);
         if (!ost.ok()) {
             LOG(WARNING) << "Fail to obtain shard path. tablet:" << _clone_req.tablet_id;
-            _error_msgs->push_back("fail to obtain shard path");
+            _error_msgs->emplace_back("fail to obtain shard path");
             return ost;
         }
 
@@ -268,7 +271,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from dir: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir='" << schema_hash_dir;
-                _error_msgs->push_back("load tablet from dir failed.");
+                _error_msgs->emplace_back("load tablet from dir failed.");
                 (void)fs::remove_all(tablet_dir);
                 return status;
             }
@@ -327,7 +330,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from snapshot: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir=" << schema_hash_dir;
-                _error_msgs->push_back("load tablet from snapshot failed.");
+                _error_msgs->emplace_back("load tablet from snapshot failed.");
             }
         } else {
             LOG(WARNING) << "Fail to find snapshot meta or header file. tablet:" << _clone_req.tablet_id;
@@ -358,7 +361,7 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
             LOG(WARNING) << "Fail to report tablet info after clone."
                          << " tablet id=" << _clone_req.tablet_id << " schema hash=" << _clone_req.schema_hash
                          << " signature=" << _signature;
-            _error_msgs->push_back("clone success, but get tablet info failed.");
+            _error_msgs->emplace_back("clone success, but get tablet info failed.");
         } else if (_clone_req.__isset.committed_version && tablet_info.version < _clone_req.committed_version) {
             LOG(WARNING) << "Fail to clone tablet. tablet_id:" << _clone_req.tablet_id
                          << ", schema_hash:" << _clone_req.schema_hash << ", signature:" << _signature
@@ -634,7 +637,22 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
             RETURN_IF_ERROR(client->init(remote_file_url));
             client->set_timeout_ms(estimate_timeout * 1000);
-            RETURN_IF_ERROR(client->download(local_file_path));
+            WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_RETURN(auto output_file, FileSystem::Default()->new_writable_file(opts, local_file_path));
+
+            Status status;
+            auto write_cb = [&status, &output_file, &local_file_path](const void* data, size_t length) {
+                status = output_file->append(Slice(static_cast<const char*>(data), length));
+                if (!status.ok()) {
+                    LOG(WARNING) << "fail to write data to file, file=" << local_file_path << ", error=" << status;
+                    return status;
+                }
+                return Status::OK();
+            };
+            RETURN_IF_ERROR(client->download(write_cb, config::download_low_speed_limit_kbps,
+                                             config::download_low_speed_time, config::max_download_speed_kbps));
+            RETURN_IF_ERROR(status);
+            RETURN_IF_ERROR(output_file->close());
 
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);
@@ -934,7 +952,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
         if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
-                                                  rs_meta_ptr, &rowset_to_remove);
+                                                  rs_meta_ptr, &rowset_to_remove, tablet->data_dir()->get_meta());
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;
@@ -1003,7 +1021,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
-            if (!st.ok()) {
+            if (!clear_st.ok()) {
                 LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
             }
         }

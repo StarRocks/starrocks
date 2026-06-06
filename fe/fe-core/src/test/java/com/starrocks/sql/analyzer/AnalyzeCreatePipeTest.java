@@ -36,8 +36,10 @@ public class AnalyzeCreatePipeTest {
                     "create pipe pipe5 properties(\"auto_ingest\"=\"true\") as " +
                             "insert into t0 select col_int, col_string, 1 from files(\"path\"=\"fake://somewhere/1.parquet\"," +
                             " \"format\"=\"parquet\")");
-            Assertions.assertEquals("test", stmt.getInsertStmt().getTableName().getDb());
-            Assertions.assertEquals(stmt.getPipeName().getDbName(), stmt.getInsertStmt().getTableName().getDb());
+            Assertions.assertEquals("test", com.starrocks.catalog.TableName
+                    .fromTableRef(stmt.getInsertStmt().getTableRef()).getDb());
+            Assertions.assertEquals(stmt.getPipeName().getDbName(),
+                    com.starrocks.catalog.TableName.fromTableRef(stmt.getInsertStmt().getTableRef()).getDb());
         }
         {
             // pipe's database: not set
@@ -45,9 +47,11 @@ public class AnalyzeCreatePipeTest {
             // result: target table's database
             CreatePipeStmt stmt = (CreatePipeStmt) AnalyzeTestUtil.analyzeSuccess(
                     "create pipe pipe5 properties(\"auto_ingest\"=\"true\") as " +
-                            "insert into test.t0 select col_int, col_string, 1 from files(\"path\"=\"fake://somewhere/1.parquet\"," +
+                            "insert into test.t0 select col_int, col_string, 1 from files(" +
+                            "\"path\"=\"fake://somewhere/1.parquet\"," +
                             " \"format\"=\"parquet\")");
-            Assertions.assertEquals(stmt.getPipeName().getDbName(), stmt.getInsertStmt().getTableName().getDb());
+            Assertions.assertEquals(stmt.getPipeName().getDbName(),
+                    com.starrocks.catalog.TableName.fromTableRef(stmt.getInsertStmt().getTableRef()).getDb());
         }
         {
             // pipe's database: 'test1'
@@ -55,7 +59,8 @@ public class AnalyzeCreatePipeTest {
             // result: error
             AnalyzeTestUtil.analyzeFail(
                     "create pipe test1.pipe5 properties(\"auto_ingest\"=\"true\") as " +
-                            "insert into test.t0 select col_int, col_string, 1 from files(\"path\"=\"fake://somewhere/1.parquet\"," +
+                            "insert into test.t0 select col_int, col_string, 1 from files(" +
+                            "\"path\"=\"fake://somewhere/1.parquet\"," +
                             " \"format\"=\"parquet\")");
         }
     }

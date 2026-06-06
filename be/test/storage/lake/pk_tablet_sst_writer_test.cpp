@@ -19,12 +19,20 @@
 
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -32,6 +40,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
@@ -39,9 +48,6 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
@@ -92,12 +98,13 @@ public:
         _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS);
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(kTestDirectory));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     }
 
 protected:
     void SetUp() override {
         clear_and_init_test_dir();
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -123,9 +130,9 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;
@@ -173,7 +180,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk2));
 
     // Test flush_sst_writer
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
 
     // Verify file info
     ASSERT_FALSE(file_info.path.empty());
@@ -200,7 +208,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
     }
 
     // Flush and get result
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
 
     // Verify results
     ASSERT_FALSE(file_info.path.empty());
@@ -225,7 +234,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
 
     // Now operations should work
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk));
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
     ASSERT_FALSE(file_info.path.empty());
 }
 
@@ -247,7 +257,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk));
 
     // Flush
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
     ASSERT_FALSE(file_info.path.empty());
     ASSERT_GT(file_info.size, 0);
 }
@@ -264,8 +275,9 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     auto chunk1 = generate_data(30);
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk1));
 
-    ASSIGN_OR_ABORT(auto file_info1, pk_sst_writer->flush_sst_writer());
-    ASSERT_FALSE(file_info1.path.empty());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
+    ASSERT_FALSE(file_info.path.empty());
 
     // Reuse the writer for a second file
     ASSERT_OK(pk_sst_writer->reset_sst_writer(location_provider, _fs));
@@ -273,11 +285,12 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     auto chunk2 = generate_data(40, 30);
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk2));
 
-    ASSIGN_OR_ABORT(auto file_info2, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret2, pk_sst_writer->flush_sst_writer());
+    auto [file_info2, sst_range2] = std::move(sst_ret2);
     ASSERT_FALSE(file_info2.path.empty());
 
     // The two files should be different
-    ASSERT_NE(file_info1.path, file_info2.path);
+    ASSERT_NE(file_info.path, file_info2.path);
 }
 
 TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
@@ -291,8 +304,8 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
     for (int i = 0; i < 5; i++) {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -337,8 +350,8 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_data_import) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1024);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(100, 0);
     auto chunk1 = generate_data(100, 100);
@@ -456,8 +469,8 @@ TEST_F(PkTabletSSTWriterTest, test_no_parallel_execution_with_update_operations)
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_with_update_operations) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(50, 0);
     auto indexes = std::vector<uint32_t>(chunk0.num_rows());
@@ -504,8 +517,8 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_compaction_consistency) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::lake_pk_compaction_min_input_segments, 2);
     ConfigResetGuard<int64_t> guard2(&config::write_buffer_size, 512);
-    ConfigResetGuard<bool> guard3(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard4(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard3(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(80, 0);
     auto chunk1 = generate_data(80, 80);
@@ -565,8 +578,8 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_compaction_consistency) {
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_results) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(60, 0);
     auto indexes = std::vector<uint32_t>(chunk0.num_rows());
@@ -603,7 +616,7 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_result
         ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
     }
 
-    ConfigResetGuard<bool> guard4(&config::enable_pk_parallel_execution, false);
+    ConfigResetGuard<bool> guard4(&config::enable_pk_index_eager_build, false);
     {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -640,5 +653,334 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_result
     EXPECT_EQ(60, serial_rows);            // Should have same 60 unique rows
     EXPECT_EQ(parallel_rows, serial_rows); // Both should produce same result
 }
+
+TEST_F(PkTabletSSTWriterTest, test_publish_with_parallel_index_get) {
+    int64_t chunk_size = 3 * 4096;
+    auto chunk0 = generate_data(chunk_size);
+    auto chunk1 = generate_data(chunk_size, 12);
+    auto chunk2 = generate_data(chunk_size, 24);
+    auto indexes = std::vector<uint32_t>(chunk0.num_rows());
+    for (uint32_t i = 0, n = chunk0.num_rows(); i < n; i++) {
+        indexes[i] = i;
+    }
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard4(&config::enable_pk_index_parallel_execution, true);
+    ConfigResetGuard<int64_t> guard5(&config::pk_index_parallel_execution_min_rows, 4096);
+    for (int i = 0; i < 5; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // read txnlog
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        EXPECT_EQ(txn_log->op_write().ssts_size(), 1);
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+    }
+    // Compaction
+    {
+        ConfigResetGuard<int64_t> guard(&config::lake_pk_compaction_min_input_segments, 1);
+        int64_t txn_id = next_id();
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, task_context->progress.value());
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        EXPECT_EQ(txn_log->op_compaction().input_rowsets_size(), 5);
+        EXPECT_EQ(txn_log->op_compaction().ssts_size(), 1);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+}
+
+TEST_F(PkTabletSSTWriterTest, test_publish_early_sst_compact) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    // Configure to generate SST files during write phase:
+    // - Small write_buffer_size to generate multiple segments per write
+    // - Enable eager PK index build to generate SST files
+    ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
+    // Set a lower threshold to trigger early_sst_compact more easily
+    ConfigResetGuard<int32_t> guard4(&config::pk_index_early_sst_compaction_threshold, 3);
+
+    // Generate sufficient data to create multiple SST files
+    // Each chunk will generate one SST file when written
+    const int64_t chunk_size = 100;
+    auto chunk0 = generate_data(chunk_size, 0);
+    auto chunk1 = generate_data(chunk_size, chunk_size);
+    auto chunk2 = generate_data(chunk_size, chunk_size * 2);
+    auto indexes = std::vector<uint32_t>(chunk_size);
+    for (uint32_t i = 0; i < chunk_size; i++) {
+        indexes[i] = i;
+    }
+
+    int version = 1;
+    // Import multiple times, each import generates multiple SST files
+    // After enough SST files are accumulated, early_sst_compact should be triggered during publish
+    const int num_imports = 6;
+    for (int i = 0; i < num_imports; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+
+        ASSERT_OK(delta_writer->open());
+        // Write multiple chunks to generate multiple segments with SST files
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // Verify that SST files were generated during write phase
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        EXPECT_GT(txn_log->op_write().ssts_size(), 0) << "SST files should be generated during write phase";
+
+        // Publish version - this is where early_sst_compact should be triggered
+        // when the number of filesets exceeds pk_index_early_sst_compaction_threshold
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+    }
+
+    // Verify data correctness after all imports and early_sst_compact
+    // Should have 300 unique rows (chunk0 + chunk1 + chunk2 = 100 + 100 + 100)
+    int64_t final_rows = read_rows(tablet_id, version);
+    EXPECT_EQ(300, final_rows) << "Data should be correct after early_sst_compact";
+}
+
+// Helper to generate tablet metadata with a single BIGINT PK column
+inline std::shared_ptr<TabletMetadataPB> generate_bigint_pk_tablet_metadata(
+        PrimaryKeyEncodingTypePB pk_encoding_type = PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(1);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    //
+    //  | column | type   | KEY | NULL |
+    //  +--------+--------+-----+------+
+    //  |   c0   | BIGINT | YES |  NO  |
+    //  |   c1   | INT    | NO  |  NO  |
+    auto schema = metadata->mutable_schema();
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    schema->set_primary_key_encoding_type(pk_encoding_type);
+    auto c0 = schema->add_column();
+    {
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("BIGINT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    auto c1 = schema->add_column();
+    {
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_aggregation("REPLACE");
+    }
+    return metadata;
+}
+
+// Test fixture for BIGINT PK tables with configurable encoding type
+class PkTabletSSTWriterBigintKeyTest : public TestBase, public ::testing::WithParamInterface<PrimaryKeyEncodingTypePB> {
+public:
+    PkTabletSSTWriterBigintKeyTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_bigint_pk_tablet_metadata(GetParam());
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    }
+
+protected:
+    void SetUp() override {
+        clear_and_init_test_dir();
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    Chunk generate_bigint_data(int64_t chunk_size, int64_t start_index = 0) {
+        auto c0 = Int64Column::create();
+        auto c1 = Int32Column::create();
+        for (int64_t i = 0; i < chunk_size; i++) {
+            c0->append(start_index + i);
+            c1->append(static_cast<int32_t>((start_index + i) * 3));
+        }
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    }
+
+    ChunkPtr read(int64_t tablet_id, int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
+            auto st = reader->get_next(tmp.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            ret->append(*tmp);
+        }
+        return ret;
+    }
+
+    int64_t read_rows(int64_t tablet_id, int64_t version) {
+        auto chunk = read(tablet_id, version);
+        return chunk->num_rows();
+    }
+
+    constexpr static const char* const kTestDirectory = "test_pk_tablet_sst_writer_bigint";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = 456;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+    std::shared_ptr<FileSystem> _fs;
+};
+
+// Test try_enable_pk_index_eager_build: V2 encoding enables for single BIGINT key,
+// V1 encoding does not.
+TEST_P(PkTabletSSTWriterBigintKeyTest, test_try_enable_pk_index_eager_build_single_bigint_key) {
+    auto tablet_id = _tablet_metadata->id();
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_eager_build, true);
+
+    auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr.get(), tablet_id, _tablet_schema,
+                                                             /*txn_id=*/next_id(), /*flush_pool=*/nullptr,
+                                                             /*is_compaction=*/false);
+
+    writer->try_enable_pk_index_eager_build();
+
+    if (GetParam() == PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2) {
+        // V2: big-endian encoding preserves sort order for all types, so eager build should be enabled
+        EXPECT_TRUE(writer->enable_pk_index_eager_build());
+    } else {
+        // V1: single BIGINT key without big-endian encoding, eager build should NOT be enabled
+        EXPECT_FALSE(writer->enable_pk_index_eager_build());
+    }
+}
+
+// Test that SST construction works with single BIGINT PK under V2 encoding (ascending data),
+// and fails under V1 encoding because encoded keys are not in ascending order.
+TEST_P(PkTabletSSTWriterBigintKeyTest, test_sst_build_single_bigint_pk_ascending_data) {
+    auto tablet_id = _tablet_metadata->id();
+
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
+    ASSERT_OK(pk_sst_writer->reset_sst_writer(location_provider, _fs));
+
+    // Generate ascending BIGINT data: 200, 201, ..., 299
+    // This range crosses the 255/256 byte boundary, where little-endian encoding
+    // breaks bytewise ascending order (255=[FF,00,...] > 256=[00,01,...])
+    auto chunk = generate_bigint_data(100, 200);
+    auto st = pk_sst_writer->append_sst_record(chunk);
+
+    if (GetParam() == PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2) {
+        // V2 encoding: big-endian guarantees encoded keys are in ascending order, SST build succeeds
+        ASSERT_OK(st);
+        ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+        auto [file_info, sst_range] = std::move(sst_ret);
+        ASSERT_FALSE(file_info.path.empty());
+        ASSERT_GT(file_info.size, 0);
+    } else {
+        // V1 encoding: native byte order for BIGINT doesn't guarantee ascending encoded order.
+        // On little-endian platforms, the encoded bytes are not in ascending order,
+        // so SST builder's ascending key check fails.
+        // Note: This test validates the V1 limitation. On big-endian platforms this may not fail,
+        // but StarRocks primarily targets little-endian (x86_64/aarch64).
+        ASSERT_FALSE(st.ok());
+    }
+}
+
+// Test end-to-end write with eager PK index build for single BIGINT PK under V2 encoding:
+// DeltaWriter should successfully produce SST files.
+TEST_P(PkTabletSSTWriterBigintKeyTest, test_write_with_eager_build_single_bigint_pk) {
+    auto tablet_id = _tablet_metadata->id();
+    ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
+
+    auto chunk0 = generate_bigint_data(100, 0);
+    auto chunk1 = generate_bigint_data(100, 100);
+    auto indexes = std::vector<uint32_t>(chunk0.num_rows());
+    for (uint32_t i = 0, n = chunk0.num_rows(); i < n; i++) {
+        indexes[i] = i;
+    }
+
+    int version = 1;
+    int64_t txn_id = next_id();
+
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+
+    if (GetParam() == PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2) {
+        // V2: eager build enabled for single BIGINT key, SST files should be generated
+        EXPECT_GT(txn_log->op_write().ssts_size(), 0);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_EQ(200, read_rows(tablet_id, version + 1));
+    } else {
+        // V1: eager build disabled for single BIGINT key, no SST files
+        EXPECT_EQ(txn_log->op_write().ssts_size(), 0);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_EQ(200, read_rows(tablet_id, version + 1));
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(PkEncodingType, PkTabletSSTWriterBigintKeyTest,
+                         ::testing::Values(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1,
+                                           PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2));
 
 } // namespace starrocks::lake

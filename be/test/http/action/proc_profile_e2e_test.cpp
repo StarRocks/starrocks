@@ -19,7 +19,7 @@
 #include <sstream>
 #include <string>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "http/action/profile_utils.h"
 #include "http/default_path_handlers.h"
 
@@ -33,8 +33,8 @@ protected:
         std::filesystem::create_directories(test_dir);
 
         // Set config to use test directory
-        original_sys_log_dir = config::sys_log_dir.c_str();
-        config::sys_log_dir = test_dir.c_str();
+        original_sys_log_dir = config::sys_log_dir;
+        config::sys_log_dir = test_dir;
 
         // Create fake profile files
         create_fake_profile_files();
@@ -92,7 +92,7 @@ protected:
     }
 
     std::string test_dir;
-    const char* original_sys_log_dir;
+    std::string original_sys_log_dir;
 };
 
 TEST_F(ProcProfileE2ETest, TestProcProfilePageDisplay) {

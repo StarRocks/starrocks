@@ -70,14 +70,14 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
         if (slot_id < 1 || slot_id > 6) {
             return Status::InternalError(fmt::format("invalid slot id: {}", slot_id));
         }
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
         switch (slot_id) {
         case 1: {
             // type
             {
                 const std::string* str = &info.type;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
@@ -86,7 +86,7 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             {
                 const std::string* str = &info.name;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
@@ -94,9 +94,9 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             // dbid
             {
                 if (info.__isset.dbid) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.dbid);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.dbid);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -105,9 +105,9 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             // tableid
             {
                 if (info.__isset.tableid) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tableid);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.tableid);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -116,9 +116,9 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             // partitionid
             {
                 if (info.__isset.partitionid) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partitionid);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.partitionid);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -128,7 +128,7 @@ Status SchemaRecycleBinCatalogs::_fill_chunk(ChunkPtr* chunk) {
             {
                 DateTimeValue t;
                 t.from_unixtime(info.droptime, _runtime_state->timezone_obj());
-                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
             }
             break;
         }

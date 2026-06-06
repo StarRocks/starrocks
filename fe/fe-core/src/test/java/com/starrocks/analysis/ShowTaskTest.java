@@ -83,7 +83,7 @@ public class ShowTaskTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, connectContext);
         Task manualTask = TaskBuilder.buildTask(submitTaskStmt, connectContext);
         manualTask.setId(0);
-        taskManager.createTask(manualTask, true);
+        taskManager.replayCreateTask(manualTask);
 
         Task periodTask = new Task("test_periodical");
         periodTask.setId(1);
@@ -95,7 +95,7 @@ public class ShowTaskTest {
         TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
         periodTask.setSchedule(taskSchedule);
         periodTask.setType(Constants.TaskType.PERIODICAL);
-        taskManager.createTask(periodTask, true);
+        taskManager.replayCreateTask(periodTask);
 
         UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
         TGetTasksParams tGetTasksParams = new TGetTasksParams();
@@ -110,7 +110,7 @@ public class ShowTaskTest {
                 Assertions.assertEquals(task.getSchedule(),"MANUAL");
             }
         }
-        taskManager.dropTasks(ImmutableList.of(periodTask.getId(), manualTask.getId()), false);
+        taskManager.dropTasks(ImmutableList.of(periodTask.getId(), manualTask.getId()));
     }
 
     @Test
@@ -123,7 +123,7 @@ public class ShowTaskTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, connectContext);
         Task manualTask = TaskBuilder.buildTask(submitTaskStmt, connectContext);
         manualTask.setId(0);
-        taskManager.createTask(manualTask, true);
+        taskManager.replayCreateTask(manualTask);
 
         Task unknownTask = new Task("test_unknown");
         unknownTask.setId(1);
@@ -135,7 +135,7 @@ public class ShowTaskTest {
         TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
         unknownTask.setSchedule(taskSchedule);
         unknownTask.setType(null);
-        taskManager.createTask(unknownTask, true);
+        taskManager.replayCreateTask(unknownTask);
 
         UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
         TGetTasksParams tGetTasksParams = new TGetTasksParams();
@@ -150,6 +150,6 @@ public class ShowTaskTest {
                 Assertions.assertEquals(task.getSchedule(),"MANUAL");
             }
         }
-        taskManager.dropTasks(ImmutableList.of(unknownTask.getId(), manualTask.getId()), false);
+        taskManager.dropTasks(ImmutableList.of(unknownTask.getId(), manualTask.getId()));
     }
 }

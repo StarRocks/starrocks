@@ -17,11 +17,13 @@ package com.starrocks.sql.optimizer.rule;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.BenchmarkScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoCTEImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumeInlineImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerReuseImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CacheStatsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.DeltaLakeScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
@@ -55,9 +57,18 @@ import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaAggregateRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaFilterRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaIcebergScanRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaJoinRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaProjectRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaUnionRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionAggregateRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionFilterRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionIcebergScanRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionJoinRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -91,6 +102,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyExceptRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyIntersectRule;
@@ -146,6 +158,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToPreAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
@@ -196,7 +209,9 @@ public class RuleSet {
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
+            new CacheStatsScanImplementationRule(),
             new JDBCScanImplementationRule(),
+            new BenchmarkScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
@@ -385,6 +400,7 @@ public class RuleSet {
                     PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
                     PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
                     new PruneEmptyDirectRule(),
+                    new PruneEmptyCTEAnchorRule(),
                     new PruneEmptyUnionRule(),
                     new PruneEmptyIntersectRule(),
                     new PruneEmptyExceptRule(),
@@ -426,6 +442,23 @@ public class RuleSet {
                     new MinMaxOptOnScanRule()
             ));
 
+    // Unified IVM delta/version rewrite rules.
+    public static final Rule IVM_DELTA_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_IVM_DELTA_REWRITE, ImmutableList.of(
+                    new IvmDeltaAggregateRule(),
+                    new IvmDeltaJoinRule(),
+                    new IvmDeltaUnionRule(),
+                    new IvmDeltaIcebergScanRule(),
+                    new IvmDeltaFilterRule(),
+                    new IvmDeltaProjectRule(),
+                    new IvmVersionAggregateRule(),
+                    new IvmVersionJoinRule(),
+                    new IvmVersionUnionRule(),
+                    new IvmVersionIcebergScanRule(),
+                    new IvmVersionFilterRule(),
+                    new IvmVersionProjectRule()
+            ));
+
     public static final Rule TVR_REWRITE_RULES =
             new CombinationRule(RuleType.GP_TVR_REWRITE, ImmutableList.of(
                     new TvrTableScanRule(),
@@ -442,6 +475,7 @@ public class RuleSet {
         transformRules.add(SplitTwoPhaseAggRule.getInstance());
         transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
+        transformRules.add(PushDownTopNToPreAggRule.getInstance());
     }
 
     public void addJoinTransformationRules() {
@@ -475,12 +509,6 @@ public class RuleSet {
 
     public List<Rule> getImplementRules() {
         return implementRules;
-    }
-
-    public void addRealtimeMVRules() {
-        this.implementRules.add(StreamJoinImplementationRule.getInstance());
-        this.implementRules.add(StreamAggregateImplementationRule.getInstance());
-        this.implementRules.add(StreamScanImplementationRule.getInstance());
     }
 
     public void addHashJoinImplementationRule() {

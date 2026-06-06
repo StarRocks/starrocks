@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Collection;
 import java.util.List;

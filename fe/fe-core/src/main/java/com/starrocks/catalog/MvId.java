@@ -14,7 +14,11 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Strings;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Objects;
 
@@ -24,9 +28,13 @@ public class MvId {
     @SerializedName(value = "id")
     private final long id;
 
+    // ignore in gson serialization
+    private final transient Supplier<String> lazyName;
+
     public MvId(long dbId, long id) {
         this.dbId = dbId;
         this.id = id;
+        this.lazyName = Suppliers.memoize(() -> getNameByMVId());
     }
 
     public long getDbId() {
@@ -54,11 +62,32 @@ public class MvId {
         return Objects.hash(dbId, id);
     }
 
+    public String getName() {
+        return lazyName.get();
+    }
+
+    /**
+     * Get the mv's name
+     */
+    private String getNameByMVId() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return "";
+        }
+        Table table = db.getTable(id);
+        if (table == null) {
+            return "";
+        }
+        return String.format("%s.%s", db.getFullName(), table.getName());
+    }
+
     @Override
     public String toString() {
-        return "MvId{" +
-                "dbId=" + dbId +
-                ", id=" + id +
-                '}';
+        String name =  getName();
+        if (Strings.isNullOrEmpty(name)) {
+            return String.format("%s.%s", dbId, id);
+        } else {
+            return name;
+        }
     }
 }

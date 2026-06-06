@@ -196,6 +196,13 @@ if __name__ == "__main__":
         print("In alive mode, set concurrency=1 in default!")
         concurrency = 1
 
+    # Auto-exclude no_arrow_flight_sql cases in arrow mode
+    if arrow_mode:
+        if attr:
+            attr = attr + ",!no_arrow_flight_sql"
+        else:
+            attr = "!no_arrow_flight_sql"
+
     # set environment
     os.environ.update(
         {
@@ -209,6 +216,8 @@ if __name__ == "__main__":
             "run_info": run_info,
             "log_filtered": str(log_filtered),
             "check_status": str(check_status),
+            "case_timeout": str(timeout),
+            "arrow_mode": "true" if arrow_mode else "false",
         }
     )
 
@@ -242,7 +251,7 @@ if __name__ == "__main__":
         print("-t|--timeout(s) must be in (0, 10min]!")
         print_help()
         sys.exit(4)
-    argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-timeout=%s" % str(timeout + 5)]
     argv += ["--process-restartworker"]
 
     # test xml

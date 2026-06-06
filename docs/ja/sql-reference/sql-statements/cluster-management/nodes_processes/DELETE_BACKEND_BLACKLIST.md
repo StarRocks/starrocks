@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE/CN ノードを BE ブラックリストから削除します。"
 ---
 
 # DELETE BACKEND/COMPUTE NOT BLACKLIST

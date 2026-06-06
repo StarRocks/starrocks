@@ -63,13 +63,13 @@ refresh materialized view  test_mv1 with sync mode;
 
 select * from test_mv1 order by 1, 2;
 
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t1 group by dt, province order by 1, 2;
 select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;
 select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;
@@ -79,13 +79,13 @@ select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, provi
 select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;
 
 INSERT INTO t1 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 group by dt, province order by 1, 2;", "test_mv1")
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t1 group by dt, province order by 1, 2;
 select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;
 select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;
@@ -106,13 +106,13 @@ PROPERTIES (
 as select dt, province, sum(age) from t2 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t2 group by dt, province order by 1, 2;
 select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;
 select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;
@@ -122,13 +122,13 @@ select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, provi
 select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;
 
 INSERT INTO t2 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 group by dt, province order by 1, 2;", "test_mv1")
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t2 group by dt, province order by 1, 2;
 select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;
 select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;
@@ -150,13 +150,13 @@ PROPERTIES (
 as select dt, province, sum(age) from t3 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
 select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;
 select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;
@@ -166,13 +166,13 @@ select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, provi
 select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;
 
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
 select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;
 select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;

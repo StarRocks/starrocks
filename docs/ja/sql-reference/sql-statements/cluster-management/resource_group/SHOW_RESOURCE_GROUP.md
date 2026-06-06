@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW RESOURCE GROUP は、リソースグループの情報を表示します。"
 ---
 
 # SHOW RESOURCE GROUP

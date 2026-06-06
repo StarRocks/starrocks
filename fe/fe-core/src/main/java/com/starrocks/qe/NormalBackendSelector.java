@@ -28,6 +28,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -72,27 +73,19 @@ public class NormalBackendSelector implements BackendSelector {
         }
 
         for (TScanRangeLocations scanRangeLocations : locations) {
+            // Each scanRangeLocations is corresponding to a tablet.
             // assign this scan range to the host w/ the fewest assigned row count
             Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;
             List<TScanRangeLocation> backupLocations = new ArrayList<>();
 
+            List<Long> unavailableDataNodeIds = new ArrayList<>();
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
+                // Each location is corresponding to a replica of the tablet.
                 if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
-                    if (workerProvider.allowUsingBackupNode()) {
-                        long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
-                        LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
-                        if (backupNodeId > 0) {
-                            // using the backupNode to generate a new ScanRangeLocation
-                            TScanRangeLocation backupLocation = new TScanRangeLocation();
-                            backupLocation.setBackend_id(backupNodeId);
-                            backupLocation.setServer(workerProvider.getWorkerById(backupNodeId).getAddress());
-                            backupLocations.add(backupLocation);
-                        }
-                    }
+                    unavailableDataNodeIds.add(location.getBackend_id());
                     continue;
                 }
-
                 Long assignedBytes = assignedRowCountPerHost.getOrDefault(location.server, 0L);
                 if (assignedBytes < minRowCount) {
                     minRowCount = assignedBytes;
@@ -100,13 +93,24 @@ public class NormalBackendSelector implements BackendSelector {
                 }
             }
 
-            // give a try of the backupLocations if minLocation is null
-            if (minLocation == null && !backupLocations.isEmpty()) {
-                for (TScanRangeLocation location : backupLocations) {
-                    Long assignedBytes = assignedRowCountPerHost.getOrDefault(location.server, 0L);
-                    if (assignedBytes < minRowCount) {
-                        minRowCount = assignedBytes;
-                        minLocation = location;
+            // [Shared-Data Only] If all replicas are in unavailable nodes, a backup node can be selected on behalf of starmgr.
+            if (minLocation == null && workerProvider.allowUsingBackupNode() && !unavailableDataNodeIds.isEmpty()) {
+                Collections.shuffle(unavailableDataNodeIds);
+                for (long unavailableId : unavailableDataNodeIds) {
+                    long backupNodeId = workerProvider.selectBackupWorker(unavailableId);
+                    LOG.debug("Select a backup node:{} for node:{}", backupNodeId, unavailableId);
+                    if (backupNodeId > 0) {
+                        // using the backupNode to generate a new ScanRangeLocation
+                        TScanRangeLocation backupLocation = new TScanRangeLocation();
+                        backupLocation.setBackend_id(backupNodeId);
+                        backupLocation.setServer(workerProvider.getWorkerById(backupNodeId).getAddress());
+                        Long assignedBytes = assignedRowCountPerHost.getOrDefault(backupLocation.server, 0L);
+                        if (assignedBytes < minRowCount) {
+                            minRowCount = assignedBytes;
+                            minLocation = backupLocation;
+                        }
+                        // one backup node is enough
+                        break;
                     }
                 }
             }

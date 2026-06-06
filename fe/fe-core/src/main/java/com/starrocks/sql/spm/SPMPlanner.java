@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -75,6 +76,7 @@ public class SPMPlanner {
         }
 
         watch.start();
+        String result = SPMMetrics.REWRITE_MISS;
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
             analyze(query);
             checkTimeout();
@@ -104,6 +106,7 @@ public class SPMPlanner {
                     checkTimeout();
                     if (bind(base, query)) {
                         baseline = base;
+                        result = SPMMetrics.REWRITE_HIT;
                         return replacePlan(base);
                     }
                 }
@@ -111,7 +114,10 @@ public class SPMPlanner {
         } catch (Exception e) {
             // fallback to original query
             baseline = null; // clean baseline
+            result = SPMMetrics.REWRITE_ERROR;
             return query;
+        } finally {
+            SPMMetrics.increaseRewrite(result);
         }
         return query;
     }
@@ -201,9 +207,9 @@ public class SPMPlanner {
         @Override
         public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, ParseNode node2) {
             TimestampArithmeticExpr other = cast(node2);
-            Preconditions.checkNotNull(node.getFn());
-            Preconditions.checkNotNull(other.getFn());
-            if (!StringUtils.equals(node.getFn().functionName(), other.getFn().functionName())) {
+            String funcName = ExprUtils.getTimestampArithmeticFunctionName(node);
+            String otherFuncName = ExprUtils.getTimestampArithmeticFunctionName(other);
+            if (!StringUtils.equalsIgnoreCase(funcName, otherFuncName)) {
                 return false;
             }
             return check(node.getChildren(), ((Expr) node2).getChildren());

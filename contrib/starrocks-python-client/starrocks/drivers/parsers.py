@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.resources
 import logging
+import re
 from typing import Any, List, Tuple
 
 from lark import Lark, Token, Transformer, v_args
@@ -57,6 +58,11 @@ class DataTypeTransformer(Transformer):
             unsigned = True
         if type_name_lower == "bigint" and unsigned:
             return self.type_map["largeint"]
+
+        # Convert TINYINT(1) to BOOLEAN during reflection
+        # This ensures that TINYINT(1) from database is always reflected as BOOLEAN
+        if type_name_lower == "tinyint" and args and len(args) == 1 and args[0] == 1:
+            return self.type_map["boolean"]
 
         type_class = self.type_map.get(type_name_lower)
         # logger.debug(f"type_class: {type_class}")
@@ -100,6 +106,7 @@ class DataTypeTransformer(Transformer):
 _grammar_text = None
 # For singleton pattern
 _data_type_parser = None
+_TYPE_COMMENT_PATTERN = re.compile(r"\s+COMMENT\s+'(?:''|[^'])*'", flags=re.IGNORECASE)
 
 
 def _get_grammar_text() -> str:
@@ -131,7 +138,11 @@ def parse_data_type(type_str: str) -> Any:
     Returns:
         A SQLAlchemy type object.
     """
-    return get_data_type_parser().parse(type_str)
+    # Reflection can return nested types with inline SQL field comments
+    # (e.g. `... value varchar COMMENT '' ...`), which are not part of the
+    # datatype grammar and would otherwise break parsing.
+    normalized_type_str = _TYPE_COMMENT_PATTERN.sub("", type_str)
+    return get_data_type_parser().parse(normalized_type_str)
 
 
 # --- Materialized View Refresh Clause Parser ---
@@ -197,5 +208,10 @@ def _get_mv_refresh_parser() -> Lark:
 
 
 def parse_mv_refresh_clause(refresh_clause_str: str) -> dict:
-    """Parses a full 'REFRESH ...' string and returns a dictionary with moment and scheme."""
+    """Parses a full 'REFRESH ...' string and returns a dictionary with moment and scheme.
+    Returns:
+        A dictionary with keys "refresh_moment" and "refresh_type". The values are like:
+        - "refresh_moment": "IMMEDIATE" | "DEFERRED" | None,
+        - "refresh_type": "ASYNC" | "MANUAL" | "INCREMENTAL" | None,
+    """
     return _get_mv_refresh_parser().parse(refresh_clause_str)

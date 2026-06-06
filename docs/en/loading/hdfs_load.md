@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 keywords: ['Broker Load']
+description: "How to load data from HDFS into StarRocks using INSERT+FILES(), Broker Load, or Spark Load."
 ---
 
 # Load data from HDFS
@@ -40,9 +41,9 @@ This method is available from v3.1 onwards and currently supports only the Parqu
 
 With `FILES()`, you can:
 
-- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
 - Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS).
-- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
 
 ### Typical examples
 

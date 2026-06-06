@@ -16,9 +16,18 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
+#include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "base/uuid/uuid_generator.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -27,8 +36,6 @@
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_clone_task.h"
-#include "testutil/assert.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 
@@ -50,13 +57,13 @@ public:
 
     void TearDown() override {
         auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
     }
@@ -146,7 +153,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     auto replicate_snapshot_agent_task = std::make_shared<ReplicateSnapshotAgentTaskRequest>(
             agent_task_request, agent_task_request.replicate_snapshot_req, time(nullptr));
 
-    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr);
+    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr, nullptr);
 
     TPublishVersionRequest publish_version_request;
     publish_version_request.__set_transaction_id(_transaction_id);
@@ -254,6 +261,87 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     tablet->set_is_dropping(false);
 }
 
+TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::CREATE));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::ALTER));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::REMOTE_SNAPSHOT));
+}
+
+// The dedicated `replicate_file` pool is built by AgentServer::Impl::init() alongside
+// `replicate_snapshot`. Verify it's exposed via the public accessor and is a distinct
+// pool from `replicate_snapshot` — the distinct-pool invariant is what makes the
+// outer-task -> ThreadPoolToken::wait() pattern in lake replication safe.
+TEST_F(AgentTaskTest, get_lake_replicate_file_thread_pool_returns_distinct_pool) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    auto* file_pool = agent_server->get_lake_replicate_file_thread_pool();
+    auto* snapshot_pool = agent_server->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
+    EXPECT_NE(nullptr, file_pool);
+    EXPECT_NE(nullptr, snapshot_pool);
+    EXPECT_NE(file_pool, snapshot_pool);
+}
+
+TEST_F(AgentTaskTest, get_thread_pool_returns_null_for_unsupported_types) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    const int unsupported_types[] = {TTaskType::PUSH, TTaskType::REALTIME_PUSH, TTaskType::EXTERNAL_CLUSTER_SNAPSHOT,
+                                     TTaskType::NUM_TASK_TYPE, -1};
+    for (int type : unsupported_types) {
+        EXPECT_EQ(nullptr, agent_server->get_thread_pool(type)) << type;
+    }
+}
+
+TEST_F(AgentTaskTest, update_thread_pool_size_applies_cpu_scaled_policy) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::UPLOAD);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+    DeferOp defer([agent_server, original_max_threads]() {
+        agent_server->update_max_thread_by_type(TTaskType::UPLOAD, original_max_threads);
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::UPLOAD, 0);
+
+    ASSERT_EQ(std::max(1, CpuInfo::num_cores()), thread_pool->max_threads());
+}
+
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    constexpr int new_parallelism = 4;
+    const int expected_max_threads =
+            std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
+
+    ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
+}
+
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_skips_missing_pool) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, 4);
+
+    ASSERT_EQ(original_max_threads, thread_pool->max_threads());
+}
+
 TEST_F(AgentTaskTest, create_tablet_task_timeout) {
     TCreateTabletReq create_tablet_req = get_create_tablet_request(10010, 368169791, 2);
     create_tablet_req.__set_timeout_ms(2000);
@@ -283,6 +371,90 @@ TEST_F(AgentTaskTest, create_tablet_task_timeout) {
                   request->task_status.error_msgs[0]);
     });
     run_create_tablet_task(agent_task, nullptr);
+}
+
+TEST_F(AgentTaskTest, drop_tablet_blocked_by_clone_task) {
+    // This test verifies the fix for the DROP/CLONE race condition
+    // where a DROP task should be rejected if a CLONE task is in progress for the same tablet
+
+    // Register a CLONE task for the tablet using the tablet_manager's register_clone_tablet
+    StorageEngine::instance()->tablet_manager()->register_clone_tablet(_tablet_id);
+
+    // Verify CLONE task is registered
+    EXPECT_TRUE(StorageEngine::instance()->tablet_manager()->check_clone_tablet(_tablet_id));
+
+    // Create a DROP task request
+    TDropTabletReq drop_tablet_req;
+    drop_tablet_req.__set_tablet_id(_tablet_id);
+    drop_tablet_req.__set_schema_hash(_schema_hash);
+    drop_tablet_req.__set_force(false);
+
+    DeferOp defer([]() {
+        // Clean up the CLONE task registration
+        StorageEngine::instance()->tablet_manager()->unregister_clone_tablet(10003); // _tablet_id
+    });
+
+    // Try to drop the tablet - should be rejected because CLONE is in progress
+    TabletDropFlag flag = kMoveFilesToTrash;
+    auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, flag);
+
+    // Verify DROP was rejected
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("CLONE task is in progress") != std::string::npos);
+
+    // Verify tablet still exists (was not dropped)
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    EXPECT_TRUE(tablet != nullptr);
+
+    // Now unregister the CLONE task
+    StorageEngine::instance()->tablet_manager()->unregister_clone_tablet(_tablet_id);
+    EXPECT_FALSE(StorageEngine::instance()->tablet_manager()->check_clone_tablet(_tablet_id));
+
+    // Now DROP should succeed
+    st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, flag);
+    EXPECT_TRUE(st.ok());
+}
+
+TEST_F(AgentTaskTest, drop_tablet_proceeds_when_no_clone_task) {
+    // This test verifies that DROP task proceeds normally when there is no CLONE task
+
+    // Create a DROP task request
+    TAgentTaskRequest drop_agent_task_request;
+    drop_agent_task_request.__set_task_type(TTaskType::DROP);
+    drop_agent_task_request.__set_signature(_tablet_id);
+
+    TDropTabletReq drop_tablet_req;
+    drop_tablet_req.__set_tablet_id(_tablet_id);
+    drop_tablet_req.__set_schema_hash(_schema_hash);
+    drop_tablet_req.__set_force(false);
+
+    drop_agent_task_request.__set_drop_tablet_req(drop_tablet_req);
+
+    auto drop_agent_task = std::make_shared<DropTabletAgentTaskRequest>(
+            drop_agent_task_request, drop_agent_task_request.drop_tablet_req, time(nullptr));
+
+    // Set up sync point to verify DROP task succeeds
+    bool drop_succeeded = false;
+    DeferOp defer([&drop_succeeded]() {
+        SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&drop_succeeded](void* arg) {
+        TFinishTaskRequest* request = (TFinishTaskRequest*)arg;
+        if (request->task_type == TTaskType::DROP) {
+            // DROP task should succeed
+            EXPECT_EQ(TStatusCode::OK, request->task_status.status_code);
+            drop_succeeded = true;
+        }
+    });
+
+    // Execute DROP task - should succeed
+    run_drop_tablet_task(drop_agent_task, nullptr);
+
+    // Verify DROP succeeded
+    EXPECT_TRUE(drop_succeeded);
 }
 
 } // namespace starrocks

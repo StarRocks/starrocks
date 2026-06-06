@@ -27,18 +27,18 @@
 #include <istream>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "fs/s3/poco_common.h"
 #include "io/s3_zero_copy_iostream.h"
-#include "util/defer_op.h"
 
 namespace starrocks::poco {
 
 PocoHttpClient::PocoHttpClient(const Aws::Client::ClientConfiguration& clientConfiguration)
         : timeouts(ConnectionTimeouts(
-                  Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000),     // connection timeout.
-                  Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000), // send timeout.
-                  Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000)  // receive timeout.
+                  Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000), // connection timeout.
+                  Poco::Timespan(clientConfiguration.requestTimeoutMs * 1000), // send timeout.
+                  Poco::Timespan(clientConfiguration.requestTimeoutMs * 1000)  // receive timeout.
                   )) {}
 
 std::shared_ptr<Aws::Http::HttpResponse> PocoHttpClient::MakeRequest(
@@ -115,6 +115,11 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
                 break;
             case Aws::Http::HttpMethod::HTTP_PATCH:
                 poco_request.setMethod(Poco::Net::HTTPRequest::HTTP_PATCH);
+                break;
+            default:
+                // TODO: Replace this fallback with explicit enum handling once the AWS dependency is upgraded
+                // to a version that defines HTTP_CONNECT, HTTP_OPTIONS, and HTTP_TRACE in Aws::Http::HttpMethod.
+                poco_request.setMethod(Aws::Http::HttpMethodMapper::GetNameForHttpMethod(request.GetMethod()));
                 break;
             }
 

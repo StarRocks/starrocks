@@ -15,6 +15,8 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 public class TaskRunTest {
@@ -70,5 +73,98 @@ public class TaskRunTest {
         props.put(SessionVariable.QUERY_TIMEOUT, "-10");
         taskRun.setProperties(props);
         assertEquals(Config.task_runs_timeout_second, taskRun.getExecuteTimeoutS());
+    }
+
+    @Test
+    public void testRefreshTaskPropertiesNonMvTask() {
+        // Create a non-MV task
+        Task task = new Task("regular-task");
+        task.setSource(Constants.TaskSource.INSERT);
+
+        taskRun.setTask(task);
+        taskRun.setProperties(new HashMap<>());
+
+        ConnectContext ctx = new ConnectContext(null);
+
+        // Call refreshTaskProperties for non-MV task
+        Map<String, String> newProperties = taskRun.refreshTaskProperties(ctx);
+
+        // Should return empty properties for non-MV tasks
+        assertTrue(newProperties.isEmpty());
+    }
+
+    @Test
+    public void testRefreshTaskPropertiesMvIdNotSet() {
+        // Create an MV task but without MV_ID in properties
+        Task task = new Task("mv-task");
+        task.setSource(Constants.TaskSource.MV);
+
+        Map<String, String> props = new HashMap<>();
+        // Intentionally not setting MV_ID
+        taskRun.setProperties(props);
+        taskRun.setTask(task);
+
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setDatabase("test_db");
+
+        // Call refreshTaskProperties - should handle missing MV_ID gracefully
+        Map<String, String> newProperties = taskRun.refreshTaskProperties(ctx);
+
+        // Should return empty properties when MV_ID is not set
+        assertTrue(newProperties.isEmpty());
+    }
+
+    @Test
+    public void testTaskRunPropertiesConstants() {
+        // Verify the constants are defined correctly
+        assertEquals("mvId", TaskRun.MV_ID);
+        assertEquals("PARTITION_START", TaskRun.PARTITION_START);
+        assertEquals("PARTITION_END", TaskRun.PARTITION_END);
+        assertEquals("FORCE", TaskRun.FORCE);
+    }
+
+    @Test
+    public void testSessionPrefixedInsertTimeoutProperty() {
+        int oldTtl = Config.task_ttl_second;
+        Config.task_ttl_second = 300000;
+        try {
+            Map<String, String> props = new HashMap<>();
+            // session variables are stored with a "session." prefix
+            props.put(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.INSERT_TIMEOUT, "259200");
+            taskRun.setProperties(props);
+            // Before the fix this returned task_runs_timeout_second (14400) because the
+            // prefixed key never matched; after the fix it honors 259200 (capped by ttls).
+            assertEquals(Math.min(259200, Config.task_runs_ttl_second), taskRun.getExecuteTimeoutS());
+        } finally {
+            Config.task_ttl_second = oldTtl;
+        }
+    }
+
+    @Test
+    public void testSessionPrefixedQueryTimeoutProperty() {
+        int oldTtl = Config.task_ttl_second;
+        Config.task_ttl_second = 300000;
+        try {
+            Map<String, String> props = new HashMap<>();
+            props.put(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.QUERY_TIMEOUT, "259200");
+            taskRun.setProperties(props);
+            assertEquals(Math.min(259200, Config.task_runs_ttl_second), taskRun.getExecuteTimeoutS());
+        } finally {
+            Config.task_ttl_second = oldTtl;
+        }
+    }
+
+    @Test
+    public void testBareInsertTimeoutStillWorks() {
+        int oldTtl = Config.task_ttl_second;
+        Config.task_ttl_second = 300000;
+        try {
+            Map<String, String> props = new HashMap<>();
+            props.put(SessionVariable.INSERT_TIMEOUT, "259200");
+            taskRun.setProperties(props);
+            assertEquals(Math.min(259200, Config.task_runs_ttl_second), taskRun.getExecuteTimeoutS());
+        } finally {
+            Config.task_ttl_second = oldTtl;
+        }
     }
 }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <utility>
 
 #include "exprs/expr.h"
@@ -19,7 +21,7 @@ namespace starrocks {
 
 class Column;
 
-// This class is a bridge to connect ColumnPredicatew which is used in scan/storage layer, and ExprContext which is
+// This class is a bridge to connect ColumnPredicate which is used in scan/storage layer, and ExprContext which is
 // used in computation layer. By bridging that, we can push more predicates from computation layer onto storage layer,
 // hopefully to scan less data and boost performance.
 
@@ -42,6 +44,8 @@ public:
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
+    bool is_match_expr() const;
+    bool is_negated_expr() const;
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_original_bloom_filter() const override { return false; }
     bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
@@ -61,6 +65,8 @@ public:
     // otherwise, it will contain one or more predicates which form the conjunction normal form
     Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
                                               std::vector<const ColumnExprPredicate*>* output) const;
+    StatusOr<std::optional<roaring::Roaring>> read_inverted_index(const std::string_view column_name,
+                                                                  InvertedIndexIterator* iterator) const;
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override;
 
@@ -82,7 +88,7 @@ private:
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;
-    bool _monotonic;
+    bool _monotonic{true};
     mutable std::vector<uint8_t> _tmp_select;
 };
 

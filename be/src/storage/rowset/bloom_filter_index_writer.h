@@ -56,6 +56,8 @@ public:
 
     BloomFilterIndexWriter() = default;
     virtual ~BloomFilterIndexWriter() = default;
+    BloomFilterIndexWriter(const BloomFilterIndexWriter&) = delete;
+    const BloomFilterIndexWriter& operator=(const BloomFilterIndexWriter&) = delete;
 
     virtual void add_values(const void* values, size_t count) = 0;
 
@@ -66,10 +68,6 @@ public:
     virtual Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) = 0;
 
     virtual uint64_t size() = 0;
-
-private:
-    BloomFilterIndexWriter(const BloomFilterIndexWriter&) = delete;
-    const BloomFilterIndexWriter& operator=(const BloomFilterIndexWriter&) = delete;
 };
 
 } // namespace starrocks

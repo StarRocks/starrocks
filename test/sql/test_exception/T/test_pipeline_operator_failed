@@ -12,3 +12,7 @@ admin enable failpoint 'operator_return_failed_status';
 [UC] select count(*) from t0;
 [UC] select count(*) from t0 group by c0;
 admin disable failpoint 'operator_return_failed_status';
+
+CLEANUP {
+    admin disable failpoint 'operator_return_failed_status';
+} END CLEANUP

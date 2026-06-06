@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
 #include <gtest/gtest.h>
-#include <testutil/assert.h>
 
 #include <memory>
 #include <random>
@@ -22,21 +22,20 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorted_chunks_merger.h"
+#include "compute_env/sorting/sorting.h"
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
 #include "exprs/column_ref.h"
-#include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
-#include "runtime/sorted_chunks_merger.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -221,7 +220,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         null_first.push_back(true);
         map[i] = i;
     }
-    auto chunk = std::make_shared<Chunk>(columns, map);
+    auto chunk = std::make_shared<Chunk>(std::move(columns), map);
 
     RuntimeState* runtime_state = suite._runtime_state.get();
     int64_t item_processed = 0;
@@ -336,7 +335,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
         null_first.push_back(true);
         map[i] = i;
     }
-    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, map);
+    ChunkPtr base_chunk = std::make_shared<Chunk>(std::move(columns), map);
 
     int64_t num_rows = 0;
     for (auto _ : state) {
@@ -421,7 +420,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         map[i] = i;
     }
     ChunkPtr chunk1 = std::make_shared<Chunk>(columns, map);
-    ChunkPtr chunk2 = std::make_shared<Chunk>(columns, map);
+    ChunkPtr chunk2 = std::make_shared<Chunk>(std::move(columns), map);
 
     int64_t num_rows = 0;
     SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
@@ -470,7 +469,7 @@ static void do_bench_materialize(benchmark::State& state, LogicalType data_type,
         columns.push_back(column);
         map[i] = i;
     }
-    auto template_chunk = std::make_shared<Chunk>(columns, map);
+    auto template_chunk = std::make_shared<Chunk>(std::move(columns), map);
 
     std::vector<ChunkPtr> chunks;
     std::vector<PermutationItem> perm;

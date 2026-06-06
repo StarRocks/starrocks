@@ -35,19 +35,22 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "column/column_access_path.h"
+#include "common/runtime_profile.h"
 #include "exec/exec_node.h"
 #include "gen_cpp/InternalService_types.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 namespace pipeline {
-class MorselQueue;
-using MorselQueuePtr = std::unique_ptr<MorselQueue>;
+class MorselQueueBuilder;
+using MorselQueueBuilderPtr = std::unique_ptr<MorselQueueBuilder>;
 class MorselQueueFactory;
 using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
 } // namespace pipeline
@@ -72,7 +75,7 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
-    ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
+    ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~ScanNode() override = default;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
@@ -88,7 +91,7 @@ public:
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
             int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
             TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
-    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    virtual StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges);
@@ -146,6 +149,14 @@ public:
         this->_back_pressure_throttle_time_upper_bound = value;
     }
 
+    void set_heavy_expr_slot_ids(std::vector<SlotId>&& slot_ids) { _heavy_expr_slot_ids = std::move(slot_ids); }
+
+    void set_heavy_expr_ctxs(std::vector<ExprContext*>& ctxs) { _heavy_expr_ctxs = std::move(ctxs); }
+
+    std::vector<SlotId>& get_heavy_expr_slot_ids() { return _heavy_expr_slot_ids; }
+
+    std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -162,7 +173,7 @@ protected:
     std::string _name;
     bool _enable_shared_scan = false;
     int64_t _mem_limit = 0;
-    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
+    int32_t _io_tasks_per_scan_operator = 0;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
@@ -171,6 +182,9 @@ protected:
     size_t _back_pressure_num_rows = 10240;
     int64_t _back_pressure_throttle_time = 500;
     int64_t _back_pressure_throttle_time_upper_bound = 5000;
+
+    std::vector<SlotId> _heavy_expr_slot_ids;
+    std::vector<ExprContext*> _heavy_expr_ctxs;
 };
 
 } // namespace starrocks

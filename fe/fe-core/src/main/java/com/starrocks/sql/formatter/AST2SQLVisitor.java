@@ -15,7 +15,7 @@
 package com.starrocks.sql.formatter;
 
 import com.google.common.base.Joiner;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
@@ -36,19 +36,21 @@ import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -217,7 +219,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                                 columnName));
                     }
                 } else if (columnName != null) {
-                    selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    selectListString.add(visit(expr) + " AS " + ParseUtil.backquote(columnName));
                 } else {
                     selectListString.add(visit(expr));
                 }
@@ -288,9 +290,8 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         }
         
         sqlBuilder.append(" AS (");
-        
+
         if (options.isEnablePrettyFormat()) {
-            // Pretty format: CTE definition with proper indentation
             options.increaseIndent();
             try {
                 sqlBuilder.append(options.indent());
@@ -300,11 +301,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             }
             sqlBuilder.append(options.indent()).append(")");
         } else {
-            // Default format: inline
             sqlBuilder.append(visit(relation.getCteQueryStatement()));
             sqlBuilder.append(") ");
         }
-        
+        if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+            sqlBuilder.append("[materialized] ");
+        } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+            sqlBuilder.append("[not_materialized] ");
+        }
+
         return sqlBuilder.toString();
     }
 
@@ -388,6 +393,11 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(node.getName().toSql());
 
+        if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
+            sqlBuilder.append(" ");
+            sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        }
+
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {
@@ -453,7 +463,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         sqlBuilder.append("(");
         sqlBuilder.append(
                 Optional.ofNullable(tableFunction.getChildExpressions())
-                        .orElse(Collections.emptyList()).stream().map(this::visit)
+                        .orElse(tableFunction.getFunctionParams().exprs()).stream().map(this::visit)
                         .collect(Collectors.joining(",")));
         sqlBuilder.append(")");
         sqlBuilder.append(")"); // TABLE(
@@ -470,11 +480,6 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         }
 
         return sqlBuilder.toString();
-    }
-
-    @Override
-    public String visitExpression(Expr expr, Void context) {
-        return expr.toSql();
     }
 
     @Override
@@ -564,10 +569,10 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         List<Expr> flatten = AnalyzerUtils.flattenPredicate(node);
         if (flatten.size() >= MASSIVE_COMPOUND_LIMIT && options.isEnableMassiveExpr()) {
             // Only record de-duplicated slots if there are too many compounds
-            List<SlotRef> exprs = node.collectAllSlotRefs(true);
+            List<SlotRef> exprs = ExprUtils.collectAllSlotRefs(node, true);
             String sortedSlots = exprs.stream()
                     .filter(SlotRef::isColumnRef)
-                    .map(SlotRef::toSql)
+                    .map(ExprToSql::toSql)
                     .sorted()
                     .collect(Collectors.joining(","));
             return "$massive_compounds[" + sortedSlots + "]$";
@@ -672,5 +677,13 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         output.append(options.indent()).append("END");
         
         return output.toString();
+    }
+
+    @Override
+    public String visitParameterExpr(Parameter node, Void context) {
+        if (node.getExpr() == null) {
+            return super.visitParameterExpr(node, context);
+        }
+        return visit(node.getExpr(), context);
     }
 }

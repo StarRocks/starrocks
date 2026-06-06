@@ -17,10 +17,10 @@ package com.starrocks.sql.common;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.type.PrimitiveType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -54,8 +54,8 @@ public class PCellSortedSetTest extends MVTestBase  {
         set.add(p1);
         set.add(p2);
 
-        Assertions.assertTrue(set.contains(p1));
-        Assertions.assertTrue(set.contains(p2));
+        Assertions.assertTrue(set.containsPCellWithName(p1));
+        Assertions.assertTrue(set.containsPCellWithName(p2));
         Assertions.assertEquals(2, set.size());
     }
 
@@ -70,31 +70,14 @@ public class PCellSortedSetTest extends MVTestBase  {
         set.add(p1);
         set.add(p2);
 
-        Assertions.assertTrue(set.contains(p1));
-        Assertions.assertTrue(set.contains(p2));
+        Assertions.assertTrue(set.containsPCellWithName(p1));
+        Assertions.assertTrue(set.containsPCellWithName(p2));
         Assertions.assertEquals(2, set.size());
 
         set.remove(p1);
-        Assertions.assertFalse(set.contains(p1));
-        Assertions.assertTrue(set.contains(p2));
+        Assertions.assertFalse(set.containsPCellWithName(p1));
+        Assertions.assertTrue(set.containsPCellWithName(p2));
         Assertions.assertEquals(1, set.size());
-    }
-
-    @Test
-    public void testLimitAndSkip() {
-        PCellSortedSet set = PCellSortedSet.of();
-        for (int i = 0; i < 5; i++) {
-            set.add(PCellWithName.of("p" + i, new PListCell(String.valueOf(i))));
-        }
-        PCellSortedSet limited = set.limit(2);
-        Assertions.assertEquals(2, limited.size());
-        Assertions.assertTrue(limited.getPartitionNames().contains("p3"));
-        Assertions.assertTrue(limited.getPartitionNames().contains("p4"));
-
-        PCellSortedSet skipped = set.skip(3);
-        Assertions.assertEquals(2, skipped.size());
-        Assertions.assertTrue(skipped.getPartitionNames().contains("p3"));
-        Assertions.assertTrue(skipped.getPartitionNames().contains("p4"));
     }
 
     private Range<PartitionKey> createRange(int start, int end) {

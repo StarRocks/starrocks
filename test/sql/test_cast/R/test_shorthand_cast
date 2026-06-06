@@ -1,0 +1,146 @@
+-- name: test_shorthand_cast_basic
+select '123'::int;
+-- result:
+123
+-- !result
+select 'abc'::int;
+-- result:
+None
+-- !result
+select 1.5::int;
+-- result:
+1
+-- !result
+select 100::string;
+-- result:
+100
+-- !result
+select 100::varchar(10);
+-- result:
+100
+-- !result
+-- name: test_shorthand_cast_chained
+select '5'::int::string;
+-- result:
+5
+-- !result
+select '3.14'::decimal(10,2)::string;
+-- result:
+3.14
+-- !result
+-- name: test_shorthand_cast_precedence
+select 1 + 2::int;
+-- result:
+3
+-- !result
+select 10 - 3::int;
+-- result:
+7
+-- !result
+select -1::int;
+-- result:
+-1
+-- !result
+select -2147483648::int;
+-- result:
+None
+-- !result
+select '4'::int < 5;
+-- result:
+1
+-- !result
+select 3 < '4'::int;
+-- result:
+1
+-- !result
+-- name: test_shorthand_cast_complex_types
+select '[1,2,3]'::array<int>;
+-- result:
+[1,2,3]
+-- !result
+select '[1,2,3]'::array<int>[1];
+-- result:
+1
+-- !result
+select cast('{"a":1}' as json)::string;
+-- result:
+{"a": 1}
+-- !result
+-- name: test_shorthand_cast_statement_contexts
+create database shorthand_cast_${uuid0};
+-- result:
+-- !result
+use shorthand_cast_${uuid0};
+-- result:
+-- !result
+create table src (
+    id int,
+    x varchar(20)
+) properties ("replication_num" = "1");
+-- result:
+-- !result
+create table dst (
+    id int,
+    xi int
+) properties ("replication_num" = "1");
+-- result:
+-- !result
+create table dim (
+    k int,
+    y varchar(20)
+) properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into src values
+    (1, '1'),
+    (2, '2'),
+    (3, '-1'),
+    (4, 'bad'),
+    (5, '10');
+-- result:
+-- !result
+insert into dim values
+    (1, '1'),
+    (2, '10'),
+    (3, '100');
+-- result:
+-- !result
+insert into dst select id, x::int from src where x::int is not null;
+-- result:
+-- !result
+[ORDER]select * from dst order by id;
+-- result:
+1	1
+2	2
+3	-1
+5	10
+-- !result
+create table ctas_dst properties ("replication_num" = "1") as
+    select id, x::int as xi from src where x::int > 0;
+-- result:
+-- !result
+[ORDER]select * from ctas_dst order by id;
+-- result:
+1	1
+2	2
+5	10
+-- !result
+[ORDER]select id, x::int from src where x::int > 0 order by id;
+-- result:
+1	1
+2	2
+5	10
+-- !result
+[ORDER]select src.id, src.x::int, dim.k from src join dim on src.x::int = dim.y::int order by src.id, dim.k;
+-- result:
+1	1	1
+5	10	2
+-- !result
+[ORDER]select id, x::int from src where x::int in (select y::int from dim) order by id;
+-- result:
+1	1
+5	10
+-- !result
+drop database shorthand_cast_${uuid0};
+-- result:
+-- !result

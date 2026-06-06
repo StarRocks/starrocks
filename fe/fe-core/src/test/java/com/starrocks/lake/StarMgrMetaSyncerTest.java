@@ -33,7 +33,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -44,6 +43,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
@@ -62,6 +62,9 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -122,6 +125,11 @@ public class StarMgrMetaSyncerTest {
     private EditLog editLog;
 
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+    private StorageVolumeMgr storageVolumeMgr = new SharedDataStorageVolumeMgr();
+
+    // PACK shard group ids surfaced by ColocateRangeMgr. Tests mutate this to register
+    // live PACK groups that must not be reaped.
+    private Set<Long> packShardGroupIds = new HashSet<>();
 
     private StarMgrMetaSyncer starMgrMetaSyncer;
 
@@ -176,6 +184,25 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
                 result = clusterSnapshotMgr;
+
+                globalStateMgr.getStorageVolumeMgr();
+                minTimes = 0;
+                result = storageVolumeMgr;
+
+                globalStateMgr.getColocateTableIndex();
+                minTimes = 0;
+                result = colocateTableIndex;
+            }
+        };
+
+        // PACK shard groups live in ColocateRangeMgr, surfaced via getAllPackShardGroupIds().
+        // Default to an empty set so getAllPartitionShardGroupId() does not NPE on addAll(null);
+        // tests mutate packShardGroupIds to register live PACK groups.
+        new Expectations() {
+            {
+                colocateTableIndex.getAllPackShardGroupIds();
+                minTimes = 0;
+                result = packShardGroupIds;
             }
         };
 
@@ -241,7 +268,6 @@ public class StarMgrMetaSyncerTest {
                         "p1", baseIndex, distributionInfo));
             }
         };
-
         UtFrameUtils.mockInitWarehouseEnv();
 
         // skip all the initialization in MetricRepo
@@ -461,7 +487,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ColocateTableIndex>() {
             @Mock
-            public boolean isLakeColocateTable(long tableId) {
+            public boolean isMetaGroupColocateTable(long tableId) {
                 return true;
             }
 
@@ -889,6 +915,59 @@ public class StarMgrMetaSyncerTest {
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
 
+    // A range-colocate PACK shard group lives in ColocateRangeMgr (surfaced via
+    // getAllPackShardGroupIds), not on any PhysicalPartition. It must be reported as FE-known
+    // and never reaped by deleteUnusedShardAndShardGroup, even when older than the threshold.
+    @Test
+    public void testPackShardGroupNotReapedWhenStillReferenced() {
+        boolean oldForceDelete = Config.meta_sync_force_delete_shard_meta;
+        long oldCleanThreshold = Config.shard_group_clean_threshold_sec;
+        Config.meta_sync_force_delete_shard_meta = false;
+        Config.shard_group_clean_threshold_sec = 0;
+
+        long packGroupId = 7777L;
+        packShardGroupIds.add(packGroupId);
+
+        // The PACK group id must be part of the FE-known shard group set.
+        Set<Long> feKnown = Deencapsulation.invoke(starMgrMetaSyncer, "getAllPartitionShardGroupId");
+        Assertions.assertTrue(feKnown.contains(packGroupId));
+
+        // An old PACK group present in StarOS must NOT be selected for deletion.
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder()
+                .setGroupId(packGroupId)
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(0L))
+                .putLabels("indexId", String.valueOf(0L))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .build());
+        List<Long> deletedGroups = new ArrayList<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
+                return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
+            }
+
+            @Mock
+            public List<Long> listShard(long groupId) {
+                return Lists.newArrayList();
+            }
+
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                deletedGroups.addAll(groupIds);
+            }
+        };
+
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assertions.assertFalse(deletedGroups.contains(packGroupId));
+        Assertions.assertEquals(1, shardGroupInfos.size());
+
+        Config.meta_sync_force_delete_shard_meta = oldForceDelete;
+        Config.shard_group_clean_threshold_sec = oldCleanThreshold;
+    }
+
     @Test
     public void testDeleteShardAndShardGroupWithoutForce() {
         boolean oldValue = Config.meta_sync_force_delete_shard_meta;
@@ -1041,7 +1120,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ColocateTableIndex>() {
             @Mock
-            public boolean isLakeColocateTable(long tableId) {
+            public boolean isMetaGroupColocateTable(long tableId) {
                 return true;
             }
 
@@ -1070,7 +1149,8 @@ public class StarMgrMetaSyncerTest {
         // test aggregator
         new MockUp<LakeAggregator>() {
             @Mock
-            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                           java.util.Collection<ComputeNode> candidateNodes) {
                 return null;
             }
         };
@@ -1545,6 +1625,109 @@ public class StarMgrMetaSyncerTest {
         // Assertions.assertEquals(expectedCleanedGroupIds.size(), cleanedGroupIds.size());
         // only groups in expectedCleanedGroupIds should be cleaned
         Assertions.assertEquals(expectedCleanedGroupIds, cleanedGroupIds);
+    }
+
+    @Test
+    public void testDropTabletAndDeleteShardPartialFailedTablets() throws StarRocksException {
+        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
+        List<Long> failedIds = Lists.newArrayList(1001L, 1003L);
+        List<Long> successIds = Lists.newArrayList(1000L, 1002L);
+        List<Long> allShardIds = new ArrayList<>(failedIds);
+        allShardIds.addAll(successIds);
+        long computeNodeId = 10001L;
+        ComputeNode computeNode = new ComputeNode(computeNodeId, "127.0.0.1", 9060);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                resp.failedTablets = failedIds;
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        new Expectations(starOSAgent) {
+            {
+                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
+                result = computeNodeId;
+
+                systemInfoService.getBackendOrComputeNode(computeNodeId);
+                result = computeNode;
+            }
+        };
+
+        Set<Long> deletedShardIds = new HashSet<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                deletedShardIds.addAll(shardIds);
+            }
+        };
+
+        Assertions.assertTrue(deletedShardIds.isEmpty());
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, allShardIds, starOSAgent, false);
+        Assertions.assertEquals(successIds.size(), deletedShardIds.size());
+        Set<Long> expectedShardIds = new HashSet<>(successIds);
+        Assertions.assertEquals(expectedShardIds, deletedShardIds);
+    }
+
+    @Test
+    public void testDropTabletAndDeleteShardNoFailedTablets() throws StarRocksException {
+        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
+        List<Long> shardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        long computeNodeId = 10001L;
+        ComputeNode computeNode = new ComputeNode(computeNodeId, "127.0.0.1", 9060);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.OK.getValue();
+                resp.failedTablets = Lists.newArrayList();
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        new Expectations(starOSAgent) {
+            {
+                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
+                result = computeNodeId;
+
+                systemInfoService.getBackendOrComputeNode(computeNodeId);
+                result = computeNode;
+            }
+        };
+
+        Set<Long> deletedShardIds = new HashSet<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                deletedShardIds.addAll(shardIds);
+            }
+        };
+
+        Assertions.assertTrue(deletedShardIds.isEmpty());
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, false);
+        Assertions.assertEquals(shardIds.size(), deletedShardIds.size());
+        Set<Long> expectedShardIds = new HashSet<>(shardIds);
+        Assertions.assertEquals(expectedShardIds, deletedShardIds);
     }
 
     @Test

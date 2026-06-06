@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "common/util/thrift_util.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/utils.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -34,14 +34,12 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override {}
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
-        return Status::NotSupported("Not implemented");
-    }
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -84,7 +82,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
     const tparquet::ColumnChunk* get_chunk_metadata() const override { return _chunk_metadata; }
@@ -146,6 +144,12 @@ public:
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
                                                                  _opts.timezone, &_converter));
+        // Finalize lazy dict-decode eligibility now that _converter is known.
+        // Lazy dict decode is only valid when no value conversion is required, because the dict-decode
+        // path materialises values directly into dst and bypasses converters (e.g. UUID bytes -> string).
+        if (_can_lazy_dict_decode && _converter->need_convert) {
+            _can_lazy_dict_decode = false;
+        }
         return RawColumnReader::prepare();
     }
 
@@ -157,11 +161,17 @@ public:
     Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
                                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
+        // Supply the converter so raw dict bytes (e.g. UUID) are converted to their logical string
+        // form before conjuncts are evaluated. _converter is always valid here because prepare()
+        // is guaranteed to run before rewrite_conjunct_ctxs_to_predicate().
+        _dict_filter_ctx->dict_value_converter = _converter.get();
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
     }
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
         _can_lazy_convert = can_lazy_decode;
+        // _converter may not be initialized yet (called before prepare()), so we cannot check
+        // need_convert here. The check is deferred to prepare() which always runs after this call.
         _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
     }
 
@@ -192,7 +202,7 @@ public:
         return _row_group_bloom_filter(predicates, pred_relation, *_col_type, rg_first_row, rg_num_rows);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
@@ -267,7 +277,7 @@ public:
                                        rg_first_row, rg_num_rows);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
@@ -307,7 +317,7 @@ public:
                                            TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:

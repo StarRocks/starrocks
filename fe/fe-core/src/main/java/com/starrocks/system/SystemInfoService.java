@@ -47,7 +47,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -94,6 +93,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
@@ -238,6 +238,9 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(
                 newComputeNode, wal -> replayAddComputeNode((ComputeNode) wal));
         LOG.info("finished to add {} ", newComputeNode);
+
+        // compute nodes are changed, regenerate tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -389,7 +392,7 @@ public class SystemInfoService implements GsonPostProcessable {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, backend.getHeartbeatPort(), fqdn);
         }
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarcharType(1024)));
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Collections.singletonList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
@@ -407,7 +410,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarcharType(1024)));
         List<List<String>> messageResult = new ArrayList<>();
 
         // update backend based on properties
@@ -636,6 +639,9 @@ public class SystemInfoService implements GsonPostProcessable {
                 new DropComputeNodeLog(dropComputeNode.getId()),
                 wal -> removeComputeNode((DropComputeNodeLog) wal));
         LOG.info("finished to drop {}", dropComputeNode);
+
+        // compute nodes are changed, regenerate tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -681,7 +687,7 @@ public class SystemInfoService implements GsonPostProcessable {
                                     db.getOriginName(), table.getName(), droppedBackend.getHost(),
                                     droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
 
-                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                            partition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                                     .forEach(rollupIdx -> {
                                         boolean existIntersection = rollupIdx.getTablets().stream()
                                                 .map(Tablet::getId).anyMatch(tabletIds::contains);
@@ -765,7 +771,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 new DropBackendInfo(droppedBackend.getId()), wal -> removeBackend((DropBackendInfo) wal));
         LOG.info("finished to drop {}", droppedBackend);
 
-        // backends are changed, regenerated tablet number metrics
+        // backends are changed, regenerate tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
     }
 
@@ -1303,7 +1309,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendResourceStat.getInstance().removeBe(dropComputeNodeLog.getComputeNodeId());
+            BackendResourceStat.getInstance().removeBe(cn.getWarehouseId(), dropComputeNodeLog.getComputeNodeId());
         }
 
         return cn;
@@ -1344,7 +1350,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendResourceStat.getInstance().removeBe(backend.getId());
+            BackendResourceStat.getInstance().removeBe(backend.getWarehouseId(), backend.getId());
         }
         return backend;
     }
@@ -1532,12 +1538,14 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // update BackendCoreStat
             for (ComputeNode node : idToBackendRef.values()) {
-                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
-                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
             }
             for (ComputeNode node : idToComputeNodeRef.values()) {
-                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
-                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
             }
         }
     }

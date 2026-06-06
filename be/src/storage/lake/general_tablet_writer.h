@@ -48,7 +48,7 @@ public:
 
     Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
 
-    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) {
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
     }
 
@@ -75,11 +75,20 @@ public:
 
     void close() override;
 
+    StatusOr<std::unique_ptr<TabletWriter>> clone() const override;
+
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 protected:
     virtual Status reset_segment_writer(bool eos);
     virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
+
+    // Record into |segment_file_info| the vector indexes that need a .vi file, honoring the
+    // segment writer's sync/async build mode. Shared by this duplicate-key flush path and the
+    // primary-key override (HorizontalPkTabletWriter::flush_segment_writer) so the two cannot
+    // silently diverge: the PK override previously omitted this block, which dropped vector
+    // index builds for shared-data primary-key tables.
+    void record_segment_vector_index_ids(SegmentFileInfo& segment_file_info, SegmentWriter* seg_writer) const;
 
     std::unique_ptr<SegmentWriter> _seg_writer;
     BundleWritableFileContext* _bundle_file_context = nullptr;

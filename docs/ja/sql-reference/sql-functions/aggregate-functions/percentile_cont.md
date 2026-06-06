@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "PERCENTILE_CONT関数は線形補間によるパーセンタイル値を計算します。"
 ---
 
 # percentile_cont

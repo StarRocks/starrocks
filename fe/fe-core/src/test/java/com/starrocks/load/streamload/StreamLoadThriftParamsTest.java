@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -296,6 +297,16 @@ public class StreamLoadThriftParamsTest extends StreamLoadParamsTestBase {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         if (expected != null) {
             request.setStrip_outer_array(expected);
+        }
+        return new StreamLoadThriftParams(request);
+    }
+
+    @Override
+    protected StreamLoadParams buildEnvelope(String value) {
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        if (value != null) {
+            TEnvelopeType type = value.equalsIgnoreCase("debezium") ? TEnvelopeType.DEBEZIUM : TEnvelopeType.NONE;
+            request.setEnvelope(type);
         }
         return new StreamLoadThriftParams(request);
     }

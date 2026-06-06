@@ -22,3 +22,7 @@ set streaming_preaggregation_mode="force_streaming";
 select * from (select max(c3), sum(c3) sc3, c0 from agg_with_limit_seq group by c0 limit 10) t order by 3;
 select * from (select max(c3), sum(c3) sc3, c1 from agg_with_limit_seq group by c1 limit 10) t order by 3;
 admin disable failpoint 'scan_chunk_sleep_after_read';
+
+CLEANUP {
+    admin disable failpoint 'scan_chunk_sleep_after_read';
+} END CLEANUP

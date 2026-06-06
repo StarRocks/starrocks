@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream Load does not support identifying column names held in the first few rows of a CSV-formatted file."
 ---
 
 # Stream Load
@@ -35,3 +36,21 @@ The size of the source data file exceeds 10 GB, which is the maximum file size s
 
 - Use `seq -w 0 n` to split the source data file into smaller files.
 - Use `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/management/BE_configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` to increase the maximum file size.
+
+## 4. How can I load real NULL values instead of writing “null” into a string column via Stream Load?
+
+Use the replace function:
+
+```Bash
+-H "columns: pk, temp, pd_type=replace(temp,'NULL',NULL)"
+```
+
+## 5. The field name “role” causes a Stream Load error. How should columns be named?
+
+`role` is a reserved keyword. Use backticks to wrap the reserved keyword when you use it in names.
+
+Example:
+
+```Bash
+-H $'columns:k1,`role`'
+```

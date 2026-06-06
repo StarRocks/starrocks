@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.extension.Inject;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,6 +37,7 @@ public class SlotManager extends BaseSlotManager {
     private final RequestWorker requestWorker = new RequestWorker();
     private final SlotTracker slotTracker;
 
+    @Inject
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
         this.slotTracker = new SlotTracker(this, resourceUsageMonitor);

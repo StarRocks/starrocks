@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/set/except_context.h"
 
 namespace starrocks::pipeline {

@@ -14,9 +14,10 @@
 
 #include "storage/rowset/bitmap_index_evaluator.h"
 
-#include "storage/chunk_helper.h"
+#include "column/chunk_schema_helper.h"
+#include "common/config_rowset_fwd.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/roaring2range.h"
+#include "storage/primitive/roaring2range.h"
 
 namespace starrocks {
 
@@ -301,7 +302,7 @@ struct BitmapIndexSeeker {
         auto& col_ctx = parent_node_ctx.col_contexts.find(cid)->second;
 
         SparseRange<> r;
-        const Status st = col_pred->seek_bitmap_dictionary(bitmap_iter, &r);
+        Status st = col_pred->seek_bitmap_dictionary(bitmap_iter, &r);
         if (st.ok()) {
             if constexpr (Type == CompoundNodeType::AND) {
                 col_ctx.bitmap_ranges &= r;
@@ -413,7 +414,7 @@ void BitmapIndexEvaluator::close() {
 }
 
 Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
-    _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    _bitmap_index_iterators.resize(ChunkSchemaHelper::max_column_id(_schema) + 1, nullptr);
     ASSIGN_OR_RETURN(_has_bitmap_index,
                      _pred_tree.visit(BitmapIndexInitializer{this, supplier}, nullptr, CompoundNodeType::AND));
     return Status::OK();

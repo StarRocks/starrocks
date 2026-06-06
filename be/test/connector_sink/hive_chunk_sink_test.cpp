@@ -21,13 +21,14 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
@@ -44,6 +45,9 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     }
 
     void TearDown() override {}
@@ -72,6 +76,7 @@ TEST_F(HiveChunkSinkTest, test_callback) {
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
         auto sink = std::make_unique<HiveChunkSink>(partition_column_names, std::move(partition_column_evaluators),
                                                     std::move(partition_chunk_writer_factory), _runtime_state);
+        sink->init_profile();
         sink->callback_on_commit(CommitResult{
                 .io_status = Status::OK(),
                 .format = formats::PARQUET,

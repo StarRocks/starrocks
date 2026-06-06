@@ -19,7 +19,11 @@
 
 #include <cstddef>
 
+#include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
@@ -32,8 +36,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "testutil/assert.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
@@ -143,17 +146,17 @@ public:
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(_tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
+        auto chunk = ChunkFactory::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(Datum(field_1));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
             JsonValue json = JsonValue::from_string(R"({"k1":)" + std::to_string(i) + R"("k2": )" +
                                                     std::to_string(10000 + 1) + "}");
-            cols[3]->append_datum(Datum(&json));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(&json));
         }
         CHECK_OK(writer->add_chunk(*chunk));
     }
@@ -301,20 +304,22 @@ protected:
 };
 
 TEST_F(BaseCompactionTest, test_init_succeeded) {
+    create_tablet_schema(DUP_KEYS);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
+    tablet_meta->set_tablet_schema(_tablet_schema);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
 }
 
 TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     TabletSchemaPB schema_pb;
-    schema_pb.set_keys_type(KeysType::DUP_KEYS);
+    schema_pb.set_keys_type(DUP_KEYS);
     auto schema = std::make_shared<const TabletSchema>(schema_pb);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_OK(tablet->init());
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
@@ -362,7 +367,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     ASSERT_OK(tablet->init());
     tablet->calculate_cumulative_point();
 

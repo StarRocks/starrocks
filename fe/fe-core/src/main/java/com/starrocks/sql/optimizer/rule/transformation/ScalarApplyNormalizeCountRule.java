@@ -18,8 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -33,6 +32,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.List;
@@ -84,9 +85,9 @@ public class ScalarApplyNormalizeCountRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> replaceMaps = Maps.newHashMap();
         for (ColumnRefOperator countRef : countRefs) {
-            CallOperator call = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
+            CallOperator call = new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
                     Lists.newArrayList(countRef, ConstantOperator.createBigint(0)),
-                    Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
+                    ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {IntegerType.BIGINT, IntegerType.BIGINT},
                             Function.CompareMode.IS_IDENTICAL));
             replaceMaps.put(countRef, call);
         }

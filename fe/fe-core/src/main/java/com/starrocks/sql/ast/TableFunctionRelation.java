@@ -14,12 +14,13 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -40,11 +41,13 @@ public class TableFunctionRelation extends Relation {
     private final FunctionParams functionParams;
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
+    private JDBCTable queryTable;
 
     private boolean isLeftJoin = false;
 
     public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
-        this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
+        this(functionCallExpr.getFnRef().getFnName().toString().toLowerCase(),
+                functionCallExpr.getParams(), functionCallExpr.getPos());
     }
 
     public TableFunctionRelation(String functionName, FunctionParams functionParams, NodePosition pos) {
@@ -83,6 +86,14 @@ public class TableFunctionRelation extends Relation {
 
     public void setChildExpressions(List<Expr> childExpressions) {
         this.childExpressions = childExpressions;
+    }
+
+    public JDBCTable getQueryTable() {
+        return queryTable;
+    }
+
+    public void setQueryTable(JDBCTable queryTable) {
+        this.queryTable = queryTable;
     }
 
     @Override

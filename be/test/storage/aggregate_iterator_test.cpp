@@ -14,9 +14,10 @@
 
 #include "storage/aggregate_iterator.h"
 
-#include "common/config.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
 #include "gtest/gtest.h"
-#include "storage/aggregate_type.h"
+#include "storage/primitive/aggregate_type.h"
 #include "storage/vector_chunk_iterator.h"
 
 namespace starrocks {
@@ -88,7 +89,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2u, chunk->num_rows());
@@ -167,7 +168,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2u, chunk->num_rows());
@@ -241,7 +242,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2u, chunk->num_rows());
@@ -320,7 +321,7 @@ TEST_F(AggregateIteratorTest, agg_replace) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2u, chunk->num_rows());
@@ -373,7 +374,7 @@ TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(5u, chunk->num_rows());
@@ -424,7 +425,7 @@ TEST_F(AggregateIteratorTest, agg_max_empty) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st = agg_iter->get_next(chunk.get());
     ASSERT_TRUE(st.is_end_of_file());
     agg_iter->close();
@@ -453,7 +454,7 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
@@ -462,9 +463,9 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(1);
+        auto* c = chunk->get_column_raw_ptr_by_index(1);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -498,7 +499,7 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
@@ -507,9 +508,9 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(1);
+        auto* c = chunk->get_column_raw_ptr_by_index(1);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -541,7 +542,7 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
@@ -550,9 +551,9 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(1);
+        auto* c = chunk->get_column_raw_ptr_by_index(1);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -581,7 +582,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -590,9 +591,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -611,7 +612,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -620,9 +621,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -636,7 +637,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -645,9 +646,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -679,7 +680,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DATE(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -688,9 +689,9 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -707,7 +708,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DATE(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -716,9 +717,9 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -732,7 +733,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DATE(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -741,9 +742,9 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -774,7 +775,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DECIMAL(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -783,9 +784,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -802,7 +803,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DECIMAL(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -811,9 +812,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -827,7 +828,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
         auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_DECIMAL(pk), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -836,9 +837,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -874,7 +875,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -883,9 +884,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -904,7 +905,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -913,9 +914,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -934,7 +935,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -943,9 +944,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -961,7 +962,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
                 std::make_shared<VectorChunkIterator>(schema, COL_VARCHAR(pk1), COL_DATE(pk2), COL_SMALLINT(v1));
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -970,9 +971,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -1016,7 +1017,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
 
         auto agg_iter = new_aggregate_iterator(child_iter);
         ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+        ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
         Status st;
         std::vector<int16_t> values;
         while (true) {
@@ -1025,9 +1026,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -1056,7 +1057,7 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
     auto agg_iter = new_aggregate_iterator(child_iter, true);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     while (true) {
         chunk->reset();
@@ -1095,7 +1096,7 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
     auto agg_iter = new_aggregate_iterator(child_iter, false);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
@@ -1104,9 +1105,9 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(0);
+        auto* c = chunk->get_column_raw_ptr_by_index(0);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -1139,7 +1140,7 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
     auto agg_iter = new_aggregate_iterator(child_iter, false);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
@@ -1148,9 +1149,9 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(0);
+        auto* c = chunk->get_column_raw_ptr_by_index(0);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());

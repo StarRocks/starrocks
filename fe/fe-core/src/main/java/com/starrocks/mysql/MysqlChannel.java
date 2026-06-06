@@ -34,9 +34,11 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.mysql.nio.MySQLReadListener;
 import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.mysql.ssl.SSLDecoder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +49,7 @@ import org.xnio.channels.Channels;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class used to read/write MySQL logical packet.
@@ -131,7 +134,10 @@ public class MysqlChannel {
             return;
         }
         try {
-            conn.close();
+            // Non-MySQL connection may have null conn.
+            if (conn != null) {
+                conn.close();
+            }
         } catch (IOException e) {
             LOG.warn("Close channel exception, ignore.");
         } finally {
@@ -141,6 +147,13 @@ public class MysqlChannel {
 
     public void setSSLChannel(SSLChannel sslChannel) {
         this.sslChannel = sslChannel;
+    }
+
+    public SSLDecoder getSSLDecoder() {
+        if (this.sslChannel == null) {
+            return null;
+        }
+        return this.sslChannel.createDecoder();
     }
 
     protected int readAll(ByteBuffer dstBuf) throws IOException {
@@ -233,12 +246,24 @@ public class MysqlChannel {
 
     public void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
-        long writeLen = Channels.writeBlocking(conn.getSinkChannel(), buffer);
+        // timeoutMs <= 0 keeps legacy unbounded wait for both phases. With a timeout, both
+        // writeBlocking and flushBlocking are bounded; either phase converts a slow-client
+        // hang into IOException so the connection cleanup path runs.
+        long timeoutMs = Config.mysql_send_packet_timeout_ms;
+        long writeLen = timeoutMs > 0
+                ? Channels.writeBlocking(conn.getSinkChannel(), buffer, timeoutMs, TimeUnit.MILLISECONDS)
+                : Channels.writeBlocking(conn.getSinkChannel(), buffer);
         if (bufLen != writeLen) {
             throw new IOException("Write mysql packet failed.[write=" + writeLen
-                    + ", needToWrite=" + bufLen + "]");
+                    + ", needToWrite=" + bufLen + ", timeoutMs=" + timeoutMs + "]");
         }
-        Channels.flushBlocking(conn.getSinkChannel());
+        if (timeoutMs > 0) {
+            if (!Channels.flushBlocking(conn.getSinkChannel(), timeoutMs, TimeUnit.MILLISECONDS)) {
+                throw new IOException("Flush mysql packet timed out.[timeoutMs=" + timeoutMs + "]");
+            }
+        } else {
+            Channels.flushBlocking(conn.getSinkChannel());
+        }
         isSend = true;
     }
 

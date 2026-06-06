@@ -218,6 +218,18 @@ public class FilePipeSource implements GsonPostProcessable {
         return fileListRepo;
     }
 
+    public boolean getAutoIngest() {
+        return autoIngest;
+    }
+
+    public long getBatchSize() {
+        return batchSize;
+    }
+
+    public long getBatchFiles() {
+        return batchFiles;
+    }
+
     /**
      * Build insert sql from original pipe statement
      * Example: original sql: insert into tbl select * from files('path'='xxx')

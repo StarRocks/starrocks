@@ -384,7 +384,7 @@ std::string Int128::toDecimalString(int32_t scale, bool trimTrailingZeros) const
     std::string str = toString();
     std::string result;
     if (scale == 0) {
-        return str;
+        result = str;
     } else if (*this < 0) {
         auto len = static_cast<int32_t>(str.length());
         if (len - 1 > scale) {

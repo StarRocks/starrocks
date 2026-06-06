@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.ShowCollationStmt;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -32,7 +33,7 @@ public class ShowCollationStmtTest {
             ShowCollationStmt stmt = (ShowCollationStmt) SqlParser.parse("SHOW COLLATION WHERE Sortlen>1", 32).get(0);
             Analyzer.analyze(stmt, ctx);
             Assertions.assertNull(stmt.getPattern());
-            Assertions.assertEquals("Sortlen > 1", stmt.getWhere().toSql());
+            Assertions.assertEquals("Sortlen > 1", ExprToSql.toSql(stmt.getWhere()));
         }
 
         {
