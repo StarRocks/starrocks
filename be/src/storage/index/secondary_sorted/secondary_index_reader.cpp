@@ -192,8 +192,9 @@ protected:
             }
             if (survivors.empty()) continue;
             for (size_t of = 0; of < _out_to_inner.size(); ++of) {
-                chunk->get_column_by_index(of)->append_selective(*_idx_chunk->get_column_by_index(_out_to_inner[of]),
-                                                                 survivors.data(), 0, survivors.size());
+                chunk->get_column_raw_ptr_by_index(of)->append_selective(
+                        *_idx_chunk->get_column_raw_ptr_by_index(_out_to_inner[of]), survivors.data(), 0,
+                        static_cast<uint32_t>(survivors.size()));
             }
             if (chunk->num_rows() > 0) return Status::OK();
         }
