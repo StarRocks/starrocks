@@ -619,9 +619,20 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         if (auto cit = covering_reader_by_rowset.find(rowset->id()); cit != covering_reader_by_rowset.end()) {
             auto delvec_loader = std::make_shared<lake::LakeDelvecLoader>(
                     _tablet_mgr, nullptr, params.lake_io_opts.fill_data_cache, params.lake_io_opts);
+            // When the tablet scan is morsel-split, hand the covering iterator
+            // this morsel's per-segment rowid ranges so each base row is
+            // emitted by exactly one morsel (else COUNT/SUM inflate by the
+            // morsel count -- the covering scan reads the whole .idx).
+            const RowidRangeOption::SetgmentRowidRangeMap* seg_ranges = nullptr;
+            if (params.rowid_range_option != nullptr) {
+                auto& m = params.rowid_range_option->rowid_range_per_segment_per_rowset;
+                if (auto rit = m.find(rowset->rowset_id()); rit != m.end()) {
+                    seg_ranges = &rit->second;
+                }
+            }
             auto cov_or = cit->second->make_covering_iterator(
                     schema(), params.pred_tree, &_obj_pool, static_cast<int64_t>(rowset->id()),
-                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, &_stats);
+                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, seg_ranges, &_stats);
             if (cov_or.status().is_end_of_file()) {
                 continue; // index pruned this rowset entirely
             }

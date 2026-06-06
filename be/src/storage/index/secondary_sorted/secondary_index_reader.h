@@ -24,6 +24,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "roaring/roaring.hh"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -125,11 +126,19 @@ public:
     // |rowset_id_base| is the rowset's id; the global DelVec segment id is
     // rowset_id_base + (seg_id decoded from the position), matching the base
     // scan's `_opts.rowset_id + segment_id()`.
-    StatusOr<ChunkIteratorPtr> make_covering_iterator(const Schema& output_schema,
-                                                      const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
-                                                      int64_t rowset_id_base, int64_t version,
-                                                      std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
-                                                      OlapReaderStatistics* stats = nullptr);
+    // |seg_rowid_ranges| (optional): when the tablet scan is split into
+    // morsels (tablet-internal parallelism), each morsel's TabletReader owns
+    // only a sub-range of the base rowids. The covering iterator scans the
+    // whole .idx, so without this it would emit EVERY matching row in EVERY
+    // morsel -- inflating non-idempotent aggregates (COUNT/SUM) by the morsel
+    // count. Passing this rowset's per-segment rowid ranges makes the iterator
+    // emit a decoded (seg,rowid) only when it falls in this morsel's range, so
+    // each base row is produced exactly once. Null => no split (single morsel).
+    StatusOr<ChunkIteratorPtr> make_covering_iterator(
+            const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
+            int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
+            const RowidRangeOption::SetgmentRowidRangeMap* seg_rowid_ranges = nullptr,
+            OlapReaderStatistics* stats = nullptr);
 
 private:
     SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr, int64_t tablet_id,
