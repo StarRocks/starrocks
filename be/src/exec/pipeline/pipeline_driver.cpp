@@ -54,7 +54,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
@@ -351,7 +350,6 @@ void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
-    QUERY_TRACE_SCOPED("process", _driver_name);
     DCHECK(_local_prepare_is_done);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
@@ -429,7 +427,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
                     SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
-                    QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
                 return_status = maybe_chunk.status();
@@ -475,7 +472,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
-                            QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
                             _adjust_memory_usage(runtime_state, query_mem_tracker, i + 1, next_op, maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
@@ -861,7 +857,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
-    QUERY_TRACE_BEGIN("finalize", _driver_name);
     _close_operators(runtime_state);
 
     set_driver_state(state);
@@ -872,13 +867,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         _global_rf_timer->unschedule_and_join(_fragment_ctx->pipeline_timer());
     }
 
-    // Acquire the pointer to avoid be released when removing query
-    auto query_trace = _query_ctx->shared_query_trace();
-    const std::string driver_name = _driver_name;
     if (_driver_observer != nullptr) {
         _driver_observer->on_driver_finished(runtime_state);
     }
-    QUERY_TRACE_END("finalize", driver_name);
 }
 
 void PipelineDriver::_update_driver_level_timer() {
@@ -997,7 +988,6 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     {
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
-        QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
         return op->set_finishing(state);
     }
 }
@@ -1014,7 +1004,6 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     {
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
-        QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
         return op->set_finished(state);
     }
 }
@@ -1058,7 +1047,6 @@ Status PipelineDriver::_mark_operator_closed(size_t operator_idx, OperatorPtr& o
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
-        QUERY_TRACE_SCOPED(op->get_name(), "close");
         op->close(state);
         _operator_mem_resource_managers[operator_idx].reset();
     }

@@ -1347,9 +1347,6 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
-// Config for query debug trace
-CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
-
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");

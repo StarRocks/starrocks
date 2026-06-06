@@ -66,7 +66,6 @@
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -157,12 +156,6 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_runtime_profile_report_interval(
                 std::max<int64_t>(1, query_options.runtime_profile_report_interval));
     }
-
-    bool enable_query_trace = false;
-    if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {
-        enable_query_trace = true;
-    }
-    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
     if (request.common().__isset.exec_stats_node_ids) {
         _query_ctx->query_runtime_state().init_node_exec_stats(request.common().exec_stats_node_ids);
