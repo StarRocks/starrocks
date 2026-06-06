@@ -459,4 +459,18 @@ TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
     EXPECT_EQ(30, runtime_state.query_runtime_state()->get_query_expire_seconds());
 }
 
+TEST(QueryContextManagerTest, testInitMemTrackerWiresQueryRuntimeStateMemTracker) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext query_ctx;
+    TUniqueId query_id;
+    query_id.hi = 5;
+    query_id.lo = 6;
+    query_ctx.set_query_id(query_id);
+
+    query_ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    ASSERT_NE(nullptr, query_ctx.mem_tracker());
+    EXPECT_EQ(query_ctx.mem_tracker().get(), query_ctx.query_runtime_state().query_mem_tracker());
+}
+
 } // namespace starrocks::pipeline

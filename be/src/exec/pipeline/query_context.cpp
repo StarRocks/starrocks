@@ -156,6 +156,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                     std::make_shared<MemTracker>(MemTrackerType::QUERY, query_mem_limit, _profile->name(), parent);
             _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         }
+        _query_runtime_state.set_query_mem_tracker(_mem_tracker.get());
 
         _static_query_mem_limit = lowest_limit;
         if (query_mem_limit > 0) {

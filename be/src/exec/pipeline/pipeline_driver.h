@@ -433,6 +433,7 @@ protected:
 
     Status _prepare_operator_mem_resource_manager(size_t operator_idx, RuntimeState* state);
     spill::OperatorMemoryResourceManager* _operator_mem_resource_manager(size_t operator_idx);
+    MemTracker* _query_mem_tracker() const;
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx, OperatorPtr& op,
                               const ChunkPtr& chunk);

@@ -30,6 +30,7 @@
 #include "gen_cpp/Types_types.h" // for TUniqueId
 
 namespace starrocks {
+class MemTracker;
 class QueryStatistics;
 } // namespace starrocks
 
@@ -50,6 +51,9 @@ public:
 
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     const TUniqueId& query_id() const { return _query_id; }
+    void set_query_mem_tracker(MemTracker* query_mem_tracker) { _query_mem_tracker = query_mem_tracker; }
+    MemTracker* query_mem_tracker() { return _query_mem_tracker; }
+    const MemTracker* query_mem_tracker() const { return _query_mem_tracker; }
 
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -182,6 +186,10 @@ private:
     SpinLock _scan_stats_lock;
     // table level scan stats
     phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
+
+    // TODO: QueryContext still owns the query MemTracker lifecycle; migrate this reference when QueryContext
+    // lifecycle is refactored.
+    MemTracker* _query_mem_tracker = nullptr;
 };
 
 } // namespace starrocks::pipeline
