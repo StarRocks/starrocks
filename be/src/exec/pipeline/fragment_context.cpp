@@ -29,6 +29,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/pipeline/pipeline_timer.h"
+#include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"

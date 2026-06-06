@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -23,20 +24,11 @@
 #include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "common/status.h"
-#include "common/thread/thread.h"
+#include "compute_env/profile_report_task.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/profile_report_task.h"
 
 namespace starrocks {
-
-class FragmentMgr;
-
-class TUniqueId;
-
-namespace pipeline {
-class QueryContextManager;
-}
 
 struct NonPipelineReportTask {
     NonPipelineReportTask(int64_t last_report_time, TQueryType::type task_type)
@@ -54,10 +46,20 @@ struct PipelineReportTask {
     TQueryType::type task_type;
 };
 
+struct ProfileReportWorkerOptions {
+    using NonPipelineReporter = std::function<std::vector<TUniqueId>(const std::vector<TUniqueId>&)>;
+    using PipelineReporter =
+            std::function<std::vector<PipeLineReportTaskKey>(const std::vector<PipeLineReportTaskKey>&)>;
+
+    NonPipelineReporter report_non_pipeline_fragments;
+    PipelineReporter report_pipeline_fragments;
+    bool start_worker_thread = true;
+};
+
 class ProfileReportWorker {
 public:
-    ProfileReportWorker(FragmentMgr* fragment_mgr, pipeline::QueryContextManager* query_context_manager);
-    ~ProfileReportWorker() = default;
+    explicit ProfileReportWorker(ProfileReportWorkerOptions options);
+    ~ProfileReportWorker();
     void execute();
     void close();
     Status register_non_pipeline_load(const TUniqueId& fragment_instance_id);
@@ -71,6 +73,8 @@ private:
     void _unregister_pipeline_loads(const std::vector<PipeLineReportTaskKey>& tasks);
     void _unregister_non_pipeline_loads(const std::vector<TUniqueId>& fragment_instance_ids);
 
+    ProfileReportWorkerOptions _options;
+
     std::unordered_map<PipeLineReportTaskKey, PipelineReportTask, PipeLineReportTaskKeyHasher,
                        PipeLineReportTaskKeyEqual>
             _pipeline_report_tasks;
@@ -79,8 +83,6 @@ private:
     std::unordered_map<TUniqueId, NonPipelineReportTask> _non_pipeline_report_tasks;
     std::mutex _non_pipeline_report_mutex;
 
-    FragmentMgr* _fragment_mgr;
-    pipeline::QueryContextManager* _query_context_manager;
     std::atomic<bool> _stop{false};
     std::thread _thread;
 };

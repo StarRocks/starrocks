@@ -51,6 +51,7 @@
 #include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "connector/builtin_connector_registry.h"
@@ -82,7 +83,6 @@
 #include "runtime/load_path_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/rejected_record_sync_daemon.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
@@ -200,7 +200,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.small_file_mgr = _small_file_mgr;
     _runtime_services.runtime_filter_worker = _runtime_filter_worker;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
-    _runtime_services.profile_report_worker = _profile_report_worker;
+    _runtime_services.profile_report_worker = profile_report_worker();
     _runtime_services.query_context_mgr = _query_context_mgr;
     _runtime_services.cache_mgr = _cache_mgr;
     _runtime_services.spill_dir_mgr = _compute_env == nullptr ? nullptr : _compute_env->spill_dir_mgr();
@@ -310,7 +310,18 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _runtime_filter_worker = new RuntimeFilterWorker(&_runtime_services, &_rpc_services);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
-    _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
+    ProfileReportWorkerOptions profile_report_worker_options;
+    profile_report_worker_options.report_non_pipeline_fragments =
+            [this](const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids) {
+                DCHECK(_fragment_mgr != nullptr);
+                return _fragment_mgr->report_fragments(non_pipeline_need_report_fragment_ids);
+            };
+    profile_report_worker_options.report_pipeline_fragments =
+            [this](const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
+                DCHECK(_query_context_mgr != nullptr);
+                return _query_context_mgr->report_fragments(pipeline_need_report_query_fragment_ids);
+            };
+    RETURN_IF_ERROR(_compute_env->init_profile_report_worker(std::move(profile_report_worker_options)));
     RuntimeMetrics::instance()->register_runtime_filter_event_queue_len_hook([] {
         auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
         return (pool == nullptr) ? 0U : pool->queue_size();
@@ -437,6 +448,10 @@ ResultQueueMgr* ExecEnv::result_queue_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->result_queue_mgr();
 }
 
+ProfileReportWorker* ExecEnv::profile_report_worker() {
+    return _compute_env == nullptr ? nullptr : _compute_env->profile_report_worker();
+}
+
 void ExecEnv::stop() {
     int64_t total_start = MonotonicMillis();
     int64_t start;
@@ -534,9 +549,9 @@ void ExecEnv::stop() {
         component_times.emplace_back("runtime_filter_worker", MonotonicMillis() - start);
     }
 
-    if (_profile_report_worker) {
+    if (profile_report_worker()) {
         start = MonotonicMillis();
-        _profile_report_worker->close();
+        _compute_env->stop_profile_report_worker();
         component_times.emplace_back("profile_report_worker", MonotonicMillis() - start);
     }
 
@@ -643,7 +658,9 @@ void ExecEnv::stop() {
 void ExecEnv::destroy() {
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
-    SAFE_DELETE(_profile_report_worker);
+    if (_compute_env != nullptr) {
+        _compute_env->destroy_profile_report_worker();
+    }
     SAFE_DELETE(_heartbeat_flags);
     SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
