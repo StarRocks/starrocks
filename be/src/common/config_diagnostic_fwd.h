@@ -74,9 +74,6 @@ CONF_mBool(enable_dcheck_on_serde_failure, "false");
 // Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
-// Config for query debug trace
-CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
-
 // exception_stack_level controls when to print exception's stack
 // -1, enable print all exceptions' stack
 // 0, disable print exceptions' stack

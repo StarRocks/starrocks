@@ -28,7 +28,6 @@ set(UTIL_FILES
   time_guard.cpp
   system_metrics.cpp
 # coding_util.cpp
-  debug/query_trace_impl.cpp
   memory_lock.cpp
   byte_buffer.cpp
   hdfs_util.cpp

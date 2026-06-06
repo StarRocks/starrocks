@@ -89,8 +89,6 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
         _drivers.emplace_back(std::move(driver));
     }
 
-    query_ctx->query_trace()->register_drivers(fragment_ctx->fragment_instance_id(), _drivers);
-
     if (!source_operator_factory()->with_morsels()) {
         return;
     }

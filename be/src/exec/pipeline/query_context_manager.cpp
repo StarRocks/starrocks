@@ -215,15 +215,7 @@ void QueryContextManager::count_down_fragments(QueryContext* query_ctx) {
     }
 
     const auto query_id = query_ctx->query_id();
-    // Acquire the pointer to avoid it being released when removing query.
-    auto query_trace = query_ctx->shared_query_trace();
     remove(query_id);
-    // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
-    // considering that this feature is generally used for debugging,
-    // I think it should not have a big impact now
-    if (query_trace != nullptr) {
-        (void)query_trace->dump();
-    }
 }
 
 size_t QueryContextManager::size() {

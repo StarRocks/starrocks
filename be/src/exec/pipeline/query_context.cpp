@@ -241,10 +241,6 @@ void QueryContext::release_workgroup_token_once() {
         _wg_running_query_token_ptr.reset();
     }
 }
-void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
-    std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
-}
-
 std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
     return _sub_plan_query_statistics_recvr;
 }
