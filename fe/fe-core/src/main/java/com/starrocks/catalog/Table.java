@@ -135,7 +135,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("ICEBERG_VIEW")
         ICEBERG_VIEW,
         @SerializedName("PAIMON_VIEW")
-        PAIMON_VIEW;
+        PAIMON_VIEW,
+        @SerializedName("LANCE")
+        LANCE;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -431,6 +433,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isBenchmarkTable() {
         return type == TableType.BENCHMARK;
+    }
+
+    public boolean isLanceTable() {
+        return type == TableType.LANCE;
     }
 
     public boolean isHMSTable() {
