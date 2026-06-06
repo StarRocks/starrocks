@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "リモートストレージシステムにリポジトリを作成して、データスナップショットをバックアップおよび復元するために使用します。"
 ---
 
 # CREATE REPOSITORY

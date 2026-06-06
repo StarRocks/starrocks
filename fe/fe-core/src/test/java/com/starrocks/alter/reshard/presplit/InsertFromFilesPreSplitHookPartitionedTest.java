@@ -47,6 +47,7 @@ import org.mockito.Mockito;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
@@ -54,6 +55,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -76,7 +78,7 @@ import static org.mockito.Mockito.when;
  *   <li>The hook's outer {@code maybeRunPreSplit} swallows any throw from the
  *       partitioned-branch resolution so an analyzer failure cannot abort the
  *       triggering INSERT.</li>
- *   <li>{@link InsertFromFilesPreSplitHook#awaitCombinedJobAllowingFallback}
+ *   <li>{@link TabletPreSplitCoordinator#awaitCombinedJobAllowingFallback}
  *       polls {@code TabletReshardJobMgr} for the combined job's terminal
  *       state, bumps {@code tablet_pre_split_post_submit_hard_cap} exactly
  *       once on timeout, and never aborts the load on timeout / abort /
@@ -248,7 +250,8 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
             Assertions.assertDoesNotThrow(() ->
-                    InsertFromFilesPreSplitHook.awaitCombinedJobAllowingFallback(table, combinedJob));
+                    TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                            LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> false));
 
             verify(reshardMgr, times(1)).getTabletReshardJob(1001L);
         }
@@ -277,7 +280,8 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
             Assertions.assertDoesNotThrow(() ->
-                    InsertFromFilesPreSplitHook.awaitCombinedJobAllowingFallback(table, combinedJob));
+                    TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                            LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> false));
         }
     }
 
@@ -300,7 +304,8 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
             Assertions.assertDoesNotThrow(() ->
-                    InsertFromFilesPreSplitHook.awaitCombinedJobAllowingFallback(table, combinedJob));
+                    TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                            LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> false));
         }
     }
 
@@ -336,7 +341,8 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
                 gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
                 Assertions.assertDoesNotThrow(() ->
-                        InsertFromFilesPreSplitHook.awaitCombinedJobAllowingFallback(table, combinedJob),
+                        TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                                LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> false),
                         "timeout must NEVER abort the INSERT — log + return only");
             }
 
@@ -372,11 +378,40 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
             Assertions.assertDoesNotThrow(() ->
-                    InsertFromFilesPreSplitHook.awaitCombinedJobAllowingFallback(table, combinedJob));
+                    TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                            LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> false));
 
             // Two polls: PENDING then FINISHED. Proves the loop continued past the
             // first non-terminal state (sleep + re-poll body).
             verify(reshardMgr, times(2)).getTabletReshardJob(2001L);
+        }
+    }
+
+    @Test
+    public void awaitReturnsImmediatelyWhenShouldAbortReturnsTrue() {
+        // Cancel-aware path: a supplier that returns true short-circuits the
+        // helper before it ever polls TabletReshardJobMgr. The helper logs
+        // the abort and returns without throwing or bumping the hard-cap
+        // counter (the load is cancelled by the caller, not timed out here).
+        OlapTable table = mock(OlapTable.class);
+        when(table.getName()).thenReturn("t_caller_abort");
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+        when(combinedJob.getJobId()).thenReturn(3001L);
+
+        TabletReshardJobMgr reshardMgr = mock(TabletReshardJobMgr.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getTabletReshardJobMgr()).thenReturn(reshardMgr);
+            gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            Assertions.assertDoesNotThrow(() ->
+                    TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                            LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> true));
+
+            // shouldAbort fires before any TabletReshardJobMgr poll.
+            verify(reshardMgr, never()).getTabletReshardJob(3001L);
         }
     }
 
@@ -405,7 +440,8 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             Thread.currentThread().interrupt();
             try {
                 Assertions.assertDoesNotThrow(() ->
-                        InsertFromFilesPreSplitHook.awaitCombinedJobAllowingFallback(table, combinedJob),
+                        TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                                LoadKind.INSERT_FROM_FILES, table, combinedJob, () -> false),
                         "interrupt must be handled internally — never propagate");
                 Assertions.assertTrue(Thread.currentThread().isInterrupted(),
                         "helper must re-assert the interrupt flag before returning");
@@ -420,11 +456,13 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
 
     @Test
     public void runMultiPartitionFlowSubmittedDrivesAwaitOnce() throws Exception {
-        // INSERT path: a SubmittedCombined outcome MUST drive
-        // awaitCombinedJobAllowingFallback exactly once (the single await call site).
-        // Sampler returns a non-empty SampleSet, grouper returns a non-empty list,
-        // and the coordinator returns SubmittedCombined whose combined job is already
-        // FINISHED (so the await returns on the first poll).
+        // INSERT path: a SubmittedCombined outcome MUST drive the shared
+        // TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback exactly once
+        // (the single await call site). Sampler returns a non-empty SampleSet,
+        // grouper returns a non-empty list, the coordinator returns
+        // SubmittedCombined; the await helper itself is stubbed via MockedStatic
+        // and its inner polling behavior is covered by the dedicated semantic
+        // tests above (awaitReturnsImmediatelyWhenJobAlreadyFinishedSinglePoll etc.).
         Database database = mock(Database.class);
         when(database.getId()).thenReturn(7L);
         OlapTable table = mockPartitionedSamplerTable();
@@ -433,25 +471,15 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
         when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
 
         SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-
         TabletReshardJob combinedJob = mock(TabletReshardJob.class);
-        when(combinedJob.getJobId()).thenReturn(3001L);
-        TabletReshardJob finishedLatest = mock(TabletReshardJob.class);
-        when(finishedLatest.getJobState()).thenReturn(TabletReshardJob.JobState.FINISHED);
-        TabletReshardJobMgr reshardMgr = mock(TabletReshardJobMgr.class);
-        when(reshardMgr.getTabletReshardJob(3001L)).thenReturn(finishedLatest);
 
-        try (MockedStatic<GlobalStateMgr> gsm = Mockito.mockStatic(GlobalStateMgr.class);
-                MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+        try (MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
-            when(globalState.getTabletReshardJobMgr()).thenReturn(reshardMgr);
-            gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
             loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
 
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
@@ -469,8 +497,62 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             // The combined submit ran once...
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any()), times(1));
-            // ...and the await loop polled the combined job (SubmittedCombined branch).
-            verify(reshardMgr, times(1)).getTabletReshardJob(3001L);
+            // ...and the shared await helper was invoked once on the combined job
+            // with a non-null shouldAbort (the hook passes context::isKilled so KILL
+            // <query_id> during the wait releases the session thread promptly).
+            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                    eq(LoadKind.INSERT_FROM_FILES), eq(table), eq(combinedJob), any()), times(1));
+        }
+    }
+
+    @Test
+    public void runMultiPartitionFlowCapsSampleAtPreSubmitBudget() throws Exception {
+        // The multi-partition data-tier sample must be capped at the pre-submit
+        // budget — the same bound the single-partition DefaultPreSplitPipeline path
+        // applies. This path bypasses the pipeline, so without the cap the sample
+        // would run until the default query_timeout. Capture the SampleRequest and
+        // assert its query-timeout equals tablet_pre_split_pre_submit_timeout_seconds.
+        long savedTimeout = Config.tablet_pre_split_pre_submit_timeout_seconds;
+        Config.tablet_pre_split_pre_submit_timeout_seconds = 123L;
+        try {
+            Database database = mock(Database.class);
+            when(database.getId()).thenReturn(7L);
+            OlapTable table = mockPartitionedSamplerTable();
+            TableFunctionTable sourceTable = mockSourceTable();
+            ConnectContext context = mockConnectContextWithSessionPreSplit(true);
+            when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
+
+            SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+            AtomicReference<SampleRequest> capturedRequest = new AtomicReference<>();
+
+            try (MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+                    MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                    MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                    MockedStatic<TabletPreSplitCoordinator> coordinator =
+                            Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                    MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                            (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenAnswer(invocation -> {
+                                capturedRequest.set(invocation.getArgument(0));
+                                return samples;
+                            }))) {
+                loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
+                metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
+                        .thenReturn(List.of(bigintColumn("sort_col")));
+                // Empty grouped list -> short-circuits after the sample; we only need
+                // the sample to have run with the capped request.
+                grouper.when(() -> PartitionSampleGrouper.group(
+                                any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                                anyLong(), anyLong()))
+                        .thenReturn(List.of());
+
+                invokeRunMultiPartitionFlow(database, table, sourceTable, context);
+
+                Assertions.assertNotNull(capturedRequest.get(), "data-tier sampler must have been invoked");
+                Assertions.assertEquals(123, capturedRequest.get().getQueryTimeoutSeconds(),
+                        "multi-partition INSERT sample must be capped at pre_submit_timeout");
+            }
+        } finally {
+            Config.tablet_pre_split_pre_submit_timeout_seconds = savedTimeout;
         }
     }
 

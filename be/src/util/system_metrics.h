@@ -68,6 +68,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(replication_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(vector_index_mem_bytes, MetricUnit::BYTES);
 };
 
 class SystemMetrics {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Data Cache 缓存内外部表数据，由内存缓存 Page Cache 和磁盘缓存 Block Cache 组成。"
 ---
 
 # Data Cache

@@ -248,8 +248,14 @@ set(STORAGE_FILES
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
+    lake/lake_proto_normalizer.cpp
     lake/rowset.cpp
     lake/segment_metadata_filter.cpp
+    lake/segment_task_runner.cpp
+    lake/index_delta_group_loader.cpp
+    lake/index_file_reader.cpp
+    lake/index_file_writer.cpp
+    lake/add_index_schema_change.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
@@ -262,6 +268,7 @@ set(STORAGE_FILES
     lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
+    lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
@@ -336,9 +343,11 @@ set(STORAGE_FILES
     index/secondary_sorted/secondary_index_writer.cpp
     index/secondary_sorted/secondary_index_reader.cpp
     index/vector/empty_index_reader.cpp
+    index/vector/vector_index_cache.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
+    index/vector/vector_index_file_reader.cpp
     index/vector/vector_index_reader_factory.cpp
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp

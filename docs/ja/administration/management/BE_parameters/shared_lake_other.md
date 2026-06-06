@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
 ---
 
@@ -93,6 +94,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
+
+### lake_rows_mapper_read_parallelism
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: sub-chunk 数
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` が `.lcrm`（lake compaction rows-mapper）ファイルを読む際に in-flight で保持する sub-chunk 読み取りの最大数。各 sub-chunk のサイズは `lake_rows_mapper_sub_chunk_bytes` で制御され、segment 境界をまたぎません。イテレータは PK index 実行スレッドプールに最大この数の並行読み取りを投入し、リモート読み取りを呼び出し側の per-segment 処理とパイプライン化します。メモリ上限は `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`。`1` に設定するとパイプライン化を無効にし、逐次読み取りにフォールバックします。
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- デフォルト: 4194304
+- タイプ: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
 ### loop_count_wait_fragments_finish
 

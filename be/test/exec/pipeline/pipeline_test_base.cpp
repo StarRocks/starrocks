@@ -20,16 +20,23 @@
 #include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exprs/function_context.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
+#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -82,10 +89,10 @@ void PipelineTestBase::_prepare() {
 
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
@@ -104,7 +111,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state->set_chunk_size(_vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
-    _runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 

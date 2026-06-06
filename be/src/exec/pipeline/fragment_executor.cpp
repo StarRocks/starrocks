@@ -27,6 +27,9 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/data_sinks/data_stream_sender.h"
@@ -38,18 +41,21 @@
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
-#include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/batch_write/batch_write_mgr.h"
@@ -110,7 +116,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
 
-    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
+    _query_ctx_mgr = exec_env->query_context_mgr();
+
+    auto&& existing_query_ctx = _query_ctx_mgr->get(query_id);
     if (existing_query_ctx) {
         auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existingfragment_ctx) {
@@ -119,17 +127,18 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
-    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
+    ASSIGN_OR_RETURN(_query_ctx, _query_ctx_mgr->get_or_register(query_id, query_ctx_should_exist));
     _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
 
-    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
-    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
+    auto& query_runtime_state = _query_ctx->query_runtime_state();
+    query_runtime_state.set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    query_runtime_state.set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    query_runtime_state.extend_delivery_lifetime();
+    query_runtime_state.extend_query_lifetime();
 
     if (query_options.__isset.enable_pipeline_level_shuffle) {
         _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
@@ -235,9 +244,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
-    runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    _fragment_ctx->attach_to_runtime_state(runtime_state);
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
-    runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(runtime_state);
     RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
     // Only consider the `query_mem_limit` variable
@@ -338,7 +347,7 @@ uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPl
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
     const auto& query_options = request.common().query_options;
 
-    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    int expired_seconds = QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
     if (query_options.__isset.query_delivery_timeout) {
         if (query_options.__isset.query_timeout) {
             expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
@@ -359,7 +368,7 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
         return std::max<int>(1, query_options.query_timeout);
     }
 
-    return QueryContext::DEFAULT_EXPIRE_SECONDS;
+    return QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
 }
 
 static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
@@ -729,7 +738,7 @@ static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGro
     auto* driver_executor = wg->executors()->driver_executor();
     for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
         EventPtr group_initialize_event =
-                Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
+                create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
 
         if (auto blocking_event = leader_source_op->adaptive_blocking_event(); blocking_event != nullptr) {
             group_initialize_event->add_dependency(blocking_event.get());
@@ -866,9 +875,9 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     // make sure query context can be released
     // if _prepare_query_ctx return error, query context doesn't exist
     // so it's safe to put this DeferOp below _prepare_query_ctx
-    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx, query_ctx_mgr = _query_ctx_mgr] {
         if (!prepare_success) {
-            query_ctx->count_down_fragments();
+            query_ctx_mgr->count_down_fragments(query_ctx);
         }
     });
 
@@ -1031,7 +1040,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
-        _query_ctx->count_down_fragments();
+        DCHECK(_query_ctx_mgr != nullptr);
+        _query_ctx_mgr->count_down_fragments(_query_ctx);
     }
 }
 

@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['compaction']
-description: "This topic describes how to manage compaction in StarRocks shared-data clusters."
+description: "How to manage and monitor compaction for shared-data clusters in StarRocks."
 ---
 
 # Compaction for Shared-data Clusters

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function analyzes and gets the integer value from a specified path in json string."
+description: "Extracts an integer value from a JSON string at the specified path."
 ---
 
 # get_json_int

@@ -15,9 +15,9 @@
 #pragma once
 
 #include "common/runtime_profile.h"
-#include "exec/spill/block_manager.h"
-#include "exec/spill/data_stream.h"
-#include "exec/spill/spiller_factory.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/data_stream.h"
+#include "compute_env/spill/spiller_factory.h"
 
 namespace starrocks {
 

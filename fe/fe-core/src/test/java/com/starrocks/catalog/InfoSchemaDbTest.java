@@ -52,6 +52,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,10 @@ public class InfoSchemaDbTest {
 
     @BeforeEach
     public void beforeClass() throws Exception {
+        // Disable connector metadata background refresh to avoid background threads
+        // touching JMockit's shared (non-thread-safe) state while the test thread is
+        // recording Expectations, which leads to flaky ConcurrentModificationException.
+        Config.enable_background_refresh_connector_metadata = false;
         UtFrameUtils.createMinStarRocksCluster();
 
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -97,6 +102,11 @@ public class InfoSchemaDbTest {
         globalStateMgr.getAuthorizationMgr().createRole(createRoleStmt);
 
         authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.enable_background_refresh_connector_metadata = true;
     }
 
     @Test

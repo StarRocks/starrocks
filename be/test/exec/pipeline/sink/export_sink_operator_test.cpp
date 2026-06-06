@@ -22,9 +22,12 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
@@ -47,10 +50,10 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
@@ -63,7 +66,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
-    _runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
@@ -92,7 +95,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _exec_env->query_context_mgr()->count_down_fragments(_query_ctx);
 }
 
 // Test export with header option
@@ -116,10 +119,10 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
@@ -132,7 +135,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
-    _runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
@@ -174,7 +177,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _exec_env->query_context_mgr()->count_down_fragments(_query_ctx);
 
     // Clean up test directory
     std::filesystem::remove_all(test_dir);

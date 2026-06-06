@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SQL operators are functions used for comparison widely employed in WHERE clauses."
 sidebar_label: "WHERE and Operators"
 ---
 
@@ -89,7 +90,7 @@ select * from small_table where tiny_column in (1,2);
 
 ### LIKE 演算子
 
-この operator は、文字列との比較に使用されます。'\_'（アンダースコア）は単一の文字に一致し、'%' は複数の文字に一致します。パラメーターは文字列全体と一致する必要があります。通常、文字列の末尾に'%'を配置する方が実用的です。
+この operator は、文字列との比較に使用されます。`_`（アンダースコア）は単一の文字に一致し、'%' は複数の文字に一致します。パラメーターは文字列全体と一致する必要があります。通常、文字列の末尾に'%'を配置する方が実用的です。
 
 例：
 

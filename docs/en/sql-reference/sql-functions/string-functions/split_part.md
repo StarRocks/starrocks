@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function splits a given string according to the separators and returns the requested part."
+description: "Splits a string by a delimiter and returns the Nth part."
 ---
 
 # split_part

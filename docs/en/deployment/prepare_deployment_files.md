@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Currently, the binary distribution packages StarRocks provides on [the StarRocks official website](https://www.starrocks.io/download/community) support deployments only on x86-based CPU."
+description: "How to prepare StarRocks deployment files for x86 or ARM-based CPU deployments."
 ---
 
 # Prepare deployment files

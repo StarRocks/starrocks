@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes how to compile StarRocks on the Ubuntu operating system."
+description: "How to compile StarRocks from source on Ubuntu."
 ---
 
 # Compile StarRocks on Ubuntu

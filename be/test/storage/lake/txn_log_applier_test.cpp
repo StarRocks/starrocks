@@ -18,6 +18,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
 
 namespace starrocks {
 namespace lake {
@@ -74,9 +75,13 @@ std::shared_ptr<TxnLogPB> make_op_write_log(int64_t tablet_id, int64_t txn_id, i
     auto* rowset = opw->mutable_rowset();
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
+    // Production op_writes mint a uid at delta_writer time; emulate that here so
+    // batch-apply's strict-uid invariant in apply_op_write_batch holds.
+    tablet_reshard_helper::ensure_rowset_uid(rowset);
     for (auto& s : segments) {
-        rowset->add_segments(s);
-        rowset->add_segment_size(123); // dummy
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(s);
+        sm->set_size(123); // dummy
     }
     return log;
 }
@@ -87,8 +92,12 @@ std::shared_ptr<TxnLogPB> make_op_write_log_with_bundle(int64_t tablet_id, int64
                                                         const std::vector<int64_t>& bundle_offsets) {
     auto log = make_op_write_log(tablet_id, txn_id, num_rows, data_size, segments);
     auto* rowset = log->mutable_op_write()->mutable_rowset();
-    for (auto offset : bundle_offsets) {
-        rowset->add_bundle_file_offsets(offset);
+    for (int i = 0; i < static_cast<int>(bundle_offsets.size()); i++) {
+        if (i < rowset->segment_metas_size()) {
+            rowset->mutable_segment_metas(i)->set_bundle_file_offset(bundle_offsets[i]);
+        } else {
+            rowset->add_segment_metas()->set_bundle_file_offset(bundle_offsets[i]);
+        }
     }
     return log;
 }
@@ -124,9 +133,55 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
     const auto& rs = meta->rowsets(0);
     EXPECT_EQ(5 + 7 + 3, rs.num_rows());
     EXPECT_EQ(100 + 140 + 60, rs.data_size());
-    EXPECT_EQ(4, rs.segments_size());
+    EXPECT_EQ(4, rs.segment_metas_size());
     EXPECT_EQ(0u, rs.id());
     EXPECT_EQ(4u, meta->next_rowset_id()); // 批量合并仍消耗3个额外rowset id
+}
+
+// Regression: a cross-published op_write whose num_rows scaled to 0 on this child (but still
+// carries a segment) must NOT be dropped, and the merged uid must be taken from it (the first
+// op_write carrying segments) so split children converge on one identity. Gating on num_rows
+// instead would skip seg_zero, set num_rows-driven uid to log1's, and diverge across children.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10020);
+    auto meta = build_non_pk_metadata(10020);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log0 = make_op_write_log(10020, 20, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
+    auto log1 = make_op_write_log(10020, 21, /*num_rows=*/10, /*data_size=*/200, {"seg_data"});
+    const PUniqueId first_uid = log0->op_write().rowset().uid();
+
+    TxnLogVector logs{log0, log1};
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    EXPECT_EQ(2, rs.segment_metas_size()) << "the num_rows==0 op_write's segment must be retained";
+    EXPECT_EQ(10, rs.num_rows()) << "num_rows still summed faithfully (0 + 10)";
+    ASSERT_TRUE(rs.has_uid());
+    EXPECT_EQ(first_uid.hi(), rs.uid().hi());
+    EXPECT_EQ(first_uid.lo(), rs.uid().lo());
+}
+
+// Regression for the early-exit: if EVERY contributing op_write scaled to num_rows==0 but
+// segments are present, the merged rowset must still be created (the early-exit keys on
+// segments, not total_num_rows) — otherwise the whole cross-published txn's data is dropped.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10021);
+    auto meta = build_non_pk_metadata(10021);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    logs.push_back(make_op_write_log(10021, 22, 0, 0, {"seg_x"}));
+    logs.push_back(make_op_write_log(10021, 23, 0, 0, {"seg_y"}));
+
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size()) << "rowset must be created even when total num_rows is 0";
+    EXPECT_EQ(2, meta->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, meta->rowsets(0).num_rows());
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
@@ -140,12 +195,17 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     auto* rowset = log->mutable_op_write()->mutable_rowset();
     rowset->set_num_rows(5);
     rowset->set_data_size(100);
-    rowset->add_segments("seg_sparse_a");
-    rowset->add_segments("seg_sparse_b");
-    rowset->add_segment_size(50);
-    rowset->add_segment_size(50);
-    rowset->add_segment_metas()->set_segment_idx(0);
-    rowset->add_segment_metas()->set_segment_idx(4);
+    tablet_reshard_helper::ensure_rowset_uid(rowset);
+    {
+        auto* sm0 = rowset->add_segment_metas();
+        sm0->set_filename("seg_sparse_a");
+        sm0->set_size(50);
+        sm0->set_segment_idx(0);
+        auto* sm1 = rowset->add_segment_metas();
+        sm1->set_filename("seg_sparse_b");
+        sm1->set_size(50);
+        sm1->set_segment_idx(4);
+    }
 
     TxnLogVector logs{log};
     Status st = applier->apply(logs);
@@ -167,9 +227,13 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     auto* rowset1 = log1->mutable_op_write()->mutable_rowset();
     rowset1->set_num_rows(3);
     rowset1->set_data_size(30);
-    rowset1->add_segments("seg_a");
-    rowset1->add_segment_size(30);
-    rowset1->add_segment_metas()->set_segment_idx(0);
+    tablet_reshard_helper::ensure_rowset_uid(rowset1);
+    {
+        auto* sm = rowset1->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(30);
+        sm->set_segment_idx(0);
+    }
 
     auto log2 = std::make_shared<TxnLogPB>();
     log2->set_tablet_id(10005);
@@ -177,9 +241,13 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     auto* rowset2 = log2->mutable_op_write()->mutable_rowset();
     rowset2->set_num_rows(4);
     rowset2->set_data_size(40);
-    rowset2->add_segments("seg_b");
-    rowset2->add_segment_size(40);
-    rowset2->add_segment_metas()->set_segment_idx(0);
+    tablet_reshard_helper::ensure_rowset_uid(rowset2);
+    {
+        auto* sm = rowset2->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(40);
+        sm->set_segment_idx(0);
+    }
 
     TxnLogVector logs{log1, log2};
     Status st = applier->apply(logs);
@@ -187,7 +255,6 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 
     ASSERT_EQ(1, meta->rowsets_size());
     const auto& merged = meta->rowsets(0);
-    ASSERT_EQ(2, merged.segments_size());
     ASSERT_EQ(2, merged.segment_metas_size());
     EXPECT_EQ(0, merged.segment_metas(0).segment_idx());
     EXPECT_EQ(1, merged.segment_metas(1).segment_idx());
@@ -218,8 +285,11 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
     auto* rowset = opw->mutable_rowset();
     rowset->set_num_rows(5);
     rowset->set_data_size(50);
-    rowset->add_segments("seg2");
-    rowset->add_segment_size(50);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg2");
+        sm->set_size(50);
+    }
     rowset->mutable_delete_predicate()->set_version(1);
 
     TxnLogVector logs{log1, log2};
@@ -286,8 +356,11 @@ std::shared_ptr<TxnLogPB> make_lake_replication_log_with_tablet_metadata(int64_t
     rowset->set_id(0);
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
-    rowset->add_segments("replicated_seg1");
-    rowset->add_segment_size(data_size);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("replicated_seg1");
+        sm->set_size(data_size);
+    }
 
     return log;
 }
@@ -354,8 +427,11 @@ std::shared_ptr<TxnLogPB> make_replication_log_without_tablet_metadata(int64_t t
     rowset->set_id(0);
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
-    rowset->add_segments("trad_replicated_seg1");
-    rowset->add_segment_size(data_size);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("trad_replicated_seg1");
+        sm->set_size(data_size);
+    }
 
     return log;
 }
@@ -400,13 +476,16 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
     const auto& rs = meta->rowsets(0);
     EXPECT_EQ(15, rs.num_rows());
     EXPECT_EQ(300, rs.data_size());
-    EXPECT_EQ(3, rs.segments_size());
+    EXPECT_EQ(3, rs.segment_metas_size());
 
     // Verify bundle_file_offsets are preserved with 1:1 correspondence
-    ASSERT_EQ(3, rs.bundle_file_offsets_size());
-    EXPECT_EQ(0, rs.bundle_file_offsets(0));
-    EXPECT_EQ(1024, rs.bundle_file_offsets(1));
-    EXPECT_EQ(2048, rs.bundle_file_offsets(2));
+    ASSERT_EQ(3, rs.segment_metas_size());
+    ASSERT_TRUE(rs.segment_metas(0).has_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(2).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(1024, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_EQ(2048, rs.segment_metas(2).bundle_file_offset());
 }
 
 // Test that when no TxnLogs have bundle_file_offsets, the merged rowset also has none.
@@ -424,8 +503,9 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
 
     ASSERT_EQ(1, meta->rowsets_size());
     const auto& rs = meta->rowsets(0);
-    EXPECT_EQ(2, rs.segments_size());
-    EXPECT_EQ(0, rs.bundle_file_offsets_size());
+    EXPECT_EQ(2, rs.segment_metas_size());
+    EXPECT_FALSE(rs.segment_metas(0).has_bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(1).has_bundle_file_offset());
 }
 
 // Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
@@ -479,6 +559,28 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchRetu
     EXPECT_NE(std::string::npos, st.to_string().find("mismatch"));
 }
 
+// Legacy/upgrade path: a txn log written before the uid field existed carries no producer
+// uid. Batch-apply must NOT hard-fail on it (that would strand a pending multi-statement
+// txn across a rolling upgrade) — instead the merged rowset backfills a fresh uid so the
+// publish succeeds. Such a txn predates range distribution and is never cross-published, so
+// the backfilled (non-deterministic) uid is safe. We clear the uid that make_op_write_log
+// auto-stamps to simulate the legacy log.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10015);
+    auto meta = build_non_pk_metadata(10015);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    auto log = make_op_write_log(10015, 10, 5, 100, {"seg_a"});
+    log->mutable_op_write()->mutable_rowset()->clear_uid(); // simulate a legacy pre-uid txn log
+    logs.push_back(std::move(log));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_TRUE(meta->rowsets(0).has_uid()) << "merged rowset must backfill a uid for a legacy log";
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30003);
     auto meta = build_non_pk_metadata(30003);
@@ -500,12 +602,16 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegm
     rowset->set_id(0);
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("rep_seg1");
-    rowset->add_segments("rep_seg2");
-    rowset->add_segment_size(50);
-    rowset->add_segment_size(50);
-    rowset->add_segment_metas()->set_segment_idx(0);
-    rowset->add_segment_metas()->set_segment_idx(6);
+    {
+        auto* sm0 = rowset->add_segment_metas();
+        sm0->set_filename("rep_seg1");
+        sm0->set_size(50);
+        sm0->set_segment_idx(0);
+        auto* sm1 = rowset->add_segment_metas();
+        sm1->set_filename("rep_seg2");
+        sm1->set_size(50);
+        sm1->set_segment_idx(6);
+    }
 
     Status st = applier->apply(*log);
     EXPECT_TRUE(st.ok()) << st.to_string();
@@ -540,8 +646,11 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClears
     rowset->set_id(5); // source rssid base
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("rep_seg1");
-    rowset->add_segment_size(100);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("rep_seg1");
+        sm->set_size(100);
+    }
 
     auto& incoming_dcg = (*op_replication->mutable_dcg_meta()->mutable_dcgs())[5];
     incoming_dcg.add_column_files("new_dcg_file.cols");
@@ -601,10 +710,14 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
         rowset->set_id(3);
         rowset->set_num_rows(50);
         rowset->set_data_size(2048);
-        rowset->add_segments("pk_full_seg1.dat");
-        rowset->add_segments("pk_full_seg2.dat");
-        rowset->add_segment_size(1024);
-        rowset->add_segment_size(1024);
+        {
+            auto* sm0 = rowset->add_segment_metas();
+            sm0->set_filename("pk_full_seg1.dat");
+            sm0->set_size(1024);
+            auto* sm1 = rowset->add_segment_metas();
+            sm1->set_filename("pk_full_seg2.dat");
+            sm1->set_size(1024);
+        }
 
         // DCG on source rssid 4 → offset to 4 + 10 = 14
         auto& dcg = (*op_rep->mutable_dcg_meta()->mutable_dcgs())[4];
@@ -661,8 +774,11 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
         rep_rowset->set_id(0);
         rep_rowset->set_num_rows(100);
         rep_rowset->set_data_size(4096);
-        rep_rowset->add_segments("lake_pk_seg1.dat");
-        rep_rowset->add_segment_size(4096);
+        {
+            auto* sm = rep_rowset->add_segment_metas();
+            sm->set_filename("lake_pk_seg1.dat");
+            sm->set_size(4096);
+        }
         auto& lake_dcg = (*tablet_metadata->mutable_dcg_meta()->mutable_dcgs())[5];
         lake_dcg.add_column_files("lake_pk_dcg.cols");
         lake_dcg.add_versions(2);
@@ -767,10 +883,14 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         rowset1->set_id(5);
         rowset1->set_num_rows(50);
         rowset1->set_data_size(200);
-        rowset1->add_segments("full_seg1");
-        rowset1->add_segments("full_seg2");
-        rowset1->add_segment_size(100);
-        rowset1->add_segment_size(100);
+        {
+            auto* sm0 = rowset1->add_segment_metas();
+            sm0->set_filename("full_seg1");
+            sm0->set_size(100);
+            auto* sm1 = rowset1->add_segment_metas();
+            sm1->set_filename("full_seg2");
+            sm1->set_size(100);
+        }
 
         // Rowset 2: source id=8, 1 seg → remap {8→12}, target→13
         auto* op_write2 = op_rep->add_op_writes();
@@ -778,8 +898,11 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         rowset2->set_id(8);
         rowset2->set_num_rows(30);
         rowset2->set_data_size(100);
-        rowset2->add_segments("full_seg3");
-        rowset2->add_segment_size(100);
+        {
+            auto* sm = rowset2->add_segment_metas();
+            sm->set_filename("full_seg3");
+            sm->set_size(100);
+        }
 
         // DCG on source rssid 6 → remap to 11
         (*op_rep->mutable_dcg_meta()->mutable_dcgs())[6].add_column_files("nonpk_full_dcg.cols");
@@ -820,8 +943,11 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         rep_rowset->set_id(0);
         rep_rowset->set_num_rows(200);
         rep_rowset->set_data_size(8192);
-        rep_rowset->add_segments("lake_nonpk_seg1.dat");
-        rep_rowset->add_segment_size(8192);
+        {
+            auto* sm = rep_rowset->add_segment_metas();
+            sm->set_filename("lake_nonpk_seg1.dat");
+            sm->set_size(8192);
+        }
         (*tablet_metadata->mutable_dcg_meta()->mutable_dcgs())[3].add_column_files("lake_nonpk_dcg.cols");
 
         ASSERT_TRUE(applier->apply(*log).ok());
@@ -863,10 +989,14 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     rowset1->set_id(5);
     rowset1->set_num_rows(50);
     rowset1->set_data_size(200);
-    rowset1->add_segments("seg1");
-    rowset1->add_segments("seg2");
-    rowset1->add_segment_size(100);
-    rowset1->add_segment_size(100);
+    {
+        auto* sm0 = rowset1->add_segment_metas();
+        sm0->set_filename("seg1");
+        sm0->set_size(100);
+        auto* sm1 = rowset1->add_segment_metas();
+        sm1->set_filename("seg2");
+        sm1->set_size(100);
+    }
 
     // op_write 2: empty (num_rows=0, no delete_pred) → skipped
     auto* op_write2 = op_rep->add_op_writes();
@@ -881,8 +1011,11 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     rowset3->set_id(20);
     rowset3->set_num_rows(0);
     rowset3->set_data_size(50);
-    rowset3->add_segments("seg3");
-    rowset3->add_segment_size(50);
+    {
+        auto* sm = rowset3->add_segment_metas();
+        sm->set_filename("seg3");
+        sm->set_size(50);
+    }
     rowset3->mutable_delete_predicate()->set_version(1);
 
     // op_write 4: no rowset → skipped

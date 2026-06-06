@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力をバイナリに変換します。"
 ---
 
 # bin

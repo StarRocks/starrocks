@@ -19,6 +19,13 @@
 #include <numeric>
 #include <set>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
@@ -413,6 +420,44 @@ size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
                 zero_count = Bits::CountTrailingZeros32(mask);
                 result_offset += 1;
                 i += (zero_count + 1);
+            }
+        }
+        check_offset += kBatchSize;
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint8_t* f_data = filter.data();
+
+    constexpr size_t kBatchSize = /*width of NEON registers*/ 128 / 8;
+
+    while (check_offset + kBatchSize < to) {
+        uint8x16_t f = vld1q_u8(f_data + check_offset);
+        // nibble_mask holds 4 bits per row: 0xf where the row is kept, 0x0 otherwise.
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(f, f));
+
+        if (nibble_mask == 0) {
+            // all no hit, pass
+        } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+            // all hit, copy all
+            auto element_size = offsets[check_offset + kBatchSize] - offsets[check_offset];
+            memset(element_filter.data() + offsets[check_offset], 1, element_size);
+            if (result_offset != check_offset) {
+                DCHECK_LE(offsets[result_offset], offsets[check_offset]);
+                auto delta = offsets[check_offset] - offsets[result_offset];
+                memmove(offsets + result_offset + 1, offsets + check_offset + 1, kBatchSize * sizeof(offsets[0]));
+                for (size_t i = 0; i < kBatchSize; i++) {
+                    offsets[result_offset + i + 1] -= delta;
+                }
+            }
+            result_offset += kBatchSize;
+        } else {
+            // Keep only the high bit of each nibble, then walk the kept rows one set bit at a time.
+            nibble_mask &= 0x8888'8888'8888'8888ull;
+            for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                size_t i = __builtin_ctzll(nibble_mask) >> 2;
+                auto array_size = offsets[check_offset + i + 1] - offsets[check_offset + i];
+                memset(element_filter.data() + offsets[check_offset + i], 1, array_size);
+                offsets[result_offset + 1] = offsets[result_offset] + array_size;
+                result_offset += 1;
             }
         }
         check_offset += kBatchSize;

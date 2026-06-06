@@ -2281,6 +2281,16 @@ public class OlapTable extends Table {
         return tableProperty.enableLoadProfile();
     }
 
+    public int getLoadInitialOpenPartitionNumber() {
+        return tableProperty == null ? TableProperty.INVALID : tableProperty.getLoadInitialOpenPartitionNumber();
+    }
+
+    public void setLoadInitialOpenPartitionNumber(int n) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(n));
+        tableProperty.buildLoadInitialOpenPartitionNumber();
+    }
+
     public void setEnableLoadProfile(boolean enableLoadProfile) {
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
@@ -2759,8 +2769,7 @@ public class OlapTable extends Table {
             // which is harmless because the next create on the same colocate_with name allocates a
             // new grpId via getNextId().
             if (colocateTableIndex.isRangeColocateGroup(groupId)) {
-                List<ColocateRange> ranges = colocateTableIndex.getColocateRangeMgr()
-                        .getColocateRanges(groupId.grpId);
+                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
                 if (!ranges.isEmpty()) {
                     GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
                             ColocateRangePersistInfo.create(groupId.grpId, ranges));
@@ -3064,6 +3073,13 @@ public class OlapTable extends Table {
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // load initial open partition number
+        String loadInitialOpenPartitionNumber =
+                tableProperties.get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+        if (loadInitialOpenPartitionNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, loadInitialOpenPartitionNumber);
         }
 
         // partition ttl

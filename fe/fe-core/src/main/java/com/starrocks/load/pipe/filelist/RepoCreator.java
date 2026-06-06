@@ -29,26 +29,19 @@ public class RepoCreator {
     private static final Logger LOG = LogManager.getLogger(RepoCreator.class);
     private static final RepoCreator INSTANCE = new RepoCreator();
 
-    private static boolean databaseExists = false;
-    private static boolean tableExists = false;
-
     public static RepoCreator getInstance() {
         return INSTANCE;
     }
 
-    public void run() {
+    public synchronized void run() {
         try {
-            if (!databaseExists) {
-                databaseExists = checkDatabaseExists();
-                if (!databaseExists) {
-                    LOG.warn("database not exists: " + FileListTableRepo.FILE_LIST_DB_NAME);
-                    return;
-                }
+            if (!checkDatabaseExists()) {
+                LOG.warn("database not exists: " + FileListTableRepo.FILE_LIST_DB_NAME);
+                return;
             }
-            if (!tableExists) {
+            if (!checkTableExists()) {
                 createTable();
                 LOG.info("table created: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
-                tableExists = true;
             }
             correctTable();
         } catch (Exception e) {
@@ -60,6 +53,12 @@ public class RepoCreator {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
+    public boolean checkTableExists() {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .mayGetTable(FileListTableRepo.FILE_LIST_DB_NAME, FileListTableRepo.FILE_LIST_TABLE_NAME)
+                .isPresent();
+    }
+
     public static void createTable() throws StarRocksException {
         int expectedReplicationNum =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
@@ -69,13 +68,5 @@ public class RepoCreator {
 
     public static boolean correctTable() {
         return StatisticUtils.alterSystemTableReplicationNumIfNecessary(FileListTableRepo.FILE_LIST_TABLE_NAME);
-    }
-
-    public boolean isDatabaseExists() {
-        return databaseExists;
-    }
-
-    public boolean isTableExists() {
-        return tableExists;
     }
 }

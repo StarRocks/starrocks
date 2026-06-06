@@ -34,7 +34,7 @@ max_concurrency = 30
 #############################  Requests  ############################
 
 # User agent to send with each request
-user_agent = "curl/7.83.1"
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # Website timeout from connect to response finished
 timeout = 10
@@ -47,7 +47,7 @@ timeout = 10
 insecure = false
 
 # Comma-separated list of accepted status codes for valid links.
-accept = [200, 204, 301, 429]
+accept = [200, 204, 301, 429, 403]
 
 # Only test links with the given schemes (e.g. https).
 # Omit to check links with any scheme.
@@ -74,7 +74,10 @@ method = "get"
      "https://openjdk.org/*",
      "https://search.maven.org/*",
      "https://gist.github.com/*",
+     "https://cloud.tencent.com/*",
+     "https://kubernetes.io/*",
      "https://github.com/*",
+     "https://www.bilibili.com/*",
      "https://www.linkedin.com/*",
    ]
 

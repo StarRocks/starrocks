@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic guides you through querying data from external data sources by using external catalogs."
+description: "How to query data from external sources in StarRocks using external catalogs."
 ---
 
 # Query external data

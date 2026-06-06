@@ -124,46 +124,54 @@ public class SplitTabletJob extends TabletReshardJob {
         return parallelTablets;
     }
 
+    @Override
+    public void init() throws StarRocksException {
+        try {
+            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
+        } catch (TabletReshardException e) {
+            // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
+            // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
+            throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
     /*
-     * 1. Set table state to TABLET_RESHARD
-     * 2. Begin transaction (allocate transaction id)
-     * 3. Create new shards on StarOS
-     * 4. Commit transaction (update next version)
-     * 5. Add new tablets to inverted index
-     * 6. Register resharding tablets
-     * 7. Set job state to PREPARING
+     * The table was already moved to TABLET_RESHARD by init() at admission time.
+     * 1. Begin transaction (allocate transaction id)
+     * 2. Create new shards on StarOS
+     * 3. Commit transaction (update next version)
+     * 4. Add new tablets to inverted index
+     * 5. Register resharding tablets
+     * 6. Set job state to PREPARING
      * Job cannot be cancelled after this step
      */
     @Override
     protected void runPendingJob() {
-        // 1. Set table state to TABLET_RESHARD
-        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
-
-        // 2. Begin transaction (allocate transaction id)
+        // 1. Begin transaction (allocate transaction id)
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         transactionId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         gtid = globalStateMgr.getGtidGenerator().nextGtid();
 
-        // 3. Create new shards on StarOS — the last "abortable" step before the no-abort
-        //    boundary below. No table lock needed: setTableState above already moved the
+        // 2. Create new shards on StarOS — the last "abortable" step before the no-abort
+        //    boundary below. No table lock needed: init() already moved the
         //    table to TABLET_RESHARD, which blocks concurrent DDL. If this throws, run()
         //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the
         //    FE-side mutations, and any orphan staros shards from a partial RPC are reaped
         //    by StarMgrMetaSyncer's diff-and-purge cycle.
         createShardsOnStarOS();
 
-        // 4. Commit transaction (update next version)
+        // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
         // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
         updateNextVersions();
 
-        // 5. Add new tablets to inverted index
+        // 4. Add new tablets to inverted index
         addTabletsToInvertedIndex();
 
-        // 6. Register resharding tablets
+        // 5. Register resharding tablets
         registerReshardingTablets();
 
-        // 7. Set job state to PREPARING
+        // 6. Set job state to PREPARING
         setJobState(JobState.PREPARING);
     }
 
@@ -393,16 +401,16 @@ public class SplitTabletJob extends TabletReshardJob {
         return jobState == JobState.PENDING;
     }
 
-    // Correspond to job added
+    // Correspond to init() at admission time
     @Override
     protected void replayPendingJob() {
+        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
         LOG.info("Split tablet job replayed pending job. {}", this);
     }
 
     // Correspond to runPendingJob()
     @Override
     protected void replayPreparingJob() {
-        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
         updateNextVersions();
         addTabletsToInvertedIndex();
         registerReshardingTablets();
@@ -606,7 +614,7 @@ public class SplitTabletJob extends TabletReshardJob {
         }
         long grpId = groupId.grpId;
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRangeMgr().getColocateRanges(grpId);
+        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRanges(grpId);
 
         Set<Tuple> canonicalLowers = new LinkedHashSet<>();
         boolean oldStradlesBoundary = false;
@@ -769,8 +777,16 @@ public class SplitTabletJob extends TabletReshardJob {
     private OlapTable getOlapTable() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) { // Table is dropped
-            errorMessage = "Table not found";
-            setJobState(JobState.ABORTING);
+            // Only force ABORTING when the job is past the abortable PENDING window. At admission
+            // (PENDING, not yet queued) and during runPendingJob (still PENDING), the run()
+            // wrapper's abort() can handle the transition cleanly — avoiding a journal entry for
+            // a job that may never be queued (admission-time table-dropped race). The errorMessage
+            // assignment is paired with setJobState here so it only fires when it is actually
+            // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
+            if (!canAbort()) {
+                errorMessage = "Table not found";
+                setJobState(JobState.ABORTING);
+            }
             throw new TabletReshardException("Table not found. " + this);
         }
         return (OlapTable) table;
@@ -824,7 +840,7 @@ public class SplitTabletJob extends TabletReshardJob {
         // Snapshot colocate ranges once: the createShard RPCs in the inner loop only ever
         // read the same grpId, and the ranges list is stable for the duration of this DDL.
         List<ColocateRange> colocateRanges = rangeColocateGroupId == null ? null
-                : colocateTableIndex.getColocateRangeMgr().getColocateRanges(rangeColocateGroupId.grpId);
+                : colocateTableIndex.getColocateRanges(rangeColocateGroupId.grpId);
         int colocateColumnCount = rangeColocateGroupId == null ? 0
                 : colocateTableIndex.getGroupSchema(rangeColocateGroupId).getColocateColumnCount();
 

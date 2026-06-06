@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADD SQLBLACKLIST は、正規表現を SQL ブラックリストに追加して特定の SQL パターンを禁止します。"
 ---
 
 # ADD SQLBLACKLIST

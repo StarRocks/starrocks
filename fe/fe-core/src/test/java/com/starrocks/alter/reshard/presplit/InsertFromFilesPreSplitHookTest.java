@@ -81,11 +81,29 @@ public class InsertFromFilesPreSplitHookTest {
 
     @Test
     public void testConfigFlagOffShortCircuits() throws Exception {
+        // Cluster-wide opt-out must short-circuit before the coordinator AND
+        // record the eligibility-skip counter under disabled_by_config — the
+        // hook returns ahead of the coordinator, so checkConfigAndSession would
+        // otherwise never bump the bucket.
         Config.enable_tablet_pre_split_for_insert_from_files = false;
         InsertStmt stmt = simpleFilesInsertStmt();
 
-        assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_CONFIG.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+
+            org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "config opt-out must bump the disabled_by_config bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     @Test

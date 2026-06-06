@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 keywords: ['Canshu']
 ---
@@ -90,6 +91,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+### lake_rows_mapper_read_parallelism
+
+- 默认值：32
+- 类型：Int
+- 单位：sub-chunk 个数
+- 是否动态：是
+- 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 读取 `.lcrm`（lake compaction rows-mapper）文件时，允许同时 in-flight 的 sub-chunk 读取数量上限。每个 sub-chunk 大小由 `lake_rows_mapper_sub_chunk_bytes` 控制，且不跨 segment 边界。迭代器最多向 PK index 执行线程池提交该数量的并发读取请求，让远端读取与调用方的 per-segment 处理流水化进行。内存上限为 `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`。设为 `1` 可关闭流水化，回退到顺序读取。
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- 默认值：4194304
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
 ### loop_count_wait_fragments_finish
 

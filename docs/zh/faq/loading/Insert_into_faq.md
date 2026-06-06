@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "不建议在 OLAP 场景中使用 INSERT INTO 语句单条写入数据。"
 ---
 
 # INSERT INTO 导入常见问题

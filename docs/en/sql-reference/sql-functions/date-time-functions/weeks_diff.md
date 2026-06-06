@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the week difference between two date expressions (*`expr1`* − *`expr2`*), accurate to the week."
+description: "Returns the week difference between two date expressions (expr1 − expr2), accurate to the week."
 ---
 
 # weeks_diff

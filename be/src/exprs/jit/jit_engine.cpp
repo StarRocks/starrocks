@@ -55,6 +55,7 @@
 #include <mutex>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/config_expr_fwd.h"
@@ -406,11 +407,15 @@ private:
     ShardedLRUCache _cache;
 };
 
+DEFINE_FAIL_POINT(jit_compile_failed);
+
 // Optimise and compile the module.
-static inline StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::string& expr_name,
-                                                                    std::unique_ptr<llvm::LLVMContext> context,
-                                                                    std::unique_ptr<llvm::Module>&& module,
-                                                                    JITObjectCache& object_cache) {
+static StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::string& expr_name,
+                                                             std::unique_ptr<llvm::LLVMContext>&& context,
+                                                             std::unique_ptr<llvm::Module>&& module,
+                                                             JITObjectCache& object_cache) {
+    // Simulates a JIT compilation failure to exercise the early-return error path.
+    FAIL_POINT_TRIGGER_RETURN(jit_compile_failed, Status::JitCompileError("injected jit compile error"));
     ASSIGN_OR_RETURN(auto jtmb, make_target_machine_builder());
     auto mem_mgr = CustomizedInProcessMemoryManager::create();
     ASSIGN_OR_RETURN(auto lljit, build_JIT(jtmb, object_cache, *mem_mgr));

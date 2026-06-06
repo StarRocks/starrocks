@@ -27,12 +27,13 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
-#include "compute_env/pipeline/observer.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregator_fwd.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/expr.h"
@@ -44,6 +45,7 @@
 
 namespace starrocks {
 class RuntimeFilter;
+class RuntimeFilterBuildDescriptor;
 class AggTopNRuntimeFilterBuilder;
 class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;

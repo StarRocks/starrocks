@@ -112,7 +112,7 @@ lake::RowsetPtr LakeScanLazyMaterializationContext::get_rowset(const std::vector
     for (const auto& rowset : rowsets) {
         const auto& rowset_meta = rowset->metadata();
         const uint32_t rssid_base = rowset_meta.id();
-        size_t num_segment = rowset_meta.segments_size();
+        size_t num_segment = rowset_meta.segment_metas_size();
         if (rssid_base <= rssid && rssid < rssid_base + num_segment) {
             segment_id = rssid - rssid_base;
             target = rowset;

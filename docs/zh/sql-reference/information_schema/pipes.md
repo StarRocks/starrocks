@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "pipes 提供当前或指定数据库下所有 Pipe 的详细信息。"
 ---
 
 # pipes

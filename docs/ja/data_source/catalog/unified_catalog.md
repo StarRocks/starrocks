@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Unified catalog は Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu のデータを統一的にクエリ。"
 toc_max_heading_level: 5
 ---
 

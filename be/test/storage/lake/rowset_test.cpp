@@ -116,9 +116,8 @@ public:
             rowset->set_overlapped(true);
             rowset->set_id(1);
             rowset->set_next_compaction_offset(1);
-            auto* segs = rowset->mutable_segments();
             for (const auto& file : writer->segments()) {
-                segs->Add()->assign(file.path);
+                rowset->add_segment_metas()->set_filename(file.path);
             }
 
             writer->close();
@@ -292,7 +291,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     {
         TxnLogPB txn_log;
         auto op_compaction = txn_log.mutable_op_compaction();
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 0);
 
         auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1
                                                  /* compaction_segment_limit */);
@@ -304,7 +303,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         VersionedTablet vt(nullptr, _tablet_metadata);
         VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
         EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 4);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 4);
         EXPECT_EQ(op_compaction->new_segment_offset(), 1);
         EXPECT_EQ(op_compaction->new_segment_count(), 2);
 
@@ -318,7 +317,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     {
         TxnLogPB txn_log;
         auto op_compaction = txn_log.mutable_op_compaction();
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 0);
 
         auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
                                                  0 /* compaction_segment_limit */);
@@ -327,7 +326,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         VersionedTablet vt(nullptr, _tablet_metadata);
         VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
         EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 2);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 2);
         EXPECT_EQ(op_compaction->new_segment_offset(), 0);
         EXPECT_EQ(op_compaction->new_segment_count(), 2);
 
@@ -343,10 +342,12 @@ TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     create_rowsets_for_testing();
     auto* rowset_meta = _tablet_metadata->mutable_rowsets(0);
     rowset_meta->set_next_compaction_offset(2);
-    rowset_meta->clear_segment_metas();
-    rowset_meta->add_segment_metas()->set_segment_idx(0);
-    rowset_meta->add_segment_metas()->set_segment_idx(2);
-    rowset_meta->add_segment_metas()->set_segment_idx(4);
+    // Assign sparse, non-contiguous segment ids to the existing (named) segments to exercise the
+    // sparse-segment_idx path without colliding ids. Keep the real filenames so load_segments works.
+    ASSERT_EQ(3, rowset_meta->segment_metas_size());
+    rowset_meta->mutable_segment_metas(0)->set_segment_idx(0);
+    rowset_meta->mutable_segment_metas(1)->set_segment_idx(2);
+    rowset_meta->mutable_segment_metas(2)->set_segment_idx(4);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     int64_t txn_id = next_id();
@@ -379,14 +380,14 @@ TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     ASSERT_OK(task.fill_compaction_segment_info(op_compaction, writer.get()));
 
     const auto& output_rowset = op_compaction->output_rowset();
-    ASSERT_EQ(4, output_rowset.segments_size());
+    ASSERT_EQ(4, output_rowset.segment_metas_size());
     ASSERT_EQ(4, output_rowset.segment_metas_size());
     EXPECT_EQ(2, op_compaction->new_segment_offset());
     EXPECT_EQ(2, op_compaction->new_segment_count());
 
     std::unordered_set<uint32_t> segment_ids;
-    for (int i = 0; i < output_rowset.segment_metas_size(); ++i) {
-        segment_ids.insert(output_rowset.segment_metas(i).segment_idx());
+    for (const auto& segment_meta : output_rowset.segment_metas()) {
+        segment_ids.insert(segment_meta.segment_idx());
     }
     EXPECT_EQ(static_cast<size_t>(output_rowset.segment_metas_size()), segment_ids.size());
     EXPECT_TRUE(segment_ids.contains(0));
@@ -421,9 +422,8 @@ static void set_tablet_range_int(TabletMetadata* tablet_meta, std::optional<int3
 }
 
 static void set_rowset_shared_segments(RowsetMetadataPB* rowset_meta, bool shared) {
-    rowset_meta->clear_shared_segments();
-    for (int i = 0; i < rowset_meta->segments_size(); i++) {
-        rowset_meta->add_shared_segments(shared);
+    for (auto& segment_meta : *rowset_meta->mutable_segment_metas()) {
+        segment_meta.set_shared(shared);
     }
 }
 
@@ -685,7 +685,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
     rowset->set_overlapped(true);
     rowset->set_id(1);
     for (auto& file : files) {
-        rowset->add_segments(std::move(file.path));
+        rowset->add_segment_metas()->set_filename(std::move(file.path));
     }
     set_rowset_shared_segments(rowset, true);
 
@@ -794,7 +794,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
     rowset->set_overlapped(true);
     rowset->set_id(1);
     for (auto& file : files) {
-        rowset->add_segments(std::move(file.path));
+        rowset->add_segment_metas()->set_filename(std::move(file.path));
     }
     set_rowset_shared_segments(rowset, true);
 
@@ -968,60 +968,59 @@ public:
         rowset->set_id(1);
         rowset->set_num_rows(33); // 11 + 11 + 11
 
-        for (const auto& file : files) {
-            rowset->add_segments(file.path);
-        }
-
         // Add segment_metas with sort_key_min/max
         // Segment 0: [0, 10]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[0].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("10");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         // Segment 1: [20, 30]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[1].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("30");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         // Segment 2: [40, 50]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[2].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("50");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         writer->close();
@@ -1302,15 +1301,15 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
     txn_log.set_txn_id(next_id());
 
     auto* op_write = txn_log.mutable_op_write();
-    op_write->mutable_rowset()->add_segments("seg1.dat");
-    op_write->mutable_rowset()->add_segments("seg2.dat");
-    op_write->add_dels("del1.del");
+    op_write->add_dels_meta()->set_name("del1.del");
 
     // seg1 has two vector indexes, seg2 has one
     auto* meta_seg1 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg1->set_filename("seg1.dat");
     meta_seg1->add_vector_index_ids(100);
     meta_seg1->add_vector_index_ids(200);
     auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg2->set_filename("seg2.dat");
     meta_seg2->add_vector_index_ids(100);
 
     std::vector<std::string> files_to_delete;
@@ -1341,22 +1340,22 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
     auto* op_compaction = txn_log.mutable_op_compaction();
     auto* output_rowset = op_compaction->mutable_output_rowset();
     // Partial compaction: segments [reused_a, new_x, new_y, reused_b]
-    output_rowset->add_segments("reused_a.dat");
-    output_rowset->add_segments("new_x.dat");
-    output_rowset->add_segments("new_y.dat");
-    output_rowset->add_segments("reused_b.dat");
     op_compaction->set_new_segment_offset(1);
     op_compaction->set_new_segment_count(2);
 
     // All segments have vi tracking via segment_metas
     auto* meta_a = output_rowset->add_segment_metas();
+    meta_a->set_filename("reused_a.dat");
     meta_a->add_vector_index_ids(100);
     auto* meta_x = output_rowset->add_segment_metas();
+    meta_x->set_filename("new_x.dat");
     meta_x->add_vector_index_ids(100);
     meta_x->add_vector_index_ids(200);
     auto* meta_y = output_rowset->add_segment_metas();
+    meta_y->set_filename("new_y.dat");
     meta_y->add_vector_index_ids(100);
     auto* meta_b = output_rowset->add_segment_metas();
+    meta_b->set_filename("reused_b.dat");
     meta_b->add_vector_index_ids(100);
 
     std::vector<std::string> files_to_delete;
@@ -1393,12 +1392,12 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
     auto* op_sc = txn_log.mutable_op_schema_change();
     op_sc->set_linked_segment(false);
     auto* rowset = op_sc->add_rowsets();
-    rowset->add_segments("sc_seg1.dat");
-    rowset->add_segments("sc_seg2.dat");
 
     auto* meta_sc1 = rowset->add_segment_metas();
+    meta_sc1->set_filename("sc_seg1.dat");
     meta_sc1->add_vector_index_ids(300);
     auto* meta_sc2 = rowset->add_segment_metas();
+    meta_sc2->set_filename("sc_seg2.dat");
     meta_sc2->add_vector_index_ids(300);
     meta_sc2->add_vector_index_ids(400);
 
@@ -1427,10 +1426,10 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
 
     auto* op_repl = txn_log.mutable_op_replication();
     auto* op_write = op_repl->add_op_writes();
-    op_write->mutable_rowset()->add_segments("repl_seg1.dat");
-    op_write->add_dels("repl_del1.del");
+    op_write->add_dels_meta()->set_name("repl_del1.del");
 
     auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
+    meta_repl->set_filename("repl_seg1.dat");
     meta_repl->add_vector_index_ids(500);
 
     std::vector<std::string> files_to_delete;
@@ -1455,7 +1454,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_no_vi_files) {
     txn_log.set_txn_id(next_id());
 
     auto* op_write = txn_log.mutable_op_write();
-    op_write->mutable_rowset()->add_segments("seg_no_vi.dat");
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_no_vi.dat");
     // No vector_index_ids in segment_metas
 
     std::vector<std::string> files_to_delete;
@@ -1476,14 +1475,14 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
     txn_log.set_txn_id(next_id());
 
     auto* op_write = txn_log.mutable_op_write();
-    op_write->mutable_rowset()->add_segments("seg_a.dat");
-    op_write->mutable_rowset()->add_segments("seg_b.dat");
-    op_write->mutable_rowset()->add_segments("seg_c.dat");
 
-    // Only seg_a has segment_metas; seg_b and seg_c do not (e.g., pre-VI rowset).
+    // Only seg_a has vector_index_ids; seg_b and seg_c do not (e.g., pre-VI rowset).
     auto* meta_a = op_write->mutable_rowset()->add_segment_metas();
+    meta_a->set_filename("seg_a.dat");
     meta_a->add_vector_index_ids(100);
     meta_a->add_vector_index_ids(200);
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_b.dat");
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_c.dat");
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1516,18 +1515,18 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
 
     auto* op_compaction = txn_log.mutable_op_compaction();
     auto* output_rowset = op_compaction->mutable_output_rowset();
-    output_rowset->add_segments("reused.dat");
-    output_rowset->add_segments("new_a.dat");
-    output_rowset->add_segments("new_b.dat");
     op_compaction->set_new_segment_offset(1);
     op_compaction->set_new_segment_count(2);
 
-    // Only one segment_meta entry — covers reused.dat. new_a.dat and new_b.dat
-    // do not have segment_metas. The op_compaction loop iterates idx=1 (new_a)
-    // and idx=2 (new_b), both past the metas array — no .vi filenames should
-    // be emitted for either.
+    // Only reused.dat has vector_index_ids. new_a.dat and new_b.dat have
+    // segment_metas with no vector_index_ids. The op_compaction loop iterates
+    // idx=1 (new_a) and idx=2 (new_b) — no .vi filenames should be emitted for
+    // either.
     auto* meta_reused = output_rowset->add_segment_metas();
+    meta_reused->set_filename("reused.dat");
     meta_reused->add_vector_index_ids(100);
+    output_rowset->add_segment_metas()->set_filename("new_a.dat");
+    output_rowset->add_segment_metas()->set_filename("new_b.dat");
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);

@@ -18,7 +18,10 @@
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
+#include "common/config_storage_fwd.h"
 #include "compute_env/compute_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
 
@@ -35,10 +38,19 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
 
     ComputeEnvOptions compute_env_options;
     compute_env_options.max_num_pipeline_drivers = 2;
     ASSERT_OK(env.compute_env()->init(compute_env_options));
+    ComputeEnvWorkGroupOptions workgroup_options;
+    workgroup_options.max_executor_threads = 2;
+    workgroup_options.metrics = metrics;
+    workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    ASSERT_OK(env.compute_env()->init_workgroup(workgroup_options));
+    ASSERT_OK(env.compute_env()->init_spill({config::storage_root_path}, metrics));
     env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
     env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
@@ -49,7 +61,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     env._refresh_service_contexts();
 
     EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
-    EXPECT_EQ(env.execution_services().workgroup_manager, nullptr);
+    EXPECT_EQ(env.execution_services().workgroup_manager, env.compute_env()->workgroup_manager());
     EXPECT_EQ(env.execution_services().driver_limiter, env.compute_env()->driver_limiter());
     EXPECT_EQ(env.execution_services().pipeline_timer, env.compute_env()->pipeline_timer());
     EXPECT_EQ(env.execution_services().max_executor_threads, global_env->max_executor_threads());
@@ -72,6 +84,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
     EXPECT_EQ(env.runtime_services().result_mgr, env.compute_env()->result_mgr());
     EXPECT_EQ(env.runtime_services().result_queue_mgr, env.compute_env()->result_queue_mgr());
+    EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
+    EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
 
     EXPECT_EQ(env.agent_services().agent_server, env._agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);
@@ -86,6 +100,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.admin_services().lake, &env.lake_services());
     EXPECT_EQ(env.admin_services().runtime, &env.runtime_services());
     EXPECT_EQ(env.admin_services().agent, &env.agent_services());
+
+    env.compute_env()->stop_workgroup();
+    env.compute_env()->destroy();
 }
 
 } // namespace starrocks

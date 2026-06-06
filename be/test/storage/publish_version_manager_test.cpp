@@ -24,6 +24,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "common/config_storage_fwd.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
@@ -49,7 +50,7 @@ public:
     void SetUp() override {
         _publish_version_manager = starrocks::StorageEngine::instance()->publish_version_manager();
         _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
-        Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
+        Thread::set_thread_name(_finish_publish_version_thread, "finish_pub_ver");
     }
 
     void TearDown() override {

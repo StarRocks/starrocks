@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "In scenarios where multiple nodes collaboratively access the same data lake, the core challenge is **how to achieve secure, unified, and auditable permission management**."
+description: "How to secure Iceberg REST Catalog access in StarRocks using JWT authentication and Vended Credentials."
 ---
 
 # Security Setup for Iceberg REST Catalog

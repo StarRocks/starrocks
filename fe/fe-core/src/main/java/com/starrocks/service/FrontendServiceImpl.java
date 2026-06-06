@@ -350,6 +350,7 @@ import com.starrocks.thrift.TOlapTableTablet;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
+import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
@@ -411,7 +412,6 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
@@ -1103,6 +1103,72 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 status.setStatus_code(NOT_IMPLEMENTED_ERROR);
                 break;
+        }
+        return result;
+    }
+
+    @Override
+    public TFeResult checkAuth(TAuthenticateParams request) throws TException {
+        TStatus status = new TStatus(TStatusCode.OK);
+        TFeResult result = new TFeResult(FrontendServiceVersion.V1, status);
+        if (request == null || !request.isSetUser() || !request.isSetPasswd()) {
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("missing authentication parameters");
+            return result;
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("checkAuth request user={} host={} requiredPriv={}",
+                    request.getUser(),
+                    request.isSetHost() ? request.getHost() : null,
+                    request.isSetRequired_privilege() ? request.getRequired_privilege() : null);
+        }
+
+        String host = request.isSetHost() ? request.getHost() : "";
+        try {
+            ConnectContext ctx = new ConnectContext();
+            // authenticate() populates ctx.currentUserIdentity + currentRoleIds (with group-derived roles),
+            // so we MUST NOT overwrite them afterward; doing so would drop LDAP/security-integration groups
+            // and the OPERATE/NODE checks below would falsely reject privileged callers.
+            AuthenticationHandler.authenticate(ctx, request.getUser(), host,
+                    request.getPasswd().getBytes(StandardCharsets.UTF_8));
+
+            // getRequired_privilege() can return null when a newer BE sends an enum value
+            // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
+            // before the switch so we reject cleanly instead of throwing NPE.
+            TPrivilegeRequirement requiredPriv = request.isSetRequired_privilege()
+                    ? request.getRequired_privilege() : TPrivilegeRequirement.NONE;
+            if (requiredPriv == null) {
+                LOG.warn("checkAuth received unknown required_privilege (enum int) from BE for user={}",
+                        request.getUser());
+                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                status.addToError_msgs("auth verification failed");
+                return result;
+            }
+            switch (requiredPriv) {
+                case NONE:
+                    break;
+                case OPERATE:
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.OPERATE);
+                    break;
+                case NODE:
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.NODE);
+                    break;
+                default:
+                    LOG.warn("checkAuth hit default switch arm for required_privilege={} (FE enum out of sync)",
+                            requiredPriv);
+                    status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    status.addToError_msgs("auth verification failed");
+                    return result;
+            }
+        } catch (AuthenticationException e) {
+            LOG.warn("checkAuth authentication failed for user={}: {}", request.getUser(), e.getMessage());
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("Access denied for " + request.getUser() + "@" + host);
+        } catch (AccessDeniedException e) {
+            LOG.warn("checkAuth privilege check failed for user={}: {}", request.getUser(), e.getMessage());
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("Access denied for " + request.getUser() + "@" + host);
         }
         return result;
     }
@@ -2040,16 +2106,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
-        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (request.isSetBackend_id()) {
-            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
-                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        }
-        // TODO(ComputeResource): support more better compute resource acquiring.
+        // The whole load transaction runs on a single compute resource (worker group). The new
+        // sub-partition shards, the tablet locations, and the nodes_info built below must all be
+        // derived from this same resource; otherwise a tablet location may reference a compute node
+        // that is absent from nodes_info and the BE reports "Unknown node_id". This mirrors the
+        // self-consistent handling on the create-partition path (buildCreatePartitionResponse).
+        final ComputeResource computeResource = txnState.getComputeResource();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        // Validate the resource before mutating any metadata below, so an unavailable worker group
+        // fails fast instead of leaving partitions marked immutable with no replacement created.
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "No available worker group for warehouse " + computeResource));
+            result.setStatus(errorStatus);
+            return result;
+        }
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
@@ -2116,9 +2187,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setPartitions(partitions);
         result.setTablets(tablets);
 
-        // build nodes
-        // TODO(ComputeResource): support more better compute resource acquiring.
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
+        // build nodes from the same compute resource used for the tablet locations above, so every
+        // location node id is guaranteed to be present in nodes_info.
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
