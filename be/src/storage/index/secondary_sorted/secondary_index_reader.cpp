@@ -452,10 +452,9 @@ StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
         // Zone-map pruned the whole .idx: nothing matches in this rowset.
         return Status::EndOfFile("covering: index segment pruned");
     }
-    return std::make_shared<CoveringIndexIterator>(output_schema, std::move(inner_iter), std::move(read_schema),
-                                                   std::move(out_to_inner), _encoded_pos_col_idx, _tablet_id,
-                                                   rowset_id_base, version, std::move(delvec_loader), chunk_size,
-                                                   seg_rowid_ranges);
+    return std::make_shared<CoveringIndexIterator>(
+            output_schema, std::move(inner_iter), std::move(read_schema), std::move(out_to_inner), _encoded_pos_col_idx,
+            _tablet_id, rowset_id_base, version, std::move(delvec_loader), chunk_size, seg_rowid_ranges);
 }
 
 } // namespace starrocks::secondary_sorted
