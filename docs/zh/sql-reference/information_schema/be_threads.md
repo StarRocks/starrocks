@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_threads 提供每个 BE 节点上运行的线程信息。"
 ---
 
 # be_threads

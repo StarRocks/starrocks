@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "max_by 返回与 y 的最大值关联的 x 值。"
 ---
 
 # max_by

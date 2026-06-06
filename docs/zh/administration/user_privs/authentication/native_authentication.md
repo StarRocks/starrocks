@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Create and manage users in StarRocks using native password-based authentication through SQL commands for local identity verification."
 sidebar_position: 10
 ---
 

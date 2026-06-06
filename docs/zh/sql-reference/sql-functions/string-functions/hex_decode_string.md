@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将十六进制编码的字符串解码为原始字符串值，是hex函数的反向函数。"
 ---
 
 # hex_decode_string

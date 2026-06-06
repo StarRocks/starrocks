@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "聚合 PERCENTILE 数据。"
 ---
 
 # percentile_union

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.4.0 以降で、Iceberg テーブルの履歴スナップショットにタイムトラベルクエリで時間を遡る。"
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

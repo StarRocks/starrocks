@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Information Schema 是实例中包含系统定义视图的数据库。"
 keywords: ['Yuanshuju']
 ---
 

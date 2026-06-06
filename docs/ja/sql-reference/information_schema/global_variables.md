@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "global_variablesはグローバル変数に関する情報を提供します。"
 ---
 
 # global_variables

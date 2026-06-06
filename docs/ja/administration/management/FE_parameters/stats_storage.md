@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：統計情報収集とストレージに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "GROUP BY clause organizes result rows into groups for use with aggregate functions."
 sidebar_label: "GROUP BY"
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.2 版本发布说明：资源组管理、Java UDF 框架、主键表部分更新、JSON 数据类型、Hudi 支持。"
 ---
 
 # StarRocks version 2.2

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据指定的时间粒度周期，将给定的时间转化到其所在周期的起始或结束时刻。"
 ---
 
 # date_slice

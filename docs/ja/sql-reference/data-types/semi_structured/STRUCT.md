@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "異なるデータ型を持つ要素のコレクションで複雑なデータ型を表現。"
 ---
 
 # STRUCT

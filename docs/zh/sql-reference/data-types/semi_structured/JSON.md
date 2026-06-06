@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JSON 是轻量级的半结构化数据格式，支持数字、字符串、布尔值、数组和对象类型。"
 ---
 
 # JSON

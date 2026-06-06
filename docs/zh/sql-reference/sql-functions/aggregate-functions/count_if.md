@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "count_if 计算满足指定条件的记录数，内部转化为 COUNT 和 IF 的组合。"
 ---
 
 # count_if

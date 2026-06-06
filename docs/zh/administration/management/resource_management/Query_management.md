@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Configure per-user query properties in StarRocks: connection limits, query timeouts, and resource allocation using ALTER USER SET PROPERTIES."
 ---
 
 # 管理查询

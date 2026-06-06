@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付の四半期部分を返します。"
 ---
 
 # quarter

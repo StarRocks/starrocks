@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "進行中のALTER TABLE操作の実行状態を表示します。列変更、スキーマ最適化、ロールアップインデックス変更を含みます。"
 ---
 
 # SHOW ALTER TABLE

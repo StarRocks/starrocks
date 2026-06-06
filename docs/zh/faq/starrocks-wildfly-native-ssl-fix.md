@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "解决 StarRocks 中 Hadoop 3.4.3 Wildfly 原生 SSL 库兼容性问题。"
 sidebar_label: "Hadoop Wildfly Native SSL 库问题"
 sidebar_position: 99
 ---

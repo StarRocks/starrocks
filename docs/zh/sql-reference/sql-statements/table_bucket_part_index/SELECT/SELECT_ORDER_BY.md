@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ORDER BY clause sorts result set by comparing values from one or more columns."
 sidebar_label: "ORDER BY"
 ---
 

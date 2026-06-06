@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回以弧度表示的角度x的余切值。"
 ---
 
 # cot

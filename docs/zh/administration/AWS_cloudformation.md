@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AWS CloudFormation 与 StarRocks 集成，支持在 AWS 上快速部署并管理 StarRocks 集群。"
 ---
 
 # 在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群

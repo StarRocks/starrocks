@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "特定のフォーマットのバイナリ文字列をビットマップに変換します。"
 ---
 
 # bitmap_from_binary

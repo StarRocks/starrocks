@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ANALYZE JOB 查看自定义自动采集任务的信息和状态。"
 ---
 
 # SHOW ANALYZE JOB

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文件外部表支持直接查询 HDFS、S3、OSS 和 COS 上的 Parquet 和 ORC 文件。"
 ---
 
 # 文件外部表

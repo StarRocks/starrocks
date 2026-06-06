@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据指定的精度级别将一个日期时间截断。"
 ---
 
 # date_trunc

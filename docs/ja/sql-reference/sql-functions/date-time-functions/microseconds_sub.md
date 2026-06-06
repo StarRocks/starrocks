@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付値からマイクロ秒単位の時間間隔を減算します。"
 ---
 
 # microseconds_sub

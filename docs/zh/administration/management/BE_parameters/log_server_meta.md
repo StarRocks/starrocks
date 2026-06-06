@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 keywords: ['Canshu']
 ---
@@ -279,7 +280,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：一致性相关任务的内存百分比上限。启动时会取 `consistency_max_memory_limit`（字节）与 `process_mem_limit * percent / 100` 的较小值作为最终上限；`process_mem_limit` 为 -1 时视为不限制。非法取值(&lt;0 或 &gt;100)按 100 处理。
+- 描述：一致性相关任务的内存百分比上限。启动时会取 `consistency_max_memory_limit`（字节）与 `process_mem_limit * percent / 100` 的较小值作为最终上限；`process_mem_limit` 为 -1 时视为不限制。非法取值(`<`0 或 `>`100)按 100 处理。
 - 引入版本：v3.2.0
 
 ### consistency_max_memory_limit

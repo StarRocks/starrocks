@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列をBITMAPに変換します。"
 ---
 
 # bitmap_from_string

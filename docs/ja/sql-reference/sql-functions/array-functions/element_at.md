@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された位置（インデックス）から配列の要素を返します。"
 ---
 
 # element_at

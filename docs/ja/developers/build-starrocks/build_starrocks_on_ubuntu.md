@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Ubuntu オペレーティングシステムで StarRocks をソースからコンパイルする方法。"
 ---
 
 # Ubuntu で StarRocks をコンパイルする

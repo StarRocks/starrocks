@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "View and monitor running queries in StarRocks using current_queries and related views, analyze resource consumption, and cancel long-running queries."
 sidebar_position: 9
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SUBMIT TASK で送信した非同期 ETL タスクを削除します。"
 ---
 
 # DROP TASK

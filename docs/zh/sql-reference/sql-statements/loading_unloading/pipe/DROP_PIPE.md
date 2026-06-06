@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "删除 Pipe 及其关联的作业和元数据。"
 ---
 
 # DROP PIPE

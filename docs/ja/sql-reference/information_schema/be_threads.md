@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_threadsは各BEノードで実行されているスレッドに関する情報を提供します。"
 ---
 
 # be_threads

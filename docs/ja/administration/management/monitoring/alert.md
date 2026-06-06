@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビジネス継続性、クラスタ可用性、マシン負荷などの監視項目に対応するアラート設定と解決策を提供します。"
 toc_max_heading_level: 4
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "启用基于完全限定域名（FQDN）访问 StarRocks 节点而非 IP 地址。"
 ---
 
 # 启用 FQDN 访问

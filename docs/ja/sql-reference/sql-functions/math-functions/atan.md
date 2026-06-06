@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "引数のアークタンジェントを計算します。"
 ---
 
 # atan

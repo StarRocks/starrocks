@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Iceberg Catalog テーブルのみでサポートされる半構造化データ型。"
 ---
 
 # VARIANT

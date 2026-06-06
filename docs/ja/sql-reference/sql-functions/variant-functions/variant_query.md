@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "VARIANT オブジェクト内のパス式で指定された要素の値をVARIANT型で返します。"
 ---
 
 # variant_query

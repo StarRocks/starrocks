@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Privileges granted to users or roles determine which operations can be performed on specific objects in StarRocks."
 sidebar_position: 20
 sidebar_label: "权限项"
 ---

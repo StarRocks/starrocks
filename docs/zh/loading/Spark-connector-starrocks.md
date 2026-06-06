@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 StarRocks Spark connector 从 Apache Spark DataFrame 或 SQL 导入数据到 StarRocks，支持批处理和流式处理。"
 ---
 
 # 使用 Spark connector 导入数据（推荐）

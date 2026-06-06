@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "bool_or 如果任意行的表达式结果为 true 则返回 true，否则返回 false。"
 ---
 
 # bool_or

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "展示所有或指定异步物化视图的信息。"
 ---
 
 # SHOW MATERIALIZED VIEWS

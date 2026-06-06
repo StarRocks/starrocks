@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "获取当前用户激活的角色。"
 ---
 
 # current_role

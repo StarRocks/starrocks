@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_POSITION関数は配列内の要素の位置を取得します。"
 ---
 
 # array_position

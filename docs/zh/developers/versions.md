@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "版本命名在版本控制文档中详细说明。"
 sidebar_position: 1
 ---
 

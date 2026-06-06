@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "複数 FE ノード上でロードバランシング層をデプロイして高可用性を実現します。"
 sidebar_position: 60
 ---
 

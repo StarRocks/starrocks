@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Flink Connector 常见问题，包括时区处理和 Sink 配置问题。"
 ---
 
 # Flink Connector 导入常见问题

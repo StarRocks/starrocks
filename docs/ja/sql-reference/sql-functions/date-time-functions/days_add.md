@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日数を、与えられた日付または日時に加算します。"
 ---
 
 # days_add

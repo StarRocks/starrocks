@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "query_idを使用してクエリのプロファイルを取得します。"
 ---
 
 # get_query_profile

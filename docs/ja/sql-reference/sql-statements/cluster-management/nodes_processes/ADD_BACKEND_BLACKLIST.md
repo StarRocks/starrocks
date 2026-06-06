@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE または CN ノードを BE および CN ブラックリストに追加します。"
 ---
 
 # ADD BACKEND/COMPUTE NOTE BLACKLIST

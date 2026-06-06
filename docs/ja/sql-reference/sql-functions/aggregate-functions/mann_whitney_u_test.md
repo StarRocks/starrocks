@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの母集団から得られたサンプルに対して Mann-Whitney 順位検定を実行します。"
 ---
 
 # mann_whitney_u_test

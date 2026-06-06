@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_SLICE関数は配列のスライスを返します。"
 ---
 
 # array_slice

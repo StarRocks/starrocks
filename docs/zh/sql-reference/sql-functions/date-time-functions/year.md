@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期中的年份，范围1000到9999。"
 ---
 
 # year

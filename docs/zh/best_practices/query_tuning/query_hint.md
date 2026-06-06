@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Query hints are directives that explicitly suggest the query optimizer on how to execute queries, including SET_VAR and Join hints."
 sidebar_position: 70
 ---
 

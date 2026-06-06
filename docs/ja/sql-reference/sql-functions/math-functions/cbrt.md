@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "引数の立方根を計算します。"
 ---
 
 # cbrt

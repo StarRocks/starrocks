@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x を y 乗した結果を返します。"
 ---
 
 # pow, power, dpow, fpow

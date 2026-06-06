@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Spark で前処理したデータを大量にインポートし、StarRocks クラスタの計算リソースを節約します。"
 ---
 
 # SPARK LOAD

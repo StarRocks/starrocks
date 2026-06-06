@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "デバッグ目的でクエリのダンプを返します。"
 ---
 
 # get_query_dump

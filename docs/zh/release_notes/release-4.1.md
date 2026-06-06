@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.1 版本发布说明：多租户范围分片自动拆分、超大容量 tablet、Fast Schema Evolution V2。"
 ---
 
 # StarRocks version 4.1

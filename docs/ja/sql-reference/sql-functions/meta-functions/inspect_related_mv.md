@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたベーステーブルを参照するすべてのマテリアライズドビューをJSON配列で返します。"
 ---
 
 # inspect_related_mv

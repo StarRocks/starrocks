@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在のデータベースの名前を返します。"
 ---
 
 # database

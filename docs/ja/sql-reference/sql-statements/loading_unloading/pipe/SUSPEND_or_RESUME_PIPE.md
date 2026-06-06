@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "パイプを一時停止または再開します。"
 ---
 
 # SUSPEND または RESUME PIPE

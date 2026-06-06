@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks SQL 查询常见问题。"
 ---
 
 # 查询常见问题

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたJSONパスからJSON文字列内のブール値を解析して取得します。"
 ---
 
 # get_json_bool

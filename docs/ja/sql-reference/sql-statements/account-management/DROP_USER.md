@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP USER removes a specified user identity from StarRocks."
 ---
 
 # DROP USER

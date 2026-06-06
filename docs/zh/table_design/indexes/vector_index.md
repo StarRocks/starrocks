@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and use vector indexes (IVFPQ, HNSW) in StarRocks for approximate nearest neighbor search on high-dimensional vector data."
 sidebar_position: 60
 ---
 

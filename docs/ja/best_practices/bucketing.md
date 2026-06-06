@@ -1,5 +1,6 @@
 ---
 sidebar_position: 30
+description: "StarRocks のハッシュ/ランダムバケット法の選択、仕組み、トレードオフ、推奨ユースケースを簡潔に説明します。"
 ---
 
 # バケット法

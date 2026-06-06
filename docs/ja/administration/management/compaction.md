@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 共有データクラスタで Compaction を管理・監視し、クエリ効率を向上させる方法。"
 ---
 
 # 共有データクラスタの Compaction

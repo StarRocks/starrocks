@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "为 StarRocks BE 节点启用和可视化 Jemalloc 堆内存分析以诊断内存使用问题。"
 ---
 
 # Jemalloc 堆内存分析

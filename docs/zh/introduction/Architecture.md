@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 架构由 FE、BE 和 CN 组件组成，支持高性能分析和水平扩展。"
 keywords: ['cun chu']
 ---
 

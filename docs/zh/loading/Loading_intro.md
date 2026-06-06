@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 提供多种导入方案：Stream Load、Broker Load、Routine Load、INSERT、Spark Load 和 Pipe。"
 toc_max_heading_level: 3
 keywords: ['daoru'] 
 ---

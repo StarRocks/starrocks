@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "辞書オブジェクト内のキーにマップされた値をクエリします。"
 ---
 
 # dictionary_get

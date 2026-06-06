@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Asynchronous materialized view monitoring metrics support from v3.1 onwards."
 sidebar_position: 20
 ---
 

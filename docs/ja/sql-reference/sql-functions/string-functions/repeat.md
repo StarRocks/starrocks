@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列を指定された回数だけ繰り返します。"
 ---
 
 # repeat

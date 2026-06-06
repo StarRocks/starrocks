@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai', 'ziyuanzu'] 
 displayed_sidebar: docs
+description: "ALTER RESOURCE GROUP modifies the configuration of a resource group."
 ---
 
 # ALTER RESOURCE GROUP

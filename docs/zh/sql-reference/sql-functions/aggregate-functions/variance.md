@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回表达式的总体方差，支持作为窗口函数使用。"
 ---
 
 # variance, var_pop, variance_pop

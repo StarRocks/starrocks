@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された分を日付から引きます。"
 ---
 
 # minutes_sub

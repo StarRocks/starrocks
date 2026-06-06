@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "暂停 Routine Load 导入作业，导入作业进入 PAUSED 状态但不结束。"
 ---
 
 # PAUSE ROUTINE LOAD

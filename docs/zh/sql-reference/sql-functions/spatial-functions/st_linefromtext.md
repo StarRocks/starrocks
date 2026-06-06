@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将 WKT（Well Known Text）转换为 Line 形式的内存表现形式。"
 ---
 
 # ST_LineFromText, ST_LineStringFromText

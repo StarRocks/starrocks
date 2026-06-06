@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据 query_id 返回已执行查询的 dump，包含表结构、统计信息和 session 变量等调试信息。"
 ---
 
 # get_query_dump_from_query_id

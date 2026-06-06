@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "tablesはテーブルに関する情報を提供します。"
 ---
 
 # tables

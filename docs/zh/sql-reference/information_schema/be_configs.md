@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_configs 提供每个 BE 节点的配置参数信息。"
 ---
 
 # be_configs

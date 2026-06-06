@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "取消异步物化视图的刷新任务。"
 ---
 
 # CANCEL REFRESH MATERIALIZED VIEW

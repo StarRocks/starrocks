@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.3 起支持阿里云 MaxCompute catalog，无导入直接查询 MaxCompute 数据。"
 toc_max_heading_level: 4
 ---
 

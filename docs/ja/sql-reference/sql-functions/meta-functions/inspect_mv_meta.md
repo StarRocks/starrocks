@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "マテリアライズドビューの詳細なメタデータをJSON形式で返します。"
 ---
 
 # inspect_mv_meta

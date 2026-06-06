@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "向日期添加指定的月数，精确到月。"
 ---
 
 # months_add

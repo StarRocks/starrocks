@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Metabase を StarRocks に接続してデータベースを追加し、クエリと可視化を行う方法を説明します。"
 ---
 
 # Metabase

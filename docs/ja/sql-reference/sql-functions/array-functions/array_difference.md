@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_DIFFERENCE関数は配列内の隣接する要素間の差を計算します。"
 ---
 
 # array_difference

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Flat JSON は StarRocks で JSON カラムから一般的なフィールドを抽出してカラム型ストレージに格納し JSON クエリを加速します。"
 sidebar_position: 110
 ---
 

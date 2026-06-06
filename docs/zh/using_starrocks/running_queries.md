@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中查看和监控运行中的查询、分析资源消耗并取消长时间运行的查询。"
 sidebar_position: 9
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 StarRocks Kubernetes Operator 在 Kubernetes 集群上自动化部署和管理集群。"
 ---
 
 # 使用 Operator 部署 StarRocks 集群
@@ -32,7 +33,7 @@ displayed_sidebar: docs
 
 **创建私有 Kubernetes 集群**
 
-创建 [Kubernetes 集群](https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/)。如需快速体验本特性，则可以使用 [Minikube](https://kubernetes.io/zh-cn/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) 创建单节点 Kubernetes 集群。
+创建 [Kubernetes 集群](https://kubernetes.io/docs/)。如需快速体验本特性，则可以使用 Minikube 创建单节点 Kubernetes 集群。
 
 ### 部署 StarRocks Operator
 

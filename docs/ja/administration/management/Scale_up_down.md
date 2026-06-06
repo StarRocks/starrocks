@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks クラスターのノードをスケールイン・スケールアウトする方法。"
 ---
 
 # スケールインとスケールアウト

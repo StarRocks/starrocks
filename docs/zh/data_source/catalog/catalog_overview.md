@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['waibiao']
+description: "StarRocks 从 v2.3 起支持 catalog 功能，用于统一管理内部和外部数据源的查询。"
 ---
 
 # 概述
