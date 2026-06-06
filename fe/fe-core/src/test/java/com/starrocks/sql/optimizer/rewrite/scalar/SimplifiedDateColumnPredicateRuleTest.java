@@ -200,6 +200,22 @@ public class SimplifiedDateColumnPredicateRuleTest {
                 verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN2));
                 verifyNotDate(new BinaryPredicateOperator(BinaryType.GE, call, DATE_BEGIN2));
             }
+            {
+                // dt is varchar
+                ScalarOperator varcharCall = new CallOperator(fn, Type.VARCHAR, ImmutableList.of(
+                    new ColumnRefOperator(1, Type.VARCHAR, "dt", true),
+                    ConstantOperator.createInt(1)
+                ));
+                verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, varcharCall, DATE_BEGIN2));
+                verifyNotDate(new BinaryPredicateOperator(BinaryType.GE, varcharCall, DATE_BEGIN2));
+                // dt is date, but substr does not include end offset
+                ScalarOperator call = new CallOperator(fn, Type.VARCHAR, ImmutableList.of(
+                    new ColumnRefOperator(1, Type.DATE, "dt", true),
+                    ConstantOperator.createInt(1)
+                ));
+                verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN2));
+                verifyNotDate(new BinaryPredicateOperator(BinaryType.GE, call, DATE_BEGIN2));
+            }
         }
     }
 
