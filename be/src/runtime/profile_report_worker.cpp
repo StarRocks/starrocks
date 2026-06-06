@@ -42,6 +42,17 @@ void ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment
     _non_pipeline_report_tasks.erase(fragment_instance_id);
 }
 
+void ProfileReportWorker::_unregister_non_pipeline_loads(const std::vector<TUniqueId>& fragment_instance_ids) {
+    if (fragment_instance_ids.empty()) {
+        return;
+    }
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    for (const auto& fragment_instance_id : fragment_instance_ids) {
+        VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+        _non_pipeline_report_tasks.erase(fragment_instance_id);
+    }
+}
+
 Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
     std::lock_guard lg(_pipeline_report_mutex);
     PipeLineReportTaskKey key(query_id, fragment_instance_id);
@@ -65,6 +76,18 @@ void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, co
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
 }
 
+void ProfileReportWorker::_unregister_pipeline_loads(const std::vector<PipeLineReportTaskKey>& tasks) {
+    if (tasks.empty()) {
+        return;
+    }
+    std::lock_guard lg(_pipeline_report_mutex);
+    for (const auto& task : tasks) {
+        VLOG(3) << "unregister_pipeline_load query_id=" << print_id(task.query_id)
+                << ", fragment_instance_id=" << print_id(task.fragment_instance_id);
+        _pipeline_report_tasks.erase(task);
+    }
+}
+
 void ProfileReportWorker::_start_report_profile() {
     int64_t cur_ms = UnixMillis();
 
@@ -85,7 +108,9 @@ void ProfileReportWorker::_start_report_profile() {
     }
 
     DCHECK(_fragment_mgr != nullptr);
-    _fragment_mgr->report_fragments(non_pipeline_need_report_fragment_ids);
+    auto non_pipeline_fragment_ids_to_unregister =
+            _fragment_mgr->report_fragments(non_pipeline_need_report_fragment_ids);
+    _unregister_non_pipeline_loads(non_pipeline_fragment_ids_to_unregister);
 
     // report pipeline load task
     std::vector<PipeLineReportTaskKey> pipeline_need_report_query_fragment_ids;
@@ -104,7 +129,9 @@ void ProfileReportWorker::_start_report_profile() {
     }
 
     DCHECK(_query_context_manager != nullptr);
-    _query_context_manager->report_fragments(pipeline_need_report_query_fragment_ids);
+    auto pipeline_tasks_to_unregister =
+            _query_context_manager->report_fragments(pipeline_need_report_query_fragment_ids);
+    _unregister_pipeline_loads(pipeline_tasks_to_unregister);
 }
 
 void ProfileReportWorker::execute() {
