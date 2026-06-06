@@ -21,7 +21,7 @@
 #include <string>
 
 #include "common/logging.h"
-#include "exec/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_manager.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"

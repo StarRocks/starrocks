@@ -306,8 +306,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/spill_process_channel.cpp
     query_cache/multilane_operator.cpp
     query_cache/cache_operator.cpp
-    query_cache/cache_manager.cpp
-    query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
 )
 
