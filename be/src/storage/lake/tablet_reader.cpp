@@ -466,9 +466,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         // covering reader produces raw values, so disable covering when any
         // global dict is active to avoid a downstream encoding mismatch.
         const bool has_global_dict = params.global_dictmaps != nullptr && !params.global_dictmaps->empty();
-        const bool covering_allowed = config::enable_secondary_index_covering &&
-                                      params.runtime_filter_preds.empty() && !has_global_dict &&
-                                      params.reader_type == ReaderType::READER_QUERY;
+        const bool covering_allowed = config::enable_secondary_index_covering && params.runtime_filter_preds.empty() &&
+                                      !has_global_dict && params.reader_type == ReaderType::READER_QUERY;
 
         // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
         // reuse it across all index files for this query.
@@ -523,8 +522,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     open_in.tablet_id = rowset->tablet_id();
                     open_in.file_pb = meta.secondary_indexes(covering_idx);
                     open_in.source_schema = _tablet_schema;
-                    ASSIGN_OR_RETURN(auto rdr,
-                                     secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                    ASSIGN_OR_RETURN(auto rdr, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
                     covering_reader_by_rowset[rowset->id()] = std::move(rdr);
                     continue; // skip the candidate-bitmap path for this rowset
                 }

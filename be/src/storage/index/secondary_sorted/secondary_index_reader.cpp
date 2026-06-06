@@ -23,8 +23,6 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "storage/del_vector.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -33,6 +31,7 @@
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
+#include "storage/del_vector.h"
 #include "storage/index/secondary_sorted/predicate_remap.h"
 #include "storage/index/secondary_sorted/types.h"
 #include "storage/lake/tablet_manager.h"
@@ -385,10 +384,12 @@ StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> SecondaryIndexReader::loo
     return entry->result;
 }
 
-StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
-        const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
-        int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
-        OlapReaderStatistics* stats) {
+StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(const Schema& output_schema,
+                                                                        const PredicateTree& source_pred_tree,
+                                                                        ObjectPool* obj_pool, int64_t rowset_id_base,
+                                                                        int64_t version,
+                                                                        std::shared_ptr<DelvecLoader> delvec_loader,
+                                                                        int chunk_size, OlapReaderStatistics* stats) {
     if (_segment == nullptr) {
         return Status::InternalError("make_covering_iterator: index segment not opened");
     }
@@ -420,8 +421,7 @@ StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
             }
         }
         if (found < 0) {
-            return Status::InternalError(
-                    fmt::format("make_covering_iterator: output column '{}' not in index", fname));
+            return Status::InternalError(fmt::format("make_covering_iterator: output column '{}' not in index", fname));
         }
         out_to_inner.push_back(found);
     }
