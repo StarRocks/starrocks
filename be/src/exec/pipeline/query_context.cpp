@@ -268,7 +268,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
             query_statistic->add_stats_item(stats_item);
         }
     }
-    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+    for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         query_statistic->add_exec_stats_item(
                 node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
                 exec_stats->pred_filter_rows.exchange(0), exec_stats->index_filter_rows.exchange(0),
@@ -298,7 +298,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
         }
     }
 
-    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+    for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
                                  exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
     }
@@ -328,7 +328,7 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
         }
     }
 
-    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+    for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
                                  exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
     }
@@ -353,15 +353,6 @@ void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, in
     stats->delta_scan_rows_num += scan_rows_num;
     stats->total_scan_bytes += scan_bytes;
     stats->delta_scan_bytes += scan_bytes;
-}
-
-void QueryContext::init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids) {
-    std::call_once(_node_exec_stats_init_flag, [this, &exec_stats_node_ids]() {
-        for (int32_t node_id : exec_stats_node_ids) {
-            auto node_exec_stats = std::make_shared<NodeExecStats>();
-            _node_exec_stats[node_id] = node_exec_stats;
-        }
-    });
 }
 
 } // namespace starrocks::pipeline

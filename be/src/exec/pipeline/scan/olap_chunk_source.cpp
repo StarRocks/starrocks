@@ -35,7 +35,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_morsel.h"
@@ -128,16 +128,16 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 }
 
 void OlapChunkSource::update_chunk_exec_stats(RuntimeState* state) {
-    if (state->query_ctx()) {
-        auto* ctx = _runtime_state->query_ctx();
+    if (auto* query_runtime_state = state == nullptr ? nullptr : state->query_runtime_state();
+        query_runtime_state != nullptr) {
         int32_t node_id = _scan_op->get_plan_node_id();
         int64_t total_index_filter = _reader->stats().rows_bf_filtered + _reader->stats().rows_bitmap_index_filtered +
                                      _reader->stats().segment_stats_filtered +
                                      _reader->stats().rows_key_range_filtered + _reader->stats().rows_stats_filtered;
-        ctx->update_index_filter_stats(node_id, total_index_filter);
-        ctx->update_rf_filter_stats(node_id, _reader->stats().runtime_stats_filtered);
-        ctx->update_pred_filter_stats(node_id, _reader->stats().rows_vec_cond_filtered);
-        ctx->update_push_rows_stats(node_id, _reader->stats().raw_rows_read + total_index_filter);
+        query_runtime_state->update_index_filter_stats(node_id, total_index_filter);
+        query_runtime_state->update_rf_filter_stats(node_id, _reader->stats().runtime_stats_filtered);
+        query_runtime_state->update_pred_filter_stats(node_id, _reader->stats().rows_vec_cond_filtered);
+        query_runtime_state->update_push_rows_stats(node_id, _reader->stats().raw_rows_read + total_index_filter);
     }
 }
 
