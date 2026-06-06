@@ -414,11 +414,6 @@ if (WITH_COMPRESS)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 endif()
 
-if (ENABLE_QUERY_DEBUG_TRACE)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
-    message(STATUS "enable query debug trace")
-endif()
-
 if (ENABLE_FAULT_INJECTION)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
     message(STATUS "enable fault injection")

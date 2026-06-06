@@ -35,7 +35,6 @@
 #include "runtime/query_context_lifetime.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state_fwd.h"
-#include "util/debug/query_trace.h"
 
 namespace starrocks {
 
@@ -192,12 +191,6 @@ public:
 
     void set_scan_limit(int64_t scan_limit) { _scan_limit = scan_limit; }
     int64_t get_scan_limit() const { return _scan_limit; }
-    void set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace);
-
-    starrocks::debug::QueryTrace* query_trace() { return _query_trace.get(); }
-
-    std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
-
     // Delta statistic since last retrieve
     std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
@@ -247,8 +240,6 @@ private:
     TPipelineProfileLevel::type _profile_level;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
-    std::once_flag _query_trace_init_flag;
-    std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
     std::atomic_bool _cancelled_by_fe = false;

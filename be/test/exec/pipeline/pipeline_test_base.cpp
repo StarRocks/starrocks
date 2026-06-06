@@ -36,7 +36,6 @@
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
-#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -95,7 +94,6 @@ void PipelineTestBase::_prepare() {
     _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
-    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);

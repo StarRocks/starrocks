@@ -937,7 +937,6 @@
         "pipeline_gcore_output_dir",
         "enable_core_file_size_optimization",
         "try_release_resource_before_core_dump",
-        "query_debug_trace_dir",
         "sys_mlock_modules",
         "exception_stack_black_list",
         "exception_stack_level",
