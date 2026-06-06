@@ -13,7 +13,7 @@ StarRocks は MySQL プロトコルと互換性があり、MySQL クライアン
 
 [StarRocks](https://github.com/StarRocks/starrocks/tree/main) は Apache 2.0 ライセンスの下で提供されており、StarRocks GitHub リポジトリで利用可能です（[StarRocks ライセンス](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)を参照）。StarRocks は (i) サードパーティのソフトウェアライブラリからリンクまたは関数を呼び出しており、そのライセンスはフォルダ [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary) にあります。また、(ii) サードパーティのソフトウェアコードを組み込んでおり、そのライセンスはフォルダ [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses) にあります。
 
-一般的な質問をするには、私たちの [ウェブフォーラム](https://forum.starrocks.io/) に参加してください。チャットには [Slack チャンネル](https://try.starrocks.com/join-starrocks-on-slack) に参加してください。コミュニティニュースについては、[StarRocks.io ブログ](https://www.starrocks.io/blog) をご覧ください。また、[LinkedIn](https://www.linkedin.com/company/starrocks) で私たちをフォローして、新機能、イベント、共有に関する最新情報を入手してください。
+一に参加してください。チャットには [Slack チャンネル](https://try.starrocks.com/join-starrocks-on-slack) に参加してください。コミュニティニュースについては、[StarRocks.io ブログ](https://www.starrocks.io/blog) をご覧ください。また、[LinkedIn](https://www.linkedin.com/company/starrocks) で私たちをフォローして、新機能、イベント、共有に関する最新情報を入手してください。
 
 ---
 
