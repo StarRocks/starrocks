@@ -1083,7 +1083,7 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
     DCHECK(sink_operator_last_cpu_time_ns >= 0);
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     DCHECK(accounted_cpu_cost >= 0);
-    query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+    _query_runtime_state->incr_cpu_cost(accounted_cpu_cost);
     if (_workgroup != nullptr) {
         _workgroup->incr_cpu_runtime_ns(accounted_cpu_cost);
     }
@@ -1095,10 +1095,10 @@ void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
         int64_t scan_bytes = scan->get_last_scan_bytes();
         int64_t table_id = scan->get_scan_table_id();
         if (scan_rows > 0 || scan_bytes > 0) {
-            query_ctx()->incr_cur_scan_rows_num(scan_rows);
-            query_ctx()->incr_cur_scan_bytes(scan_bytes);
+            _query_runtime_state->incr_cur_scan_rows_num(scan_rows);
+            _query_runtime_state->incr_cur_scan_bytes(scan_bytes);
             if (state->enable_collect_table_level_scan_stats()) {
-                query_ctx()->update_scan_stats(table_id, scan_rows, scan_bytes);
+                _query_runtime_state->update_scan_stats(table_id, scan_rows, scan_bytes);
             }
         }
     }

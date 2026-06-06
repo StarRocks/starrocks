@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/primitives/query_runtime_state.h"
 
+#include "runtime/query_statistics.h"
+
 namespace starrocks::pipeline {
 
 void QueryRuntimeState::update_operator_exec_stats(const OperatorExecStatsSnapshot& snapshot) {
@@ -39,6 +41,46 @@ void QueryRuntimeState::update_operator_exec_stats(const OperatorExecStatsSnapsh
     }
     if (snapshot.update_rf_filter_rows) {
         update_rf_filter_stats(snapshot.plan_node_id, snapshot.rf_filter_rows);
+    }
+}
+
+void QueryRuntimeState::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
+    ScanStats* stats = nullptr;
+    {
+        std::lock_guard l(_scan_stats_lock);
+        auto iter = _scan_stats.find(table_id);
+        if (iter == _scan_stats.end()) {
+            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
+            iter = _scan_stats.find(table_id);
+        }
+        stats = iter->second.get();
+    }
+
+    stats->total_scan_rows_num += scan_rows_num;
+    stats->delta_scan_rows_num += scan_rows_num;
+    stats->total_scan_bytes += scan_bytes;
+    stats->delta_scan_bytes += scan_bytes;
+}
+
+void QueryRuntimeState::consume_delta_scan_stats(QueryStatistics* query_statistic) {
+    std::lock_guard l(_scan_stats_lock);
+    for (const auto& [table_id, scan_stats] : _scan_stats) {
+        QueryStatisticsItemPB stats_item;
+        stats_item.set_table_id(table_id);
+        stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
+        stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
+        query_statistic->add_stats_item(stats_item);
+    }
+}
+
+void QueryRuntimeState::add_total_scan_stats(QueryStatistics* query_statistic) {
+    std::lock_guard l(_scan_stats_lock);
+    for (const auto& [table_id, scan_stats] : _scan_stats) {
+        QueryStatisticsItemPB stats_item;
+        stats_item.set_table_id(table_id);
+        stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+        stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+        query_statistic->add_stats_item(stats_item);
     }
 }
 

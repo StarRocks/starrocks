@@ -388,6 +388,54 @@ TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateExecStats)
     EXPECT_EQ(0, snapshot_item.rf_filter_rows());
 }
 
+TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScanStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    auto& query_runtime_state = ctx.query_runtime_state();
+    query_runtime_state.incr_cpu_cost(17);
+    query_runtime_state.incr_cur_scan_rows_num(5);
+    query_runtime_state.incr_cur_scan_bytes(7);
+    query_runtime_state.update_scan_stats(100, 5, 7);
+    query_runtime_state.incr_cur_scan_rows_num(3);
+    query_runtime_state.incr_cur_scan_bytes(4);
+    query_runtime_state.update_scan_stats(100, 3, 4);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    EXPECT_EQ(17, intermediate_pb.cpu_cost_ns());
+    EXPECT_EQ(8, intermediate_pb.scan_rows());
+    EXPECT_EQ(11, intermediate_pb.scan_bytes());
+    ASSERT_EQ(1, intermediate_pb.stats_items_size());
+    EXPECT_EQ(100, intermediate_pb.stats_items(0).table_id());
+    EXPECT_EQ(8, intermediate_pb.stats_items(0).scan_rows());
+    EXPECT_EQ(11, intermediate_pb.stats_items(0).scan_bytes());
+
+    auto second_intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, second_intermediate_stats);
+    PQueryStatistics second_intermediate_pb;
+    second_intermediate_stats->to_pb(&second_intermediate_pb);
+    EXPECT_EQ(0, second_intermediate_pb.cpu_cost_ns());
+    EXPECT_EQ(0, second_intermediate_pb.scan_rows());
+    EXPECT_EQ(0, second_intermediate_pb.scan_bytes());
+    EXPECT_EQ(0, second_intermediate_pb.stats_items_size());
+
+    auto snapshot_stats = ctx.snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot_stats);
+    PQueryStatistics snapshot_pb;
+    snapshot_stats->to_pb(&snapshot_pb);
+    EXPECT_EQ(17, snapshot_pb.cpu_cost_ns());
+    EXPECT_EQ(8, snapshot_pb.scan_rows());
+    EXPECT_EQ(11, snapshot_pb.scan_bytes());
+    ASSERT_EQ(1, snapshot_pb.stats_items_size());
+    EXPECT_EQ(100, snapshot_pb.stats_items(0).table_id());
+    EXPECT_EQ(8, snapshot_pb.stats_items(0).scan_rows());
+    EXPECT_EQ(11, snapshot_pb.stats_items(0).scan_bytes());
+}
+
 TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
     auto query_ctx = std::make_shared<QueryContext>();
     TUniqueId query_id;
