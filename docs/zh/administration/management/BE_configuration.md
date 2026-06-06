@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks BE 配置参数完整参考：be.conf 或 SQL 命令可配置的所有 BE 参数。"
 keywords: ['Canshu']
 ---
 

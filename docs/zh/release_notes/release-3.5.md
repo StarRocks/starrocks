@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.0 和 JWT 认证、多分区列物化视图、多表事务。"
 ---
 
 # StarRocks version 3.5

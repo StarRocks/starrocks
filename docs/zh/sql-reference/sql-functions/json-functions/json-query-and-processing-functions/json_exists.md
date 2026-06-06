@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "检查一个 JSON 对象是否包含通过 json_path 表达式定位的元素。"
 ---
 
 # json_exists

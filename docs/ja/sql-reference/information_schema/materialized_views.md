@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "materialized_viewsはすべてのマテリアライズドビューに関する情報を提供します。"
 ---
 
 # materialized_views
