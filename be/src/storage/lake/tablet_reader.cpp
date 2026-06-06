@@ -466,8 +466,14 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         // covering reader produces raw values, so disable covering when any
         // global dict is active to avoid a downstream encoding mismatch.
         const bool has_global_dict = params.global_dictmaps != nullptr && !params.global_dictmaps->empty();
+        // A 0-field output schema (e.g. some COUNT(*) plans) would make the
+        // covering iterator emit 0-column chunks whose num_rows() is always 0,
+        // silently losing the row count. Require >=1 output column so the
+        // count is carried by a real column; otherwise fall back to the
+        // (correct) candidate-bitmap lookup path below.
         const bool covering_allowed = config::enable_secondary_index_covering && params.runtime_filter_preds.empty() &&
-                                      !has_global_dict && params.reader_type == ReaderType::READER_QUERY;
+                                      !has_global_dict && params.reader_type == ReaderType::READER_QUERY &&
+                                      schema().num_fields() > 0;
 
         // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
         // reuse it across all index files for this query.
