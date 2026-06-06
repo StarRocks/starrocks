@@ -70,31 +70,7 @@ public:
         return it != _node_exec_stats.end();
     }
 
-    void update_operator_exec_stats(const OperatorExecStatsSnapshot& snapshot) {
-        if (!snapshot.valid) {
-            return;
-        }
-        if (snapshot.require_registered_plan_node && !need_record_exec_stats(snapshot.plan_node_id)) {
-            return;
-        }
-
-        if (snapshot.update_push_rows) {
-            update_push_rows_stats(snapshot.plan_node_id, snapshot.push_rows);
-        }
-        if (snapshot.update_pull_rows) {
-            if (snapshot.force_set_pull_rows) {
-                force_set_pull_rows_stats(snapshot.plan_node_id, snapshot.pull_rows);
-            } else {
-                update_pull_rows_stats(snapshot.plan_node_id, snapshot.pull_rows);
-            }
-        }
-        if (snapshot.update_pred_filter_rows) {
-            update_pred_filter_stats(snapshot.plan_node_id, snapshot.pred_filter_rows);
-        }
-        if (snapshot.update_rf_filter_rows) {
-            update_rf_filter_stats(snapshot.plan_node_id, snapshot.rf_filter_rows);
-        }
-    }
+    void update_operator_exec_stats(const OperatorExecStatsSnapshot& snapshot);
 
     void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
         if (auto* stats = _find_node_exec_stats(plan_node_id); stats != nullptr) {
