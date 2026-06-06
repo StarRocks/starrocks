@@ -1,10 +1,7 @@
 ---
 sidebar_position: 10
-<<<<<<< HEAD
-=======
 keywords: ['分区', 'partition']
 description: "Fast analytics in StarRocks begin with table layout design matching query patterns using strategic partitioning for data reduction and lifecycle management."
->>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ---
 
 # 分区

@@ -139,7 +139,6 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 #### JSON 参数
 
-<<<<<<< HEAD
 | **参数名称**      | **是否必选** | **参数说明**                                                 |
 | ----------------- | ------------ | ------------------------------------------------------------ |
 | jsonpaths         | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[导入 JSON 数据时配置列映射关系](#导入-json-数据时配置列映射关系)。    |
@@ -147,16 +146,6 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 | json_root         | 否           | 用于指定待导入 JSON 数据的根元素。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为合法的 JsonPath 字符串。默认值为空，表示会导入整个 JSON 数据文件的数据。具体请参见本文提供的示例“[导入数据并指定 JSON 根节点](#指定-json-根节点使用匹配模式导入数据)”。 |
 | ignore_json_size | 否   | 用于指定是否检查 HTTP 请求中 JSON Body 的大小。<br />**说明**<br />HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。 |
 | compression, Content-Encoding | 否 | 指定在 STREAM LOAD 数据传输过程中使用哪种压缩算法，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 算法。示例：`curl --location-trusted -u root:  -v '<table_url>' \-X PUT  -H "expect:100-continue" \-H 'format: json' -H 'compression: lz4_frame'   -T ./b.json.lz4`。 |
-=======
-| 参数              | 必填 | 描述                                                         |
-| ----------------- | ---- | ------------------------------------------------------------ |
-| jsonpaths         | 否   | 您希望从 JSON 数据文件中导入的键名。仅在使用匹配模式导入 JSON 数据时需要指定此参数。该参数的值为 JSON 格式。请参阅[为 JSON 数据加载配置列映射](#configure-column-mapping-for-json-data-loading)。           |
-| strip_outer_array | 否   | 指定是否去除最外层的数组结构。有效值：`true` 和 `false`。默认值：`false`。<br />在实际业务场景中，JSON 数据可能具有由一对方括号 `[]` 表示的最外层数组结构。在这种情况下，建议将此参数设置为 `true`，以便系统去除最外层的方括号 `[]`，并将每个内部数组作为单独的数据记录导入。如果将此参数设置为 `false`，系统将把整个 JSON 数据文件解析为一个数组，并将该数组作为单条数据记录导入。<br />例如，JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`。如果将此参数设置为 `true`，`{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 将被解析为单独的数据记录，并加载到不同的表行中。|
-| json_root         | 否       | 您希望从 JSON 数据文件中加载的 JSON 数据的根元素。仅当使用匹配模式加载 JSON 数据时，才需要指定此参数。该参数的值为有效的 JsonPath 字符串。默认情况下，该参数值为空，表示将加载 JSON 数据文件的所有数据。更多信息，请参阅本主题的「[使用指定根元素的匹配模式加载 JSON 数据](#load-json-data-using-matched-mode-with-root-element-specified)」部分。|
-| envelope          | 否       | 指定 JSON 数据的 CDC envelope 格式。有效值：`debezium`。默认值：未设置（无 envelope 包装）。当设置为 `debezium` 时，StarRocks 将每条 JSON 消息解析为 Debezium CDC 事件。消息必须包含一个 `op` 字段（`c`=创建，`u`=更新，`d`=删除，`r`=快照读取）以及一个 `after` 字段（用于 c/u/r）或 `before` 字段（用于 d），用于保存实际行数据。`payload` 为 `null` 的墓碑消息将被静默跳过。不能与 `json_root` 或 `strip_outer_array` 同时使用。|
-| ignore_json_size  | 否       | 指定是否检查 HTTP 请求中 JSON 正文的大小。<br />**注意**<br />默认情况下，HTTP 请求中 JSON 正文的大小不能超过 100 MB。如果 JSON 正文超过 100 MB，将报告错误「The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming.」。为避免此错误，您可以在 HTTP 请求头中添加 `"ignore_json_size:true"`，以指示系统不检查 JSON 正文大小。|
-| compression, Content-Encoding | 否 | 数据传输过程中应用的编码算法。支持的算法包括 GZIP、BZIP2、LZ4_FRAME 和 ZSTD。示例：`curl --location-trusted -u root:  -v '<table_url>' \-X PUT  -H "expect:100-continue" \-H 'format: json' -H 'compression: lz4_frame'   -T ./b.json.lz4`。|
->>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 
 加载 JSON 数据时，还需注意每个 JSON 对象的大小不能超过 4 GB。如果 JSON 数据文件中某个 JSON 对象超过 4 GB，将报告错误「This parser can't support a document that big.」。
 

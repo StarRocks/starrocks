@@ -19,8 +19,6 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 
 :::
 
-<<<<<<< HEAD
-=======
 ## 4.0.10
 
 リリース日：2026 年 5 月 9 日
@@ -494,7 +492,6 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 - サードパーティライブラリからのログ漏洩を修正しました。 [#67129](https://github.com/StarRocks/starrocks/pull/67129)
 - REST Catalog の認証ロジック不備により認証に失敗する問題を修正しました。 [#66861](https://github.com/StarRocks/starrocks/pull/66861)
 
->>>>>>> e16d27a64e ([Doc] generate descriptions (#74345))
 ## 4.0.3
 
 リリース日：2025 年 12 月 25 日
