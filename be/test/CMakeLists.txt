@@ -76,6 +76,7 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp

@@ -579,7 +579,7 @@ bool ConnectorScanOperator::need_notify_all() {
 }
 
 Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
-    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
+    SplitMorselTicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
         for (const MorselPtr& morsel : morsels) {

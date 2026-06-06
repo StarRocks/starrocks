@@ -63,7 +63,6 @@
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
-#include "exec/query_cache/cache_manager.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
@@ -202,7 +201,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
     _runtime_services.profile_report_worker = profile_report_worker();
     _runtime_services.query_context_mgr = _query_context_mgr;
-    _runtime_services.cache_mgr = _cache_mgr;
+    _runtime_services.cache_mgr = cache_mgr();
     _runtime_services.spill_dir_mgr = _compute_env == nullptr ? nullptr : _compute_env->spill_dir_mgr();
     _runtime_services.global_spill_manager = _compute_env == nullptr ? nullptr : _compute_env->global_spill_manager();
     _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
@@ -396,7 +395,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
-    _cache_mgr = new query_cache::CacheManager(capacity);
+    RETURN_IF_ERROR(_compute_env->init_query_cache(capacity));
 
     RETURN_IF_ERROR(_compute_env->init_spill(StorageEngine::instance()->get_store_paths(), process_metrics));
 
@@ -446,6 +445,10 @@ ResultBufferMgr* ExecEnv::result_mgr() {
 
 ResultQueueMgr* ExecEnv::result_queue_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->result_queue_mgr();
+}
+
+query_cache::CacheManagerRawPtr ExecEnv::cache_mgr() const {
+    return _compute_env == nullptr ? nullptr : _compute_env->cache_mgr();
 }
 
 ProfileReportWorker* ExecEnv::profile_report_worker() {
@@ -699,7 +702,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
-    SAFE_DELETE(_cache_mgr);
     SAFE_DELETE(_diagnose_daemon);
     _parallel_compact_mgr.reset();
     DCHECK(_global_env != nullptr);

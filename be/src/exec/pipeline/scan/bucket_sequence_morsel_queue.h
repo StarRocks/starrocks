@@ -45,7 +45,7 @@ public:
         _olap_morsel_queue()->set_tablet_rowsets(tablet_rowsets);
     }
 
-    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() const override { return true; }
@@ -75,7 +75,7 @@ private:
     mutable std::mutex _mutex;
 
     MorselQueuePtr _morsel_queue;
-    query_cache::TicketCheckerPtr _ticket_checker;
+    SplitMorselTicketCheckerPtr _ticket_checker;
     int64_t _current_sequence = -1;
 };
 

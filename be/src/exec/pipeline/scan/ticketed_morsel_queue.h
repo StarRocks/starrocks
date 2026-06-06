@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/query_cache/ticket_checker.h"
+#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 
 namespace starrocks::pipeline {
 
@@ -22,7 +22,7 @@ class TicketedMorselQueue {
 public:
     virtual ~TicketedMorselQueue() = default;
 
-    virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) = 0;
+    virtual void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) = 0;
     virtual bool could_attch_ticket_checker() const = 0;
 };
 
