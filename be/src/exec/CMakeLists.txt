@@ -38,7 +38,7 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
     pipeline/scan/scan_morsel.cpp
-    query_cache/ticket_checker.cpp
+    pipeline/scan/split_morsel_ticket_checker.cpp
 )
 
 ADD_BE_LIB(ExecPrimitive

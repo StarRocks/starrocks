@@ -397,7 +397,6 @@
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/runtime_filter/",
-        "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/primitives/",
@@ -487,11 +486,11 @@
         "be/src/exec/pipeline/scan/dynamic_morsel_queue_builder.h",
         "be/src/exec/pipeline/scan/fixed_morsel_queue_builder.h",
         "be/src/exec/pipeline/scan/morsel_queue_builder.h",
-        "be/src/exec/pipeline/scan/ticketed_morsel_queue.h"
+        "be/src/exec/pipeline/scan/ticketed_morsel_queue.h",
+        "be/src/exec/pipeline/scan/split_morsel_ticket_checker.h"
       ],
       "allowed_include_prefixes": [
         "exec/runtime_filter/",
-        "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/operator_factory.h",
@@ -505,6 +504,7 @@
         "exec/pipeline/scan/fixed_morsel_queue_builder.h",
         "exec/pipeline/scan/dynamic_morsel_queue.h",
         "exec/pipeline/scan/dynamic_morsel_queue_builder.h",
+        "exec/pipeline/scan/split_morsel_ticket_checker.h",
         "exec/pipeline/scan/ticketed_morsel_queue.h",
         "exprs/",
         "runtime/",

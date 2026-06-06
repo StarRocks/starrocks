@@ -43,12 +43,12 @@
 #include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/multilane_operator.h"
-#include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -203,7 +203,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     if (should_attach_ticket_checker) {
         auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
-        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        auto ticket_checker = std::make_shared<SplitMorselTicketChecker>();
         scan_op->set_ticket_checker(ticket_checker);
         ticketed_morsel_queue->set_ticket_checker(ticket_checker);
     }

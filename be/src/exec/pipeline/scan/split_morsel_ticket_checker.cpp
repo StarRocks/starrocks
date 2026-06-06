@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/query_cache/ticket_checker.h"
+#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 
 #include <mutex>
 
-namespace starrocks::query_cache {
-void TicketChecker::enter(TicketIdType id, bool is_last) {
+namespace starrocks::pipeline {
+
+void SplitMorselTicketChecker::enter(int64_t id, bool is_last) {
     std::lock_guard<SpinLock> require_lock(_lock);
     auto [it, _] = _tickets.try_emplace(id, id, 0);
     Ticket& ticket = it->second;
@@ -25,7 +26,7 @@ void TicketChecker::enter(TicketIdType id, bool is_last) {
     ticket.data |= is_last ? ALL_READY_BIT : 0;
 }
 
-bool TicketChecker::leave(TicketIdType id) {
+bool SplitMorselTicketChecker::leave(int64_t id) {
     std::lock_guard<SpinLock> require_lock(_lock);
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
@@ -37,7 +38,7 @@ bool TicketChecker::leave(TicketIdType id) {
     return is_all_enter && (enter_count == leave_count);
 }
 
-bool TicketChecker::are_all_ready(TicketIdType id) {
+bool SplitMorselTicketChecker::are_all_ready(int64_t id) {
     std::lock_guard<SpinLock> require_lock(_lock);
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
@@ -45,7 +46,7 @@ bool TicketChecker::are_all_ready(TicketIdType id) {
     return (ticket.data & ALL_READY_BIT) != 0L;
 }
 
-bool TicketChecker::are_all_left(TicketIdType id) {
+bool SplitMorselTicketChecker::are_all_left(int64_t id) {
     std::lock_guard<SpinLock> require_lock(_lock);
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
@@ -56,7 +57,7 @@ bool TicketChecker::are_all_left(TicketIdType id) {
     return is_all_enter && (enter_count == leave_count);
 }
 
-void TicketChecker::more_tickets(TicketIdType id) {
+void SplitMorselTicketChecker::more_tickets(int64_t id) {
     std::lock_guard<SpinLock> require_lock(_lock);
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
@@ -64,4 +65,4 @@ void TicketChecker::more_tickets(TicketIdType id) {
     ticket.data &= ~ALL_READY_BIT;
 }
 
-} // namespace starrocks::query_cache
+} // namespace starrocks::pipeline
