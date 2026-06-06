@@ -22,8 +22,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/concurrency/spinlock.h"
+#include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
 #include "exec/pipeline/primitives/operator_exec_stats.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+
+namespace starrocks {
+class QueryStatistics;
+} // namespace starrocks
 
 namespace starrocks::pipeline {
 
@@ -111,6 +119,30 @@ public:
     NodeExecStatsMap& node_exec_stats() { return _node_exec_stats; }
     const NodeExecStatsMap& node_exec_stats() const { return _node_exec_stats; }
 
+    void incr_cpu_cost(int64_t cost) {
+        _total_cpu_cost_ns += cost;
+        _delta_cpu_cost_ns += cost;
+    }
+
+    void incr_cur_scan_rows_num(int64_t rows_num) {
+        _total_scan_rows_num += rows_num;
+        _delta_scan_rows_num += rows_num;
+    }
+
+    void incr_cur_scan_bytes(int64_t scan_bytes) {
+        _total_scan_bytes += scan_bytes;
+        _delta_scan_bytes += scan_bytes;
+    }
+
+    void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
+
+    int64_t cpu_cost() const { return _total_cpu_cost_ns; }
+    int64_t consume_delta_cpu_cost() { return _delta_cpu_cost_ns.exchange(0); }
+    int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
+    int64_t get_scan_bytes() const { return _total_scan_bytes; }
+    void consume_delta_scan_stats(QueryStatistics* query_statistic);
+    void add_total_scan_stats(QueryStatistics* query_statistic);
+
 private:
     static int64_t _now_ms() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -123,6 +155,13 @@ private:
         return it == _node_exec_stats.end() ? nullptr : it->second.get();
     }
 
+    struct ScanStats {
+        std::atomic<int64_t> total_scan_rows_num = 0;
+        std::atomic<int64_t> total_scan_bytes = 0;
+        std::atomic<int64_t> delta_scan_rows_num = 0;
+        std::atomic<int64_t> delta_scan_bytes = 0;
+    };
+
     TUniqueId _query_id;
     std::atomic<int64_t> _delivery_deadline_ms{0};
     std::atomic<int64_t> _query_deadline_ms{0};
@@ -130,6 +169,19 @@ private:
     std::atomic<int64_t> _query_expire_seconds{DEFAULT_EXPIRE_SECONDS};
     std::once_flag _node_exec_stats_init_flag;
     NodeExecStatsMap _node_exec_stats;
+    std::atomic<int64_t> _total_cpu_cost_ns = 0;
+    std::atomic<int64_t> _total_scan_rows_num = 0;
+    std::atomic<int64_t> _total_scan_bytes = 0;
+    std::atomic<int64_t> _delta_cpu_cost_ns = 0;
+    std::atomic<int64_t> _delta_scan_rows_num = 0;
+    std::atomic<int64_t> _delta_scan_bytes = 0;
+
+    // @TODO(silverbullet233):
+    // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,
+    // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
+    SpinLock _scan_stats_lock;
+    // table level scan stats
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
 };
 
 } // namespace starrocks::pipeline

@@ -19,12 +19,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
-#include "base/concurrency/spinlock.h"
-#include "base/hash/hash.h"
-#include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "compute_env/spill/query_spill_manager.h"
@@ -172,33 +168,17 @@ public:
     /// to avoid double-free between the destruction and this method.
     void release_workgroup_token_once();
 
-    // Some statistic about the query, including cpu, scan_rows, scan_bytes
+    // Some statistic about the query.
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
     int64_t current_mem_usage_bytes() const { return _mem_tracker->consumption(); }
-    void incr_cpu_cost(int64_t cost) {
-        _total_cpu_cost_ns += cost;
-        _delta_cpu_cost_ns += cost;
-    }
-    void incr_cur_scan_rows_num(int64_t rows_num) {
-        _total_scan_rows_num += rows_num;
-        _delta_scan_rows_num += rows_num;
-    }
-    void incr_cur_scan_bytes(int64_t scan_bytes) {
-        _total_scan_bytes += scan_bytes;
-        _delta_scan_bytes += scan_bytes;
-    }
 
     void incr_transmitted_bytes(int64_t transmitted_bytes) { _total_transmitted_bytes += transmitted_bytes; }
 
-    void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
     void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
         _total_read_local_cnt += read_local_cnt;
         _total_read_remote_cnt += read_remote_cnt;
     }
 
-    int64_t cpu_cost() const { return _total_cpu_cost_ns; }
-    int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
-    int64_t get_scan_bytes() const { return _total_scan_bytes; }
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
     int64_t get_read_local_cnt() { return _total_read_local_cnt; }
@@ -279,31 +259,11 @@ private:
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
     std::once_flag _init_spill_manager_once;
-    std::atomic<int64_t> _total_cpu_cost_ns = 0;
-    std::atomic<int64_t> _total_scan_rows_num = 0;
-    std::atomic<int64_t> _total_scan_bytes = 0;
     std::atomic<int64_t> _total_spill_bytes = 0;
     std::atomic<int64_t> _total_read_local_cnt = 0;
     std::atomic<int64_t> _total_read_remote_cnt = 0;
     std::atomic<int64_t> _total_transmitted_bytes = 0;
-    std::atomic<int64_t> _delta_cpu_cost_ns = 0;
-    std::atomic<int64_t> _delta_scan_rows_num = 0;
-    std::atomic<int64_t> _delta_scan_bytes = 0;
     std::atomic_bool _audit_statistics_reported = false;
-
-    struct ScanStats {
-        std::atomic<int64_t> total_scan_rows_num = 0;
-        std::atomic<int64_t> total_scan_bytes = 0;
-        std::atomic<int64_t> delta_scan_rows_num = 0;
-        std::atomic<int64_t> delta_scan_bytes = 0;
-    };
-
-    // @TODO(silverbullet233):
-    // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,
-    // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
-    SpinLock _scan_stats_lock;
-    // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
 
     bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
