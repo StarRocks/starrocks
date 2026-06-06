@@ -15,7 +15,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -48,11 +47,6 @@ class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
 
-using std::chrono::seconds;
-using std::chrono::milliseconds;
-using std::chrono::steady_clock;
-using std::chrono::duration_cast;
-
 struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
@@ -81,25 +75,15 @@ public:
         _num_active_fragments.fetch_sub(1);
     }
 
-    void count_down_fragments();
-    void count_down_fragments(QueryContextManager* query_context_mgr);
+    // Decrements the query-local active fragment counter.
+    // Returns true only when the caller just finished the last active fragment; the caller owns any manager-level
+    // lifecycle transition such as removal from QueryContextManager or moving the context to second-chance storage.
+    bool decrement_num_active_fragments();
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
-    void set_delivery_expire_seconds(int expire_seconds) { _delivery_expire_seconds = seconds(expire_seconds); }
-    void set_query_expire_seconds(int expire_seconds) { _query_expire_seconds = seconds(expire_seconds); }
-    inline int get_query_expire_seconds() const { return _query_expire_seconds.count(); }
-    // now time point pass by deadline point.
-    bool is_delivery_expired() const {
-        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline || _cancelled_by_fe;
-    }
-    bool is_query_expired() const {
-        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _query_deadline;
-    }
-
     bool is_cancelled() const { return _is_cancelled; }
+    bool is_cancelled_by_fe() const { return _cancelled_by_fe; }
 
     Status get_cancelled_status() const {
         auto* status = _cancelled_status.load();
@@ -108,15 +92,6 @@ public:
 
     bool is_dead() const {
         return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _cancelled_by_fe);
-    }
-    // add expired seconds to deadline
-    void extend_delivery_lifetime() {
-        _delivery_deadline =
-                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _delivery_expire_seconds).count();
-    }
-    void extend_query_lifetime() {
-        _query_deadline =
-                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
     void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
     bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
@@ -215,57 +190,10 @@ public:
 
     void incr_transmitted_bytes(int64_t transmitted_bytes) { _total_transmitted_bytes += transmitted_bytes; }
 
-    void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
-    bool need_record_exec_stats(int32_t plan_node_id) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        return it != _node_exec_stats.end();
-    }
-
     void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
     void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
         _total_read_local_cnt += read_local_cnt;
         _total_read_remote_cnt += read_remote_cnt;
-    }
-    void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        if (it != _node_exec_stats.end()) {
-            it->second->push_rows += push_rows;
-        }
-    }
-
-    void update_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        if (it != _node_exec_stats.end()) {
-            it->second->pull_rows += pull_rows;
-        }
-    }
-
-    void update_pred_filter_stats(int32_t plan_node_id, int64_t pred_filter_rows) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        if (it != _node_exec_stats.end()) {
-            it->second->pred_filter_rows += pred_filter_rows;
-        }
-    }
-
-    void update_index_filter_stats(int32_t plan_node_id, int64_t index_filter_rows) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        if (it != _node_exec_stats.end()) {
-            it->second->index_filter_rows += index_filter_rows;
-        }
-    }
-
-    void update_rf_filter_stats(int32_t plan_node_id, int64_t rf_filter_rows) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        if (it != _node_exec_stats.end()) {
-            it->second->rf_filter_rows += rf_filter_rows;
-        }
-    }
-
-    void force_set_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
-        auto it = _node_exec_stats.find(plan_node_id);
-        if (it != _node_exec_stats.end()) {
-            it->second->pull_rows.exchange(pull_rows);
-        }
     }
 
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
@@ -321,9 +249,6 @@ public:
         return _global_late_materialization_ctx_mgr;
     }
 
-public:
-    static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
-
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
     QueryRuntimeState _query_runtime_state;
@@ -333,10 +258,6 @@ private:
     size_t _total_fragments{0};
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
-    int64_t _delivery_deadline = 0;
-    int64_t _query_deadline = 0;
-    seconds _delivery_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
-    seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     bool _enable_pipeline_level_shuffle = true;
@@ -377,23 +298,12 @@ private:
         std::atomic<int64_t> delta_scan_bytes = 0;
     };
 
-    std::once_flag _node_exec_stats_init_flag;
-    struct NodeExecStats {
-        std::atomic_int64_t push_rows;
-        std::atomic_int64_t pull_rows;
-        std::atomic_int64_t pred_filter_rows;
-        std::atomic_int64_t index_filter_rows;
-        std::atomic_int64_t rf_filter_rows;
-    };
-
     // @TODO(silverbullet233):
     // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
     phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
-
-    std::unordered_map<int32_t, std::shared_ptr<NodeExecStats>> _node_exec_stats;
 
     bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive

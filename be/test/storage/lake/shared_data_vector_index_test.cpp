@@ -767,6 +767,37 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_async_above_threshol
     writer->close();
 }
 
+// Counterpart to the async test above: with force_set_build_vector_index_inline() the writer must
+// build the .vi inline even though the schema is in async index_build_mode. This is the lake
+// schema-change conversion path (DirectSchemaChange/SortedSchemaChange), which indexes a shadow
+// tablet's EXISTING data within the ALTER regardless of async mode. Same async schema and
+// above-threshold row count as the test above, but here the .vi IS produced inline.
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_force_inline_builds_vi_in_async_mode) {
+    auto schema_pb = create_vi_schema_pb_async(/*threshold=*/3);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 4003;
+    auto writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                                  /*is_compaction=*/false);
+    writer->force_set_build_vector_index_inline();
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 5); // >= threshold
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+
+    ASSERT_EQ(1u, writer->segments().size());
+    const auto& seg = writer->segments().front();
+    EXPECT_EQ(5, seg.num_rows);
+    ASSERT_EQ(1u, seg.vector_index_ids.size());
+    EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
+
+    // Force-inline overrides async deferral: the .vi must exist right after the write
+    // (a non-TenANN build still writes the empty-mark placeholder, like the sync tests above).
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path)) << "force-inline build should produce .vi inline despite async mode";
+    writer->close();
+}
+
 // HorizontalGeneralTabletWriter, async mode, num_rows below threshold:
 // flush_segment_writer must NOT record vector_index_ids (no .vi will ever be built
 // for this segment). Covers the "Async vector index ... SKIPPED (below threshold)"

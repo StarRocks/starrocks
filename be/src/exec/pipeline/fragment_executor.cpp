@@ -116,7 +116,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
 
-    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
+    _query_ctx_mgr = exec_env->query_context_mgr();
+
+    auto&& existing_query_ctx = _query_ctx_mgr->get(query_id);
     if (existing_query_ctx) {
         auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existingfragment_ctx) {
@@ -125,17 +127,18 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
-    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
+    ASSIGN_OR_RETURN(_query_ctx, _query_ctx_mgr->get_or_register(query_id, query_ctx_should_exist));
     _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
 
-    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
-    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
+    auto& query_runtime_state = _query_ctx->query_runtime_state();
+    query_runtime_state.set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    query_runtime_state.set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    query_runtime_state.extend_delivery_lifetime();
+    query_runtime_state.extend_query_lifetime();
 
     if (query_options.__isset.enable_pipeline_level_shuffle) {
         _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
@@ -162,7 +165,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
     if (request.common().__isset.exec_stats_node_ids) {
-        _query_ctx->init_node_exec_stats(request.common().exec_stats_node_ids);
+        _query_ctx->query_runtime_state().init_node_exec_stats(request.common().exec_stats_node_ids);
     }
 
     return Status::OK();
@@ -241,7 +244,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
-    runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    _fragment_ctx->attach_to_runtime_state(runtime_state);
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
     _query_ctx->attach_to_runtime_state(runtime_state);
     RuntimeStateHelper::init_runtime_filter_port(runtime_state);
@@ -344,7 +347,7 @@ uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPl
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
     const auto& query_options = request.common().query_options;
 
-    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    int expired_seconds = QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
     if (query_options.__isset.query_delivery_timeout) {
         if (query_options.__isset.query_timeout) {
             expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
@@ -365,7 +368,7 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
         return std::max<int>(1, query_options.query_timeout);
     }
 
-    return QueryContext::DEFAULT_EXPIRE_SECONDS;
+    return QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
 }
 
 static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
@@ -872,9 +875,9 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     // make sure query context can be released
     // if _prepare_query_ctx return error, query context doesn't exist
     // so it's safe to put this DeferOp below _prepare_query_ctx
-    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx, query_ctx_mgr = _query_ctx_mgr] {
         if (!prepare_success) {
-            query_ctx->count_down_fragments();
+            query_ctx_mgr->count_down_fragments(query_ctx);
         }
     });
 
@@ -1037,7 +1040,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
-        _query_ctx->count_down_fragments();
+        DCHECK(_query_ctx_mgr != nullptr);
+        _query_ctx_mgr->count_down_fragments(_query_ctx);
     }
 }
 

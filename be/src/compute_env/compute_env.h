@@ -25,8 +25,10 @@ namespace starrocks {
 
 class DataStreamMgr;
 class MetricRegistry;
+class ProfileReportWorker;
 class ResultBufferMgr;
 class ResultQueueMgr;
+struct ProfileReportWorkerOptions;
 
 namespace pipeline {
 class DriverLimiter;
@@ -61,10 +63,13 @@ public:
     Status init(const ComputeEnvOptions& options);
     Status init_workgroup(const ComputeEnvWorkGroupOptions& options);
     Status init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
+    Status init_profile_report_worker(ProfileReportWorkerOptions options);
     void stop();
     void stop_workgroup();
+    void stop_profile_report_worker();
     Status start_result_mgr();
     void stop_result_mgr();
+    void destroy_profile_report_worker();
     void destroy();
 
     pipeline::DriverLimiter* driver_limiter() const { return _driver_limiter.get(); }
@@ -75,6 +80,7 @@ public:
     workgroup::WorkGroupManager* workgroup_manager() const { return _workgroup_manager.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
     spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
+    ProfileReportWorker* profile_report_worker() const { return _profile_report_worker.get(); }
 
 private:
     std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
@@ -85,6 +91,7 @@ private:
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
+    std::unique_ptr<ProfileReportWorker> _profile_report_worker;
 };
 
 } // namespace starrocks

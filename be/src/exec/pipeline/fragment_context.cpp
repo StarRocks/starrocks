@@ -29,6 +29,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/pipeline/pipeline_timer.h"
+#include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
@@ -39,6 +40,7 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
@@ -126,6 +128,12 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
+void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
+    DCHECK(state != nullptr);
+    state->set_fragment_ctx(this);
+    state->set_fragment_runtime_state(&fragment_runtime_state());
+}
+
 void FragmentContext::count_down_execution_group(size_t val) {
     // Note that _pipelines may be destructed after fetch_add
     // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
@@ -187,7 +195,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     destroy_pass_through_chunk_buffer();
 
-    query_ctx->count_down_fragments();
+    runtime_services(state).query_context_mgr->count_down_fragments(query_ctx);
 }
 
 bool FragmentContext::need_report_exec_state() {
@@ -259,7 +267,7 @@ void FragmentContext::set_final_status(const Status& status) {
         auto detailed_message = _s_status.detailed_message();
         bool is_timeout = detailed_message == "TimeOut";
         if (is_timeout) {
-            hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
+            hook_on_query_timeout(_query_id, _runtime_state->query_runtime_state()->get_query_expire_seconds());
         }
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
@@ -277,7 +285,7 @@ void FragmentContext::set_final_status(const Status& status) {
         if (_s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
-                                print_id(_fragment_instance_id), detailed_message);
+                                print_id(fragment_instance_id()), detailed_message);
             if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
                 detailed_message == "UserCancel" || is_timeout) {
                 LOG(INFO) << cancel_msg;
@@ -352,7 +360,7 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         runtime_services(_runtime_state.get())
-                .profile_report_worker->unregister_pipeline_load(_query_id, _fragment_instance_id);
+                .profile_report_worker->unregister_pipeline_load(_query_id, fragment_instance_id());
     }
 }
 
@@ -367,7 +375,7 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
     _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
-    timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
+    timespec tm = butil::seconds_from_now(runtime_state()->query_runtime_state()->get_query_expire_seconds());
     RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task.get(), tm));
     return Status::OK();
 }

@@ -213,6 +213,17 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // create writer
     ASSIGN_OR_RETURN(auto writer, _new_tablet.new_writer(kHorizontal, _txn_id));
+    // This conversion writer only ever processes the table's EXISTING data — the snapshot being
+    // rewritten into the ALTER's shadow tablet (_new_tablet) — never live/new writes, which go
+    // through their own load writers. So we unconditionally build the vector index inline here:
+    // existing data is fully indexed during the ALTER regardless of index_build_mode (async only
+    // governs live writes). Data imported AFTER the ALTER still follows async mode and is built by
+    // the VectorIndexBuildScheduler. The FE stamps the shadow tablets' vibv=V_snap to mark this
+    // inline-built existing data as done so the scheduler does not rebuild it.
+    // No-op when the new schema has no async vector index (general_tablet_writer gates the flag on
+    // has_async_vector_index, and sync/no vector index already builds inline). Also a no-op for PK
+    // tablet writers, which ignore this flag and always build the vector index inline.
+    writer->force_set_build_vector_index_inline();
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -304,6 +315,11 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
                                           .set_mem_tracker(CurrentThread::mem_tracker())
                                           .set_schema_id(_new_tablet_schema->id())
                                           .set_tablet_schema(_new_tablet_schema)
+                                          // _new_tablet is the ALTER's shadow tablet and this writer only ever
+                                          // converts the table's EXISTING data. Force inline .vi build so an
+                                          // async-mode table's existing rows are fully indexed within the ALTER
+                                          // (same invariant as DirectSchemaChange); new writes still go async.
+                                          .set_force_build_vector_index_inline(true)
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });

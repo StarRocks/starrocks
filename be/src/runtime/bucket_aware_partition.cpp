@@ -38,6 +38,9 @@ void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partition
         partitions_columns[i]->murmur_hash3_x86_32(&round_hashes[0], 0, num_rows);
         for (int j = 0; j < num_rows; j++) {
             hash_values[j] ^= round_hashes[j];
+        }
+        // Modulo cannot be easily vectorized, keep it in a separate scalar loop
+        for (int j = 0; j < num_rows; j++) {
             round_ids[j] = (round_hashes[j] & std::numeric_limits<int>::max()) % bucket_properties[i].bucket_num;
         }
         if (partitions_columns[i]->has_null()) {

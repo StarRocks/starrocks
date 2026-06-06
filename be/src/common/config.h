@@ -782,6 +782,11 @@ CONF_mBool(enable_token_check, "true");
 // exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
 CONF_Bool(enable_http_auth, "false");
 
+// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
+// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
+// This config is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action, "true");
+
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 

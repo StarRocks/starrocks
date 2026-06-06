@@ -185,7 +185,7 @@ public:
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
-    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
+    ProfileReportWorker* profile_report_worker();
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
@@ -255,8 +255,6 @@ private:
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
-
-    ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;

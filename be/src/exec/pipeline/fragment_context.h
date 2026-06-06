@@ -31,6 +31,7 @@
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/fragment_runtime_state.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/query_cache/cache_param.h"
@@ -40,7 +41,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "storage/primitive/predicate_tree_params.h"
@@ -72,16 +72,19 @@ public:
 
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const TUniqueId& fragment_instance_id() const { return _fragment_runtime_state.fragment_instance_id(); }
     void set_fragment_instance_id(const TUniqueId& fragment_instance_id) {
-        _fragment_instance_id = fragment_instance_id;
+        _fragment_runtime_state.set_fragment_instance_id(fragment_instance_id);
     }
+    FragmentRuntimeState& fragment_runtime_state() { return _fragment_runtime_state; }
+    const FragmentRuntimeState& fragment_runtime_state() const { return _fragment_runtime_state; }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
+    void attach_to_runtime_state(RuntimeState* state);
     FragmentDictState* dict_state() const { return _fragment_dict_state.get(); }
     ExecNode*& plan() { return _plan; }
 
@@ -192,7 +195,7 @@ private:
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
-    TUniqueId _fragment_instance_id;
+    FragmentRuntimeState _fragment_runtime_state;
     TNetworkAddress _fe_addr;
 
     // Hold tplan data datasink from delivery request to create driver lazily

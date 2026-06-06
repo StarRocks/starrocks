@@ -19,8 +19,8 @@
 #include <sstream>
 
 #include "common/logging.h"
+#include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/fragment_context.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 

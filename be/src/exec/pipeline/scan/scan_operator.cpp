@@ -277,7 +277,7 @@ OperatorExecStatsSnapshot ScanOperator::exec_stats_snapshot() const {
 Status ScanOperator::set_finishing(RuntimeState* state) {
     auto notify = scan_defer_notify(this);
     // check when expired, are there running io tasks or submitted tasks
-    if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
+    if (UNLIKELY(state != nullptr && state->query_runtime_state()->is_query_expired() &&
                  (_num_running_io_tasks > 0 || COUNTER_VALUE(_submit_task_counter) == 0))) {
         LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
                      << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks

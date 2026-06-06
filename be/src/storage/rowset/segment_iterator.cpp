@@ -1111,7 +1111,11 @@ Status SegmentIterator::_init_ann_reader() {
         }
     }
     if (!tablet_index_meta) {
-        return Status::OK();
+        // The query selected a vector search but this segment's schema has no VECTOR index, so there
+        // is no index meta to build a brute-force fallback from. Fail the scan rather than letting a
+        // null ann_reader be dereferenced downstream (this Status aborts the scan via RETURN_IF_ERROR).
+        return Status::InternalError(
+                fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
 #ifdef WITH_TENANN

@@ -15,26 +15,20 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "common/status.h"
-#include "common/thread/thread.h"
+#include "compute_env/profile_report_task.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
-
-class FragmentMgr;
-
-class TUniqueId;
-
-namespace pipeline {
-class QueryContextManager;
-}
 
 struct NonPipelineReportTask {
     NonPipelineReportTask(int64_t last_report_time, TQueryType::type task_type)
@@ -52,32 +46,20 @@ struct PipelineReportTask {
     TQueryType::type task_type;
 };
 
-struct PipeLineReportTaskKey {
-    PipeLineReportTaskKey(const TUniqueId& query_id, const TUniqueId& fragment_instance_id)
-            : query_id(query_id), fragment_instance_id(fragment_instance_id) {}
+struct ProfileReportWorkerOptions {
+    using NonPipelineReporter = std::function<std::vector<TUniqueId>(const std::vector<TUniqueId>&)>;
+    using PipelineReporter =
+            std::function<std::vector<PipeLineReportTaskKey>(const std::vector<PipeLineReportTaskKey>&)>;
 
-    TUniqueId query_id;
-    TUniqueId fragment_instance_id;
-};
-
-struct PipeLineReportTaskKeyEqual {
-    bool operator()(const PipeLineReportTaskKey& k1, const PipeLineReportTaskKey& k2) const {
-        return k1.query_id == k2.query_id && k1.fragment_instance_id == k2.fragment_instance_id;
-    }
-};
-
-struct PipeLineReportTaskKeyHasher {
-    std::size_t operator()(const PipeLineReportTaskKey& key) const {
-        return (((std::hash<int64_t>()(key.query_id.lo) + (std::hash<int64_t>()(key.query_id.hi) >> 4)) +
-                 (std::hash<int64_t>()(key.fragment_instance_id.hi) >> 8)) +
-                (std::hash<int64_t>()(key.fragment_instance_id.hi) >> 12));
-    }
+    NonPipelineReporter report_non_pipeline_fragments;
+    PipelineReporter report_pipeline_fragments;
+    bool start_worker_thread = true;
 };
 
 class ProfileReportWorker {
 public:
-    ProfileReportWorker(FragmentMgr* fragment_mgr, pipeline::QueryContextManager* query_context_manager);
-    ~ProfileReportWorker() = default;
+    explicit ProfileReportWorker(ProfileReportWorkerOptions options);
+    ~ProfileReportWorker();
     void execute();
     void close();
     Status register_non_pipeline_load(const TUniqueId& fragment_instance_id);
@@ -88,6 +70,10 @@ public:
 
 private:
     void _start_report_profile();
+    void _unregister_pipeline_loads(const std::vector<PipeLineReportTaskKey>& tasks);
+    void _unregister_non_pipeline_loads(const std::vector<TUniqueId>& fragment_instance_ids);
+
+    ProfileReportWorkerOptions _options;
 
     std::unordered_map<PipeLineReportTaskKey, PipelineReportTask, PipeLineReportTaskKeyHasher,
                        PipeLineReportTaskKeyEqual>
@@ -97,8 +83,6 @@ private:
     std::unordered_map<TUniqueId, NonPipelineReportTask> _non_pipeline_report_tasks;
     std::mutex _non_pipeline_report_mutex;
 
-    FragmentMgr* _fragment_mgr;
-    pipeline::QueryContextManager* _query_context_manager;
     std::atomic<bool> _stop{false};
     std::thread _thread;
 };
