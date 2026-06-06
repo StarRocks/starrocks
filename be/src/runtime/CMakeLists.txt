@@ -122,7 +122,6 @@ set(RUNTIME_FILES
     global_dict/parser.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
-    profile_report_worker.cpp
     command_executor.cpp
     diagnose_daemon.cpp
     logconfig.cpp

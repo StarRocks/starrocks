@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/profile_report_worker.h"
+#include "compute_env/profile_report_worker.h"
 
+#include <sstream>
+#include <utility>
+
+#include "base/time/time.h"
 #include "common/config_exec_flow_fwd.h"
+#include "common/logging.h"
+#include "common/thread/thread.h"
 #include "common/util/misc.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
-#include "runtime/fragment_mgr.h"
 
 namespace starrocks {
 
@@ -107,9 +110,9 @@ void ProfileReportWorker::_start_report_profile() {
         }
     }
 
-    DCHECK(_fragment_mgr != nullptr);
+    DCHECK(_options.report_non_pipeline_fragments != nullptr);
     auto non_pipeline_fragment_ids_to_unregister =
-            _fragment_mgr->report_fragments(non_pipeline_need_report_fragment_ids);
+            _options.report_non_pipeline_fragments(non_pipeline_need_report_fragment_ids);
     _unregister_non_pipeline_loads(non_pipeline_fragment_ids_to_unregister);
 
     // report pipeline load task
@@ -128,9 +131,8 @@ void ProfileReportWorker::_start_report_profile() {
         }
     }
 
-    DCHECK(_query_context_manager != nullptr);
-    auto pipeline_tasks_to_unregister =
-            _query_context_manager->report_fragments(pipeline_need_report_query_fragment_ids);
+    DCHECK(_options.report_pipeline_fragments != nullptr);
+    auto pipeline_tasks_to_unregister = _options.report_pipeline_fragments(pipeline_need_report_query_fragment_ids);
     _unregister_pipeline_loads(pipeline_tasks_to_unregister);
 }
 
@@ -152,10 +154,17 @@ void ProfileReportWorker::execute() {
     LOG(INFO) << "ProfileReportWorker going to exit.";
 }
 
-ProfileReportWorker::ProfileReportWorker(FragmentMgr* fragment_mgr,
-                                         pipeline::QueryContextManager* query_context_manager)
-        : _fragment_mgr(fragment_mgr), _query_context_manager(query_context_manager), _thread([this] { execute(); }) {
-    Thread::set_thread_name(_thread, "profile_report");
+ProfileReportWorker::ProfileReportWorker(ProfileReportWorkerOptions options) : _options(std::move(options)) {
+    DCHECK(_options.report_non_pipeline_fragments != nullptr);
+    DCHECK(_options.report_pipeline_fragments != nullptr);
+    if (_options.start_worker_thread) {
+        _thread = std::thread([this] { execute(); });
+        Thread::set_thread_name(_thread, "profile_report");
+    }
+}
+
+ProfileReportWorker::~ProfileReportWorker() {
+    close();
 }
 
 void ProfileReportWorker::close() {

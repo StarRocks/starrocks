@@ -27,12 +27,12 @@
 #include "base/metrics.h"
 #include "base/statusor.h"
 #include "base/uid_util.h"
+#include "compute_env/profile_report_task.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/profile_report_task.h"
 
 namespace starrocks::pipeline {
 
