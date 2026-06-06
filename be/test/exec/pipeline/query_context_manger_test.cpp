@@ -21,6 +21,7 @@
 #include "exec/pipeline/query_context_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -343,6 +344,48 @@ TEST(QueryContextManagerTest, testReadStats) {
     ctx.incr_read_stats(100, 200);
     ASSERT_EQ(100, ctx.get_read_local_cnt());
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
+}
+
+TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateExecStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    TUniqueId query_id;
+    query_id.hi = 3;
+    query_id.lo = 4;
+    ctx.set_query_id(query_id);
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+    ctx.query_runtime_state().init_node_exec_stats({10});
+    ctx.query_runtime_state().update_push_rows_stats(10, 7);
+    ctx.query_runtime_state().update_pull_rows_stats(10, 5);
+    ctx.query_runtime_state().update_pred_filter_stats(10, 3);
+    ctx.query_runtime_state().update_index_filter_stats(10, 2);
+    ctx.query_runtime_state().update_rf_filter_stats(10, 1);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    ASSERT_EQ(1, intermediate_pb.node_exec_stats_items_size());
+    const auto& intermediate_item = intermediate_pb.node_exec_stats_items(0);
+    EXPECT_EQ(10, intermediate_item.node_id());
+    EXPECT_EQ(7, intermediate_item.push_rows());
+    EXPECT_EQ(5, intermediate_item.pull_rows());
+    EXPECT_EQ(3, intermediate_item.pred_filter_rows());
+    EXPECT_EQ(2, intermediate_item.index_filter_rows());
+    EXPECT_EQ(1, intermediate_item.rf_filter_rows());
+
+    auto snapshot_stats = ctx.snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot_stats);
+    PQueryStatistics snapshot_pb;
+    snapshot_stats->to_pb(&snapshot_pb);
+    ASSERT_EQ(1, snapshot_pb.node_exec_stats_items_size());
+    const auto& snapshot_item = snapshot_pb.node_exec_stats_items(0);
+    EXPECT_EQ(10, snapshot_item.node_id());
+    EXPECT_EQ(0, snapshot_item.push_rows());
+    EXPECT_EQ(0, snapshot_item.pull_rows());
+    EXPECT_EQ(0, snapshot_item.pred_filter_rows());
+    EXPECT_EQ(0, snapshot_item.index_filter_rows());
+    EXPECT_EQ(0, snapshot_item.rf_filter_rows());
 }
 
 TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
