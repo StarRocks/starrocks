@@ -70,8 +70,8 @@ QueryContext::~QueryContext() noexcept {
             LOG(INFO) << fmt::format(
                     "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
                     "bytes:{} cache_hit_ratio:{:.1f}%",
-                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes(),
-                    cache_hit_ratio);
+                    print_id(query_id()), lifetime(), _query_runtime_state.cpu_cost(), mem_cost_bytes(),
+                    _query_runtime_state.get_scan_bytes(), get_spill_bytes(), cache_hit_ratio);
         }
     }
 
@@ -255,19 +255,10 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
         return nullptr;
     }
 
-    query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
+    query_statistic->add_cpu_costs(_query_runtime_state.consume_delta_cpu_cost());
     query_statistic->add_mem_costs(mem_cost_bytes());
     query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
-    {
-        std::lock_guard l(_scan_stats_lock);
-        for (const auto& [table_id, scan_stats] : _scan_stats) {
-            QueryStatisticsItemPB stats_item;
-            stats_item.set_table_id(table_id);
-            stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
-            stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
-            query_statistic->add_stats_item(stats_item);
-        }
-    }
+    _query_runtime_state.consume_delta_scan_stats(query_statistic.get());
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         query_statistic->add_exec_stats_item(
                 node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
@@ -281,22 +272,13 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
-    res->add_cpu_costs(cpu_cost());
+    res->add_cpu_costs(_query_runtime_state.cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
     res->add_transmitted_bytes(get_transmitted_bytes());
 
-    {
-        std::lock_guard l(_scan_stats_lock);
-        for (const auto& [table_id, scan_stats] : _scan_stats) {
-            QueryStatisticsItemPB stats_item;
-            stats_item.set_table_id(table_id);
-            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
-            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
-            res->add_stats_item(stats_item);
-        }
-    }
+    _query_runtime_state.add_total_scan_stats(res.get());
 
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
@@ -309,7 +291,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
 
 std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     auto res = std::make_shared<QueryStatistics>();
-    res->add_cpu_costs(cpu_cost());
+    res->add_cpu_costs(_query_runtime_state.cpu_cost());
     if (_mem_tracker != nullptr) {
         res->add_mem_costs(mem_cost_bytes());
     }
@@ -317,16 +299,7 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
     res->add_transmitted_bytes(get_transmitted_bytes());
 
-    {
-        std::lock_guard l(_scan_stats_lock);
-        for (const auto& [table_id, scan_stats] : _scan_stats) {
-            QueryStatisticsItemPB stats_item;
-            stats_item.set_table_id(table_id);
-            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
-            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
-            res->add_stats_item(stats_item);
-        }
-    }
+    _query_runtime_state.add_total_scan_stats(res.get());
 
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
@@ -335,24 +308,6 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
 
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
-}
-
-void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
-    ScanStats* stats = nullptr;
-    {
-        std::lock_guard l(_scan_stats_lock);
-        auto iter = _scan_stats.find(table_id);
-        if (iter == _scan_stats.end()) {
-            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
-            iter = _scan_stats.find(table_id);
-        }
-        stats = iter->second.get();
-    }
-
-    stats->total_scan_rows_num += scan_rows_num;
-    stats->delta_scan_rows_num += scan_rows_num;
-    stats->total_scan_bytes += scan_bytes;
-    stats->delta_scan_bytes += scan_bytes;
 }
 
 } // namespace starrocks::pipeline

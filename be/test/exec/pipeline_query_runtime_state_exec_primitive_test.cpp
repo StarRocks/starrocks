@@ -18,8 +18,22 @@
 #include <thread>
 
 #include "exec/pipeline/primitives/query_runtime_state.h"
+#include "runtime/query_statistics.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+const QueryStatisticsItemPB* find_scan_stats_item(const PQueryStatistics& statistics, int64_t table_id) {
+    for (const auto& stats_item : statistics.stats_items()) {
+        if (stats_item.table_id() == table_id) {
+            return &stats_item;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
 
 TEST(QueryRuntimeStateTest, StoresQueryId) {
     QueryRuntimeState state;
@@ -162,6 +176,70 @@ TEST(QueryRuntimeStateTest, AppliesOperatorExecStatsSnapshot) {
     ASSERT_NE(stats.end(), node20_stats);
     EXPECT_EQ(6, node20_stats->second->pull_rows.load());
     EXPECT_EQ(stats.end(), stats.find(30));
+}
+
+TEST(QueryRuntimeStateTest, TracksCpuAndScanStats) {
+    QueryRuntimeState state;
+
+    state.incr_cpu_cost(7);
+    state.incr_cpu_cost(11);
+    EXPECT_EQ(18, state.cpu_cost());
+    EXPECT_EQ(18, state.consume_delta_cpu_cost());
+    EXPECT_EQ(0, state.consume_delta_cpu_cost());
+    EXPECT_EQ(18, state.cpu_cost());
+
+    state.incr_cur_scan_rows_num(5);
+    state.incr_cur_scan_bytes(7);
+    state.update_scan_stats(100, 5, 7);
+    state.incr_cur_scan_rows_num(3);
+    state.incr_cur_scan_bytes(4);
+    state.update_scan_stats(100, 3, 4);
+    state.incr_cur_scan_rows_num(11);
+    state.incr_cur_scan_bytes(13);
+    state.update_scan_stats(200, 11, 13);
+
+    EXPECT_EQ(19, state.cur_scan_rows_num());
+    EXPECT_EQ(24, state.get_scan_bytes());
+
+    QueryStatistics delta_statistics;
+    state.consume_delta_scan_stats(&delta_statistics);
+    PQueryStatistics delta_pb;
+    delta_statistics.to_pb(&delta_pb);
+    ASSERT_EQ(2, delta_pb.stats_items_size());
+    EXPECT_EQ(19, delta_pb.scan_rows());
+    EXPECT_EQ(24, delta_pb.scan_bytes());
+    auto* table100_delta = find_scan_stats_item(delta_pb, 100);
+    ASSERT_NE(nullptr, table100_delta);
+    EXPECT_EQ(8, table100_delta->scan_rows());
+    EXPECT_EQ(11, table100_delta->scan_bytes());
+    auto* table200_delta = find_scan_stats_item(delta_pb, 200);
+    ASSERT_NE(nullptr, table200_delta);
+    EXPECT_EQ(11, table200_delta->scan_rows());
+    EXPECT_EQ(13, table200_delta->scan_bytes());
+
+    QueryStatistics second_delta_statistics;
+    state.consume_delta_scan_stats(&second_delta_statistics);
+    PQueryStatistics second_delta_pb;
+    second_delta_statistics.to_pb(&second_delta_pb);
+    EXPECT_EQ(0, second_delta_pb.scan_rows());
+    EXPECT_EQ(0, second_delta_pb.scan_bytes());
+    EXPECT_EQ(0, second_delta_pb.stats_items_size());
+
+    QueryStatistics total_statistics;
+    state.add_total_scan_stats(&total_statistics);
+    PQueryStatistics total_pb;
+    total_statistics.to_pb(&total_pb);
+    ASSERT_EQ(2, total_pb.stats_items_size());
+    EXPECT_EQ(19, total_pb.scan_rows());
+    EXPECT_EQ(24, total_pb.scan_bytes());
+    auto* table100_total = find_scan_stats_item(total_pb, 100);
+    ASSERT_NE(nullptr, table100_total);
+    EXPECT_EQ(8, table100_total->scan_rows());
+    EXPECT_EQ(11, table100_total->scan_bytes());
+    auto* table200_total = find_scan_stats_item(total_pb, 200);
+    ASSERT_NE(nullptr, table200_total);
+    EXPECT_EQ(11, table200_total->scan_rows());
+    EXPECT_EQ(13, table200_total->scan_bytes());
 }
 
 } // namespace starrocks::pipeline

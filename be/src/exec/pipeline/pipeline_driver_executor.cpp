@@ -189,9 +189,10 @@ void GlobalDriverExecutor::_worker_thread() {
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
+                auto* query_runtime_state = driver->query_runtime_state();
                 workgroup::WorkGroupQueryStats query_stats;
-                query_stats.cpu_runtime_ns = query_ctx->cpu_cost();
-                query_stats.scan_rows = query_ctx->cur_scan_rows_num();
+                query_stats.cpu_runtime_ns = query_runtime_state->cpu_cost();
+                query_stats.scan_rows = query_runtime_state->cur_scan_rows_num();
                 query_stats.scan_rows_limit = query_ctx->get_scan_limit();
                 status = driver->workgroup()->check_big_query(query_stats);
             }
@@ -333,7 +334,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         auto* query_cumulative_cpu = profile->add_counter(
                 "QueryCumulativeCpuTime", TUnit::TIME_NS,
                 RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        COUNTER_SET(query_cumulative_cpu, query_ctx->cpu_cost());
+        COUNTER_SET(query_cumulative_cpu, query_ctx->query_runtime_state().cpu_cost());
 
         auto* query_spill_bytes = profile->add_counter(
                 "QuerySpillBytes", TUnit::BYTES,
