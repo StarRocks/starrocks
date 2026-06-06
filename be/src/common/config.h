@@ -483,6 +483,9 @@ CONF_mString(secondary_index_defs, "");
 // readers + zone-map index) for a single .idx file. Default 256 covers
 // 256 distinct (tablet, index) pairs at <~100 MB resident metadata.
 CONF_mInt64(secondary_index_reader_cache_capacity, "256");
+// Enable the covering-index fast path: predicate AND output columns all in
+// the index -> answer from .idx (DelVec-filtered), no base-table readback.
+CONF_mBool(enable_secondary_index_covering, "true");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.

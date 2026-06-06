@@ -31,7 +31,11 @@ class Segment;
 class ColumnPredicate;
 class ObjectPool;
 class PredicateTree;
+class DelvecLoader;
+class ChunkIterator;
+class Schema;
 struct OlapReaderStatistics;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -108,6 +112,24 @@ public:
                                                                         OlapReaderStatistics* stats = nullptr);
 
     const SecondaryIndexFilePB& file_pb() const { return _file_pb; }
+
+    // Covering-index fast path: when the query's predicate columns AND its
+    // output columns are all contained in this index, the query can be
+    // answered ENTIRELY from the .idx file -- no base-table readback. Returns
+    // a ChunkIterator that scans the .idx with the (remapped) predicate
+    // pushed down, decodes __sidx_pos__ -> (seg_id, rowid), drops rows marked
+    // deleted by DelVec (via |delvec_loader|, keyed by rowset_id_base+seg_id),
+    // and emits the requested |output_schema| columns straight from the index.
+    //
+    // |output_schema| fields must all be index columns (matched by name).
+    // |rowset_id_base| is the rowset's id; the global DelVec segment id is
+    // rowset_id_base + (seg_id decoded from the position), matching the base
+    // scan's `_opts.rowset_id + segment_id()`.
+    StatusOr<ChunkIteratorPtr> make_covering_iterator(const Schema& output_schema,
+                                                      const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
+                                                      int64_t rowset_id_base, int64_t version,
+                                                      std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
+                                                      OlapReaderStatistics* stats = nullptr);
 
 private:
     SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr, int64_t tablet_id,

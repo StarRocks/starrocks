@@ -20,8 +20,11 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "storage/del_vector.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -136,6 +139,98 @@ private:
     std::mutex _mu;
     std::list<std::pair<std::string, std::shared_ptr<LookupCacheEntry>>> _entries;
     std::unordered_map<std::string, decltype(_entries)::iterator> _index;
+};
+
+// Answers a covered query entirely from the .idx file: scans the index
+// segment (predicate already pushed down into |idx_iter|), decodes
+// __sidx_pos__ -> (seg_id, rowid), drops rows that DelVec marks deleted, and
+// emits only the requested output columns -- no base-table readback.
+class CoveringIndexIterator final : public ChunkIterator {
+public:
+    CoveringIndexIterator(Schema output_schema, ChunkIteratorPtr idx_iter, Schema idx_read_schema,
+                          std::vector<int> out_to_inner, uint32_t pos_col_idx, int64_t tablet_id,
+                          int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader,
+                          int chunk_size)
+            : ChunkIterator(std::move(output_schema), chunk_size),
+              _idx_iter(std::move(idx_iter)),
+              _idx_read_schema(std::move(idx_read_schema)),
+              _out_to_inner(std::move(out_to_inner)),
+              _pos_col_idx(pos_col_idx),
+              _tablet_id(tablet_id),
+              _rowset_id_base(rowset_id_base),
+              _version(version),
+              _delvec_loader(std::move(delvec_loader)) {}
+
+    void close() override {
+        if (_idx_iter != nullptr) _idx_iter->close();
+    }
+
+protected:
+    Status do_get_next(Chunk* chunk) override {
+        if (_idx_iter == nullptr) return Status::EndOfFile("covering: no index iterator");
+        if (_idx_chunk == nullptr) {
+            ASSIGN_OR_RETURN(_idx_chunk, RuntimeChunkHelper::new_chunk_checked(_idx_read_schema, chunk_size()));
+        }
+        std::vector<uint32_t> survivors;
+        while (true) {
+            _idx_chunk->reset();
+            Status s = _idx_iter->get_next(_idx_chunk.get());
+            if (s.is_end_of_file()) break;
+            RETURN_IF_ERROR(s);
+            const size_t n = _idx_chunk->num_rows();
+            if (n == 0) continue;
+
+            const auto* pos_col = down_cast<const Int64Column*>(_idx_chunk->get_column_by_index(_pos_col_idx).get());
+            const auto& pos = pos_col->get_data();
+            survivors.clear();
+            survivors.reserve(n);
+            for (size_t r = 0; r < n; ++r) {
+                uint32_t seg = 0, rowid = 0;
+                decode_position(pos[r], &seg, &rowid);
+                bool deleted = false;
+                RETURN_IF_ERROR(_is_deleted(seg, rowid, &deleted));
+                if (!deleted) survivors.push_back(static_cast<uint32_t>(r));
+            }
+            if (survivors.empty()) continue;
+            for (size_t of = 0; of < _out_to_inner.size(); ++of) {
+                chunk->get_column_by_index(of)->append_selective(*_idx_chunk->get_column_by_index(_out_to_inner[of]),
+                                                                 survivors.data(), 0, survivors.size());
+            }
+            if (chunk->num_rows() > 0) return Status::OK();
+        }
+        return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("covering: eof");
+    }
+
+private:
+    Status _is_deleted(uint32_t seg, uint32_t rowid, bool* deleted) {
+        *deleted = false;
+        if (_delvec_loader == nullptr) return Status::OK();
+        const uint32_t gseg = static_cast<uint32_t>(_rowset_id_base) + seg;
+        auto it = _delvec_cache.find(gseg);
+        if (it == _delvec_cache.end()) {
+            DelVectorPtr dv;
+            TabletSegmentId tsid;
+            tsid.tablet_id = _tablet_id;
+            tsid.segment_id = gseg;
+            RETURN_IF_ERROR(_delvec_loader->load(tsid, _version, &dv));
+            it = _delvec_cache.emplace(gseg, std::move(dv)).first;
+        }
+        if (it->second != nullptr && !it->second->empty()) {
+            *deleted = it->second->roaring()->contains(rowid);
+        }
+        return Status::OK();
+    }
+
+    ChunkIteratorPtr _idx_iter;
+    Schema _idx_read_schema;
+    std::vector<int> _out_to_inner;
+    uint32_t _pos_col_idx;
+    int64_t _tablet_id;
+    int64_t _rowset_id_base;
+    int64_t _version;
+    std::shared_ptr<DelvecLoader> _delvec_loader;
+    std::unordered_map<uint32_t, DelVectorPtr> _delvec_cache;
+    ChunkPtr _idx_chunk;
 };
 
 } // namespace
@@ -288,6 +383,56 @@ StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> SecondaryIndexReader::loo
         }
     });
     return entry->result;
+}
+
+StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
+        const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
+        int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
+        OlapReaderStatistics* stats) {
+    if (_segment == nullptr) {
+        return Status::InternalError("make_covering_iterator: index segment not opened");
+    }
+    // Inner read schema covers all index columns + the encoded position; the
+    // predicate is pushed down exactly as in lookup() so the .idx scan only
+    // touches the matching range.
+    Schema read_schema = ChunkHelper::convert_schema(_index_schema);
+    SegmentReadOptions read_opts;
+    read_opts.fs = _fs;
+    read_opts.stats = stats;
+    if (obj_pool != nullptr && !source_pred_tree.empty()) {
+        read_opts.pred_tree = build_remapped_predicate_tree(source_pred_tree, _source_index_col_ids, obj_pool);
+        read_opts.pred_tree_for_zone_map = read_opts.pred_tree;
+    }
+    ASSIGN_OR_RETURN(auto inner_iter, _segment->new_iterator(read_schema, read_opts));
+
+    // Map each output field (by name) to its column index in the inner
+    // (.idx) read schema. Caller guarantees every output column is an index
+    // column, so a miss is a programming error.
+    std::vector<int> out_to_inner;
+    out_to_inner.reserve(output_schema.num_fields());
+    for (size_t f = 0; f < static_cast<size_t>(output_schema.num_fields()); ++f) {
+        const std::string fname(output_schema.field(f)->name());
+        int found = -1;
+        for (int j = 0; j < _file_pb.index_col_names_size(); ++j) {
+            if (_file_pb.index_col_names(j) == fname) {
+                found = j;
+                break;
+            }
+        }
+        if (found < 0) {
+            return Status::InternalError(
+                    fmt::format("make_covering_iterator: output column '{}' not in index", fname));
+        }
+        out_to_inner.push_back(found);
+    }
+
+    if (inner_iter == nullptr) {
+        // Zone-map pruned the whole .idx: nothing matches in this rowset.
+        return Status::EndOfFile("covering: index segment pruned");
+    }
+    return std::make_shared<CoveringIndexIterator>(output_schema, std::move(inner_iter), std::move(read_schema),
+                                                   std::move(out_to_inner), _encoded_pos_col_idx, _tablet_id,
+                                                   rowset_id_base, version, std::move(delvec_loader), chunk_size);
 }
 
 } // namespace starrocks::secondary_sorted
