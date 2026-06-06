@@ -107,9 +107,9 @@ public:
     // |cache_key| must uniquely identify (.idx file, predicate); the caller
     // builds it from file_name + a predicate signature.
     StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> lookup_cached(const std::string& cache_key,
-                                                                        const PredicateTree& source_pred_tree,
-                                                                        ObjectPool* obj_pool,
-                                                                        OlapReaderStatistics* stats = nullptr);
+                                                                         const PredicateTree& source_pred_tree,
+                                                                         ObjectPool* obj_pool,
+                                                                         OlapReaderStatistics* stats = nullptr);
 
     const SecondaryIndexFilePB& file_pb() const { return _file_pb; }
 
