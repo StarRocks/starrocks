@@ -5773,4 +5773,69 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_handles_invalid_hex_prefix) {
     EXPECT_EQ(0, deleted);
 }
 
+// Regression test: a PhysicalPartition.metadataSwitchVersion can be permanently stranded when the
+// switch version's tablet metadata (and everything at or below it) has already been vacuumed away
+// before the FE managed to clear the switch (e.g. an in-memory clear lost across an FE failover).
+// In that state collect_files_to_vacuum used to report `min_retain_version - 1`, which is below the
+// switch version, so the FE never clears it (it only clears once vacuumed_version >= switch_version).
+// The vacuum must instead report the real cleaned watermark so the switch can be cleared.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_min_retain_below_min_version) {
+    // Case 1: the tablet's lowest existing version has already advanced past min_retain_version, so
+    // the metadata walk never runs. Only the visible version (5) metadata remains.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5200,
+            "version": 5,
+            "commit_time": 1
+        }
+        )DEL")));
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5200);
+        // Versions <= 4 are already gone; the lowest existing version is 5.
+        info->set_min_version(5);
+        // min_retain_version is pinned to a switch version (3) whose metadata no longer exists.
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 60);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // Before the fix: min_retain_version - 1 == 2 (< switch version 3 -> stranded forever).
+        // After the fix: max(min_retain_version, min_version - 1) == 4 (>= switch version 3).
+        EXPECT_EQ(4, response.vacuumed_version());
+    }
+
+    // Case 2: the retain-boundary metadata read itself returns NotFound (the boundary version is
+    // gone while the FE still believes min_version is low). The watermark must not drop below the
+    // retain boundary so the switch version can still be cleared.
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        *res = Status::NotFound("injected: retain-boundary metadata already vacuumed");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5200);
+        info->set_min_version(1);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 60);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // Before the fix: min_retain_version - 1 == 2 (< switch version 3). After the fix: 3.
+        EXPECT_EQ(3, response.vacuumed_version());
+    }
+    SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
 } // namespace starrocks::lake
