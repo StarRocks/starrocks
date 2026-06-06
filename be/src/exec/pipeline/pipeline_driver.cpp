@@ -387,7 +387,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         });
 
         SCOPED_RAW_TIMER(&process_time_ns);
-        auto query_mem_tracker = _query_ctx->mem_tracker();
+        auto* query_mem_tracker = _query_mem_tracker();
 
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
@@ -406,7 +406,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     _query_runtime_state->update_operator_exec_stats(curr_op->exec_stats_snapshot());
-                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op, nullptr);
+                    _adjust_memory_usage(runtime_state, query_mem_tracker, i + 1, next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -477,8 +477,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
-                            _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op,
-                                                 maybe_chunk.value());
+                            _adjust_memory_usage(runtime_state, query_mem_tracker, i + 1, next_op, maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
@@ -514,7 +513,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     _query_runtime_state->update_operator_exec_stats(curr_op->exec_stats_snapshot());
-                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), i + 1, next_op, nullptr);
+                    _adjust_memory_usage(runtime_state, query_mem_tracker, i + 1, next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -746,6 +745,13 @@ spill::OperatorMemoryResourceManager* PipelineDriver::_operator_mem_resource_man
     return _operator_mem_resource_managers[operator_idx].get();
 }
 
+MemTracker* PipelineDriver::_query_mem_tracker() const {
+    DCHECK(_query_runtime_state != nullptr);
+    auto* tracker = _query_runtime_state->query_mem_tracker();
+    DCHECK(tracker != nullptr);
+    return tracker;
+}
+
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx,
                                           OperatorPtr& op, const ChunkPtr& chunk) {
     auto* mem_resource_mgr = _operator_mem_resource_manager(operator_idx);
@@ -796,7 +802,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
             }
         }
 
-        const auto& query_mem_tracker = _query_ctx->mem_tracker();
+        auto* query_mem_tracker = _query_mem_tracker();
         auto query_consumption = query_mem_tracker->consumption();
         auto limited = query_mem_tracker->limit();
         auto reserved_limit = query_mem_tracker->reserve_limit();
@@ -813,7 +819,7 @@ const double release_buffer_mem_ratio = 0.5;
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, size_t operator_idx, OperatorPtr& op) {
     auto* mem_resource_mgr = _operator_mem_resource_manager(operator_idx);
     if (state->enable_spill() && mem_resource_mgr != nullptr && mem_resource_mgr->releaseable() && op->releaseable()) {
-        const auto& query_mem_tracker = _query_ctx->mem_tracker();
+        auto* query_mem_tracker = _query_mem_tracker();
         auto query_consumption = query_mem_tracker->consumption();
         auto query_mem_limit = query_mem_tracker->lowest_limit();
         DCHECK_GT(query_mem_limit, 0);

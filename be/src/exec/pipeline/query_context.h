@@ -231,7 +231,6 @@ public:
 
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
-    QueryRuntimeState _query_runtime_state;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
@@ -277,6 +276,9 @@ private:
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
+    // _query_runtime_state keeps a non-owning pointer to _mem_tracker. Keep it declared after the mem trackers so
+    // it is destroyed before them.
+    QueryRuntimeState _query_runtime_state;
 
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;

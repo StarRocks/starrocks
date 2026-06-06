@@ -18,6 +18,7 @@
 #include <thread>
 
 #include "exec/pipeline/primitives/query_runtime_state.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 
 namespace starrocks::pipeline {
@@ -45,6 +46,17 @@ TEST(QueryRuntimeStateTest, StoresQueryId) {
 
     EXPECT_EQ(1, state.query_id().hi);
     EXPECT_EQ(2, state.query_id().lo);
+}
+
+TEST(QueryRuntimeStateTest, StoresQueryMemTrackerReference) {
+    QueryRuntimeState state;
+    MemTracker tracker(-1);
+
+    state.set_query_mem_tracker(&tracker);
+
+    EXPECT_EQ(&tracker, state.query_mem_tracker());
+    const auto& const_state = state;
+    EXPECT_EQ(&tracker, const_state.query_mem_tracker());
 }
 
 TEST(QueryRuntimeStateTest, TracksQueryAndDeliveryExpiry) {
