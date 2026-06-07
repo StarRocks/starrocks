@@ -69,6 +69,16 @@ public class LancePlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "LanceScanNode");
         assertContains(plan, "TABLE: vectors_table");
+
+        // Verify Thrift scan range params (use_lance_jni_reader and lance_dataset_uri)
+        com.starrocks.common.Pair<String, com.starrocks.qe.DefaultCoordinator> pair =
+                com.starrocks.utframe.UtFrameUtils.getPlanAndStartScheduling(connectContext, sql);
+        java.util.List<com.starrocks.thrift.TScanRangeParams> tScanRangeLocationsList =
+                collectAllScanRangeParams(pair.second);
+        org.junit.jupiter.api.Assertions.assertFalse(tScanRangeLocationsList.isEmpty());
+        com.starrocks.thrift.THdfsScanRange hdfsScanRange = tScanRangeLocationsList.get(0).scan_range.hdfs_scan_range;
+        org.junit.jupiter.api.Assertions.assertTrue(hdfsScanRange.isUse_lance_jni_reader());
+        org.junit.jupiter.api.Assertions.assertEquals("s3://bucket/vectors", hdfsScanRange.getLance_dataset_uri());
     }
 
     @Test
