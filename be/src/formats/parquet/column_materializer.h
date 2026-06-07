@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -30,12 +31,16 @@
 
 namespace starrocks::parquet {
 
+class LazyMaterializationContext;
+class ReadRangePlanner;
+
 class ColumnMaterializer {
 public:
     using ColumnReaderMap = std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>;
 
-    ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers)
-            : _param(param), _column_readers(column_readers) {}
+    ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers);
+
+    ReadRangePlanner* read_range_planner() const { return _read_range_planner.get(); }
 
     void clear_classification();
     void add_active_column(int col_idx);
@@ -92,7 +97,10 @@ public:
                       ChunkPtr* chunk, bool ignore_reserved_field = false);
     Status read_active_range(const Range<uint64_t>& range, const Filter* filter, ChunkPtr* chunk);
     Status read_lazy_range(const Range<uint64_t>& range, const Filter* filter, ChunkPtr* chunk);
-    StatusOr<size_t> read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
+    // read_active_range_round_by_round accepts an optional LazyMaterializationContext*
+    // as a forward-looking parameter for Phase 6 expression-driven materialization.
+    StatusOr<size_t> read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk,
+                                                      LazyMaterializationContext* lazy_ctx = nullptr);
 
     Status rewrite_dict_conjuncts_to_predicate(bool* is_group_filtered);
     Status filter_dict_column(SlotId slot_id, ColumnPtr& column, Filter* filter,
@@ -177,6 +185,8 @@ private:
     std::unordered_map<SlotId, SlotCacheEntry> _slot_cache;
 
     bool _lazy_column_needed = false;
+
+    std::unique_ptr<ReadRangePlanner> _read_range_planner;
 };
 
 } // namespace starrocks::parquet

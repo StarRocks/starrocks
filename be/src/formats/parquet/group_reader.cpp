@@ -35,9 +35,11 @@
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/iceberg_row_id_reader.h"
+#include "formats/parquet/lazy_materialization_context.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/parquet_pos_reader.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
+#include "formats/parquet/read_range_planner.h"
 #include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
@@ -47,42 +49,6 @@
 #include "utils.h"
 
 namespace starrocks::parquet {
-
-namespace {
-
-// Deduplicate exact-duplicate IO ranges collected from multiple column readers.
-void deduplicate_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges) {
-    if (ranges == nullptr || ranges->size() <= 1) {
-        return;
-    }
-
-    std::sort(ranges->begin(), ranges->end(), [](const auto& lhs, const auto& rhs) {
-        if (lhs.offset != rhs.offset) {
-            return lhs.offset < rhs.offset;
-        }
-        if (lhs.size != rhs.size) {
-            return lhs.size < rhs.size;
-        }
-        return lhs.is_active < rhs.is_active;
-    });
-
-    size_t write_idx = 0;
-    for (size_t read_idx = 1; read_idx < ranges->size(); ++read_idx) {
-        auto& current = (*ranges)[write_idx];
-        const auto& next = (*ranges)[read_idx];
-        if (current.offset == next.offset && current.size == next.size) {
-            current.is_active = current.is_active || next.is_active;
-            continue;
-        }
-        ++write_idx;
-        if (write_idx != read_idx) {
-            (*ranges)[write_idx] = next;
-        }
-    }
-    ranges->erase(ranges->begin() + static_cast<std::ptrdiff_t>(write_idx + 1), ranges->end());
-}
-
-} // namespace
 
 // ── GroupReader: construction / destruction ─────────────────────────────────
 
@@ -144,19 +110,20 @@ Status GroupReader::prepare() {
     // Promote variant virtual columns to typed-value proxy readers.
     _variant->try_promote();
 
-    // Coalesce IO ranges.
+    // Coalesce IO ranges using ReadRangePlanner's staged planning.
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
         std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
-        int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
-        if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
+        auto* planner = _column_materializer->read_range_planner();
+        bool coalesce_lazy = planner->should_coalesce_active_lazy();
+        if (coalesce_lazy || !config::io_coalesce_adaptive_lazy_active) {
             _param.stats->group_active_lazy_coalesce_together += 1;
         } else {
             _param.stats->group_active_lazy_coalesce_seperately += 1;
         }
         _set_end_offset(end_offset);
-        RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
+        RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, coalesce_lazy));
     }
 
     RETURN_IF_ERROR(_column_materializer->rewrite_dict_conjuncts_to_predicate(&_is_group_filtered));
@@ -237,13 +204,19 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         Filter chunk_filter(count, 1);
         active_chunk->reset();
 
+        // Phase 4: lazy materialization context for on-demand slot resolution.
+        // Created early so Phase 6 expression trigger can call materialize_slot()
+        // during predicate evaluation.  Destroyed before get_next() returns.
+        LazyMaterializationContext lazy_ctx(*_column_materializer, r, nullptr, active_chunk);
+
         // 1. Prune deleted rows
         ASSIGN_OR_RETURN(bool rows_survive, _prune_deleted_rows(r, chunk_filter, has_filter, count));
         if (!rows_survive) continue;
 
-        // 2. Read & filter active columns
+        // 2. Read & filter active columns (Phase 6: passes lazy_ctx for on-demand
+        //    lazy_predicate column materialization during round-by-round eval).
         ASSIGN_OR_RETURN(rows_survive,
-                         _read_and_filter_active_columns(r, chunk_filter, active_chunk, has_filter, count));
+                         _read_and_filter_active_columns(r, chunk_filter, active_chunk, has_filter, count, &lazy_ctx));
         if (!rows_survive) continue;
 
         // 3. Fetch variant sources (for subfield conjuncts)
@@ -284,7 +257,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                            chunk_filter.begin() + post_filter_range.end() - r.begin()};
         }
 
-        // 5. Backfill lazy physical columns
+        // 5. Backfill lazy physical columns via LazyMaterializationContext
         if (!_column_materializer->lazy_column_indices().empty()) {
             RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter, has_filter,
                                                                     active_chunk));
@@ -331,11 +304,12 @@ StatusOr<bool> GroupReader::_prune_deleted_rows(const Range<uint64_t>& r, Filter
 // ── 2. Read & filter active columns ──────
 
 StatusOr<bool> GroupReader::_read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
-                                                            ChunkPtr& active_chunk, bool& has_filter, size_t count) {
+                                                            ChunkPtr& active_chunk, bool& has_filter, size_t count,
+                                                            LazyMaterializationContext* lazy_ctx) {
     if (_column_materializer->has_predicate_filter()) {
         has_filter = true;
-        ASSIGN_OR_RETURN(size_t hit_count,
-                         _column_materializer->read_active_range_round_by_round(r, &chunk_filter, &active_chunk));
+        ASSIGN_OR_RETURN(size_t hit_count, _column_materializer->read_active_range_round_by_round(
+                                                   r, &chunk_filter, &active_chunk, lazy_ctx));
         if (hit_count == 0) {
             _param.stats->late_materialize_skip_rows += count;
             return false;
@@ -594,7 +568,7 @@ void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORan
     int64_t end = 0;
     _column_materializer->collect_io_ranges(ranges, &end, types);
     _variant->collect_io_ranges(ranges, &end, types);
-    deduplicate_io_ranges(ranges);
+    ReadRangePlanner::deduplicate(ranges);
     *end_offset = end;
 }
 

@@ -24,10 +24,16 @@
 #include "common/config_scan_io_fwd.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "formats/parquet/read_range_planner.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::parquet {
+
+ColumnMaterializer::ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers)
+        : _param(param), _column_readers(column_readers) {
+    _read_range_planner = std::make_unique<ReadRangePlanner>(param, column_readers);
+}
 
 void ColumnMaterializer::clear_classification() {
     _active_column_indices.clear();
@@ -136,7 +142,8 @@ Status ColumnMaterializer::read_lazy_range(const Range<uint64_t>& range, const F
 }
 
 StatusOr<size_t> ColumnMaterializer::read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter,
-                                                                      ChunkPtr* chunk) {
+                                                                      ChunkPtr* chunk,
+                                                                      LazyMaterializationContext* lazy_ctx) {
     DCHECK(_column_read_order_ctx != nullptr);
     const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
     size_t round_cost = 0;
@@ -247,15 +254,10 @@ Status ColumnMaterializer::fill_dst_column(SlotId slot_id, ColumnPtr& dst, Colum
 
 void ColumnMaterializer::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end,
                                            ColumnIOTypeFlags types) {
-    for (const auto& index : _active_column_indices) {
-        const auto& column = _param.read_cols[index];
-        (*_column_readers)[column.slot_id()]->collect_column_io_range(ranges, end, types, true);
-    }
-
-    for (const auto& index : _lazy_column_indices) {
-        const auto& column = _param.read_cols[index];
-        (*_column_readers)[column.slot_id()]->collect_column_io_range(ranges, end, types, false);
-    }
+    _read_range_planner->collect_ranges(_active_column_indices, true, ranges, end, types);
+    _read_range_planner->pre_plan_lazy_ranges(_lazy_column_indices, end, types);
+    const auto& lazy_ranges = _read_range_planner->lazy_ranges();
+    ranges->insert(ranges->end(), lazy_ranges.begin(), lazy_ranges.end());
 }
 
 Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
