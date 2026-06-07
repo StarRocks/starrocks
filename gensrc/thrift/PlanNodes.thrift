@@ -466,6 +466,8 @@ struct THdfsScanRange {
     39: optional bool use_lance_jni_reader
     // lance split info
     40: optional string lance_split_info
+    // lance dataset URI
+    41: optional string lance_dataset_uri
 }
 
 struct TBinlogScanRange {

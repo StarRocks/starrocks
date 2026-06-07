@@ -84,21 +84,19 @@ public class LanceScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
-        // For Phase 2 of query planning, we construct dummy scan ranges (splits)
-        // that will be sent via JNI scan ranges. In actual execution we'd request files/splits from Arrow/Lance API.
         List<Long> nodeIds = getAllAvailableBackendOrComputeIds();
         if (nodeIds.isEmpty()) {
             return;
         }
 
-        // Add 1 dummy split for test purposes
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_lance_jni_reader(true);
-        hdfsScanRange.setLance_split_info("lance_split_placeholder");
-        hdfsScanRange.setFile_length(100);
-        hdfsScanRange.setLength(100);
+        hdfsScanRange.setLance_dataset_uri(lanceTable.getUri());
+        hdfsScanRange.setLance_split_info("{\"fragment_ids\": [0]}");
+        hdfsScanRange.setFile_length(0);
+        hdfsScanRange.setLength(0);
         hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
 
         TScanRange scanRange = new TScanRange();
