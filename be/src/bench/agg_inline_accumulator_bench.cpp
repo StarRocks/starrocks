@@ -404,14 +404,12 @@ struct SliceInline {
             const auto* col = down_cast<const BinaryColumn*>(chunk.get());
             const size_t dist = agg_hash_map_default_prefetch_dist();
             const bool do_pf = dist != 0 && agg_should_prefetch_table(map);
-            // Always pre-hash the chunk in a dense pass (like the general string path):
-            // the string hash branches on the length, and a mispredict inside the
-            // dependent emplace chain costs ~10x what it costs in a dense loop.
-            for (int i = 0; i < kChunk; ++i) hashes[i] = hasher(col->get_slice(i));
+            const auto slices = col->immutable_data();
+            for (int i = 0; i < kChunk; ++i) hashes[i] = hasher(slices[i]);
             size_t pf = dist;
             for (int i = 0; i < kChunk; ++i) {
                 if (do_pf && pf < static_cast<size_t>(kChunk)) map.prefetch_hash(hashes[pf++]);
-                Slice s = col->get_slice(i);
+                Slice s = slices[i];
                 auto emplace = [&](const auto& ctor) {
                     uint8_t* mem = pool->allocate(s.size); // inline still copies the key into the pool
                     memcpy(mem, s.data, s.size);

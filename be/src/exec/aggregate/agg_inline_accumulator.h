@@ -147,6 +147,42 @@ struct InlineAddOp {
 // count(*) (delta 1), count(col) (delta !null[i]) and sum(bool/int8..64) -> BIGINT;
 // InlineAddOp<double> serves sum(float/double) -> DOUBLE.
 
+// ============================ multi-aggregate pack ============================
+// Several qualifying aggregates can share ONE widened map cell: the value type of the
+// pack map flavors is a fixed 32-byte cell of four int64 fields, and the aggregator uses
+// the first N of them (the gate caps N at 4). A fixed cell type keeps the variant growth
+// at one new map instance per key flavor instead of one per width; the unused tail of a
+// 2- or 3-field pack costs cell footprint only, never per-row work.
+//
+// Pack scope: every field is an int64 ADDITIVE op -- count(*) (delta 1), count(col)
+// (delta !null[i]) and sum(int family -> BIGINT) (the widened value). One shared identity
+// (all-zero bytes) and one shared combine shape (field += delta) keep the creating build's
+// no-op guarantee: combine(identity-deltas) over a fresh cell is bitwise neutral, exactly
+// like the single-op additive family.
+struct InlinePackCell {
+    int64_t f[4];
+};
+// Per-row deltas of the whole pack, materialized AoS by the aggregator's compute pass.
+struct InlinePackDelta {
+    int64_t d[4];
+};
+
+template <size_t N>
+struct InlinePackOp {
+    static_assert(N >= 2 && N <= 4);
+    using SlotType = InlinePackCell;
+    // By value: the loops pass one delta per row (and the fold pass indexes a delta array),
+    // so DeltaType must be a regular object type; the 32-byte copy folds away under inlining.
+    using DeltaType = InlinePackDelta;
+    static constexpr InlinePackCell identity() { return InlinePackCell{}; }
+    ALWAYS_INLINE static InlinePackCell identity_slot() { return InlinePackCell{}; }
+    ALWAYS_INLINE static void combine(InlinePackCell& slot, const InlinePackDelta& delta) {
+        for (size_t k = 0; k < N; ++k) {
+            slot.f[k] += delta.d[k];
+        }
+    }
+};
+
 // min/max keep the value type T itself in the slot (every whitelisted T fits 8 bytes; the
 // identity image writes sizeof(T) bytes over the zeroed slot). combine reuses the exact
 // general-path expression -- AggDataTypeTraits<LT>::update_min/max == std::min/max<T> -- so
@@ -339,16 +375,17 @@ ALWAYS_NOINLINE void agg_inline_fold_keys(HashMap& hash_map, const InlineKeyView
 }
 
 // Commit pass for the selective classify build: re-probe each kept row (selection[i] == 0, or
-// all rows when selection is null) and add +1 to its slot. Re-looking-up the key instead of
-// replaying a stashed slot address keeps the count valid even if the hash table was rehashed
-// after the classifying build.
+// all rows when selection is null) and combine the unit delta into its slot (+1 for the
+// fused count, the all-ones delta for an all-count(*) pack). Re-looking-up the key instead
+// of replaying a stashed slot address keeps the count valid even if the hash table was
+// rehashed after the classifying build.
 template <typename Op, typename HashMap, typename KeyT>
 ALWAYS_NOINLINE void agg_inline_commit_keys(HashMap& hash_map, const InlineKeyView<KeyT>& view, size_t num_rows,
-                                            const Filter* selection) {
+                                            const Filter* selection, typename Op::DeltaType delta) {
     uint8_t ignore_not_found = 0;
     for (size_t i = 0; i < num_rows; ++i) {
         if (selection != nullptr && (*selection)[i] != 0) continue;
-        inline_agg_find<Op>(hash_map, view.key_at(i), ignore_not_found, 1);
+        inline_agg_find<Op>(hash_map, view.key_at(i), ignore_not_found, delta);
     }
 }
 
@@ -400,9 +437,10 @@ struct InlineAggMapMixin {
     }
 
     template <typename Op, typename KeysArg>
-    void inline_agg_commit_dense(const KeysArg& keys, size_t n, const Filter* selection) {
+    void inline_agg_commit_dense(const KeysArg& keys, size_t n, const Filter* selection, typename Op::DeltaType delta) {
         auto* self = static_cast<Derived*>(this);
-        agg_inline_commit_keys<Op>(self->hash_map, self->prepare_inline_keys(keys, n, false, nullptr), n, selection);
+        agg_inline_commit_keys<Op>(self->hash_map, self->prepare_inline_keys(keys, n, false, nullptr), n, selection,
+                                   delta);
     }
 
     // Public entry points for the flavors whose key columns go straight to the hook (the
@@ -422,8 +460,8 @@ struct InlineAggMapMixin {
     }
     template <typename Op>
     void commit_inline_agg(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* scratch,
-                           const Filter* selection) {
-        inline_agg_commit_dense<Op>(key_columns, chunk_size, selection);
+                           const Filter* selection, typename Op::DeltaType delta) {
+        inline_agg_commit_dense<Op>(key_columns, chunk_size, selection, delta);
     }
 };
 

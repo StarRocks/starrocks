@@ -457,7 +457,24 @@ protected:
     enum class InlineOpKind : uint8_t { kCountStar, kCountCol, kSumInt, kSumDouble, kMin, kMax };
     InlineOpKind _inline_op = InlineOpKind::kCountStar;
     LogicalType _inline_minmax_lt = TYPE_UNKNOWN;
-    bool _inline_op_is_fused() const { return _inline_op == InlineOpKind::kCountStar; }
+    // Multi-aggregate pack: 2..4 additive int64 aggregates (count(*) / count(col) /
+    // sum(int->BIGINT)) share one 32-byte map cell; field k of the cell is aggregate k.
+    // The single-op fields above are not used while _inline_pack is set.
+    bool _inline_pack = false;
+    uint8_t _inline_pack_n = 0;
+    InlineOpKind _inline_pack_ops[4] = {};
+    // A pack is build-fused only when EVERY field is count(*): that is the only delta
+    // needing no input column. Any other member defers the whole pack's fold to compute.
+    bool _inline_pack_fused = false;
+    bool _inline_op_is_fused() const {
+        return _inline_pack ? _inline_pack_fused : _inline_op == InlineOpKind::kCountStar;
+    }
+    template <typename HTBuildOp>
+    void _inline_pack_dispatch_build(size_t chunk_size, Filter* not_founds, size_t limit, bool fused);
+    // Materialize the chunk's per-row pack deltas (AoS) into the delta scratch: on an update
+    // chunk field k's delta comes from aggregate k's input column, on a merge chunk from its
+    // intermediate partial column.
+    StatusOr<const InlinePackDelta*> _compute_pack_deltas(Chunk* chunk, size_t chunk_size, bool is_merge);
     // Per-chunk materialized deltas for the per-row-delta ops (8B per row; doubles reuse the
     // same bytes). Lives until the end of the compute call that filled it.
     Buffer<int64_t> _inline_delta_scratch;
@@ -502,6 +519,7 @@ protected:
         bool is_merge = false; // captured _inline_agg_merge_chunk() of the current chunk
     };
     InlineChunkState _inline_chunk;
+    Status _inline_pack_compute(Chunk* chunk, size_t chunk_size, const Filter* selection, InlineChunkState chunk_state);
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
@@ -671,7 +689,7 @@ protected:
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
-    void _init_agg_hash_variant(HashVariantType& hash_variant);
+    void _init_agg_hash_variant(HashVariantType& hash_variant, bool want_pack = false);
     // get spec hash table/set type
     template <typename HashVariantType>
     typename HashVariantType::Type _get_hash_table_type();

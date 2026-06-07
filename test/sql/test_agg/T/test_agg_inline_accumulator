@@ -324,6 +324,33 @@ select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c
 select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c_int) cnt from t group by c_big) x;
 set enable_query_cache = false;
 
+-- ============ engaged: multi-aggregate pack (2..4 additive aggregates, one 32B cell) ============
+-- count(*) / count(col) / sum(int->BIGINT) members; every numeric/fx key flavor with a pack twin
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn) x;
+-- nullable key: the NULL group exists with count(c_int)=0 and sum=0
+select count(*) grp, sum(cnt) c1, sum(cc) c2, sum(s) tots, min(cc) mn from (select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big) x;
+-- four fields
+select count(*) grp, sum(c1) a, sum(c2) b, sum(s1) c, sum(s2) d from (select c_int_nn, count(*) c1, count(c_int) c2, sum(c_int_nn) s1, sum(c_big_nn) s2 from t group by c_int_nn) x;
+-- all-count(*) pack stays build-fused
+select c_int_nn, count(*) c1, count(1) c2 from t group by c_int_nn order by c_int_nn limit 3;
+-- date key
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_dt, count(*) cnt, sum(c_int_nn) s from t group by c_dt) x;
+-- multi-column serialized fixed-size key
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_tiny, c_small, c_int, count(*) cnt, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+-- both phases
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn) x;
+select count(*) grp, sum(cnt) c1, sum(cc) c2, sum(s) tots, min(cc) mn from (select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big) x;
+-- merge phase + spill
+set enable_spill = true;
+set spill_mode = 'force';
+select sum(cnt) tot, sum(s) tots from (select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn) x;
+set enable_spill = false;
+set new_planner_agg_stage = 0;
+-- guards: members outside the pack whitelist keep the general path (results still correct)
+select count(*) grp, sum(s) tots, min(mn) lo from (select c_big_nn, sum(c_int) s, min(c_int_nn) mn from t group by c_big_nn) x;
+select count(*) grp, round(sum(sd), 3) tot from (select c_big_nn, count(*) cnt, sum((c_int_nn + 0.0) / 2) sd from t group by c_big_nn) x;
+
 -- ============ inline ON vs OFF must produce identical results ============
 set enable_agg_inline_accumulator = false;
 select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select c_big, count(*) cnt from t group by c_big) x;
@@ -336,6 +363,8 @@ select count(*) grp, sum(cnt) tot from (select c_tiny, c_small, c_int, count(*) 
 select count(*) grp, sum(s) tot, min(s) smallest from (select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
 select count(*) grp, min(mn) lo, max(mn) hi from (select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int) x;
 select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit 4;
+select count(*) grp, sum(cnt) c1, sum(cc) c2, sum(s) tots, min(cc) mn from (select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big) x;
+select count(*) grp, sum(c1) a, sum(c2) b, sum(s1) c, sum(s2) d from (select c_int_nn, count(*) c1, count(c_int) c2, sum(c_int_nn) s1, sum(c_big_nn) s2 from t group by c_int_nn) x;
 set enable_agg_inline_accumulator = true;
 
 -- ============ engagement asserts: the runtime profile must show inline where designed ============
@@ -369,6 +398,9 @@ select s_nn, count(*) cnt from t_str group by s_nn order by s_nn limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
 select s, sum(v) sv from t_str group by s order by s nulls last limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
+-- multi-aggregate pack
+select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: pack%';
 -- two-phase: BOTH aggregation nodes engage (2 op-markers, 0 false-markers); for count(col)
 -- the update node classifies count(col) while the merge node resolves plain count after the
 -- honest-nullability fix
@@ -387,6 +419,8 @@ select c_big_nn, max(c_int_nn) mx from t group by c_big_nn order by c_big_nn lim
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: max%';
 select s, count(*) cnt from t_str group by s order by s nulls last limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
+select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: pack%';
 -- merge + spill: both main aggregators stay inline (the spill-restore path additionally
 -- runs a SortedStreamingAggregator that reports false by design, so false is NOT counted)
 set enable_spill = true;
@@ -394,13 +428,16 @@ set spill_mode = 'force';
 select c_big_nn, sum(c_int_nn) s from t group by c_big_nn order by c_big_nn limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
 set enable_spill = false;
--- fallback by design: nullable input, distinct, two aggregates, repeat below the agg --
+-- fallback by design: nullable input, distinct, an over-cap/non-additive aggregate set,
+-- repeat below the agg --
 -- zero non-false markers anywhere in the profile
 select c_big_nn, sum(c_int) s from t group by c_big_nn order by c_big_nn limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
 select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nulls last limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
-select c_big, count(*) cnt, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+select c_big_nn, count(*) c1, count(c_int) c2, sum(c_int_nn) s1, sum(c_big_nn) s2, min(c_int_nn) mn from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
+select c_big_nn, count(*) c1, min(c_int_nn) mn from t group by c_big_nn order by c_big_nn limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
 select c_tiny, sum(c_int_nn) s from t group by rollup(c_tiny) order by c_tiny nulls last limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
@@ -413,8 +450,8 @@ set enable_async_profile = true;
 select c_tiny, count(*) cnt from t group by c_tiny order by c_tiny nulls last limit 3;
 -- count(DISTINCT) -> not a plain count
 select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nulls last limit 3;
--- two aggregate functions
-select c_big, count(*) cnt, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 3;
+-- five aggregate functions (over the pack cap), one of them non-additive
+select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s, max(c_int_nn) mx, min(c_int_nn) mn from t group by c_big order by c_big nulls last limit 3;
 -- global count(*), no GROUP BY
 select count(*) from t;
 

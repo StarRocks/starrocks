@@ -85,6 +85,34 @@ template <PhmapSeed seed>
 using NullTimeStampAggHashMapWithOneNumberKey =
         AggHashMapWithOneNullableNumberKey<TYPE_DATETIME, TimeStampAggHashMap<seed>>;
 
+// Pack flavors: the same key handling over the 32-byte multi-aggregate pack cell.
+template <PhmapSeed seed>
+using Int32PackAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_INT, Int32PackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using Int64PackAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_BIGINT, Int64PackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using DatePackAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DATE, DatePackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using TimeStampPackAggHashMapWithOneNumberKey =
+        AggHashMapWithOneNumberKey<TYPE_DATETIME, TimeStampPackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using NullInt32PackAggHashMapWithOneNumberKey = AggHashMapWithOneNullableNumberKey<TYPE_INT, Int32PackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using NullInt64PackAggHashMapWithOneNumberKey =
+        AggHashMapWithOneNullableNumberKey<TYPE_BIGINT, Int64PackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using NullDatePackAggHashMapWithOneNumberKey = AggHashMapWithOneNullableNumberKey<TYPE_DATE, DatePackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using NullTimeStampPackAggHashMapWithOneNumberKey =
+        AggHashMapWithOneNullableNumberKey<TYPE_DATETIME, TimeStampPackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using SerializedKeyFixedSize4PackAggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize4SlicePackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using SerializedKeyFixedSize8PackAggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize8SlicePackAggHashMap<seed>>;
+template <PhmapSeed seed>
+using SerializedKeyFixedSize16PackAggHashMap =
+        AggHashMapWithSerializedKeyFixedSize<FixedSize16SlicePackAggHashMap<seed>>;
+
 // For string type, we use slice type as hashmap key
 template <PhmapSeed seed>
 using OneStringAggHashMap = AggHashMapWithOneStringKey<SliceAggHashMap<seed>>;
@@ -340,7 +368,30 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<CompressedFixedSize1AggHashMap<PhmapSeed2>>,
         std::unique_ptr<CompressedFixedSize4AggHashMap<PhmapSeed2>>,
         std::unique_ptr<CompressedFixedSize8AggHashMap<PhmapSeed2>>,
-        std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed2>>>;
+        std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed2>>,
+
+        std::unique_ptr<Int32PackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<Int64PackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<DatePackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<TimeStampPackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<NullInt32PackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<NullInt64PackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<NullDatePackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<NullTimeStampPackAggHashMapWithOneNumberKey<PhmapSeed1>>,
+        std::unique_ptr<SerializedKeyFixedSize4PackAggHashMap<PhmapSeed1>>,
+        std::unique_ptr<SerializedKeyFixedSize8PackAggHashMap<PhmapSeed1>>,
+        std::unique_ptr<SerializedKeyFixedSize16PackAggHashMap<PhmapSeed1>>,
+        std::unique_ptr<Int32PackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<Int64PackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<DatePackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<TimeStampPackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<NullInt32PackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<NullInt64PackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<NullDatePackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<NullTimeStampPackAggHashMapWithOneNumberKey<PhmapSeed2>>,
+        std::unique_ptr<SerializedKeyFixedSize4PackAggHashMap<PhmapSeed2>>,
+        std::unique_ptr<SerializedKeyFixedSize8PackAggHashMap<PhmapSeed2>>,
+        std::unique_ptr<SerializedKeyFixedSize16PackAggHashMap<PhmapSeed2>>>;
 
 using AggHashSetWithKeyPtr = std::variant<
         std::unique_ptr<UInt8AggHashSetOfOneNumberKey<PhmapSeed1>>,
@@ -502,6 +553,29 @@ struct AggHashMapVariant {
         phase2_slice_cx4,
         phase2_slice_cx8,
         phase2_slice_cx16,
+
+        phase1_int32_pack,
+        phase1_int64_pack,
+        phase1_date_pack,
+        phase1_timestamp_pack,
+        phase1_null_int32_pack,
+        phase1_null_int64_pack,
+        phase1_null_date_pack,
+        phase1_null_timestamp_pack,
+        phase1_slice_fx4_pack,
+        phase1_slice_fx8_pack,
+        phase1_slice_fx16_pack,
+        phase2_int32_pack,
+        phase2_int64_pack,
+        phase2_date_pack,
+        phase2_timestamp_pack,
+        phase2_null_int32_pack,
+        phase2_null_int64_pack,
+        phase2_null_date_pack,
+        phase2_null_timestamp_pack,
+        phase2_slice_fx4_pack,
+        phase2_slice_fx8_pack,
+        phase2_slice_fx16_pack,
     };
 
     detail::AggHashMapWithKeyPtr hash_map_with_key;
@@ -519,6 +593,16 @@ struct AggHashMapVariant {
 
     // True when the active key type can run the inline-agg fast path
     // (non-nullable fixed-size numeric key on a phmap).
+    // Pack twin of a chosen single-op variant type (identity when none exists).
+    static Type pack_type_for(Type type);
+    // Whether the ACTIVE variant is a multi-aggregate pack flavor.
+    bool is_inline_pack() const {
+        return visit([](const auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            return agg_inline_pack<MapType>;
+        });
+    }
+
     bool supports_inline_agg() const {
         return visit([](const auto& hash_map_with_key) {
             using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;

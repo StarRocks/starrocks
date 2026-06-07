@@ -415,9 +415,55 @@ Status Aggregator::open(RuntimeState* state) {
             break;
         }
     }
+    // Multi-aggregate pack gate: 2..4 aggregates, every one an additive int64 op
+    // (count(*) / count(col) / sum(int family -> BIGINT)), over a key that has a pack
+    // variant twin. The variant was initialized for the general path above; on success it
+    // is re-initialized onto the pack twin (the map is still empty in open), and a key
+    // with no twin (string, compressed, direct-array) re-resolves to the same type, which
+    // is detected via is_inline_pack() and keeps the general path.
+    if (!_inline_agg && _allow_inline_agg && state->enable_agg_inline_accumulator() && !_is_only_group_by_columns &&
+        !_group_by_expr_ctxs.empty() && !_is_merge_funcs.empty() && _agg_fn_ctxs.size() >= 2 &&
+        _agg_fn_ctxs.size() <= 4) {
+        bool all_additive = true;
+        bool all_count_star = true;
+        InlineOpKind kinds[4] = {};
+        for (size_t i = 0; i < _agg_fn_ctxs.size() && all_additive; ++i) {
+            if (_agg_fn_types[i].is_distinct || _is_merge_funcs[i] != _is_merge_funcs[0]) {
+                all_additive = false;
+                break;
+            }
+            const std::string& resolved = _agg_functions[i]->get_name();
+            if (resolved == "count") {
+                kinds[i] = InlineOpKind::kCountStar;
+            } else if (resolved == "count_nullable") {
+                kinds[i] = InlineOpKind::kCountCol;
+                all_count_star = false;
+            } else if (resolved == "sum" && i < _fns.size() && _fns[i].name.function_name == "sum" &&
+                       _agg_fn_types[i].result_type.type == TYPE_BIGINT) {
+                kinds[i] = InlineOpKind::kSumInt;
+                all_count_star = false;
+            } else {
+                all_additive = false;
+            }
+        }
+        if (all_additive) {
+            TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant, /*want_pack=*/true));
+            if (_hash_map_variant.is_inline_pack()) {
+                _inline_agg = true;
+                _inline_pack = true;
+                _inline_pack_n = static_cast<uint8_t>(_agg_fn_ctxs.size());
+                _inline_pack_fused = all_count_star;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); ++i) {
+                    _inline_pack_ops[i] = kinds[i];
+                }
+            }
+        }
+    }
+
     static constexpr const char* kInlineOpNames[] = {"count(*)", "count(col)", "sum(int)", "sum(double)", "min", "max"};
-    _runtime_profile->add_info_string("InlineAggOptimization",
-                                      _inline_agg ? kInlineOpNames[static_cast<int>(_inline_op)] : "false");
+    _runtime_profile->add_info_string(
+            "InlineAggOptimization",
+            _inline_agg ? (_inline_pack ? "pack" : kInlineOpNames[static_cast<int>(_inline_op)]) : "false");
 
     {
         _agg_states_total_size = 16;
@@ -1006,7 +1052,7 @@ static void inline_agg_fold_dispatch(AggHashMapVariant& variant, size_t chunk_si
                                      const typename Op::DeltaType* partials, const Filter* selection = nullptr);
 template <typename Op>
 static void inline_agg_commit(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                              Buffer<AggDataPtr>* scratch, const Filter* selection);
+                              Buffer<AggDataPtr>* scratch, const Filter* selection, typename Op::DeltaType delta);
 
 // Typed merge fold: evaluate the intermediate partial column the same way the general merge
 // path does, unwrap a possible (NULL-free) nullable wrapper and fold slot += partial for the
@@ -1153,8 +1199,41 @@ Status Aggregator::_inline_minmax_merge(Chunk* chunk, size_t chunk_size, const F
 // count op (delta 1 fused / 0 deferred -- a zero delta is a bitwise no-op); min/max creates
 // with its typed identity and a delta equal to the identity (combine(identity, identity) ==
 // identity), so a creating build never disturbs the slot either.
+// Pack build: one op instance per pack arity. A fused build (every field count(*)) adds the
+// all-ones delta per row; a creating/classifying build folds the all-zero delta -- bitwise
+// neutral over the zero identity cell, exactly like the single-op additive family.
+template <typename HTBuildOp>
+void Aggregator::_inline_pack_dispatch_build(size_t chunk_size, Filter* not_founds, size_t limit, bool fused) {
+    InlinePackDelta delta{};
+    if (fused) {
+        for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+            delta.d[k] = 1;
+        }
+    }
+    switch (_inline_pack_n) {
+    case 2:
+        inline_agg_build<InlinePackOp<2>, HTBuildOp>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(),
+                                                     &_tmp_agg_states, not_founds, limit, delta);
+        return;
+    case 3:
+        inline_agg_build<InlinePackOp<3>, HTBuildOp>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(),
+                                                     &_tmp_agg_states, not_founds, limit, delta);
+        return;
+    case 4:
+        inline_agg_build<InlinePackOp<4>, HTBuildOp>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(),
+                                                     &_tmp_agg_states, not_founds, limit, delta);
+        return;
+    default:
+        DCHECK(false) << "unexpected inline pack arity " << static_cast<int>(_inline_pack_n);
+    }
+}
+
 template <typename HTBuildOp>
 void Aggregator::_inline_dispatch_build(size_t chunk_size, Filter* not_founds, size_t limit, bool fused_count) {
+    if (_inline_pack) {
+        _inline_pack_dispatch_build<HTBuildOp>(chunk_size, not_founds, limit, fused_count);
+        return;
+    }
     switch (_inline_op) {
     case InlineOpKind::kCountStar:
     case InlineOpKind::kCountCol:
@@ -1210,6 +1289,138 @@ const int64_t* Aggregator::_compute_count_col_deltas(size_t chunk_size) {
     return _inline_delta_scratch.data();
 }
 
+// Materialize the chunk's per-row pack deltas (AoS, 32B per row in the delta scratch).
+// On an update chunk field k's delta is aggregate k's per-row contribution (1 / !null[i] /
+// the widened sum input); on a merge chunk it is aggregate k's BIGINT partial. Field
+// argument evaluation happens here for every member, so an erroring argument expression
+// fails identically with the pack on or off.
+StatusOr<const InlinePackDelta*> Aggregator::_compute_pack_deltas(Chunk* chunk, size_t chunk_size, bool is_merge) {
+    if (_inline_delta_scratch.size() < chunk_size * 4) {
+        _inline_delta_scratch.resize(chunk_size * 4);
+    }
+    auto* out = reinterpret_cast<InlinePackDelta*>(_inline_delta_scratch.data());
+    const bool use_intermediate = _use_intermediate_as_input();
+    auto& expr_ctxs = (is_merge && use_intermediate) ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+    for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+        RETURN_IF_ERROR(evaluate_agg_input_column(chunk, expr_ctxs[k], k));
+        if (is_merge) {
+            const Column* in = _agg_input_columns[k][0].get();
+            const Column* data = in->is_nullable() ? down_cast<const NullableColumn*>(in)->data_column().get() : in;
+            const auto& vals = down_cast<const Int64Column*>(data)->get_data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                out[i].d[k] = vals[i];
+            }
+            continue;
+        }
+        switch (_inline_pack_ops[k]) {
+        case InlineOpKind::kCountStar:
+            for (size_t i = 0; i < chunk_size; ++i) {
+                out[i].d[k] = 1;
+            }
+            break;
+        case InlineOpKind::kCountCol: {
+            const Column* input = _agg_input_columns[k][0].get();
+            if (input->is_nullable() && input->has_null()) {
+                const auto& null_data = down_cast<const NullableColumn*>(input)->null_column_data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    out[i].d[k] = null_data[i] == 0;
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    out[i].d[k] = 1;
+                }
+            }
+            break;
+        }
+        case InlineOpKind::kSumInt: {
+            const Column* in_col = _agg_input_columns[k][0].get();
+            const Column* in =
+                    in_col->is_nullable() ? down_cast<const NullableColumn*>(in_col)->data_column().get() : in_col;
+            auto widen = [&](const auto* typed) {
+                const auto& vals = typed->get_data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    out[i].d[k] = static_cast<int64_t>(vals[i]);
+                }
+            };
+            if (typeid(*in) == typeid(Int64Column)) {
+                widen(down_cast<const Int64Column*>(in));
+            } else if (typeid(*in) == typeid(Int32Column)) {
+                widen(down_cast<const Int32Column*>(in));
+            } else if (typeid(*in) == typeid(Int16Column)) {
+                widen(down_cast<const Int16Column*>(in));
+            } else if (typeid(*in) == typeid(Int8Column)) {
+                widen(down_cast<const Int8Column*>(in));
+            } else if (typeid(*in) == typeid(BooleanColumn)) {
+                widen(down_cast<const BooleanColumn*>(in));
+            } else {
+                return Status::InternalError("unexpected inline pack sum input column");
+            }
+            break;
+        }
+        default:
+            return Status::InternalError("unexpected inline pack member op");
+        }
+    }
+    return out;
+}
+
+// Pack compute: consume the captured chunk state for a 2..4-aggregate pack. The fold/commit
+// arity dispatch instantiates one op per pack size; the protocol (committed / fold-all /
+// fold-selection x update / merge) is exactly the single-op one.
+Status Aggregator::_inline_pack_compute(Chunk* chunk, size_t chunk_size, const Filter* selection,
+                                        InlineChunkState chunk_state) {
+    if (!chunk_state.is_merge && _inline_pack_fused) {
+        // All-count(*) pack: argument expressions still get evaluated for error parity.
+        for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+            RETURN_IF_ERROR(evaluate_agg_input_column(chunk, _agg_expr_ctxs[k], k));
+        }
+        DCHECK(chunk_state.fold == InlineChunkState::kCommitted ||
+               chunk_state.fold == InlineChunkState::kFoldSelection);
+        if (chunk_state.fold == InlineChunkState::kFoldSelection) {
+            InlinePackDelta unit{};
+            for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+                unit.d[k] = 1;
+            }
+            switch (_inline_pack_n) {
+            case 2:
+                inline_agg_commit<InlinePackOp<2>>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
+                                                   selection, unit);
+                break;
+            case 3:
+                inline_agg_commit<InlinePackOp<3>>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
+                                                   selection, unit);
+                break;
+            case 4:
+                inline_agg_commit<InlinePackOp<4>>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
+                                                   selection, unit);
+                break;
+            default:
+                DCHECK(false);
+            }
+        }
+        return check_has_error();
+    }
+    DCHECK(chunk_state.fold == InlineChunkState::kFoldAll || chunk_state.fold == InlineChunkState::kFoldSelection);
+    ASSIGN_OR_RETURN(const InlinePackDelta* deltas, _compute_pack_deltas(chunk, chunk_size, chunk_state.is_merge));
+    switch (_inline_pack_n) {
+    case 2:
+        inline_agg_fold_dispatch<InlinePackOp<2>>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(),
+                                                  &_tmp_agg_states, deltas, selection);
+        break;
+    case 3:
+        inline_agg_fold_dispatch<InlinePackOp<3>>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(),
+                                                  &_tmp_agg_states, deltas, selection);
+        break;
+    case 4:
+        inline_agg_fold_dispatch<InlinePackOp<4>>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(),
+                                                  &_tmp_agg_states, deltas, selection);
+        break;
+    default:
+        DCHECK(false);
+    }
+    return check_has_error();
+}
+
 Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     if (_inline_agg) {
@@ -1217,6 +1428,9 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
         // merge predicate here -- the capture is what guarantees build/compute consistency).
         const InlineChunkState chunk_state = _inline_chunk;
         _inline_chunk.fold = InlineChunkState::kConsumed;
+        if (_inline_pack) {
+            return _inline_pack_compute(chunk, chunk_size, nullptr, chunk_state);
+        }
         if (!chunk_state.is_merge) {
             // Update chunk. The count argument is evaluated exactly like the general path does:
             // kCountCol reads its null mask as the deltas; for kCountStar it is discarded, but an
@@ -1258,7 +1472,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
                    chunk_state.fold == InlineChunkState::kFoldSelection);
             if (chunk_state.fold == InlineChunkState::kFoldSelection) {
                 inline_agg_commit<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns,
-                                                        &_tmp_agg_states, nullptr);
+                                                        &_tmp_agg_states, nullptr, 1);
             }
             return Status::OK();
         }
@@ -1299,6 +1513,9 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
     if (_inline_agg) {
         const InlineChunkState chunk_state = _inline_chunk;
         _inline_chunk.fold = InlineChunkState::kConsumed;
+        if (_inline_pack) {
+            return _inline_pack_compute(chunk, chunk_size, &_streaming_selection, chunk_state);
+        }
         // A selective compute follows either a classify build (kFoldSelection) or a counting
         // limited build whose over-limit rows go to streaming (kCommitted, update only).
         DCHECK(chunk_state.fold == InlineChunkState::kFoldSelection ||
@@ -1347,7 +1564,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
         // a counting limited build (kCommitted) already added everything in place -- no-op fold.
         if (chunk_state.fold == InlineChunkState::kFoldSelection) {
             inline_agg_commit<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
-                                                    &_streaming_selection);
+                                                    &_streaming_selection, 1);
         }
         return Status::OK();
     }
@@ -2022,7 +2239,7 @@ void Aggregator::_build_hash_variant(HashVariantType& hash_variant, typename Has
 }
 
 template <typename HashVariantType>
-void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
+void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant, bool want_pack) {
     auto type = _get_hash_table_type<HashVariantType>();
 
     CompressKeyContext compress_key_ctx;
@@ -2031,7 +2248,8 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     type = _try_to_apply_compressed_key_opt<HashVariantType>(type, &compress_key_ctx);
     apply_compress_key_opt = prev_type != type;
     if (apply_compress_key_opt) {
-        // build with compressed key
+        // build with compressed key (no pack twin exists for the compressed flavors; a pack
+        // re-init lands back on this same type and the caller sees is_inline_pack() false)
         VLOG_ROW << "apply compressed key";
         _build_hash_variant<HashVariantType>(hash_variant, type, std::move(compress_key_ctx));
         return;
@@ -2042,6 +2260,12 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
 
     if (_group_by_types.size() > 1) {
         type = _try_to_apply_fixed_size_opt<HashVariantType>(type, &has_null_column, &fixed_byte_size);
+    }
+
+    if constexpr (std::is_same_v<HashVariantType, AggHashMapVariant>) {
+        if (want_pack) {
+            type = AggHashMapVariant::pack_type_for(type);
+        }
     }
 
     VLOG_ROW << "hash type is "
@@ -2070,7 +2294,7 @@ static void inline_agg_build(AggHashMapVariant& variant, size_t chunk_size, cons
                              typename Op::DeltaType delta) {
     variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        if constexpr (agg_inline_supported<MapType>) {
+        if constexpr (agg_inline_op_for_map<Op, MapType>) {
             if (not_founds != nullptr) not_founds->assign(chunk_size, 0);
             ExtraAggParam extra;
             extra.not_founds = not_founds;
@@ -2091,7 +2315,7 @@ static void inline_agg_fold_dispatch(AggHashMapVariant& variant, size_t chunk_si
                                      const typename Op::DeltaType* partials, const Filter* selection) {
     variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        if constexpr (agg_inline_supported<MapType>) {
+        if constexpr (agg_inline_op_for_map<Op, MapType>) {
             hash_map_with_key->template build_inline_agg_fold<Op>(chunk_size, group_by_columns, pool, agg_states,
                                                                   partials, selection);
         } else {
@@ -2104,11 +2328,11 @@ static void inline_agg_fold_dispatch(AggHashMapVariant& variant, size_t chunk_si
 // to aggregate locally (selection[i] == 0, or all rows when selection is null) and add to its slot.
 template <typename Op>
 static void inline_agg_commit(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                              Buffer<AggDataPtr>* scratch, const Filter* selection) {
+                              Buffer<AggDataPtr>* scratch, const Filter* selection, typename Op::DeltaType delta) {
     variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        if constexpr (agg_inline_supported<MapType>) {
-            hash_map_with_key->template commit_inline_agg<Op>(chunk_size, group_by_columns, scratch, selection);
+        if constexpr (agg_inline_op_for_map<Op, MapType>) {
+            hash_map_with_key->template commit_inline_agg<Op>(chunk_size, group_by_columns, scratch, selection, delta);
         } else {
             DCHECK(false) << "inline_agg commit on unsupported variant";
         }
@@ -2143,8 +2367,12 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
-                                          &_tmp_agg_states);
+        if constexpr (agg_inline_pack<MapType>) {
+            DCHECK(false) << "general build on a pack variant";
+        } else {
+            hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(),
+                                              AllocateState<MapType>(this), &_tmp_agg_states);
+        }
     });
 }
 
@@ -2183,9 +2411,13 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
-                                                     AllocateState<MapType>(this), &_tmp_agg_states,
-                                                     &_streaming_selection, _limit);
+        if constexpr (agg_inline_pack<MapType>) {
+            DCHECK(false) << "general build on a pack variant";
+        } else {
+            hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                         AllocateState<MapType>(this), &_tmp_agg_states,
+                                                         &_streaming_selection, _limit);
+        }
     });
     shared_limit_countdown.fetch_sub(_hash_map_variant.size() - start_size, std::memory_order_relaxed);
 }
@@ -2207,9 +2439,13 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
-                                                         AllocateState<MapType>(this), &_tmp_agg_states,
-                                                         &_streaming_selection);
+        if constexpr (agg_inline_pack<MapType>) {
+            DCHECK(false) << "general build on a pack variant";
+        } else {
+            hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                             AllocateState<MapType>(this), &_tmp_agg_states,
+                                                             &_streaming_selection);
+        }
     });
 }
 
@@ -2231,9 +2467,13 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
     } else {
         _hash_map_variant.visit([&](auto& hash_map_with_key) {
             using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-            hash_map_with_key->build_hash_map_with_selection_and_allocation(
-                    chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this), &_tmp_agg_states,
-                    &_streaming_selection);
+            if constexpr (agg_inline_pack<MapType>) {
+                DCHECK(false) << "general build on a pack variant";
+            } else {
+                hash_map_with_key->build_hash_map_with_selection_and_allocation(
+                        chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this), &_tmp_agg_states,
+                        &_streaming_selection);
+            }
         });
     }
     // if _streaming_selection is not all 0, means there are new group by keys,
@@ -2262,9 +2502,13 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
-                                                                        AllocateState<MapType>(this), &_tmp_agg_states,
-                                                                        &_streaming_selection);
+        if constexpr (agg_inline_pack<MapType>) {
+            DCHECK(false) << "general build on a pack variant";
+        } else {
+            hash_map_with_key->build_hash_map_with_selection_and_allocation(
+                    chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this), &_tmp_agg_states,
+                    &_streaming_selection);
+        }
     });
 }
 
@@ -2279,12 +2523,12 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
 
-        // Inline-agg finalize: iterate the phmap directly (key from the cell,
-        // count from the in-slot int64), instead of the arena walk. The operators
-        // seed _it_hash with a RawHashTableIterator (arena begin); on the first
-        // inline round we replace it with the phmap begin() and resume from there.
-        if constexpr (agg_inline_supported<HashMapWithKey>) {
-            if (_inline_agg) {
+        // Pack finalize: iterate the phmap directly, draining field k of every cell into
+        // aggregate k's result column. The intermediate type of every pack member equals its
+        // result type (all BIGINT), so the same drain serves the final output and the
+        // spill/intermediate drain; only the count members' outputs are non-nullable.
+        if constexpr (agg_inline_pack<HashMapWithKey>) {
+            if (_inline_pack) {
                 using MapIter = typename HashMapWithKey::HashMapType::iterator;
                 MapIter it = (_it_hash.type() == typeid(RawHashTableIterator)) ? hash_map_with_key.hash_map.begin()
                                                                                : std::any_cast<MapIter>(_it_hash);
@@ -2295,84 +2539,56 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                 MutableColumns group_by_columns = _create_group_by_columns(num_rows);
                 MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 
-                // Drain the slots into the result column with the op's slot type: int64 ->
-                // Int64Column for the counts and sum(int), double -> DoubleColumn for
-                // sum(double). The intermediate type equals the result type for every inline op
-                // (the contract: intermediate type == result type), so this also serves the
-                // spill/intermediate drain.
-                Column* acc_col = agg_result_columns[0].get();
-                Column* acc_data_col =
-                        acc_col->is_nullable() ? down_cast<NullableColumn*>(acc_col)->data_column_raw_ptr() : acc_col;
+                Int64Column* field_cols[4] = {};
+                for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+                    Column* acc_col = agg_result_columns[k].get();
+                    Column* data_col = acc_col->is_nullable()
+                                               ? down_cast<NullableColumn*>(acc_col)->data_column_raw_ptr()
+                                               : acc_col;
+                    field_cols[k] = down_cast<Int64Column*>(data_col);
+                }
                 int32_t read_index = 0;
                 hash_map_with_key.results.resize(chunk_size);
-                auto drain = [&](auto* typed_col, auto slot_type_tag) {
-                    using SlotT = decltype(slot_type_tag);
+                {
                     SCOPED_TIMER(_agg_stat->iter_timer);
                     while ((it != end) & (read_index < chunk_size)) {
                         hash_map_with_key.results[read_index] = it->first;
-                        typed_col->get_data().emplace_back(agg_inline_slot_load<SlotT>(it->second));
+                        const InlinePackCell& cell = it->second;
+                        for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+                            field_cols[k]->get_data().emplace_back(cell.f[k]);
+                        }
                         ++read_index;
                         ++it;
                     }
-                };
-                if (_inline_op == InlineOpKind::kMin || _inline_op == InlineOpKind::kMax) {
-                    switch (_inline_minmax_lt) {
-#define M(LT)                                                                         \
-    case LT:                                                                          \
-        drain(down_cast<RunTimeColumnType<LT>*>(acc_data_col), RunTimeCppType<LT>{}); \
-        break;
-                        INLINE_MINMAX_LT_CASES(M)
-#undef M
-                    default:
-                        DCHECK(false) << "unexpected inline minmax type " << _inline_minmax_lt;
-                    }
-                } else if (_inline_op == InlineOpKind::kSumDouble) {
-                    drain(down_cast<DoubleColumn*>(acc_data_col), double{});
-                } else {
-                    drain(down_cast<Int64Column*>(acc_data_col), int64_t{});
                 }
-                if (acc_col->is_nullable()) {
-                    auto* nullable = down_cast<NullableColumn*>(acc_col);
-                    nullable->null_column_data().resize(read_index, 0);
-                    nullable->set_has_null(false);
+                for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+                    Column* acc_col = agg_result_columns[k].get();
+                    if (acc_col->is_nullable()) {
+                        auto* nullable = down_cast<NullableColumn*>(acc_col);
+                        nullable->null_column_data().resize(read_index, 0);
+                        nullable->set_has_null(false);
+                    }
                 }
                 if (read_index > 0) {
                     SCOPED_TIMER(_agg_stat->group_by_append_timer);
                     hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
                 }
                 _is_ht_eos = (it == end);
-                // The NULL group is kept out of the hash map in null_key_data (reused as a slot).
-                // Emit it as one extra row in the final chunk: NULL key + its accumulator. If it
-                // does not fit this chunk, hold eos so it lands in the next round.
+                // The NULL-key group rides in null_key_data (the whole pack cell) + the
+                // existence bit; emit it as one extra row exactly like the single-op drain.
                 if constexpr (HashMapWithKey::has_single_null_key) {
                     if (_is_ht_eos && hash_map_with_key.has_null_key()) {
                         if (read_index < chunk_size) {
                             DCHECK(group_by_columns.size() == 1);
                             DCHECK(group_by_columns[0]->is_nullable());
                             group_by_columns[0]->append_default();
-                            auto drain_null = [&](auto* typed_col, auto slot_type_tag) {
-                                using SlotT = decltype(slot_type_tag);
-                                typed_col->get_data().emplace_back(
-                                        agg_inline_slot_load<SlotT>(hash_map_with_key.null_key_data));
-                            };
-                            if (_inline_op == InlineOpKind::kMin || _inline_op == InlineOpKind::kMax) {
-                                switch (_inline_minmax_lt) {
-#define M(LT)                                                                              \
-    case LT:                                                                               \
-        drain_null(down_cast<RunTimeColumnType<LT>*>(acc_data_col), RunTimeCppType<LT>{}); \
-        break;
-                                    INLINE_MINMAX_LT_CASES(M)
-#undef M
-                                default:
-                                    DCHECK(false) << "unexpected inline minmax type " << _inline_minmax_lt;
+                            const InlinePackCell& cell = hash_map_with_key.null_key_data;
+                            for (uint8_t k = 0; k < _inline_pack_n; ++k) {
+                                field_cols[k]->get_data().emplace_back(cell.f[k]);
+                                Column* acc_col = agg_result_columns[k].get();
+                                if (acc_col->is_nullable()) {
+                                    down_cast<NullableColumn*>(acc_col)->null_column_data().emplace_back(0);
                                 }
-                            } else if (_inline_op == InlineOpKind::kSumDouble) {
-                                drain_null(down_cast<DoubleColumn*>(acc_data_col), double{});
-                            } else {
-                                drain_null(down_cast<Int64Column*>(acc_data_col), int64_t{});
-                            }
-                            if (acc_col->is_nullable()) {
-                                down_cast<NullableColumn*>(acc_col)->null_column_data().emplace_back(0);
                             }
                             ++read_index;
                         } else {
@@ -2388,92 +2604,209 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                 *chunk = std::move(result_chunk);
                 return Status::OK();
             }
-        }
+            DCHECK(false) << "pack variant active without the pack gate";
+            return Status::InternalError("pack variant active without the pack gate");
+        } else {
+            // Inline-agg finalize: iterate the phmap directly (key from the cell,
+            // count from the in-slot int64), instead of the arena walk. The operators
+            // seed _it_hash with a RawHashTableIterator (arena begin); on the first
+            // inline round we replace it with the phmap begin() and resume from there.
+            if constexpr (agg_inline_supported<HashMapWithKey>) {
+                if (_inline_agg) {
+                    using MapIter = typename HashMapWithKey::HashMapType::iterator;
+                    MapIter it = (_it_hash.type() == typeid(RawHashTableIterator)) ? hash_map_with_key.hash_map.begin()
+                                                                                   : std::any_cast<MapIter>(_it_hash);
+                    auto end = hash_map_with_key.hash_map.end();
+                    const auto hash_map_size = _hash_map_variant.size();
+                    auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
+                    auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
+                    MutableColumns group_by_columns = _create_group_by_columns(num_rows);
+                    MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 
-        auto it = std::any_cast<RawHashTableIterator>(_it_hash);
-        auto end = _state_allocator.end();
-
-        const auto hash_map_size = _hash_map_variant.size();
-        auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
-        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
-        MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
-
-        int32_t read_index = 0;
-        {
-            SCOPED_TIMER(_agg_stat->iter_timer);
-            hash_map_with_key.results.resize(chunk_size);
-            // get key/value from hashtable
-            while ((it != end) & (read_index < chunk_size)) {
-                auto* value = it.value();
-                hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
-                _tmp_agg_states[read_index] = value;
-                ++read_index;
-                it.next();
-            }
-        }
-
-        if (read_index > 0) {
-            {
-                SCOPED_TIMER(_agg_stat->group_by_append_timer);
-                // Pass MutableColumns directly to hashtable interface
-                hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
-            }
-
-            {
-                SCOPED_TIMER(_agg_stat->agg_append_timer);
-                SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
-                if (!use_intermediate) {
-                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
-                                                                              _tmp_agg_states, _agg_states_offsets[i],
-                                                                              agg_result_columns[i].get()));
+                    // Drain the slots into the result column with the op's slot type: int64 ->
+                    // Int64Column for the counts and sum(int), double -> DoubleColumn for
+                    // sum(double). The intermediate type equals the result type for every inline op
+                    // (the contract: intermediate type == result type), so this also serves the
+                    // spill/intermediate drain.
+                    Column* acc_col = agg_result_columns[0].get();
+                    Column* acc_data_col = acc_col->is_nullable()
+                                                   ? down_cast<NullableColumn*>(acc_col)->data_column_raw_ptr()
+                                                   : acc_col;
+                    int32_t read_index = 0;
+                    hash_map_with_key.results.resize(chunk_size);
+                    auto drain = [&](auto* typed_col, auto slot_type_tag) {
+                        using SlotT = decltype(slot_type_tag);
+                        SCOPED_TIMER(_agg_stat->iter_timer);
+                        while ((it != end) & (read_index < chunk_size)) {
+                            hash_map_with_key.results[read_index] = it->first;
+                            typed_col->get_data().emplace_back(agg_inline_slot_load<SlotT>(it->second));
+                            ++read_index;
+                            ++it;
+                        }
+                    };
+                    if (_inline_op == InlineOpKind::kMin || _inline_op == InlineOpKind::kMax) {
+                        switch (_inline_minmax_lt) {
+#define M(LT)                                                                         \
+    case LT:                                                                          \
+        drain(down_cast<RunTimeColumnType<LT>*>(acc_data_col), RunTimeCppType<LT>{}); \
+        break;
+                            INLINE_MINMAX_LT_CASES(M)
+#undef M
+                        default:
+                            DCHECK(false) << "unexpected inline minmax type " << _inline_minmax_lt;
+                        }
+                    } else if (_inline_op == InlineOpKind::kSumDouble) {
+                        drain(down_cast<DoubleColumn*>(acc_data_col), double{});
+                    } else {
+                        drain(down_cast<Int64Column*>(acc_data_col), int64_t{});
                     }
-                } else {
-                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index,
-                                                                               _tmp_agg_states, _agg_states_offsets[i],
-                                                                               agg_result_columns[i].get()));
+                    if (acc_col->is_nullable()) {
+                        auto* nullable = down_cast<NullableColumn*>(acc_col);
+                        nullable->null_column_data().resize(read_index, 0);
+                        nullable->set_has_null(false);
                     }
+                    if (read_index > 0) {
+                        SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                        hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns,
+                                                                 read_index);
+                    }
+                    _is_ht_eos = (it == end);
+                    // The NULL group is kept out of the hash map in null_key_data (reused as a slot).
+                    // Emit it as one extra row in the final chunk: NULL key + its accumulator. If it
+                    // does not fit this chunk, hold eos so it lands in the next round.
+                    if constexpr (HashMapWithKey::has_single_null_key) {
+                        if (_is_ht_eos && hash_map_with_key.has_null_key()) {
+                            if (read_index < chunk_size) {
+                                DCHECK(group_by_columns.size() == 1);
+                                DCHECK(group_by_columns[0]->is_nullable());
+                                group_by_columns[0]->append_default();
+                                auto drain_null = [&](auto* typed_col, auto slot_type_tag) {
+                                    using SlotT = decltype(slot_type_tag);
+                                    typed_col->get_data().emplace_back(
+                                            agg_inline_slot_load<SlotT>(hash_map_with_key.null_key_data));
+                                };
+                                if (_inline_op == InlineOpKind::kMin || _inline_op == InlineOpKind::kMax) {
+                                    switch (_inline_minmax_lt) {
+#define M(LT)                                                                              \
+    case LT:                                                                               \
+        drain_null(down_cast<RunTimeColumnType<LT>*>(acc_data_col), RunTimeCppType<LT>{}); \
+        break;
+                                        INLINE_MINMAX_LT_CASES(M)
+#undef M
+                                    default:
+                                        DCHECK(false) << "unexpected inline minmax type " << _inline_minmax_lt;
+                                    }
+                                } else if (_inline_op == InlineOpKind::kSumDouble) {
+                                    drain_null(down_cast<DoubleColumn*>(acc_data_col), double{});
+                                } else {
+                                    drain_null(down_cast<Int64Column*>(acc_data_col), int64_t{});
+                                }
+                                if (acc_col->is_nullable()) {
+                                    down_cast<NullableColumn*>(acc_col)->null_column_data().emplace_back(0);
+                                }
+                                ++read_index;
+                            } else {
+                                _is_ht_eos = false;
+                            }
+                        }
+                    }
+                    _it_hash = it;
+                    auto result_chunk = _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns),
+                                                            use_intermediate);
+                    _num_rows_returned += read_index;
+                    _num_rows_processed += read_index;
+                    *chunk = std::move(result_chunk);
+                    return Status::OK();
                 }
             }
-        }
 
-        RETURN_IF_ERROR(check_has_error());
-        _is_ht_eos = (it == end);
+            auto it = std::any_cast<RawHashTableIterator>(_it_hash);
+            auto end = _state_allocator.end();
 
-        // If there is null key, output it last
-        if constexpr (HashMapWithKey::has_single_null_key) {
-            if (_is_ht_eos && hash_map_with_key.has_null_key()) {
-                // The output chunk size couldn't larger than _state->chunk_size()
-                if (read_index < _state->chunk_size()) {
-                    // For multi group by key, we don't need to special handle null key
-                    DCHECK(group_by_columns.size() == 1);
-                    DCHECK(group_by_columns[0]->is_nullable());
-                    group_by_columns[0]->append_default();
+            const auto hash_map_size = _hash_map_variant.size();
+            auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
+            auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
+            MutableColumns group_by_columns = _create_group_by_columns(num_rows);
+            MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
+
+            int32_t read_index = 0;
+            {
+                SCOPED_TIMER(_agg_stat->iter_timer);
+                hash_map_with_key.results.resize(chunk_size);
+                // get key/value from hashtable
+                while ((it != end) & (read_index < chunk_size)) {
+                    auto* value = it.value();
+                    hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
+                    _tmp_agg_states[read_index] = value;
+                    ++read_index;
+                    it.next();
+                }
+            }
+
+            if (read_index > 0) {
+                {
+                    SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                    // Pass MutableColumns directly to hashtable interface
+                    hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
+                }
+
+                {
+                    SCOPED_TIMER(_agg_stat->agg_append_timer);
                     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                     if (!use_intermediate) {
-                        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
+                        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                            TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(
+                                    _agg_fn_ctxs[i], read_index, _tmp_agg_states, _agg_states_offsets[i],
+                                    agg_result_columns[i].get()));
+                        }
                     } else {
-                        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
+                        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                            TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(
+                                    _agg_fn_ctxs[i], read_index, _tmp_agg_states, _agg_states_offsets[i],
+                                    agg_result_columns[i].get()));
+                        }
                     }
-                    RETURN_IF_ERROR(check_has_error());
-                    ++read_index;
-                } else {
-                    // Output null key in next round
-                    _is_ht_eos = false;
                 }
             }
+
+            RETURN_IF_ERROR(check_has_error());
+            _is_ht_eos = (it == end);
+
+            // If there is null key, output it last
+            if constexpr (HashMapWithKey::has_single_null_key) {
+                if (_is_ht_eos && hash_map_with_key.has_null_key()) {
+                    // The output chunk size couldn't larger than _state->chunk_size()
+                    if (read_index < _state->chunk_size()) {
+                        // For multi group by key, we don't need to special handle null key
+                        DCHECK(group_by_columns.size() == 1);
+                        DCHECK(group_by_columns[0]->is_nullable());
+                        group_by_columns[0]->append_default();
+                        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                        if (!use_intermediate) {
+                            TRY_CATCH_BAD_ALLOC(
+                                    _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
+                        } else {
+                            TRY_CATCH_BAD_ALLOC(
+                                    _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
+                        }
+                        RETURN_IF_ERROR(check_has_error());
+                        ++read_index;
+                    } else {
+                        // Output null key in next round
+                        _is_ht_eos = false;
+                    }
+                }
+            }
+
+            _it_hash = it;
+            auto result_chunk =
+                    _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns), use_intermediate);
+            _num_rows_returned += read_index;
+            _num_rows_processed += read_index;
+            *chunk = std::move(result_chunk);
+
+            return Status::OK();
         }
-
-        _it_hash = it;
-        auto result_chunk =
-                _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns), use_intermediate);
-        _num_rows_returned += read_index;
-        _num_rows_processed += read_index;
-        *chunk = std::move(result_chunk);
-
-        return Status::OK();
     });
     RETURN_IF_ERROR(visit_status);
 
@@ -2564,23 +2897,30 @@ void Aggregator::_release_agg_memory() {
     //
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
-        bool skip_destroy = std::all_of(_agg_functions.begin(), _agg_functions.end(),
-                                        [](auto* func) { return func->is_pod_state(); });
-        if (hash_map_with_key != nullptr && !skip_destroy) {
-            auto null_data_ptr = hash_map_with_key->get_null_key_data();
-            if (null_data_ptr != nullptr) {
-                for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (agg_inline_pack<MapType>) {
+            // Pack accumulators are POD cells inside the map value; there are no arena
+            // states (and no state pointers) to destroy.
+            return;
+        } else {
+            bool skip_destroy = std::all_of(_agg_functions.begin(), _agg_functions.end(),
+                                            [](auto* func) { return func->is_pod_state(); });
+            if (hash_map_with_key != nullptr && !skip_destroy) {
+                auto null_data_ptr = hash_map_with_key->get_null_key_data();
+                if (null_data_ptr != nullptr) {
+                    for (int i = 0; i < _agg_functions.size(); i++) {
+                        _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
+                    }
                 }
-            }
-            auto it = _state_allocator.begin();
-            auto end = _state_allocator.end();
+                auto it = _state_allocator.begin();
+                auto end = _state_allocator.end();
 
-            while (it != end) {
-                for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it.value() + _agg_states_offsets[i]);
+                while (it != end) {
+                    for (int i = 0; i < _agg_functions.size(); i++) {
+                        _agg_functions[i]->destroy(_agg_fn_ctxs[i], it.value() + _agg_states_offsets[i]);
+                    }
+                    it.next();
                 }
-                it.next();
             }
         }
     });

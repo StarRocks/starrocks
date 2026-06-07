@@ -753,6 +753,67 @@ select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c
 set enable_query_cache = false;
 -- result:
 -- !result
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn) x;
+-- result:
+97	39800	1862400
+-- !result
+select count(*) grp, sum(cnt) c1, sum(cc) c2, sum(s) tots, min(cc) mn from (select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big) x;
+-- result:
+98	39800	38800	1862400	0
+-- !result
+select count(*) grp, sum(c1) a, sum(c2) b, sum(s1) c, sum(s2) d from (select c_int_nn, count(*) c1, count(c_int) c2, sum(c_int_nn) s1, sum(c_big_nn) s2 from t group by c_int_nn) x;
+-- result:
+97	39800	38800	1862400	1862400
+-- !result
+select c_int_nn, count(*) c1, count(1) c2 from t group by c_int_nn order by c_int_nn limit 3;
+-- result:
+0	1400	1400
+1	400	400
+2	400	400
+-- !result
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_dt, count(*) cnt, sum(c_int_nn) s from t group by c_dt) x;
+-- result:
+98	39800	1862400
+-- !result
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_tiny, c_small, c_int, count(*) cnt, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+-- result:
+98	39800	1862400
+-- !result
+set new_planner_agg_stage = 2;
+-- result:
+-- !result
+select count(*) grp, sum(cnt) tot, sum(s) tots from (select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn) x;
+-- result:
+97	39800	1862400
+-- !result
+select count(*) grp, sum(cnt) c1, sum(cc) c2, sum(s) tots, min(cc) mn from (select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big) x;
+-- result:
+98	39800	38800	1862400	0
+-- !result
+set enable_spill = true;
+-- result:
+-- !result
+set spill_mode = 'force';
+-- result:
+-- !result
+select sum(cnt) tot, sum(s) tots from (select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn) x;
+-- result:
+39800	1862400
+-- !result
+set enable_spill = false;
+-- result:
+-- !result
+set new_planner_agg_stage = 0;
+-- result:
+-- !result
+select count(*) grp, sum(s) tots, min(mn) lo from (select c_big_nn, sum(c_int) s, min(c_int_nn) mn from t group by c_big_nn) x;
+-- result:
+97	1862400	0
+-- !result
+select count(*) grp, round(sum(sd), 3) tot from (select c_big_nn, count(*) cnt, sum((c_int_nn + 0.0) / 2) sd from t group by c_big_nn) x;
+-- result:
+97	931200.000
+-- !result
 set enable_agg_inline_accumulator = false;
 -- result:
 -- !result
@@ -798,6 +859,14 @@ select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit
 1	400
 2	400
 3	400
+-- !result
+select count(*) grp, sum(cnt) c1, sum(cc) c2, sum(s) tots, min(cc) mn from (select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big) x;
+-- result:
+98	39800	38800	1862400	0
+-- !result
+select count(*) grp, sum(c1) a, sum(c2) b, sum(s1) c, sum(s2) d from (select c_int_nn, count(*) c1, count(c_int) c2, sum(c_int_nn) s1, sum(c_big_nn) s2 from t group by c_int_nn) x;
+-- result:
+97	39800	38800	1862400	1862400
 -- !result
 set enable_agg_inline_accumulator = true;
 -- result:
@@ -897,6 +966,14 @@ select count(*) from (select line from table(unnest(split(get_query_profile(last
 -- result:
 1
 -- !result
+select c_big_nn, count(*) cnt, sum(c_int_nn) s from t group by c_big_nn order by c_big_nn limit 1;
+-- result:
+0	1400	0
+-- !result
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: pack%';
+-- result:
+1
+-- !result
 set new_planner_agg_stage = 2;
 -- result:
 -- !result
@@ -956,6 +1033,14 @@ select count(*) from (select line from table(unnest(split(get_query_profile(last
 -- result:
 2
 -- !result
+select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+-- result:
+0	400	400	0
+-- !result
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: pack%';
+-- result:
+2
+-- !result
 set enable_spill = true;
 -- result:
 -- !result
@@ -989,9 +1074,17 @@ select count(*) from (select line from table(unnest(split(get_query_profile(last
 -- result:
 0
 -- !result
-select c_big, count(*) cnt, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+select c_big_nn, count(*) c1, count(c_int) c2, sum(c_int_nn) s1, sum(c_big_nn) s2, min(c_int_nn) mn from t group by c_big_nn order by c_big_nn limit 1;
 -- result:
-0	400	0
+0	1400	400	0	0	0
+-- !result
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
+-- result:
+0
+-- !result
+select c_big_nn, count(*) c1, min(c_int_nn) mn from t group by c_big_nn order by c_big_nn limit 1;
+-- result:
+0	1400	0
 -- !result
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
 -- result:
@@ -1026,11 +1119,11 @@ select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nul
 1	1
 2	1
 -- !result
-select c_big, count(*) cnt, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 3;
+select c_big, count(*) cnt, count(c_int) cc, sum(c_int_nn) s, max(c_int_nn) mx, min(c_int_nn) mn from t group by c_big order by c_big nulls last limit 3;
 -- result:
-0	400	0
-1	400	400
-2	400	800
+0	400	400	0	0	0
+1	400	400	400	1	1
+2	400	400	800	2	2
 -- !result
 select count(*) from t;
 -- result:
