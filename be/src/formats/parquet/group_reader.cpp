@@ -186,8 +186,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         return Status::EndOfFile("");
     }
 
-    _column_materializer->reset_read_chunk();
-    _variant->reset_iteration_state();
     ChunkPtr active_chunk = _column_materializer->create_active_chunk();
 
     while (true) {
@@ -200,6 +198,10 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         auto count = r.span_size();
         _param.stats->raw_rows_read += count;
 
+        // Previous iteration's triggered-lazy slot cache must not carry over into
+        // the next range — stale slot_cache entries would corrupt read_lazy_columns.
+        _column_materializer->reset_read_chunk();
+        _variant->reset_iteration_state();
         bool has_filter = false;
         Filter chunk_filter(count, 1);
         active_chunk->reset();
@@ -207,16 +209,21 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // Phase 4: lazy materialization context for on-demand slot resolution.
         // Created early so Phase 6 expression trigger can call materialize_slot()
         // during predicate evaluation.  Destroyed before get_next() returns.
-        LazyMaterializationContext lazy_ctx(*_column_materializer, r, nullptr, active_chunk);
+        LazyMaterializationContext lazy_ctx(*_column_materializer, _variant.get(), r, nullptr, active_chunk);
 
         // 1. Prune deleted rows
         ASSIGN_OR_RETURN(bool rows_survive, _prune_deleted_rows(r, chunk_filter, has_filter, count));
         if (!rows_survive) continue;
 
-        // 2. Read & filter active columns (Phase 6: passes lazy_ctx for on-demand
-        //    lazy_predicate column materialization during round-by-round eval).
+        // 2. Read & filter active columns.  Attach lazy_ctx as the chunk's
+        //    MissingColumnProvider so that ColumnRef can trigger on-demand
+        //    materialization of lazy slots during predicate evaluation.
+        //    The provider is detached immediately after to prevent it from
+        //    escaping downstream (lazy state must not outlive get_next()).
+        active_chunk->set_missing_column_provider(&lazy_ctx);
         ASSIGN_OR_RETURN(rows_survive,
                          _read_and_filter_active_columns(r, chunk_filter, active_chunk, has_filter, count, &lazy_ctx));
+        active_chunk->set_missing_column_provider(nullptr);
         if (!rows_survive) continue;
 
         // 3. Fetch variant sources (for subfield conjuncts)
@@ -257,10 +264,18 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                            chunk_filter.begin() + post_filter_range.end() - r.begin()};
         }
 
-        // 5. Backfill lazy physical columns via LazyMaterializationContext
-        if (!_column_materializer->lazy_column_indices().empty()) {
-            RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter, has_filter,
-                                                                    active_chunk));
+        // 5. Backfill lazy physical columns.  Pass chunk_filter so that any lazy
+        //    columns triggered during step 2 can be filtered to surviving rows.
+        {
+            bool has_any_lazy = !_column_materializer->lazy_column_indices().empty() ||
+                                !_variant->lazy_hidden_slot_ids().empty();
+            if (has_any_lazy) {
+                _param.stats->parquet_lazy_col_skip_rows += count - active_chunk->num_rows();
+            }
+            if (!_column_materializer->lazy_column_indices().empty()) {
+                RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter,
+                                                                        chunk_filter, has_filter, active_chunk));
+            }
         }
 
         // 6. Backfill lazy variant sources
@@ -552,6 +567,9 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     _variant->classify_hidden_sources();
     for (SlotId sid : _variant->active_hidden_slot_ids()) {
         _column_materializer->add_active_slot(sid);
+    }
+    if (!_param.enable_lazy_materialization) {
+        _variant->promote_lazy_to_active();
     }
 
     // ── Promote lazy to active when no active columns exist ───────────────────

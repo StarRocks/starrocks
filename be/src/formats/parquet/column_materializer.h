@@ -41,6 +41,7 @@ public:
     ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers);
 
     ReadRangePlanner* read_range_planner() const { return _read_range_planner.get(); }
+    HdfsScanStats* stats() const { return _param.stats; }
 
     void clear_classification();
     void add_active_column(int col_idx);
@@ -127,8 +128,12 @@ public:
     Status materialize_slot(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter);
 
     // Post-filter lazy-column backfill.
+    // chunk_filter has full_range.span_size() entries and is used to apply the
+    // correct filter to any lazy columns that were already triggered (via
+    // LazyMaterializationContext) during predicate evaluation.
     Status read_lazy_columns(const Range<uint64_t>& full_range, const Range<uint64_t>& post_filter_range,
-                             const Filter& post_filter, bool has_filter, ChunkPtr& active_chunk);
+                             const Filter& post_filter, const Filter& chunk_filter, bool has_filter,
+                             ChunkPtr& active_chunk);
     // Emit physical + reserved-field columns into dst. Skips slots listed in skip_slots.
     Status emit_physical_columns(ChunkPtr& active_chunk, ChunkPtr* dst,
                                  const std::unordered_set<SlotId>* skip_slots = nullptr);

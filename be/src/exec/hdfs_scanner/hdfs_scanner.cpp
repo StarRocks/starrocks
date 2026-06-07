@@ -215,6 +215,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
     ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
     ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
+    ctx.parquet_lazy_materialization_enable = _scanner_params.parquet_lazy_materialization_enable;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
@@ -537,6 +538,8 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->raw_rows_read_counter, _app_stats.raw_rows_read);
     COUNTER_UPDATE(profile->rows_read_counter, _app_stats.rows_read);
     COUNTER_UPDATE(profile->late_materialize_skip_rows_counter, _app_stats.late_materialize_skip_rows);
+    COUNTER_UPDATE(profile->parquet_lazy_col_skip_rows_counter, _app_stats.parquet_lazy_col_skip_rows);
+    COUNTER_UPDATE(profile->parquet_lazy_slot_triggered_counter, _app_stats.parquet_lazy_slot_triggered);
     COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);

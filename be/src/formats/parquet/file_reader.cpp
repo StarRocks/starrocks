@@ -276,6 +276,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.datacache_options = &_datacache_options;
     _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
     _group_reader_param.scan_range = fd_scanner_ctx.scan_range;
+    _group_reader_param.enable_lazy_materialization = _scanner_ctx->parquet_lazy_materialization_enable;
 
     int64_t row_group_first_row_id = _scanner_ctx->scan_range->first_row_id;
     int64_t row_group_first_row = 0;

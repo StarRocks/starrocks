@@ -392,6 +392,11 @@ struct TQueryOptions {
   216: optional bool http_request_allow_private_in_allowlist = false;
   217: optional bool enable_cache_udaf = false;
 
+  // Whether to enable Parquet lazy (late) materialization of output-only columns.
+  // When true, columns without predicates are deferred until after active-column
+  // filtering; defaults to true (enabled) when not set.
+  219: optional bool enable_parquet_lazy_materialization;
+
   // Pre-built JSON anchor of the streaming source for a routine-load
   // task fragment (e.g. {"format":"kafka","topic":"t","partitions":[0,1],
   // "begin_offsets":[10,20]}). When set, BE writes it to the

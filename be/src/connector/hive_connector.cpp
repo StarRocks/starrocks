@@ -586,6 +586,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.raw_rows_read_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _profile.late_materialize_skip_rows_counter = ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
+    _profile.parquet_lazy_col_skip_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyColSkipRows", TUnit::UNIT);
+    _profile.parquet_lazy_slot_triggered_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazySlotTriggered", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
 
@@ -924,6 +928,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                   ? state->query_options().enable_parquet_reader_bloom_filter
                                   : true
                         : false;
+        scanner_params.parquet_lazy_materialization_enable =
+                state->query_options().__isset.enable_parquet_lazy_materialization
+                        ? state->query_options().enable_parquet_lazy_materialization
+                        : true;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;

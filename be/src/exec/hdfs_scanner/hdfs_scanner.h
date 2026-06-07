@@ -74,6 +74,10 @@ struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
     int64_t late_materialize_skip_rows = 0;
+    // Parquet lazy materialization: rows filtered before lazy columns were read.
+    int64_t parquet_lazy_col_skip_rows = 0;
+    // Parquet lazy materialization: number of lazy slots triggered via MissingColumnProvider.
+    int64_t parquet_lazy_slot_triggered = 0;
 
     int64_t io_ns = 0;
     int64_t io_count = 0;
@@ -164,6 +168,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_col_skip_rows_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_slot_triggered_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;
 
@@ -305,6 +311,7 @@ struct HdfsScannerParams {
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
     bool parquet_bloom_filter_enable = false;
+    bool parquet_lazy_materialization_enable = true;
 
     int64_t connector_max_split_size = 0;
 
@@ -395,6 +402,8 @@ struct HdfsScannerContext {
     bool parquet_page_index_enable = false;
 
     bool parquet_bloom_filter_enable = false;
+
+    bool parquet_lazy_materialization_enable = true;
 
     std::string timezone;
 

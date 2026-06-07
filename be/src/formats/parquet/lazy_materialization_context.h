@@ -16,28 +16,34 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "storage/primitive/range.h"
 
 namespace starrocks::parquet {
 
 class ColumnMaterializer;
+class VariantProjectionHandler;
 
 // Expression-facing facade over ColumnMaterializer.  Scoped to a single
 // get_next() iteration: created before predicate evaluation, destroyed
 // before the scanner emits a Chunk.  Lazy state must not escape the scanner.
 //
-// When expression evaluation reaches a missing slot, the context can
-// materialize it on demand through ColumnMaterializer.  This is the
-// interface that Phase 6 (expression trigger) will call.
-class LazyMaterializationContext {
+// Implements MissingColumnProvider so it can be attached to active_chunk
+// during predicate evaluation.  When ColumnRef encounters a missing slot
+// it calls can_provide() / provide() on this context, which loads the
+// column on demand through ColumnMaterializer or VariantProjectionHandler.
+class LazyMaterializationContext : public MissingColumnProvider {
 public:
-    LazyMaterializationContext(ColumnMaterializer& materializer, const Range<uint64_t>& range, const Filter* filter,
-                               ChunkPtr& active_chunk)
-            : _materializer(materializer), _range(range), _filter(filter), _active_chunk(active_chunk) {}
+    // variant may be nullptr when no variant columns are present.
+    LazyMaterializationContext(ColumnMaterializer& materializer, VariantProjectionHandler* variant,
+                               const Range<uint64_t>& range, const Filter* filter, ChunkPtr& active_chunk)
+            : _materializer(materializer), _variant(variant), _range(range), _filter(filter),
+              _active_chunk(active_chunk) {}
 
     LazyMaterializationContext(const LazyMaterializationContext&) = delete;
     LazyMaterializationContext& operator=(const LazyMaterializationContext&) = delete;
@@ -50,12 +56,17 @@ public:
     bool can_materialize(SlotId slot_id) const;
 
     // Materialize a lazy slot, reading through its ColumnReader if needed.
-    // No-op if the slot is already cached.  Appends the column to active_chunk.
+    // No-op if the slot is already cached.
     Status materialize_slot(SlotId slot_id);
 
     // Return the column for a slot, materializing it on demand first.
     // Returns nullptr if the slot cannot be resolved.
     ColumnPtr get_column(SlotId slot_id);
+
+    // MissingColumnProvider implementation: called by ColumnRef when a slot
+    // is absent from the active chunk during predicate evaluation.
+    bool can_provide(SlotId slot_id) const override { return can_materialize(slot_id); }
+    StatusOr<ColumnPtr> provide(SlotId slot_id) override;
 
     const Range<uint64_t>& range() const { return _range; }
     const Filter* filter() const { return _filter; }
@@ -63,6 +74,7 @@ public:
 
 private:
     ColumnMaterializer& _materializer;
+    VariantProjectionHandler* _variant;
     Range<uint64_t> _range;
     const Filter* _filter;
     ChunkPtr& _active_chunk;

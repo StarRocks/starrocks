@@ -131,8 +131,16 @@ public:
     Status align_after_combined_filter(const ChunkPtr& active_chunk, const Filter& filter, size_t pre_filter_rows);
 
     // 6. Backfill projection-only variant source columns.
+    // Slots already triggered via LazyMaterializationContext (already present in
+    // active_chunk) are skipped to avoid double-reading.
     Status backfill_sources(const Range<uint64_t>& full_range, const Range<uint64_t>* post_filter_range,
                             const Filter* post_filter, bool has_filter, ChunkPtr& active_chunk);
+
+    // On-demand materialization of a single lazy hidden source slot into active_chunk.
+    // Called by LazyMaterializationContext when an expression triggers the slot.
+    // No-op if slot_id is already in active_chunk or is not a lazy hidden source.
+    Status materialize_hidden_source(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter,
+                                     ChunkPtr& active_chunk);
 
     // 7. Emit variant virtual-column projections into the destination chunk.
     //    Consumes internally stored projected chunk (set by filter_subfields).
