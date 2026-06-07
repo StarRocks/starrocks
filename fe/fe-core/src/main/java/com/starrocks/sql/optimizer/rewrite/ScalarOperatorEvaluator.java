@@ -116,7 +116,7 @@ public enum ScalarOperatorEvaluator {
         String nameStr = name.getFunction().toUpperCase();
         // NOTE: only support VARCHAR as return type
         FunctionSignature signature = new FunctionSignature(nameStr, Lists.newArrayList(args), VarcharType.VARCHAR);
-        FunctionInvoker invoker = functions.get(signature);
+        FunctionInvoker invoker = getFunctionInvoker(signature);
         if (invoker == null || !invoker.isMetaFunction) {
             return null;
         }
@@ -183,7 +183,7 @@ public enum ScalarOperatorEvaluator {
         FunctionSignature signature =
                 new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
 
-        FunctionInvoker invoker = functions.get(signature);
+        FunctionInvoker invoker = getFunctionInvoker(signature);
 
         if (invoker == null) {
             return root;
@@ -238,7 +238,7 @@ public enum ScalarOperatorEvaluator {
             signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
         }
 
-        FunctionInvoker invoker = functions.get(signature);
+        FunctionInvoker invoker = getFunctionInvoker(signature);
 
         return invoker != null && isMonotonicFunc(invoker, call);
     }
@@ -254,8 +254,21 @@ public enum ScalarOperatorEvaluator {
             signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
         }
 
-        FunctionInvoker invoker = functions.get(signature);
+        FunctionInvoker invoker = getFunctionInvoker(signature);
         return invoker != null;
+    }
+
+    private FunctionInvoker getFunctionInvoker(FunctionSignature signature) {
+        FunctionInvoker invoker = functions.get(signature);
+        if (invoker != null) {
+            return invoker;
+        }
+        for (FunctionInvoker variableInvoker : functions.values()) {
+            if (variableInvoker.matchesVariableArgs(signature)) {
+                return variableInvoker;
+            }
+        }
+        return null;
     }
 
     private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {
@@ -359,6 +372,36 @@ public enum ScalarOperatorEvaluator {
             return signature;
         }
 
+        private boolean matchesVariableArgs(FunctionSignature actual) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            if (parameterTypes.length == 0 || !parameterTypes[parameterTypes.length - 1].isArray()) {
+                return false;
+            }
+
+            List<Type> registeredArgTypes = signature.getArgTypes();
+            int fixedArgCount = parameterTypes.length - 1;
+            if (registeredArgTypes.size() != fixedArgCount + 1 ||
+                    actual.getArgTypes().size() < registeredArgTypes.size() ||
+                    !signature.getName().equals(actual.getName()) ||
+                    !signature.getReturnType().matchesType(actual.getReturnType())) {
+                return false;
+            }
+
+            for (int i = 0; i < fixedArgCount; i++) {
+                if (!registeredArgTypes.get(i).matchesType(actual.getArgTypes().get(i))) {
+                    return false;
+                }
+            }
+
+            Type variableArgType = registeredArgTypes.get(fixedArgCount);
+            for (int i = fixedArgCount; i < actual.getArgTypes().size(); i++) {
+                if (!variableArgType.matchesType(actual.getArgTypes().get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // Function doesn't support array type
         public ConstantOperator invoke(List<ScalarOperator> args) throws IllegalAccessException, InvocationTargetException {
             final List<Object> invokeArgs = createInvokeArgs(args);
@@ -456,4 +499,3 @@ public enum ScalarOperatorEvaluator {
         }
     }
 }
-

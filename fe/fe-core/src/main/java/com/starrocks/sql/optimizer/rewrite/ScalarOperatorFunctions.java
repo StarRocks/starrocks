@@ -72,6 +72,7 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -251,47 +252,45 @@ public class ScalarOperatorFunctions {
         private static final long XX_HASH64_SEED = 0;
         private static final int XX_HASH3_32_SEED = 0;
         private static final long XX_HASH3_64_SEED = 0;
+        private static final int XX_HASH32_PRIME1 = 0x9E3779B1;
+        private static final int XX_HASH32_PRIME2 = 0x85EBCA77;
+        private static final int XX_HASH32_PRIME3 = 0xC2B2AE3D;
+        private static final int XX_HASH32_PRIME4 = 0x27D4EB2F;
+        private static final int XX_HASH32_PRIME5 = 0x165667B1;
 
         public static int hash32(String value, int seed) {
-            byte[] data = value.getBytes();
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
             return xxHash32(data, seed);
         }
 
         public static long hash64(String value, long seed) {
-            byte[] data = value.getBytes();
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
             LongHashFunction hasher = LongHashFunction.xx(seed);
             return hasher.hashBytes(data, 0, data.length);
         }
 
         public static long hash3_64(String value, long seed) {
-            byte[] data = value.getBytes();
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
             LongHashFunction hasher = LongHashFunction.xx3(seed);
             return hasher.hashBytes(data, 0, data.length);
         }
 
         public static int hash3_32(String value, int seed) {
-            byte[] data = value.getBytes();
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
             LongHashFunction hasher = LongHashFunction.xx3(Integer.toUnsignedLong(seed));
             return (int) hasher.hashBytes(data, 0, data.length);
         }
 
         private static int xxHash32(byte[] data, int seed) {
-            final int prime1 = 0x9E3779B1;
-            final int prime2 = 0x85EBCA77;
-            final int prime3 = 0xC2B2AE3D;
-            final int prime4 = 0x27D4EB2F;
-            final int prime5 = 0x165667B1;
-
             int offset = 0;
-            int remaining = data.length;
             int hash;
 
-            if (remaining >= 16) {
-                int limit = remaining - 16;
-                int v1 = seed + prime1 + prime2;
-                int v2 = seed + prime2;
+            if (data.length >= 16) {
+                int limit = data.length - 16;
+                int v1 = seed + XX_HASH32_PRIME1 + XX_HASH32_PRIME2;
+                int v2 = seed + XX_HASH32_PRIME2;
                 int v3 = seed;
-                int v4 = seed - prime1;
+                int v4 = seed - XX_HASH32_PRIME1;
 
                 do {
                     v1 = round(v1, readIntLE(data, offset));
@@ -307,38 +306,35 @@ public class ScalarOperatorFunctions {
                 hash = Integer.rotateLeft(v1, 1) + Integer.rotateLeft(v2, 7) + Integer.rotateLeft(v3, 12)
                         + Integer.rotateLeft(v4, 18);
             } else {
-                hash = seed + prime5;
+                hash = seed + XX_HASH32_PRIME5;
             }
 
             hash += data.length;
 
             while (offset <= data.length - 4) {
-                hash += readIntLE(data, offset) * prime3;
-                hash = Integer.rotateLeft(hash, 17) * prime4;
+                hash += readIntLE(data, offset) * XX_HASH32_PRIME3;
+                hash = Integer.rotateLeft(hash, 17) * XX_HASH32_PRIME4;
                 offset += 4;
             }
 
             while (offset < data.length) {
-                hash += (data[offset] & 0xFF) * prime5;
-                hash = Integer.rotateLeft(hash, 11) * prime1;
+                hash += (data[offset] & 0xFF) * XX_HASH32_PRIME5;
+                hash = Integer.rotateLeft(hash, 11) * XX_HASH32_PRIME1;
                 offset++;
             }
 
             hash ^= hash >>> 15;
-            hash *= prime2;
+            hash *= XX_HASH32_PRIME2;
             hash ^= hash >>> 13;
-            hash *= prime3;
+            hash *= XX_HASH32_PRIME3;
             hash ^= hash >>> 16;
             return hash;
         }
 
         private static int round(int accumulator, int input) {
-            final int prime1 = 0x9E3779B1;
-            final int prime2 = 0x85EBCA77;
-
-            accumulator += input * prime2;
+            accumulator += input * XX_HASH32_PRIME2;
             accumulator = Integer.rotateLeft(accumulator, 13);
-            accumulator *= prime1;
+            accumulator *= XX_HASH32_PRIME1;
             return accumulator;
         }
 

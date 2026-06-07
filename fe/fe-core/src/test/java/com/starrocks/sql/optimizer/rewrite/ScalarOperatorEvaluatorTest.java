@@ -34,6 +34,8 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -224,6 +226,42 @@ public class ScalarOperatorEvaluatorTest {
     }
 
     @Test
+    public void evaluationVariadicHashFunctions() {
+        ConstantOperator first = ConstantOperator.createVarchar("hello");
+        ConstantOperator second = ConstantOperator.createVarchar("world");
+        ConstantOperator third = ConstantOperator.createVarchar("starrocks");
+
+        CallOperator xxHash32 = constantFunctionCall(FunctionSet.XX_HASH32, IntegerType.INT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash32));
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash32);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash32(first, second, third).getInt(),
+                ((ConstantOperator) result).getInt());
+
+        CallOperator xxHash64 = constantFunctionCall(FunctionSet.XX_HASH64, IntegerType.BIGINT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash64));
+        result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash64);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash64(first, second, third).getBigint(),
+                ((ConstantOperator) result).getBigint());
+
+        CallOperator xxHash3Int = constantFunctionCall(FunctionSet.XX_HASH3_32, IntegerType.INT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash3Int));
+        result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash3Int);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash3_32(first, second, third).getInt(),
+                ((ConstantOperator) result).getInt());
+
+        CallOperator xxHash3Bigint = constantFunctionCall(
+                FunctionSet.XX_HASH3_64, IntegerType.BIGINT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash3Bigint));
+        result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash3Bigint);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash3_64(first, second, third).getBigint(),
+                ((ConstantOperator) result).getBigint());
+    }
+
+    @Test
     public void testCreateConstantValue() {
         ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(IntegerType.TINYINT);
         Assertions.assertTrue(tinyInt.getTinyInt() == 1);
@@ -235,6 +273,13 @@ public class ScalarOperatorEvaluatorTest {
         Assertions.assertTrue(bigInt.getBigint() == 1L);
         ConstantOperator largeInt = ConstantOperator.createExampleValueByType(IntegerType.LARGEINT);
         Assertions.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
+    }
+
+    private static CallOperator constantFunctionCall(String fnName, Type returnType, ConstantOperator... args) {
+        Type[] argTypes = Arrays.stream(args).map(ConstantOperator::getType).toArray(Type[]::new);
+        Function fn = new Function(new FunctionName(fnName), argTypes, returnType, false);
+        List<ScalarOperator> arguments = Lists.newArrayList(args);
+        return new CallOperator(fnName, returnType, arguments, fn);
     }
 
 }
