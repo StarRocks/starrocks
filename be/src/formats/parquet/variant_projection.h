@@ -140,6 +140,7 @@ public:
     Status emit_projections(ChunkPtr& active_chunk, ChunkPtr* dst, const cctz::time_zone& zone);
     bool has_projections() const { return !_projections.empty(); }
     bool is_virtual_slot(SlotId slot_id) const { return _projections.count(slot_id) > 0; }
+    std::unordered_set<SlotId> projection_slot_ids() const;
 
     //    Reset per-iteration state (call at start of each get_next() call).
     void reset_iteration_state();
