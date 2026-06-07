@@ -113,12 +113,19 @@ TEST(HashUtilTest, MurmurHash64A) {
 
 TEST(HashUtilTest, XxHashDeterminism) {
     const std::string_view data = "starrocks";
+    const uint32_t seed32 = 0x12345678u;
     const uint64_t seed = 0x1234567890abcdefULL;
+    const uint32_t h32 = HashUtil::xx_hash32(data.data(), static_cast<int32_t>(data.size()), seed32);
+    const uint32_t h32_repeat = HashUtil::xx_hash32(data.data(), static_cast<int32_t>(data.size()), seed32);
     const uint64_t h64 = HashUtil::xx_hash64(data.data(), static_cast<int32_t>(data.size()), seed);
     const uint64_t h64_repeat = HashUtil::xx_hash64(data.data(), static_cast<int32_t>(data.size()), seed);
+    const uint32_t h3_32 = HashUtil::xx_hash3_32(data.data(), static_cast<int32_t>(data.size()), seed32);
+    const uint32_t h3_32_repeat = HashUtil::xx_hash3_32(data.data(), static_cast<int32_t>(data.size()), seed32);
     const uint64_t h3 = HashUtil::xx_hash3_64(data.data(), static_cast<int32_t>(data.size()), seed);
     const uint64_t h3_repeat = HashUtil::xx_hash3_64(data.data(), static_cast<int32_t>(data.size()), seed);
+    EXPECT_EQ(h32, h32_repeat);
     EXPECT_EQ(h64, h64_repeat);
+    EXPECT_EQ(h3_32, h3_32_repeat);
     EXPECT_EQ(h3, h3_repeat);
 }
 

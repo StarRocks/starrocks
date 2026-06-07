@@ -860,6 +860,9 @@ vectorized_functions = [
 
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100028, 'xx_hash32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::xx_hash32'],
+    [100029, 'xx_hash64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash64'],
+    [100048, 'xx_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_32'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
     [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
