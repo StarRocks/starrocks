@@ -370,7 +370,7 @@ void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
 
     [[maybe_unused]] auto build_debug_string = [&]() {
         std::stringstream ss;
-        ss << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
+        ss << "end_driver_process. query_id = " << print_id(driver->query_runtime_state()->query_id())
            << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
         return ss.str();
     };

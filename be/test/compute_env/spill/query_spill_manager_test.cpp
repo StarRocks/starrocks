@@ -78,11 +78,19 @@ TEST_F(QuerySpillManagerCoreTest, CountersForwardToGlobalSpillManager) {
     query_spill_manager.inc_reserve_bytes(128);
     EXPECT_EQ(1, _global_mgr.spillable_operators());
     EXPECT_EQ(128, _global_mgr.spill_expected_reserved_bytes());
+    EXPECT_EQ(128, query_spill_manager.spill_expected_reserved_bytes());
 
     query_spill_manager.dec_reserve_bytes(64);
     query_spill_manager.decrease_spillable_operators();
     EXPECT_EQ(0, _global_mgr.spillable_operators());
     EXPECT_EQ(64, _global_mgr.spill_expected_reserved_bytes());
+    EXPECT_EQ(64, query_spill_manager.spill_expected_reserved_bytes());
+}
+
+TEST_F(QuerySpillManagerCoreTest, ExpectedReservedBytesToleratesMissingGlobalManager) {
+    QuerySpillManager query_spill_manager(_query_id, nullptr, _dir_mgr.get());
+
+    EXPECT_EQ(0, query_spill_manager.spill_expected_reserved_bytes());
 }
 
 } // namespace starrocks::spill

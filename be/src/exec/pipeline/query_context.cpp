@@ -201,6 +201,7 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
             spill_dir_mgr = compute_env->spill_dir_mgr();
         }
         _spill_manager = std::make_unique<spill::QuerySpillManager>(query_id(), g_spill_manager, spill_dir_mgr);
+        _query_runtime_state.set_query_spill_manager(_spill_manager.get());
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;

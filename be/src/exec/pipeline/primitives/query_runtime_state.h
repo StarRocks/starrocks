@@ -32,6 +32,9 @@
 namespace starrocks {
 class MemTracker;
 class QueryStatistics;
+namespace spill {
+class QuerySpillManager;
+} // namespace spill
 } // namespace starrocks
 
 namespace starrocks::pipeline {
@@ -54,6 +57,11 @@ public:
     void set_query_mem_tracker(MemTracker* query_mem_tracker) { _query_mem_tracker = query_mem_tracker; }
     MemTracker* query_mem_tracker() { return _query_mem_tracker; }
     const MemTracker* query_mem_tracker() const { return _query_mem_tracker; }
+    void set_query_spill_manager(spill::QuerySpillManager* query_spill_manager) {
+        _query_spill_manager = query_spill_manager;
+    }
+    spill::QuerySpillManager* query_spill_manager() { return _query_spill_manager; }
+    const spill::QuerySpillManager* query_spill_manager() const { return _query_spill_manager; }
 
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -190,6 +198,8 @@ private:
     // TODO: QueryContext still owns the query MemTracker lifecycle; migrate this reference when QueryContext
     // lifecycle is refactored.
     MemTracker* _query_mem_tracker = nullptr;
+    // QueryContext owns the query spill manager lifecycle; QueryRuntimeState only exposes a non-owning reference.
+    spill::QuerySpillManager* _query_spill_manager = nullptr;
 };
 
 } // namespace starrocks::pipeline
