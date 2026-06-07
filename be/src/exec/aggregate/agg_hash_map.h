@@ -748,10 +748,6 @@ struct AggInlinePack<AggHashMapWithSerializedKeyFixedSize<HashMap>>
 template <typename T>
 inline constexpr bool agg_inline_pack = AggInlinePack<std::remove_reference_t<T>>::value;
 
-// Compile-time pairing of an op policy with a map flavor: the 8-byte-slot ops drive the
-// single-op inline maps, the pack op drives the pack maps. The generic dispatchers
-// instantiate every (Op, MapType) combination a visit can produce; the mismatched ones
-// must resolve to the DCHECK branch without instantiating the map's inline entry points.
 // Carry the inline NULL-group state across a two-level conversion: in inline mode
 // null_key_data is the NULL group's accumulator (whose legal values include 0 == nullptr)
 // and null_key_exists is the existence sentinel -- both must survive verbatim. A template
@@ -765,6 +761,10 @@ void agg_inline_transfer_null_state(Dst& dst, Src& src) {
     }
 }
 
+// Compile-time pairing of an op policy with a map flavor: the 8-byte-slot ops drive the
+// single-op inline maps, the pack op drives the pack maps. The generic dispatchers
+// instantiate every (Op, MapType) combination a visit can produce; the mismatched ones
+// must resolve to the DCHECK branch without instantiating the map's inline entry points.
 template <typename Op, typename T>
 inline constexpr bool agg_inline_op_for_map = (agg_inline_supported<T> &&
                                                !std::is_same_v<typename Op::SlotType, InlinePackCell>) ||
@@ -994,14 +994,16 @@ struct AggHashMapWithOneStringKeyWithNullable
     // String flavor of the inline path: the hash-map value slot holds the op accumulator
     // directly (no arena state). The key handling stays the general path's: an inserted
     // key is duplicated into the pool (the slot saves the STATE indirection, never the key
-    // copy). This flavor does not ride the shared fixed-size loops; its own passes differ
-    // on purpose:
-    //   - the chunk's hashes are ALWAYS precomputed in a dense pass first. The string hash
-    //     branches on the key length, and on mixed-length keys that branch mispredicts about
-    //     once per two rows; inside the dependent emplace chain such a mispredict stalls the
-    //     probe pipeline, while in a dense pass it overlaps with the neighboring rows.
+    // copy). Unlike the fixed-size flavors this does NOT ride InlineAggMapMixin: that mixin
+    // assumes a zero-copy strided key view, while a string key must be duplicated into the
+    // pool on insert and is read from the column, not a flat buffer -- so the dense passes
+    // live here. Its own passes mirror the general string build:
+    //   - the chunk's hashes are precomputed in a dense pass, so the probe pass has the
+    //     hash ready to drive prefetch (the same shape as the general precompute) instead
+    //     of hashing inside the dependent emplace chain.
     //   - the Slice keys are read from the column's immutable container, like the general
-    //     precompute.
+    //     precompute (re-deriving each Slice from the offsets per row leaves the length
+    //     test in the probe loop and codegens worse).
     // NULL here is about the group-by KEY (null_key_data is reused as the NULL group's
     // slot, existence tracked by null_key_exists). NULL input VALUES are a different axis:
     // the gate rejects nullable inputs, count(col) reads its input null mask as deltas.
@@ -1144,12 +1146,15 @@ struct AggHashMapWithOneStringKeyWithNullable
     }
 
     // Mixed null/non-null build. Same classify/limit/allocate split as the numeric flavor;
-    // rows go one by one (the null mask interleaves the two destinations), so no prehash here.
+    // the null mask interleaves the two destinations, so this walks row by row with the hash
+    // computed inline (no dense prehash pass). Keys still come from the immutable container,
+    // like the dense path.
     template <typename Op, typename HTBuildOp>
     ALWAYS_NOINLINE void _inline_str_through_null(size_t chunk_size, const NullableColumn* nullable_column,
                                                   MemPool* pool, ExtraAggParam* extra, typename Op::DeltaType delta) {
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
+        const auto container_data = get_immutable_data(data_column);
         if constexpr (HTBuildOp::fill_not_found && !HTBuildOp::allocate && !HTBuildOp::process_limit) {
             auto* __restrict not_founds = extra->not_founds;
             const bool null_group_exists = has_null_key();
@@ -1157,7 +1162,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                 if (null_data[i]) {
                     if (!null_group_exists) (*not_founds)[i] = 1;
                 } else {
-                    inline_agg_probe(this->hash_map, data_column->get_slice(i), (*not_founds)[i]);
+                    inline_agg_probe(this->hash_map, container_data[i], (*not_founds)[i]);
                 }
             }
         } else if constexpr (HTBuildOp::process_limit) {
@@ -1168,7 +1173,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                 if (null_data[i]) {
                     _touch_null_acc<Op>();
                     Op::combine(null_key_data, delta);
-                } else if (const Slice key = data_column->get_slice(i); hash_table_size < extra->limits) {
+                } else if (const Slice key = container_data[i]; hash_table_size < extra->limits) {
                     _inline_emplace_str<Op>(
                             key, hasher(key), pool, [&] { hash_table_size++; }, delta);
                 } else {
@@ -1182,7 +1187,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                     _touch_null_acc<Op>();
                     Op::combine(null_key_data, delta);
                 } else {
-                    const Slice key = data_column->get_slice(i);
+                    const Slice key = container_data[i];
                     _inline_emplace_str<Op>(
                             key, hasher(key), pool, [] {}, delta);
                 }
@@ -1212,6 +1217,7 @@ struct AggHashMapWithOneStringKeyWithNullable
             const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
             if (nullable_column->has_null()) {
                 const auto& null_data = nullable_column->null_column_data();
+                const auto container_data = get_immutable_data(data_column);
                 const auto hasher = this->hash_map.hash_function();
                 for (size_t i = 0; i < chunk_size; i++) {
                     if (selection != nullptr && (*selection)[i] != 0) continue;
@@ -1219,7 +1225,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                         _touch_null_acc<Op>();
                         Op::combine(null_key_data, partials[i]);
                     } else {
-                        const Slice key = data_column->get_slice(i);
+                        const Slice key = container_data[i];
                         _inline_emplace_str<Op>(
                                 key, hasher(key), pool, [] {}, partials[i]);
                     }
@@ -1254,6 +1260,7 @@ struct AggHashMapWithOneStringKeyWithNullable
             const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
             const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
             const auto& null_data = nullable_column->null_column_data();
+            const auto container_data = get_immutable_data(data_column);
             uint8_t ignore_not_found = 0;
             for (size_t i = 0; i < chunk_size; i++) {
                 if (selection != nullptr && (*selection)[i] != 0) continue;
@@ -1261,7 +1268,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                     _touch_null_acc<Op>();
                     Op::combine(null_key_data, delta);
                 } else {
-                    inline_agg_find<Op>(this->hash_map, data_column->get_slice(i), ignore_not_found, delta);
+                    inline_agg_find<Op>(this->hash_map, container_data[i], ignore_not_found, delta);
                 }
             }
         } else {
@@ -1273,9 +1280,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     static constexpr bool has_single_null_key = is_nullable;
 
     AggDataPtr null_key_data = nullptr;
-    // Inline-mode existence bit for the NULL group: a per-row-delta op (count(col) over
-    // all-NULL values) can legally leave the accumulator at 0, so "slot != 0" stopped being
-    // a usable sentinel (see the numeric flavor).
+    // Inline-mode existence bit for the NULL group (see has_null_key()).
     bool null_key_exists = false;
     ResultVector results;
 };

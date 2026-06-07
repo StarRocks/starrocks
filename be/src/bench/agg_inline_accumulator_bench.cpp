@@ -67,6 +67,7 @@
 #include "exprs/agg/count.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "gutil/port.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
