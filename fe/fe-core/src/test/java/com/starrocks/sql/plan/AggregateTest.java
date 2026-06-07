@@ -698,9 +698,11 @@ public class AggregateTest extends PlanTestBase {
                 + "  |  aggregate: count[(if[([1: t1a, VARCHAR, true] IS NULL, NULL, [2: t1b, SMALLINT, true]); "
                 + "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; "
                 + "result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]");
+        // the merge-stage count call reports its child slot's real nullability (it is the
+        // producer's non-nullable count output), not the historical blanket "nullable"
         assertContains(plan, "4:AGGREGATE (merge finalize)\n"
                 + "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; "
-                + "result: BIGINT; args nullable: true; result nullable: false]");
+                + "result: BIGINT; args nullable: false; result nullable: false]");
         FeConstants.runningUnitTest = false;
     }
 

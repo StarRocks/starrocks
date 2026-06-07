@@ -1,0 +1,376 @@
+-- name: test_agg_inline_accumulator
+-- Qualifying aggregates run the inline-agg fast path: the 8-byte accumulator lives in the
+-- group-by hash-map value slot instead of an arena agg state. This suite covers every key
+-- variant that engages it (single numeric, multi-column serialized, multi-column compressed;
+-- nullable and NOT NULL), the update and merge phases, and the streaming / spill / shared-limit
+-- operator paths -- plus guard cases where inline must NOT engage. A dedicated block re-runs the
+-- representative queries with the session variable toggled off to prove the optimization does not
+-- change results. Counts are deterministic: 97 value groups of exactly 400 rows each, plus a 1000-row
+-- NULL group (and those 1000 rows fold into group 0 of the NOT NULL columns).
+
+create table t (
+    c_int    int,
+    c_big    bigint,
+    c_dt     datetime,
+    c_dec    decimal(18,2),
+    c_tiny   tinyint,
+    c_small  smallint,
+    c_str    string,
+    c_big_nn bigint  not null,
+    c_int_nn int     not null
+) DUPLICATE KEY(c_int) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+
+insert into t
+select x % 97, x % 97, date_add('2020-01-01', interval x % 97 day), (x % 97) + 0.5,
+       x % 97, x % 97, concat('s', x % 97), x % 97, x % 97
+from TABLE(generate_series(1, 38800)) as g(x);
+insert into t (c_big_nn, c_int_nn)
+select 0, 0 from TABLE(generate_series(1, 1000)) as g(x);
+
+set pipeline_dop = 4;
+function: wait_min_max_stat_ready('c_tiny', 't')
+function: wait_min_max_stat_ready('c_small', 't')
+function: wait_min_max_stat_ready('c_int', 't')
+
+-- ============ engaged: single numeric key (nullable) ============
+-- invariant per type: 98 groups (97 + NULL), 39800 rows, NULL group = 1000, value group = 400
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select c_int, count(*) cnt from t group by c_int) x;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select c_big, count(*) cnt from t group by c_big) x;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select c_dt,  count(*) cnt from t group by c_dt)  x;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select c_dec, count(*) cnt from t group by c_dec) x;
+-- first groups + the NULL group, deterministic
+select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit 4;
+select count(*) cnt from t where c_big is null;
+
+-- ============ engaged: single numeric key (NOT NULL); count(1) also engages ============
+-- group 0 = 1400 (400 + 1000 null-key rows), groups 1..96 = 400
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select c_big_nn, count(*) cnt from t group by c_big_nn) x;
+select c_int_nn, count(1) cnt from t group by c_int_nn order by c_int_nn limit 3;
+-- count over a real non-nullable expression: the argument is evaluated (and discarded) on the
+-- inline path exactly like the general path, so an erroring expression fails identically
+select c_int_nn, count(c_big_nn + 1) cnt from t group by c_int_nn order by c_int_nn limit 3;
+-- a throwing argument fails the same way with the optimization on and off
+select c_int_nn, count(assert_true(c_big_nn < 0)) cnt from t group by c_int_nn;
+set enable_agg_inline_accumulator = false;
+select c_int_nn, count(assert_true(c_big_nn < 0)) cnt from t group by c_int_nn;
+set enable_agg_inline_accumulator = true;
+
+-- ============ engaged: count(col) -- per-row null-mask deltas ============
+-- the 1000 extra rows have c_int NULL: group 0 of the NOT NULL key counts only its 400 non-null
+select c_big_nn, count(c_int) cnt from t group by c_big_nn order by c_big_nn limit 3;
+-- nullable key: the NULL-key group's 1000 rows are all c_int-NULL -> the group EXISTS with count 0
+-- (98 groups incl. the zero-count one; min(cnt)=0 proves it was emitted)
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c_int) cnt from t group by c_big) x;
+-- both phases
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c_int) cnt from t group by c_big) x;
+-- two-phase count(col) over a NOT NULL input: the plan-merge stage resolves count_nullable
+-- and must stay inline (the v1 gate silently lost it)
+select count(*) grp, sum(cnt) tot from (select c_big, count(c_int_nn) cnt from t group by c_big) x;
+set new_planner_agg_stage = 0;
+
+-- ============ engaged: sum over slot-width accumulators ============
+-- group g of c_big_nn sums 400 rows of c_int_nn=g (+1000 zero rows in g0): sum = 400*g
+-- total = 400*(0+...+96) = 1862400; min = 0 (group 0 sums to zero -- a zero accumulator of an
+-- existing group must be emitted)
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big_nn, sum(c_int_nn) s from t group by c_big_nn) x;
+-- nullable key: the NULL-key group's 1000 rows all carry c_int_nn=0 -> exists with sum 0
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big, sum(c_int_nn) s from t group by c_big) x;
+-- bigint input
+select count(*) grp, sum(s) tot from (select c_int, sum(c_big_nn) s from t group by c_int) x;
+-- doubles (deterministic dyadic fractions; rounded per the not-bit-exact policy)
+create table t_dbl (k int not null, d double not null, f float not null, vl largeint not null, dt datetime not null)
+DUPLICATE KEY(k) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+insert into t_dbl select x % 97, (x % 97) * 0.5, (x % 97) * 0.25, x % 97,
+date_add('2020-01-01', interval x % 97 day)
+from TABLE(generate_series(1, 9700)) as g(x);
+select count(*) grp, round(sum(s), 3) tot from (select k, sum(d) s from t_dbl group by k) x;
+select count(*) grp, round(sum(s), 3) tot from (select k, sum(f) s from t_dbl group by k) x;
+-- spill drain of the typed intermediate (one-phase, forced)
+set enable_spill = true;
+set spill_mode = 'force';
+set new_planner_agg_stage = 1;
+select round(sum(s), 3) tot from (select k, sum(d) s from t_dbl group by k) x;
+select sum(s) tot from (select c_big_nn, sum(c_int_nn) s from t group by c_big_nn) x;
+set enable_spill = false;
+set new_planner_agg_stage = 0;
+
+-- ============ engaged: min/max -- non-additive combine, nonzero identity ============
+-- every group g holds only the value g (or g-derived), so min == max == f(g) per group
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_big_nn, min(c_int_nn) mn from t group by c_big_nn) x;
+select count(*) grp, min(mx) lo, max(mx) hi from (select c_big_nn, max(c_int_nn) mx from t group by c_big_nn) x;
+-- nullable key: the NULL-key group's rows carry c_int_nn=0 -> min 0
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_big, min(c_int_nn) mn from t group by c_big) x;
+-- bigint / double / float / datetime value types
+select count(*) grp, min(mn) lo, max(mx) hi from (select c_int, min(c_big_nn) mn, max(c_big_nn) mx from t group by c_int) x;
+select min(mn) lo, max(mx) hi from (select k, min(d) mn, max(d) mx from t_dbl group by k) x;
+select min(mn) lo, max(mx) hi from (select k, min(f) mn, max(f) mx from t_dbl group by k) x;
+select min(mn) lo, max(mx) hi from (select k, min(dt) mn, max(dt) mx from t_dbl group by k) x;
+-- both phases
+set new_planner_agg_stage = 2;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_big_nn, min(c_int_nn) mn from t group by c_big_nn) x;
+set new_planner_agg_stage = 0;
+-- spill drain of the typed intermediate
+set enable_spill = true;
+set spill_mode = 'force';
+set new_planner_agg_stage = 1;
+select min(mn) lo, max(mx) hi from (select k, min(d) mn, max(d) mx from t_dbl group by k) x;
+set enable_spill = false;
+set new_planner_agg_stage = 0;
+
+-- ============ merge stage of sum/min/max runs inline (honest producer nullability) ============
+-- the producer stage states its intermediate slots' real nullability, so the plan-merge
+-- stage resolves the plain variants and keeps the inline accumulator
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big, sum(c_int_nn) s from t group by c_big) x;
+select count(*) grp, round(sum(s), 3) tot from (select k, sum(d) s from t_dbl group by k) x;
+select count(*) grp, min(mx) lo, max(mx) hi from (select c_big_nn, max(c_int_nn) mx from t group by c_big_nn) x;
+select min(mn) lo, max(mx) hi from (select k, min(dt) mn, max(dt) mx from t_dbl group by k) x;
+-- merge phase + spill
+set enable_spill = true;
+set spill_mode = 'force';
+select sum(s) tot from (select c_big_nn, sum(c_int_nn) s from t group by c_big_nn) x;
+select min(mn) lo, max(mx) hi from (select k, min(d) mn, max(d) mx from t_dbl group by k) x;
+set enable_spill = false;
+-- inline OFF on the same two-phase shapes must match
+set enable_agg_inline_accumulator = false;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big, sum(c_int_nn) s from t group by c_big) x;
+select count(*) grp, min(mx) lo, max(mx) hi from (select c_big_nn, max(c_int_nn) mx from t group by c_big_nn) x;
+set enable_agg_inline_accumulator = true;
+set new_planner_agg_stage = 0;
+
+-- ============ negative: outer join / repeat below the aggregation keep honest fallback ============
+-- the inner side's NOT NULL columns are runtime-nullable there; the producer keeps nullable
+-- slots, every stage falls back, and the missing matches surface as NULLs / count 0
+create table tj1 (k int not null, v int not null) DUPLICATE KEY(k) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+create table tj2 (k int not null, w int not null) DUPLICATE KEY(k) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+insert into tj1 values (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);
+insert into tj2 values (1, 100), (2, 200), (3, 300);
+set new_planner_agg_stage = 2;
+select t1.k, sum(t2.w) s, min(t2.w) mn, max(t2.w) mx, count(t2.w) c from tj1 t1 left join tj2 t2 on t1.k = t2.k group by t1.k order by t1.k;
+-- rollup's repeat node generates NULL grouping keys; aggregates stay correct
+select k, sum(v) s from tj1 group by rollup(k) order by k nulls first;
+set new_planner_agg_stage = 0;
+drop table tj1;
+drop table tj2;
+
+-- ============ guards: sums that must NOT engage (16-byte or nullable-wrapped) ============
+-- largeint accumulator (resolved "sum" but LARGEINT result)
+select count(*) grp, sum(s) tot from (select k, sum(vl) s from t_dbl group by k) x;
+-- decimal goes through decimal_sum
+select count(*) grp from (select c_big_nn, sum(c_dec) s from t group by c_big_nn) x;
+-- nullable input resolves "nullable sum"
+select count(*) grp, sum(s) tot from (select c_big_nn, sum(c_int) s from t group by c_big_nn) x;
+-- nullable input resolves "nullable maxmin"; string min/max is no inline client either
+select count(*) grp, min(mn) lo from (select c_big_nn, min(c_int) mn from t group by c_big_nn) x;
+select min(mn) lo, max(mn) hi from (select c_big_nn, min(c_str) mn from t group by c_big_nn) x;
+
+-- ============ engaged: multi-column serialized fixed-size key ============
+set enable_group_by_compressed_key = false;
+select count(*) grp, sum(cnt) tot from (select c_tiny, c_small, c_int, count(*) cnt from t group by c_tiny, c_small, c_int) x;
+select c_tiny, c_small, c_int, count(*) cnt from t group by c_tiny, c_small, c_int order by 1,2,3 nulls last limit 3;
+
+-- ============ engaged: multi-column compressed key (same key, stats ready) ============
+set enable_group_by_compressed_key = true;
+select count(*) grp, sum(cnt) tot from (select c_tiny, c_small, c_int, count(*) cnt from t group by c_tiny, c_small, c_int) x;
+select c_tiny, c_small, c_int, count(*) cnt from t group by c_tiny, c_small, c_int order by 1,2,3 nulls last limit 3;
+set enable_group_by_compressed_key = false;
+
+-- ============ engaged: delta ops on the serialized / compressed multi-column keys ============
+-- group (g,g,g): 400 rows with c_int_nn = g; the all-NULL key group: 1000 rows with c_int_nn = 0
+-- and c_dt NULL (so count(c_dt) = 0 there); both prepare_inline_keys flavors must fold deltas
+set enable_group_by_compressed_key = false;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int) x;
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_tiny, c_small, c_int, count(c_dt) cnt from t group by c_tiny, c_small, c_int) x;
+-- both phases for a delta op on the serialized key, then its spill drain
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+set enable_spill = true;
+set spill_mode = 'force';
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+set enable_spill = false;
+set new_planner_agg_stage = 0;
+set enable_group_by_compressed_key = true;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+select count(*) grp, min(mx) lo, max(mx) hi from (select c_tiny, c_small, c_int, max(c_int_nn) mx from t group by c_tiny, c_small, c_int) x;
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_tiny, c_small, c_int, count(c_dt) cnt from t group by c_tiny, c_small, c_int) x;
+set new_planner_agg_stage = 2;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int) x;
+set enable_spill = true;
+set spill_mode = 'force';
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int) x;
+set enable_spill = false;
+set new_planner_agg_stage = 0;
+set enable_group_by_compressed_key = false;
+
+-- ============ phases: forced one-phase (update) and two-phase (merge) ============
+set new_planner_agg_stage = 1;
+select count(*) grp, sum(cnt) tot from (select c_big, count(*) cnt from t group by c_big) x;
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(cnt) tot from (select c_big, count(*) cnt from t group by c_big) x;
+set new_planner_agg_stage = 0;
+
+-- ============ operator paths: spill (merge phase) and shared-limit ============
+set enable_spill = true;
+set spill_mode = 'force';
+set spill_mem_table_size = 1048576;
+set enable_agg_spill_preaggregation = true;
+set new_planner_agg_stage = 2;
+select sum(cnt) tot from (select c_big, count(*) cnt from t group by c_big) x;
+select sum(cnt) tot from (select c_big_nn, count(*) cnt from t group by c_big_nn) x;
+set enable_spill = false;
+set new_planner_agg_stage = 0;
+
+set enable_aggregation_pipeline_share_limit = true;
+select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit 5;
+set enable_aggregation_pipeline_share_limit = false;
+
+-- ============ merge phase + group-by LIMIT (inline stays on; equal-sized groups make ============
+-- ============ the streamed-group choice irrelevant to the checked aggregates)  ============
+create table t_lim (k int not null, v int not null, w int not null) DUPLICATE KEY(k) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+insert into t_lim select x % 100, x, 5 from TABLE(generate_series(1, 38800)) as g(x);
+-- 100 groups x 388 rows; any 7 groups count to 2716, and w=5 makes every group's
+-- sum(w)=1940 / min(w)=max(w)=5, so the streamed-group choice stays irrelevant
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(cnt) tot from (select k, count(*) cnt from t_lim group by k limit 7) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select k, sum(w) s from t_lim group by k limit 7) x;
+select count(*) grp, min(mn) lo from (select k, min(w) mn from t_lim group by k limit 7) x;
+select count(*) grp, max(mx) hi from (select k, max(w) mx from t_lim group by k limit 7) x;
+select count(*) grp, sum(cnt) tot from (select k, count(v) cnt from t_lim group by k limit 7) x;
+set enable_aggregation_pipeline_share_limit = true;
+select count(*) grp, sum(cnt) tot from (select k, count(*) cnt from t_lim group by k limit 7) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select k, sum(w) s from t_lim group by k limit 7) x;
+set enable_aggregation_pipeline_share_limit = false;
+set new_planner_agg_stage = 0;
+
+-- ============ streaming preagg paths (the local stage of a forced two-phase plan) ============
+-- without stage=2 the optimizer picks a one-phase blocking plan and no streaming sink ever
+-- runs; with it, force_streaming exercises raw passthrough, and auto on group by (v div 2)
+-- (every chunk ~0.5 hit-rate: neither low <0.2 nor high >=0.9, aggregator.h LowReduction/
+-- HighReduction) drives ADJUST into its SELECTIVE_PREAGG branch = the classify+fold path
+set new_planner_agg_stage = 2;
+set streaming_preaggregation_mode = 'force_streaming';
+select count(*) grp, sum(cnt) tot from (select v, count(*) cnt from t_lim group by v) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select v, sum(w) s from t_lim group by v) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select v, min(w) mn from t_lim group by v) x;
+select count(*) grp, sum(cnt) tot from (select v, count(k) cnt from t_lim group by v) x;
+set streaming_preaggregation_mode = 'auto';
+select count(*) grp, sum(cnt) tot from (select v div 2, count(*) cnt from t_lim group by v div 2) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select v div 2, sum(w) s from t_lim group by v div 2) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select v div 2, min(w) mn from t_lim group by v div 2) x;
+-- OFF parity on the same streaming shapes
+set enable_agg_inline_accumulator = false;
+set streaming_preaggregation_mode = 'force_streaming';
+select count(*) grp, sum(s) tot, min(s) smallest from (select v, sum(w) s from t_lim group by v) x;
+set streaming_preaggregation_mode = 'auto';
+select count(*) grp, sum(s) tot, min(s) smallest from (select v div 2, sum(w) s from t_lim group by v div 2) x;
+set enable_agg_inline_accumulator = true;
+set new_planner_agg_stage = 0;
+drop table t_lim;
+
+-- ============ query cache: a hit refills the aggregator with intermediates; ============
+-- ============ the fold must add partials, not recount rows                  ============
+set enable_query_cache = true;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select c_big, count(*) cnt from t group by c_big) x;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select c_big, count(*) cnt from t group by c_big) x;
+-- the delta ops refill from their own NULL-free intermediates too
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big, sum(c_int_nn) s from t group by c_big) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big, sum(c_int_nn) s from t group by c_big) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_big_nn, min(c_int_nn) mn from t group by c_big_nn) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_big_nn, min(c_int_nn) mn from t group by c_big_nn) x;
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c_int) cnt from t group by c_big) x;
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c_int) cnt from t group by c_big) x;
+set enable_query_cache = false;
+
+-- ============ inline ON vs OFF must produce identical results ============
+set enable_agg_inline_accumulator = false;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select c_big, count(*) cnt from t group by c_big) x;
+select count(*) grp, sum(cnt) tot, min(cnt) smallest from (select c_big, count(c_int) cnt from t group by c_big) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_big, sum(c_int_nn) s from t group by c_big) x;
+select count(*) grp, round(sum(s), 3) tot from (select k, sum(d) s from t_dbl group by k) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_big_nn, min(c_int_nn) mn from t group by c_big_nn) x;
+select min(mn) lo, max(mx) hi from (select k, min(dt) mn, max(dt) mx from t_dbl group by k) x;
+select count(*) grp, sum(cnt) tot from (select c_tiny, c_small, c_int, count(*) cnt from t group by c_tiny, c_small, c_int) x;
+select count(*) grp, sum(s) tot, min(s) smallest from (select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int) x;
+select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit 4;
+set enable_agg_inline_accumulator = true;
+
+-- ============ engagement asserts: the runtime profile must show inline where designed ============
+-- NO BEHAVIOR CHANGE means a silently broken gate keeps every result-test green; these pin
+-- the InlineAggOptimization marker itself (the count of profile lines carrying it = the
+-- number of aggregation nodes that engaged). Forced one-phase: exactly 1 engaged node per op.
+set enable_profile = true;
+set enable_async_profile = false;
+set new_planner_agg_stage = 1;
+select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
+select c_big_nn, count(c_int) cnt from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(col)%';
+select c_big, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
+select k, sum(d) s from t_dbl group by k order by k limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(double)%';
+select c_big_nn, min(c_int_nn) mn from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: min%';
+select k, max(dt) mx from t_dbl group by k order by k limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: max%';
+-- multi-column serialized / compressed keys
+select c_tiny, c_small, c_int, sum(c_int_nn) s from t group by c_tiny, c_small, c_int order by 1,2,3 nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
+set enable_group_by_compressed_key = true;
+select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int order by 1,2,3 nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: min%';
+set enable_group_by_compressed_key = false;
+-- two-phase: BOTH aggregation nodes engage (2 op-markers, 0 false-markers); for count(col)
+-- the update node classifies count(col) while the merge node resolves plain count after the
+-- honest-nullability fix
+set new_planner_agg_stage = 2;
+select c_big, count(*) cnt from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
+select c_big, count(c_int) cnt from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(col)%';
+select c_big, count(c_int) cnt from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
+select c_big, count(c_int) cnt from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: false%';
+select c_big, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
+select c_big_nn, max(c_int_nn) mx from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: max%';
+-- merge + spill: both main aggregators stay inline (the spill-restore path additionally
+-- runs a SortedStreamingAggregator that reports false by design, so false is NOT counted)
+set enable_spill = true;
+set spill_mode = 'force';
+select c_big_nn, sum(c_int_nn) s from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
+set enable_spill = false;
+-- fallback by design: nullable input, distinct, two aggregates, repeat below the agg --
+-- zero non-false markers anywhere in the profile
+select c_big_nn, sum(c_int) s from t group by c_big_nn order by c_big_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
+select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
+select c_big, count(*) cnt, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
+select c_tiny, sum(c_int_nn) s from t group by rollup(c_tiny) order by c_tiny nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization%' and v.line not like '%InlineAggOptimization: false%';
+set new_planner_agg_stage = 0;
+set enable_profile = false;
+set enable_async_profile = true;
+
+-- ============ guard: inline must NOT engage, results still correct ============
+-- single TINYINT key -> direct-array (no-prefetch) map, excluded
+select c_tiny, count(*) cnt from t group by c_tiny order by c_tiny nulls last limit 3;
+-- single STRING key -> slice key, not a supported variant
+select c_str, count(*) cnt from t group by c_str order by c_str nulls last limit 3;
+-- count(DISTINCT) -> not a plain count
+select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nulls last limit 3;
+-- two aggregate functions
+select c_big, count(*) cnt, sum(c_int_nn) s from t group by c_big order by c_big nulls last limit 3;
+-- global count(*), no GROUP BY
+select count(*) from t;
+
+drop table t;
+drop table t_dbl;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A/B bench for the "inline count" value specialization of COUNT(*) GROUP BY.
+// A/B bench for the inline-agg value specialization of COUNT(*) GROUP BY.
 // Methodology follows agg_update_batch_bench.cpp: drive the REAL production
 // hot path and A/B two implementations from one source.
 //
@@ -37,7 +37,7 @@
 //
 // Per iteration the table is rebuilt fresh and the full chunk stream is
 // build+update'd -- the "medium" shape (real inserts + growth + update), which
-// is where inline count wins on BOTH the build (no arena alloc / key dup) and
+// is where inline-agg wins on BOTH the build (no arena alloc / key dup) and
 // the update (no pointer chase).
 //
 // Keys: INT (int32), BIGINT (int64), VARCHAR (Slice).  No FE / scan / pipeline.
@@ -59,6 +59,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/system/cpu_info.h"
 #include "exec/aggregate/agg_hash_map.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregator.h"
@@ -200,7 +201,7 @@ public:
         _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
         _runtime_state->init_instance_mem_tracker();
         _mem_pool = std::make_unique<MemPool>();
-        _runtime_profile = std::make_unique<RuntimeProfile>("agg_inline_count_bench");
+        _runtime_profile = std::make_unique<RuntimeProfile>("agg_inline_accumulator_bench");
         _agg_stat = std::make_unique<AggStatistics>(_runtime_profile.get());
     }
     void TearDown() {
@@ -403,8 +404,10 @@ struct SliceInline {
             const auto* col = down_cast<const BinaryColumn*>(chunk.get());
             const size_t dist = agg_hash_map_default_prefetch_dist();
             const bool do_pf = dist != 0 && agg_should_prefetch_table(map);
-            if (do_pf)
-                for (int i = 0; i < kChunk; ++i) hashes[i] = hasher(col->get_slice(i));
+            // Always pre-hash the chunk in a dense pass (like the general string path):
+            // the string hash branches on the length, and a mispredict inside the
+            // dependent emplace chain costs ~10x what it costs in a dense loop.
+            for (int i = 0; i < kChunk; ++i) hashes[i] = hasher(col->get_slice(i));
             size_t pf = dist;
             for (int i = 0; i < kChunk; ++i) {
                 if (do_pf && pf < static_cast<size_t>(kChunk)) map.prefetch_hash(hashes[pf++]);
@@ -414,7 +417,7 @@ struct SliceInline {
                     memcpy(mem, s.data, s.size);
                     ctor(Slice(reinterpret_cast<char*>(mem), s.size), int64_t(0));
                 };
-                auto it = do_pf ? map.lazy_emplace_with_hash(s, hashes[i], emplace) : map.lazy_emplace(s, emplace);
+                auto it = map.lazy_emplace_with_hash(s, hashes[i], emplace);
                 ++it->second;
             }
         }
@@ -422,6 +425,127 @@ struct SliceInline {
     int64_t finalize() {
         int64_t checksum = 0;
         for (auto& kv : map) checksum += static_cast<int64_t>(kv.first.size) + kv.second;
+        return checksum;
+    }
+    size_t groups() const { return map.size(); }
+    size_t ht_bytes() const { return map.dump_bound(); }
+    size_t pool_bytes() const { return suite->_mem_pool->total_allocated_bytes(); }
+};
+
+// ===========================================================================
+// v3 width probes: how much a fatter accumulator cell costs.
+//   WidthInline<W>: the map value IS a W-byte cell (the Inline16/24/32 candidates);
+//   WidthArena<W> : the map value is a pointer, the W-byte state lives in the arena
+//                   (what a W-byte multi-aggregate state costs on the general path).
+// Per row both touch every 8-byte field once (field0 += 1, field f += key), so a pair
+// at equal W differs only in WHERE the state lives.
+// ===========================================================================
+template <size_t W>
+struct WidthCell {
+    int64_t v[W / 8];
+};
+
+template <size_t W>
+struct WidthInline {
+    using Stream = NumberKeyStream<TYPE_BIGINT>;
+    using ColumnType = RunTimeColumnType<TYPE_BIGINT>;
+    using FieldType = RunTimeCppType<TYPE_BIGINT>;
+    using InlineMap = phmap::flat_hash_map<FieldType, WidthCell<W>, StdHashWithSeed<FieldType, PhmapSeed1>>;
+
+    BenchSuite* suite;
+    InlineMap map;
+    std::vector<size_t> hashes;
+
+    explicit WidthInline(BenchSuite* s) : suite(s), hashes(kChunk) {}
+
+    void build_update(const std::vector<ColumnPtr>& chunks) {
+        const auto hasher = map.hash_function();
+        for (const auto& chunk : chunks) {
+            const auto* col = down_cast<const ColumnType*>(chunk.get());
+            const auto& data = col->get_data();
+            const size_t dist = agg_hash_map_default_prefetch_dist();
+            if (dist != 0 && agg_should_prefetch_table(map)) {
+                for (int i = 0; i < kChunk; ++i) hashes[i] = hasher(data[i]);
+                size_t pf = dist;
+                for (int i = 0; i < kChunk; ++i) {
+                    if (pf < static_cast<size_t>(kChunk)) map.prefetch_hash(hashes[pf++]);
+                    auto it = map.lazy_emplace_with_hash(data[i], hashes[i],
+                                                         [&](const auto& ctor) { ctor(data[i], WidthCell<W>{}); });
+                    auto& c = it->second;
+                    c.v[0] += 1;
+                    for (size_t f = 1; f < W / 8; ++f) c.v[f] += data[i];
+                }
+            } else {
+                for (int i = 0; i < kChunk; ++i) {
+                    auto it = map.lazy_emplace(data[i], [&](const auto& ctor) { ctor(data[i], WidthCell<W>{}); });
+                    auto& c = it->second;
+                    c.v[0] += 1;
+                    for (size_t f = 1; f < W / 8; ++f) c.v[f] += data[i];
+                }
+            }
+        }
+    }
+    int64_t finalize() {
+        int64_t checksum = 0;
+        for (auto& kv : map) checksum += static_cast<int64_t>(kv.first) + kv.second.v[0];
+        return checksum;
+    }
+    size_t groups() const { return map.size(); }
+    size_t ht_bytes() const { return map.dump_bound(); }
+    size_t pool_bytes() const { return 0; }
+};
+
+template <size_t W>
+struct WidthArena {
+    using Stream = NumberKeyStream<TYPE_BIGINT>;
+    using ColumnType = RunTimeColumnType<TYPE_BIGINT>;
+    using FieldType = RunTimeCppType<TYPE_BIGINT>;
+    using MapT = Int64AggHashMap<PhmapSeed1>;
+
+    BenchSuite* suite;
+    MapT map;
+    std::vector<size_t> hashes;
+    MemPool* pool;
+
+    explicit WidthArena(BenchSuite* s) : suite(s), hashes(kChunk), pool(s->_mem_pool.get()) {}
+
+    void build_update(const std::vector<ColumnPtr>& chunks) {
+        const auto hasher = map.hash_function();
+        for (const auto& chunk : chunks) {
+            const auto* col = down_cast<const ColumnType*>(chunk.get());
+            const auto& data = col->get_data();
+            const size_t dist = agg_hash_map_default_prefetch_dist();
+            if (dist != 0 && agg_should_prefetch_table(map)) {
+                for (int i = 0; i < kChunk; ++i) hashes[i] = hasher(data[i]);
+                size_t pf = dist;
+                for (int i = 0; i < kChunk; ++i) {
+                    if (pf < static_cast<size_t>(kChunk)) map.prefetch_hash(hashes[pf++]);
+                    auto it = map.lazy_emplace_with_hash(data[i], hashes[i], [&](const auto& ctor) {
+                        auto* st = pool->allocate_aligned(W, 8);
+                        std::memset(st, 0, W);
+                        ctor(data[i], st);
+                    });
+                    auto* c = reinterpret_cast<int64_t*>(it->second);
+                    c[0] += 1;
+                    for (size_t f = 1; f < W / 8; ++f) c[f] += data[i];
+                }
+            } else {
+                for (int i = 0; i < kChunk; ++i) {
+                    auto it = map.lazy_emplace(data[i], [&](const auto& ctor) {
+                        auto* st = pool->allocate_aligned(W, 8);
+                        std::memset(st, 0, W);
+                        ctor(data[i], st);
+                    });
+                    auto* c = reinterpret_cast<int64_t*>(it->second);
+                    c[0] += 1;
+                    for (size_t f = 1; f < W / 8; ++f) c[f] += data[i];
+                }
+            }
+        }
+    }
+    int64_t finalize() {
+        int64_t checksum = 0;
+        for (auto& kv : map) checksum += static_cast<int64_t>(kv.first) + reinterpret_cast<int64_t*>(kv.second)[0];
         return checksum;
     }
     size_t groups() const { return map.size(); }
@@ -530,6 +654,46 @@ BENCHMARK_TEMPLATE(BM_BuildUpdate, Int64Inl)->Apply(Sweep);
 BENCHMARK_TEMPLATE(BM_BuildUpdate, SliceBase)->Apply(Sweep);
 BENCHMARK_TEMPLATE(BM_BuildUpdate, SliceInl)->Apply(Sweep);
 
+// Narrow sweep for the wide-cell crossover question (5..10 aggregate fields):
+// decisive cardinalities only, Random distribution.
+static void WidthSweep(benchmark::internal::Benchmark* b) {
+    b->ArgNames({"rows", "distinct", "dist"});
+    constexpr int64_t kRows = 64'000'000;
+    for (int distinct : {1000, 100000, 4000000}) b->Args({kRows, distinct, 0});
+    b->Unit(benchmark::kMillisecond);
+    b->Iterations(3);
+}
+
+using WInl8 = WidthInline<8>;
+using WInl16 = WidthInline<16>;
+using WInl24 = WidthInline<24>;
+using WInl32 = WidthInline<32>;
+using WArena8 = WidthArena<8>;
+using WArena16 = WidthArena<16>;
+using WArena32 = WidthArena<32>;
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl8)->Apply(Sweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl16)->Apply(Sweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl24)->Apply(Sweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl32)->Apply(Sweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WArena8)->Apply(Sweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WArena16)->Apply(Sweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WArena32)->Apply(Sweep);
+
+using WInl40 = WidthInline<40>;
+using WInl48 = WidthInline<48>;
+using WInl64 = WidthInline<64>;
+using WInl80 = WidthInline<80>;
+using WArena48 = WidthArena<48>;
+using WArena64 = WidthArena<64>;
+using WArena80 = WidthArena<80>;
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl40)->Apply(WidthSweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl48)->Apply(WidthSweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl64)->Apply(WidthSweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WInl80)->Apply(WidthSweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WArena48)->Apply(WidthSweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WArena64)->Apply(WidthSweep);
+BENCHMARK_TEMPLATE(BM_BuildUpdate, WArena80)->Apply(WidthSweep);
+
 BENCHMARK_TEMPLATE(BM_Finalize, Int32Base)->Apply(FinSweep);
 BENCHMARK_TEMPLATE(BM_Finalize, Int32Inl)->Apply(FinSweep);
 BENCHMARK_TEMPLATE(BM_Finalize, Int64Base)->Apply(FinSweep);
@@ -539,4 +703,13 @@ BENCHMARK_TEMPLATE(BM_Finalize, SliceInl)->Apply(FinSweep);
 
 } // namespace starrocks
 
-BENCHMARK_MAIN();
+// Custom main: the prefetch threshold reads CpuInfo's cache sizes, which are only
+// populated by CpuInfo::init() (the daemon does it at startup; BENCHMARK_MAIN would not).
+int main(int argc, char** argv) {
+    starrocks::CpuInfo::init();
+    benchmark::Initialize(&argc, argv);
+    if (benchmark::ReportUnrecognizedArguments(argc, argv)) return 1;
+    benchmark::RunSpecifiedBenchmarks();
+    benchmark::Shutdown();
+    return 0;
+}

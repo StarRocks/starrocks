@@ -399,9 +399,10 @@ struct TQueryOptions {
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
 
-  // Inline the COUNT(*) accumulator into the group-by hash-map value slot
-  // for fixed-size keys, instead of a pointer to an arena-allocated state.
-  219: optional bool enable_agg_inline_count;
+  // Inline a qualifying aggregate's accumulator (count/sum/min/max) into the
+  // group-by hash-map value slot for fixed-size keys, instead of a pointer to
+  // an arena-allocated state.
+  219: optional bool enable_agg_inline_accumulator;
 }
 
 // A scan range plus the parameters needed to execute that scan.

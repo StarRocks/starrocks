@@ -28,7 +28,7 @@ OutPut Exchange Id: 18
 |  * sum-->[-1091.382358719141, 10913.921812585948, 0.0, 8.0, 137439.0] ESTIMATE
 |
 16:AGGREGATE (merge finalize)
-|  aggregate: count[([33: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false], sum[([34: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: count[([33: count, BIGINT, false]); args: ; result: BIGINT; args nullable: false; result nullable: false], sum[([34: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [32: substring, VARCHAR, true]
 |  cardinality: 150000
 |  column statistics:

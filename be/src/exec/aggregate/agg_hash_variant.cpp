@@ -337,7 +337,7 @@ size_t AggHashMapVariant::capacity() const {
 
 size_t AggHashMapVariant::size() const {
     return visit([](const auto& hash_map_with_key) {
-        return hash_map_with_key->hash_map.size() + (hash_map_with_key->get_null_key_data() != nullptr);
+        return hash_map_with_key->hash_map.size() + hash_map_with_key->has_null_key();
     });
 }
 

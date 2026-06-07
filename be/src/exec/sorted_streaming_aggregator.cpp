@@ -230,7 +230,7 @@ private:
 };
 
 SortedStreamingAggregator::SortedStreamingAggregator(AggregatorParamsPtr params) : Aggregator(std::move(params)) {
-    _allow_inline_count = false;
+    _allow_inline_agg = false;
 }
 
 SortedStreamingAggregator::~SortedStreamingAggregator() {

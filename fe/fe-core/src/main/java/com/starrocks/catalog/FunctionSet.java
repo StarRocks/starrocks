@@ -781,6 +781,20 @@ public class FunctionSet {
                     .add(FunctionSet.SPLIT_PART)
                     .build();
 
+    // Aggregates whose merge-stage call may report the real nullability of its child slot
+    // instead of the conservative blanket "nullable": their merge input is exactly the
+    // producer stage's output slot, whose nullability the planner states honestly (see
+    // PlanFragmentBuilder#buildAggregateTuple). A non-nullable child lets the BE resolve
+    // the non-nullable function variant on the merge stage, which keeps fast paths such as
+    // the inline aggregation available there.
+    public static final Set<String> MERGE_HONEST_NULLABLE_CHILD_FUNCTIONS =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.SUM)
+                    .add(FunctionSet.MIN)
+                    .add(FunctionSet.MAX)
+                    .build();
+
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(TRUNCATE)
