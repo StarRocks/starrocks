@@ -131,6 +131,13 @@ public class ScalarOperatorFunctionsTest {
         assertEquals(-920844969, ScalarOperatorFunctions.xxHash32(
                 ConstantOperator.createVarchar("hello"),
                 ConstantOperator.createVarchar("world")).getInt());
+
+        assertEquals(-349168521, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("abcdefghijklmnopQRST")).getInt());
+
+        assertEquals(531093706, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("0123456789abcdefXYZ")).getInt());
     }
 
     @Test

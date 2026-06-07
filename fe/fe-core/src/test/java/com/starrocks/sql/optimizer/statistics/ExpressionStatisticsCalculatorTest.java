@@ -451,16 +451,19 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), Integer.MAX_VALUE, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), Integer.MIN_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 100, 0.001);
         // test xx_hash64 function
         callOperator = new CallOperator(FunctionSet.XX_HASH64, IntegerType.BIGINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), Long.MAX_VALUE, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), Long.MIN_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 100, 0.001);
         // test xx_hash3_32 function
         callOperator = new CallOperator(FunctionSet.XX_HASH3_32, IntegerType.INT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), Integer.MAX_VALUE, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), Integer.MIN_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 100, 0.001);
         // test xx_hash3_64 function
         callOperator = new CallOperator(FunctionSet.XX_HASH3_64, IntegerType.BIGINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
