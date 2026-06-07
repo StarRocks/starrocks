@@ -20,7 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "compute_env/query_cache/lane_arbiter.h"
+#include "compute_env/query_cache/pipeline_cache_context.h"
 #include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_fwd.h"
@@ -38,7 +38,7 @@ using MultilaneOperatorFactoryPtr = std::shared_ptr<MultilaneOperatorFactory>;
 // lanes the number of which is designated by _lane_arbiter->num_lanes(), each lane is a operator instance that
 // MultilaneOperator decorates. The lane is acquired/released to/from the underlying tablet of morsels picked from
 // MorselQueue dynamically.
-class MultilaneOperator final : public pipeline::Operator {
+class MultilaneOperator final : public pipeline::Operator, public CacheMultilaneOperator {
 public:
     struct Lane {
         pipeline::OperatorPtr processor;
@@ -71,11 +71,11 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+    void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) override { _lane_arbiter = lane_arbiter; }
 
-    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<ChunkPtr>& chunks);
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<ChunkPtr>& chunks) override;
 
-    pipeline::OperatorPtr get_internal_op(size_t i);
+    pipeline::OperatorPtr get_internal_op(size_t i) override;
 
     void set_precondition_ready(starrocks::RuntimeState* state) override;
     bool ignore_empty_eos() const override { return false; }

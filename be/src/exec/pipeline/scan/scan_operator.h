@@ -16,7 +16,7 @@
 
 #include "base/concurrency/race_detect.h"
 #include "base/concurrency/spinlock.h"
-#include "compute_env/query_cache/lane_arbiter.h"
+#include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -24,7 +24,6 @@
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
-#include "exec/query_cache/cache_operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {
@@ -81,8 +80,7 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
-    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
+    void set_cache_context(const query_cache::ScanCacheContextPtr& cache_context) { _cache_context = cache_context; }
     void set_ticket_checker(SplitMorselTicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
@@ -274,8 +272,7 @@ private:
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 
-    query_cache::LaneArbiterPtr _lane_arbiter = nullptr;
-    query_cache::CacheOperatorPtr _cache_operator = nullptr;
+    query_cache::ScanCacheContextPtr _cache_context = nullptr;
 
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
