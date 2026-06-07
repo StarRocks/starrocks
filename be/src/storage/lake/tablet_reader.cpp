@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <algorithm>
 #include <future>
 #include <map>
 #include <unordered_set>
@@ -415,14 +416,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // these are served entirely from the .idx (covering fast path), bypassing
     // the base-table scan. Maps rowset id -> the covering index reader.
     std::unordered_map<uint32_t, std::shared_ptr<secondary_sorted::SecondaryIndexReader>> covering_reader_by_rowset;
-    // Covered rowsets that THIS morsel must NOT emit (a different morsel is the
-    // designated one that runs the single covering scan for the rowset). The
-    // .idx is ordered by index key, not base rowid, so it cannot be split by the
-    // morsel's base-rowid range; instead exactly one morsel scans it once and
-    // emits all matching rows, and the rest skip the rowset entirely. Without
-    // this, every morsel would re-scan the whole matching .idx range (the 71x
-    // redundancy that #31 removed from the lookup path).
-    std::unordered_set<uint32_t> covered_skip_rowsets;
     // BE-config-only gate for now: the FE-side session variable that would
     // set TabletReaderParams::use_secondary_index is not wired yet. Once a
     // SELECT references columns that any registered index covers, the lookup
@@ -530,25 +523,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     }
                 }
                 if (covering_idx >= 0) {
-                    // Exactly one morsel runs the single covering scan for this
-                    // rowset; the rest record it as "skip" and emit nothing.
-                    // The designated morsel is the one owning the first split of
-                    // segment 0 (or, when there is no morsel split, this one).
-                    bool is_designated = true;
-                    if (params.rowid_range_option != nullptr) {
-                        is_designated = false;
-                        auto& m = params.rowid_range_option->rowid_range_per_segment_per_rowset;
-                        if (auto rit = m.find(rowset->rowset_id()); rit != m.end()) {
-                            if (auto sit = rit->second.find(0);
-                                sit != rit->second.end() && sit->second.is_first_split_of_segment) {
-                                is_designated = true;
-                            }
-                        }
-                    }
-                    if (!is_designated) {
-                        covered_skip_rowsets.insert(rowset->id());
-                        continue;
-                    }
                     secondary_sorted::SecondaryIndexReader::OpenInput open_in;
                     open_in.fs = sidx_fs;
                     open_in.tablet_mgr = _tablet_mgr;
@@ -636,27 +610,53 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     });
     for (auto& rowset : _rowsets) {
-        // A different morsel is the designated one that runs the single covering
-        // scan for this rowset; emit nothing here.
-        if (covered_skip_rowsets.count(rowset->id())) {
-            continue;
-        }
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
         // Covering fast path: this rowset is fully answered by its .idx -- build
         // a covering iterator (predicate + DelVec applied inside) and skip the
-        // base-table scan entirely. This (designated) morsel scans the whole
-        // matching .idx range once and emits all rows, so no per-row morsel
-        // range filter is needed.
+        // base-table scan entirely.
         if (auto cit = covering_reader_by_rowset.find(rowset->id()); cit != covering_reader_by_rowset.end()) {
             auto delvec_loader = std::make_shared<lake::LakeDelvecLoader>(
                     _tablet_mgr, nullptr, params.lake_io_opts.fill_data_cache, params.lake_io_opts);
+            // Parallelize the covering scan across morsels: the .idx has one
+            // entry per base row, so this morsel's base-rowid coverage maps
+            // numerically onto a disjoint slice of the .idx row space [0,N_idx).
+            // Map each owned (segment, rowid-subrange) through the segment's
+            // cumulative base-row offset; the union of all morsels' slices is
+            // the whole .idx, scanned exactly once and in parallel.
+            SparseRangePtr idx_range;
+            if (params.rowid_range_option != nullptr) {
+                auto& m = params.rowid_range_option->rowid_range_per_segment_per_rowset;
+                if (auto rit = m.find(rowset->rowset_id()); rit != m.end()) {
+                    const auto& rmeta = rowset->metadata();
+                    std::unordered_map<uint32_t, int64_t> seg_offset;
+                    int64_t off = 0;
+                    for (int s = 0; s < rmeta.segment_metas_size(); ++s) {
+                        seg_offset[static_cast<uint32_t>(s)] = off;
+                        off += rmeta.segment_metas(s).num_rows();
+                    }
+                    std::vector<std::pair<rowid_t, rowid_t>> ivals;
+                    for (const auto& [seg_id, split] : rit->second) {
+                        auto oit = seg_offset.find(static_cast<uint32_t>(seg_id));
+                        if (oit == seg_offset.end() || split.row_id_range == nullptr) continue;
+                        const int64_t base = oit->second;
+                        const auto& sr = *split.row_id_range;
+                        for (size_t i = 0; i < sr.size(); ++i) {
+                            ivals.emplace_back(static_cast<rowid_t>(base + sr[i].begin()),
+                                               static_cast<rowid_t>(base + sr[i].end()));
+                        }
+                    }
+                    std::sort(ivals.begin(), ivals.end());
+                    idx_range = std::make_shared<SparseRange<>>();
+                    for (const auto& [lo, hi] : ivals) idx_range->add(Range<>(lo, hi));
+                }
+            }
             auto cov_or = cit->second->make_covering_iterator(
                     schema(), params.pred_tree, &_obj_pool, static_cast<int64_t>(rowset->id()),
-                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size,
-                    /*seg_rowid_ranges=*/nullptr, &_stats);
+                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, std::move(idx_range),
+                    &_stats);
             if (cov_or.status().is_end_of_file()) {
                 continue; // index pruned this rowset entirely
             }

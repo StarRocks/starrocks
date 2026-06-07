@@ -149,7 +149,7 @@ public:
     CoveringIndexIterator(Schema output_schema, ChunkIteratorPtr idx_iter, Schema idx_read_schema,
                           std::vector<int> out_to_inner, uint32_t pos_col_idx, int64_t tablet_id,
                           int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader,
-                          int chunk_size, const RowidRangeOption::SetgmentRowidRangeMap* seg_splits)
+                          int chunk_size)
             : ChunkIterator(std::move(output_schema), chunk_size),
               _idx_iter(std::move(idx_iter)),
               _idx_read_schema(std::move(idx_read_schema)),
@@ -158,8 +158,7 @@ public:
               _tablet_id(tablet_id),
               _rowset_id_base(rowset_id_base),
               _version(version),
-              _delvec_loader(std::move(delvec_loader)),
-              _seg_splits(seg_splits) {}
+              _delvec_loader(std::move(delvec_loader)) {}
 
     void close() override {
         if (_idx_iter != nullptr) _idx_iter->close();
@@ -187,10 +186,9 @@ protected:
             for (size_t r = 0; r < n; ++r) {
                 uint32_t seg = 0, rowid = 0;
                 decode_position(pos[r], &seg, &rowid);
-                // Tablet-internal parallelism: emit a base row only if it
-                // belongs to this morsel's rowid range, so non-idempotent
-                // aggregates (COUNT/SUM) aren't multiplied by the morsel count.
-                if (!_in_morsel_range(seg, rowid)) continue;
+                // The inner .idx scan is already restricted to this morsel's
+                // index-row slice, so every row read here belongs to exactly
+                // this morsel -- no per-row morsel filter needed.
                 bool deleted = false;
                 RETURN_IF_ERROR(_is_deleted(seg, rowid, &deleted));
                 if (!deleted) survivors.push_back(static_cast<uint32_t>(r));
@@ -226,23 +224,6 @@ private:
         return Status::OK();
     }
 
-    // True if base position (seg, rowid) is owned by this morsel. When no
-    // split map is present the iterator owns the whole tablet (single morsel).
-    bool _in_morsel_range(uint32_t seg, uint32_t rowid) const {
-        if (_seg_splits == nullptr) return true;
-        auto it = _seg_splits->find(seg);
-        if (it == _seg_splits->end()) return false; // segment handled by another morsel
-        const SparseRangePtr& sr = it->second.row_id_range;
-        if (sr == nullptr) return true;
-        // Sub-ranges are [begin, end); a morsel split is typically a handful
-        // of contiguous ranges, so a linear scan is cheap.
-        for (size_t i = 0; i < sr->size(); ++i) {
-            const auto& rg = (*sr)[i];
-            if (rowid >= rg.begin() && rowid < rg.end()) return true;
-        }
-        return false;
-    }
-
     ChunkIteratorPtr _idx_iter;
     Schema _idx_read_schema;
     std::vector<int> _out_to_inner;
@@ -252,7 +233,6 @@ private:
     int64_t _version;
     std::shared_ptr<DelvecLoader> _delvec_loader;
     std::unordered_map<uint32_t, DelVectorPtr> _delvec_cache;
-    const RowidRangeOption::SetgmentRowidRangeMap* _seg_splits;
     ChunkPtr _idx_chunk;
 };
 
@@ -411,7 +391,7 @@ StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> SecondaryIndexReader::loo
 StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
         const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
         int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
-        const RowidRangeOption::SetgmentRowidRangeMap* seg_rowid_ranges, OlapReaderStatistics* stats) {
+        SparseRangePtr idx_rowid_range, OlapReaderStatistics* stats) {
     if (_segment == nullptr) {
         return Status::InternalError("make_covering_iterator: index segment not opened");
     }
@@ -425,6 +405,11 @@ StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
     if (obj_pool != nullptr && !source_pred_tree.empty()) {
         read_opts.pred_tree = build_remapped_predicate_tree(source_pred_tree, _source_index_col_ids, obj_pool);
         read_opts.pred_tree_for_zone_map = read_opts.pred_tree;
+    }
+    // Restrict this morsel's scan to its slice of the .idx row positions so the
+    // covering scan is parallel across morsels with no redundant rescans.
+    if (idx_rowid_range != nullptr && !idx_rowid_range->empty()) {
+        read_opts.rowid_range_option = std::move(idx_rowid_range);
     }
     ASSIGN_OR_RETURN(auto inner_iter, _segment->new_iterator(read_schema, read_opts));
 
@@ -454,7 +439,7 @@ StatusOr<ChunkIteratorPtr> SecondaryIndexReader::make_covering_iterator(
     }
     return std::make_shared<CoveringIndexIterator>(
             output_schema, std::move(inner_iter), std::move(read_schema), std::move(out_to_inner), _encoded_pos_col_idx,
-            _tablet_id, rowset_id_base, version, std::move(delvec_loader), chunk_size, seg_rowid_ranges);
+            _tablet_id, rowset_id_base, version, std::move(delvec_loader), chunk_size);
 }
 
 } // namespace starrocks::secondary_sorted

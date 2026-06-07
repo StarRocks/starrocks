@@ -126,19 +126,20 @@ public:
     // |rowset_id_base| is the rowset's id; the global DelVec segment id is
     // rowset_id_base + (seg_id decoded from the position), matching the base
     // scan's `_opts.rowset_id + segment_id()`.
-    // |seg_rowid_ranges| (optional): when the tablet scan is split into
-    // morsels (tablet-internal parallelism), each morsel's TabletReader owns
-    // only a sub-range of the base rowids. The covering iterator scans the
-    // whole .idx, so without this it would emit EVERY matching row in EVERY
-    // morsel -- inflating non-idempotent aggregates (COUNT/SUM) by the morsel
-    // count. Passing this rowset's per-segment rowid ranges makes the iterator
-    // emit a decoded (seg,rowid) only when it falls in this morsel's range, so
-    // each base row is produced exactly once. Null => no split (single morsel).
+    // |idx_rowid_range| (optional): restricts the inner .idx segment scan to a
+    // sub-range of the index's OWN row positions. This is how the covering scan
+    // is parallelized across morsels: the .idx is ordered by index key (not base
+    // rowid) so it cannot be split by the morsel's base-rowid range, but since
+    // the .idx holds exactly one entry per base row (N_idx == N_base), each
+    // morsel's base-rowid coverage maps numerically onto a disjoint slice of
+    // [0, N_idx). Every morsel scans its own .idx slice and emits all rows in
+    // it; the union covers the whole matching range exactly once -- parallel,
+    // no redundant rescans, no per-row morsel filter. Null => scan all (single
+    // morsel / no split).
     StatusOr<ChunkIteratorPtr> make_covering_iterator(
             const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
             int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
-            const RowidRangeOption::SetgmentRowidRangeMap* seg_rowid_ranges = nullptr,
-            OlapReaderStatistics* stats = nullptr);
+            SparseRangePtr idx_rowid_range = nullptr, OlapReaderStatistics* stats = nullptr);
 
 private:
     SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr, int64_t tablet_id,
