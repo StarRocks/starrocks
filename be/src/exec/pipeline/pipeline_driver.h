@@ -39,12 +39,6 @@
 
 namespace starrocks {
 
-namespace query_cache {
-class MultilaneOperator;
-using MultilaneOperatorRawPtr = MultilaneOperator*;
-using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
-} // namespace query_cache
-
 namespace spill {
 class OperatorMemoryResourceManager;
 } // namespace spill

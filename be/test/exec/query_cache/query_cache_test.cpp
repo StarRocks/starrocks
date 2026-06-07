@@ -261,9 +261,9 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         }
         tasks[k].cache_operator = cache_op;
         tasks[k].lane_arbiter = cache_op->lane_arbiter();
-        query_cache::MultilaneOperators multilane_operators;
+        query_cache::CacheMultilaneOperators multilane_operators;
         for (size_t i = 0, size = cache_op_idx; i < size; ++i) {
-            auto* ml_op = dynamic_cast<query_cache::MultilaneOperator*>(upstream[i].get());
+            auto* ml_op = dynamic_cast<query_cache::CacheMultilaneOperator*>(upstream[i].get());
             ml_op->set_lane_arbiter(cache_op->lane_arbiter());
             multilane_operators.push_back(ml_op);
         }
