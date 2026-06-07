@@ -29,7 +29,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/compute_env.h"
-#include "compute_env/query_cache/lane_arbiter.h"
+#include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
@@ -47,8 +47,6 @@
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/query_cache/cache_operator.h"
-#include "exec/query_cache/multilane_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -218,7 +216,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         if (use_cache) {
             // For MultilaneOperator<HashJoinProbeOperator> and MultilaneOperator<NLJoinProbeOperator>, we must use the
             // internal operators wrapped in MultiOperators to construct _dependencies.
-            if (auto multilane_op = std::dynamic_pointer_cast<query_cache::MultilaneOperator>(op_ref);
+            if (auto multilane_op = std::dynamic_pointer_cast<query_cache::CacheMultilaneOperator>(op_ref);
                 multilane_op != nullptr) {
                 op = multilane_op->get_internal_op(0);
             }
@@ -261,30 +259,30 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     if (use_cache) {
         ssize_t cache_op_idx = -1;
-        query_cache::CacheOperatorPtr cache_op = nullptr;
+        query_cache::DriverCacheContextPtr cache_context = nullptr;
         for (auto i = 0; i < _operators.size(); ++i) {
-            if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
+            if (cache_context = std::dynamic_pointer_cast<query_cache::DriverCacheContext>(_operators[i]);
+                cache_context != nullptr) {
                 cache_op_idx = i;
                 break;
             }
         }
 
-        if (cache_op != nullptr) {
-            query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
-            query_cache::MultilaneOperators multilane_operators;
+        if (cache_context != nullptr) {
+            auto lane_arbiter = cache_context->lane_arbiter();
+            query_cache::CacheMultilaneOperators multilane_operators;
             for (auto i = 0; i < cache_op_idx; ++i) {
                 auto& op = _operators[i];
-                if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get());
+                if (auto* multilane_op = dynamic_cast<query_cache::CacheMultilaneOperator*>(op.get());
                     multilane_op != nullptr) {
                     multilane_op->set_lane_arbiter(lane_arbiter);
                     multilane_operators.push_back(multilane_op);
                 } else if (auto* scan_op = dynamic_cast<ScanOperator*>(op.get()); scan_op != nullptr) {
-                    scan_op->set_lane_arbiter(lane_arbiter);
-                    scan_op->set_cache_operator(cache_op);
-                    cache_op->set_scan_operator(scan_op);
+                    scan_op->set_cache_context(cache_context);
+                    cache_context->set_scan_operator(scan_op);
                 }
             }
-            cache_op->set_multilane_operators(std::move(multilane_operators));
+            cache_context->set_multilane_operators(std::move(multilane_operators));
         }
     }
 
