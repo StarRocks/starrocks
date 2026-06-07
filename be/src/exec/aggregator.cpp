@@ -347,9 +347,11 @@ Status Aggregator::open(RuntimeState* state) {
         TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
 
-    // Inline-agg fast path: a single qualifying aggregate over a fixed-size group-by key
-    // (numeric, or a multi-column serialized/compressed key) keeps its accumulator in the
-    // hash-map slot itself (no arena state, no key dup). supports_inline_agg() decides which
+    // Inline-agg fast path: a single qualifying aggregate over a supported group-by key
+    // (numeric, single string, or a multi-column serialized/compressed fixed-size key) keeps
+    // its accumulator in the hash-map slot itself (no arena state; a string key is still
+    // duplicated into the pool -- the slot replaces the state indirection, not the key
+    // copy). supports_inline_agg() decides which
     // key variants qualify; the op is resolved from the resolved function name. Gated by the
     // enable_agg_inline_accumulator session variable; everything else is unchanged.
     // Update-vs-merge is NOT decided here: it is a per-chunk property (_inline_agg_merge_chunk),
@@ -1000,11 +1002,11 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
 
 template <typename Op>
 static void inline_agg_fold_dispatch(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                                     Buffer<AggDataPtr>* agg_states, const typename Op::DeltaType* partials,
-                                     const Filter* selection = nullptr);
+                                     MemPool* pool, Buffer<AggDataPtr>* agg_states,
+                                     const typename Op::DeltaType* partials, const Filter* selection = nullptr);
 template <typename Op>
 static void inline_agg_commit(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                              const Filter* selection);
+                              Buffer<AggDataPtr>* scratch, const Filter* selection);
 
 // Typed merge fold: evaluate the intermediate partial column the same way the general merge
 // path does, unwrap a possible (NULL-free) nullable wrapper and fold slot += partial for the
@@ -1022,7 +1024,7 @@ Status Aggregator::_inline_fold_merge_chunk(Chunk* chunk, size_t chunk_size, con
     if (_tmp_agg_states.size() < chunk_size) {
         _tmp_agg_states.resize(chunk_size);
     }
-    inline_agg_fold_dispatch<Op>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
+    inline_agg_fold_dispatch<Op>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(), &_tmp_agg_states,
                                  partial->get_data().data(), selection);
     return check_has_error();
 }
@@ -1055,7 +1057,8 @@ Status Aggregator::_inline_fold_sum_update_chunk(Chunk* chunk, size_t chunk_size
     if (_tmp_agg_states.size() < chunk_size) {
         _tmp_agg_states.resize(chunk_size);
     }
-    inline_agg_fold_dispatch<Op>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states, deltas, selection);
+    inline_agg_fold_dispatch<Op>(_hash_map_variant, chunk_size, _group_by_columns, _mem_pool.get(), &_tmp_agg_states,
+                                 deltas, selection);
     return check_has_error();
 }
 
@@ -1158,7 +1161,8 @@ void Aggregator::_inline_dispatch_build(size_t chunk_size, Filter* not_founds, s
     case InlineOpKind::kSumInt:
     case InlineOpKind::kSumDouble:
         inline_agg_build<InlineAddOp<int64_t>, HTBuildOp>(_hash_map_variant, chunk_size, _group_by_columns,
-                                                          &_tmp_agg_states, not_founds, limit, fused_count ? 1 : 0);
+                                                          _mem_pool.get(), &_tmp_agg_states, not_founds, limit,
+                                                          fused_count ? 1 : 0);
         return;
     case InlineOpKind::kMin:
     case InlineOpKind::kMax: {
@@ -1168,12 +1172,12 @@ void Aggregator::_inline_dispatch_build(size_t chunk_size, Filter* not_founds, s
     case LT:                                                                                                         \
         if (is_min) {                                                                                                \
             inline_agg_build<InlineMinMaxOp<LT, true>, HTBuildOp>(_hash_map_variant, chunk_size, _group_by_columns,  \
-                                                                  &_tmp_agg_states, not_founds, limit,               \
-                                                                  InlineMinMaxOp<LT, true>::identity());             \
+                                                                  _mem_pool.get(), &_tmp_agg_states, not_founds,     \
+                                                                  limit, InlineMinMaxOp<LT, true>::identity());      \
         } else {                                                                                                     \
             inline_agg_build<InlineMinMaxOp<LT, false>, HTBuildOp>(_hash_map_variant, chunk_size, _group_by_columns, \
-                                                                   &_tmp_agg_states, not_founds, limit,              \
-                                                                   InlineMinMaxOp<LT, false>::identity());           \
+                                                                   _mem_pool.get(), &_tmp_agg_states, not_founds,    \
+                                                                   limit, InlineMinMaxOp<LT, false>::identity());    \
         }                                                                                                            \
         return;
             INLINE_MINMAX_LT_CASES(M)
@@ -1231,7 +1235,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
                 case InlineOpKind::kCountCol: {
                     const int64_t* deltas = _compute_count_col_deltas(chunk_size);
                     inline_agg_fold_dispatch<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns,
-                                                                   &_tmp_agg_states, deltas);
+                                                                   _mem_pool.get(), &_tmp_agg_states, deltas);
                     RETURN_IF_ERROR(check_has_error());
                     return Status::OK();
                 }
@@ -1253,7 +1257,8 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
             DCHECK(chunk_state.fold == InlineChunkState::kCommitted ||
                    chunk_state.fold == InlineChunkState::kFoldSelection);
             if (chunk_state.fold == InlineChunkState::kFoldSelection) {
-                inline_agg_commit<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns, nullptr);
+                inline_agg_commit<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns,
+                                                        &_tmp_agg_states, nullptr);
             }
             return Status::OK();
         }
@@ -1322,7 +1327,8 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
             case InlineOpKind::kCountCol: {
                 const int64_t* deltas = _compute_count_col_deltas(chunk_size);
                 inline_agg_fold_dispatch<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns,
-                                                               &_tmp_agg_states, deltas, &_streaming_selection);
+                                                               _mem_pool.get(), &_tmp_agg_states, deltas,
+                                                               &_streaming_selection);
                 RETURN_IF_ERROR(check_has_error());
                 return Status::OK();
             }
@@ -1340,7 +1346,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
         // kCountStar: commit the classifying selective build by re-probing kept rows (+1 each);
         // a counting limited build (kCommitted) already added everything in place -- no-op fold.
         if (chunk_state.fold == InlineChunkState::kFoldSelection) {
-            inline_agg_commit<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns,
+            inline_agg_commit<InlineAddOp<int64_t>>(_hash_map_variant, chunk_size, _group_by_columns, &_tmp_agg_states,
                                                     &_streaming_selection);
         }
         return Status::OK();
@@ -1621,10 +1627,10 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 
 // Blocking/spillable sinks call this between an inline-agg build (classify) and its compute
 // fold. That is address-safe (the fold re-probes keys, it never replays cell pointers), and
-// today only slice/string variants are convertible while the inline gate admits fixed-size
-// keys only. If a numeric variant ever becomes convertible, the conversion must stay a no-op
-// for agg_inline_supported maps or move after the fold: the threshold below reads a map that
-// is still missing the chunk's pending new groups.
+// it stays safe for the convertible variants the inline gate admits (the single-string maps):
+// the conversion migrates the {key, slot} pairs by value into the two-level backing, whose
+// class -- and therefore inline support -- is the same. The threshold below reads a map that
+// is still missing the chunk's pending new groups; that only delays a conversion by a chunk.
 void Aggregator::try_convert_to_two_level_map() {
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
@@ -2060,7 +2066,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
 // is true, so the supported branch always runs.
 template <typename Op, typename HTBuildOp>
 static void inline_agg_build(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                             Buffer<AggDataPtr>* tmp_states, Filter* not_founds, size_t limit,
+                             MemPool* pool, Buffer<AggDataPtr>* tmp_states, Filter* not_founds, size_t limit,
                              typename Op::DeltaType delta) {
     variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
@@ -2069,7 +2075,7 @@ static void inline_agg_build(AggHashMapVariant& variant, size_t chunk_size, cons
             ExtraAggParam extra;
             extra.not_founds = not_founds;
             extra.limits = limit;
-            hash_map_with_key->template build_inline_agg<Op, HTBuildOp>(chunk_size, group_by_columns, tmp_states,
+            hash_map_with_key->template build_inline_agg<Op, HTBuildOp>(chunk_size, group_by_columns, pool, tmp_states,
                                                                         &extra, delta);
         } else {
             DCHECK(false) << "inline_agg enabled on unsupported variant";
@@ -2078,16 +2084,16 @@ static void inline_agg_build(AggHashMapVariant& variant, size_t chunk_size, cons
 }
 
 // Dispatch the merge fold to the active map's typed build_inline_agg_fold. Only the supported
-// numeric variants reach here (gated by supports_inline_agg() at open()); the rest DCHECK.
+// variants reach here (gated by supports_inline_agg() at open()); the rest DCHECK.
 template <typename Op>
 static void inline_agg_fold_dispatch(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                                     Buffer<AggDataPtr>* agg_states, const typename Op::DeltaType* partials,
-                                     const Filter* selection) {
+                                     MemPool* pool, Buffer<AggDataPtr>* agg_states,
+                                     const typename Op::DeltaType* partials, const Filter* selection) {
     variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (agg_inline_supported<MapType>) {
-            hash_map_with_key->template build_inline_agg_fold<Op>(chunk_size, group_by_columns, agg_states, partials,
-                                                                  selection);
+            hash_map_with_key->template build_inline_agg_fold<Op>(chunk_size, group_by_columns, pool, agg_states,
+                                                                  partials, selection);
         } else {
             DCHECK(false) << "inline_agg fold on unsupported variant";
         }
@@ -2098,11 +2104,11 @@ static void inline_agg_fold_dispatch(AggHashMapVariant& variant, size_t chunk_si
 // to aggregate locally (selection[i] == 0, or all rows when selection is null) and add to its slot.
 template <typename Op>
 static void inline_agg_commit(AggHashMapVariant& variant, size_t chunk_size, const Columns& group_by_columns,
-                              const Filter* selection) {
+                              Buffer<AggDataPtr>* scratch, const Filter* selection) {
     variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (agg_inline_supported<MapType>) {
-            hash_map_with_key->template commit_inline_agg<Op>(chunk_size, group_by_columns, selection);
+            hash_map_with_key->template commit_inline_agg<Op>(chunk_size, group_by_columns, scratch, selection);
         } else {
             DCHECK(false) << "inline_agg commit on unsupported variant";
         }

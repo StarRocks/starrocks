@@ -118,6 +118,47 @@ select min(mn) lo, max(mx) hi from (select k, min(d) mn, max(d) mx from t_dbl gr
 set enable_spill = false;
 set new_planner_agg_stage = 0;
 
+-- ============ engaged: single string key (nullable and NOT NULL) ============
+-- the slot holds the accumulator; the key is still duplicated into the pool. Same invariants
+-- as the numeric keys: 98 groups (97 + NULL) over c_str, value group = 400, NULL group = 1000.
+create table t_str (
+    s_nn string not null,
+    v    int    not null,
+    s    string
+) DUPLICATE KEY(s_nn) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+insert into t_str
+select concat('k', x % 97), x % 97, concat('s', x % 97)
+from TABLE(generate_series(1, 38800)) as g(x);
+insert into t_str (s_nn, v) select 'k0', 0 from TABLE(generate_series(1, 1000)) as g(x);
+
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select s, count(*) cnt from t_str group by s) x;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select s_nn, count(*) cnt from t_str group by s_nn) x;
+select s, count(*) cnt from t_str group by s order by s nulls last limit 3;
+select count(*) cnt from t_str where s is null;
+-- count(col): the NULL-s rows count 0 into their group of the NOT NULL key
+select s_nn, count(s) cnt from t_str group by s_nn order by s_nn limit 3;
+-- sum / min / max over the string key
+select count(*) grp, sum(sv) tot, min(sv) smallest from (select s, sum(v) sv from t_str group by s) x;
+select count(*) grp, min(mn) lo, max(mn) hi from (select s_nn, min(v) mn from t_str group by s_nn) x;
+select count(*) grp, min(mx) lo, max(mx) hi from (select s, max(v) mx from t_str group by s) x;
+-- keys longer than the 8-byte slot: only the STATE moved into the slot, the key dup is intact
+select count(*) grp, sum(cnt) tot from (select concat('a-much-longer-prefix-', s_nn) k, count(*) cnt from t_str group by k) x;
+-- both phases + spill on the string key
+set new_planner_agg_stage = 2;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select s, count(*) cnt from t_str group by s) x;
+select count(*) grp, sum(sv) tot, min(sv) smallest from (select s, sum(v) sv from t_str group by s) x;
+set enable_spill = true;
+set spill_mode = 'force';
+select count(*) grp, sum(cnt) tot from (select s, count(*) cnt from t_str group by s) x;
+select count(*) grp, sum(s) tot from (select s_nn, sum(v) s from t_str group by s_nn) x;
+set enable_spill = false;
+-- inline OFF on the same shapes must match
+set enable_agg_inline_accumulator = false;
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select s, count(*) cnt from t_str group by s) x;
+select count(*) grp, sum(sv) tot, min(sv) smallest from (select s, sum(v) sv from t_str group by s) x;
+set enable_agg_inline_accumulator = true;
+set new_planner_agg_stage = 0;
+
 -- ============ merge stage of sum/min/max runs inline (honest producer nullability) ============
 -- the producer stage states its intermediate slots' real nullability, so the plan-merge
 -- stage resolves the plain variants and keeps the inline accumulator
@@ -323,6 +364,11 @@ set enable_group_by_compressed_key = true;
 select c_tiny, c_small, c_int, min(c_int_nn) mn from t group by c_tiny, c_small, c_int order by 1,2,3 nulls last limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: min%';
 set enable_group_by_compressed_key = false;
+-- single string key
+select s_nn, count(*) cnt from t_str group by s_nn order by s_nn limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
+select s, sum(v) sv from t_str group by s order by s nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
 -- two-phase: BOTH aggregation nodes engage (2 op-markers, 0 false-markers); for count(col)
 -- the update node classifies count(col) while the merge node resolves plain count after the
 -- honest-nullability fix
@@ -339,6 +385,8 @@ select c_big, sum(c_int_nn) s from t group by c_big order by c_big nulls last li
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
 select c_big_nn, max(c_int_nn) mx from t group by c_big_nn order by c_big_nn limit 1;
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: max%';
+select s, count(*) cnt from t_str group by s order by s nulls last limit 1;
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
 -- merge + spill: both main aggregators stay inline (the spill-restore path additionally
 -- runs a SortedStreamingAggregator that reports false by design, so false is NOT counted)
 set enable_spill = true;
@@ -363,8 +411,6 @@ set enable_async_profile = true;
 -- ============ guard: inline must NOT engage, results still correct ============
 -- single TINYINT key -> direct-array (no-prefetch) map, excluded
 select c_tiny, count(*) cnt from t group by c_tiny order by c_tiny nulls last limit 3;
--- single STRING key -> slice key, not a supported variant
-select c_str, count(*) cnt from t group by c_str order by c_str nulls last limit 3;
 -- count(DISTINCT) -> not a plain count
 select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nulls last limit 3;
 -- two aggregate functions
@@ -374,3 +420,4 @@ select count(*) from t;
 
 drop table t;
 drop table t_dbl;
+drop table t_str;

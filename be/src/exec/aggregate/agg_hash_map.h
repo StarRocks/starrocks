@@ -432,8 +432,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
     // classifies-and-creates -- the partials are folded by selection in
     // compute.
     template <typename Op, typename HTBuildOp>
-    ALWAYS_NOINLINE void build_inline_agg(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
-                                          ExtraAggParam* extra, typename Op::DeltaType delta) {
+    ALWAYS_NOINLINE void build_inline_agg(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                          Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
+                                          typename Op::DeltaType delta) {
         const Column* key_column = key_columns[0].get();
         if constexpr (is_nullable) {
             // NULL rows count into null_key_data (an int64 reused like a slot); non-null rows go
@@ -551,8 +552,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
     // spill preaggregation miss mask; rows with selection[i] != 0 are streamed unchanged and must
     // not be folded into the local hash table. A null selection folds every row (non-selective merge).
     template <typename Op>
-    void build_inline_agg_fold(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
-                               const typename Op::DeltaType* partials, const Filter* selection = nullptr) {
+    void build_inline_agg_fold(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                               Buffer<AggDataPtr>* agg_states, const typename Op::DeltaType* partials,
+                               const Filter* selection = nullptr) {
         const Column* key_column = key_columns[0].get();
         if constexpr (is_nullable) {
             if (key_column->only_null()) {
@@ -595,7 +597,8 @@ struct AggHashMapWithOneNumberKeyWithNullable
     // count valid even if the hash table was rehashed/spilled after the classifying build. `selection`
     // may be null when the caller wants every row committed (the all-hit branch).
     template <typename Op>
-    void commit_inline_agg(size_t chunk_size, const Columns& key_columns, const Filter* selection) {
+    void commit_inline_agg(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* scratch,
+                           const Filter* selection) {
         const Column* key_column = key_columns[0].get();
         if constexpr (is_nullable) {
             if (key_column->only_null()) {
@@ -655,6 +658,8 @@ template <typename HashMap>
 struct AggHashMapWithSerializedKeyFixedSize;
 template <typename HashMap>
 struct AggHashMapWithCompressedKeyFixedSize;
+template <typename HashMap, bool is_nullable>
+struct AggHashMapWithOneStringKeyWithNullable;
 
 // Selects, at the variant visit site, which key types run the inline-agg path. The qualifier is
 // that the value slot is a raw AggDataPtr the int64 counter can occupy directly.
@@ -678,6 +683,13 @@ struct AggInlineSupported<AggHashMapWithSerializedKeyFixedSize<HashMap>>
 template <typename HashMap>
 struct AggInlineSupported<AggHashMapWithCompressedKeyFixedSize<HashMap>>
         : std::bool_constant<!is_no_prefetch_map<HashMap>> {};
+// Single string key, nullable or not, on both the flat and the two-level phmap backings (one
+// class covers both, so one specialization does too). The two-level conversion stays legal
+// while the inline path is active: it migrates the {key, slot} pairs by value, and the only
+// build that can span the conversion point -- the classify -> fold pair -- re-probes keys
+// instead of replaying cell addresses.
+template <typename HashMap, bool is_nullable>
+struct AggInlineSupported<AggHashMapWithOneStringKeyWithNullable<HashMap, is_nullable>> : std::true_type {};
 template <typename T>
 inline constexpr bool agg_inline_supported = AggInlineSupported<std::remove_reference_t<T>>::value;
 
@@ -695,11 +707,11 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     AggDataPtr get_null_key_data() { return null_key_data; }
     // Whether the NULL-key group exists. On the general path the sentinel is the arena state
-    // pointer; in inline mode the slot doubles as the count and "!= 0" keeps meaning existence
-    // because a counted group is always >= 1. Every consumer (variant size(), classify,
-    // finalize) goes through this predicate so a future op whose accumulator can legally be 0
-    // only has to change it in one place.
-    bool has_null_key() const { return null_key_data != nullptr; }
+    // pointer; in inline mode every NULL-group touch sets the explicit existence bit, because
+    // a per-row-delta op (count(col) over all-NULL values) can legally leave the accumulator
+    // at 0 -- "slot != 0" is not a usable sentinel. Every consumer (variant size(), classify,
+    // finalize) goes through this predicate.
+    bool has_null_key() const { return null_key_exists || null_key_data != nullptr; }
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
@@ -900,9 +912,286 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
+    // ====================== inline-agg fast path ==========================
+    // String flavor of the inline path: the hash-map value slot holds the op accumulator
+    // directly (no arena state). The key handling stays the general path's: an inserted
+    // key is duplicated into the pool (the slot saves the STATE indirection, never the key
+    // copy). This flavor does not ride the shared fixed-size loops; its own passes differ
+    // on purpose:
+    //   - the chunk's hashes are ALWAYS precomputed in a dense pass first. The string hash
+    //     branches on the key length, and on mixed-length keys that branch mispredicts about
+    //     once per two rows; inside the dependent emplace chain such a mispredict stalls the
+    //     probe pipeline, while in a dense pass it overlaps with the neighboring rows.
+    //   - the Slice keys are formed per row from the binary column (no key view: a slice is
+    //     two loads from the column, not a strided buffer).
+    // NULL here is about the group-by KEY (null_key_data is reused as the NULL group's
+    // slot, existence tracked by null_key_exists). NULL input VALUES are a different axis:
+    // the gate rejects nullable inputs, count(col) reads its input null mask as deltas.
+    template <typename Op>
+    ALWAYS_INLINE void _touch_null_acc() {
+        if (!null_key_exists) {
+            null_key_data = Op::identity_slot();
+            null_key_exists = true;
+        }
+    }
+
+    // Dup-and-init emplace: a new group copies the key into the pool (with the memequal
+    // overflow reserve, like the general emplace) and starts its slot from the op identity.
+    template <typename Op, typename Callback>
+    ALWAYS_INLINE void _inline_emplace_str(const Slice& key, size_t hash, MemPool* pool, Callback&& cb,
+                                           typename Op::DeltaType delta) {
+        auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+            cb();
+            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            strings::memcpy_inlined(pos, key.data, key.size);
+            ctor(Slice{pos, key.size}, Op::identity_slot());
+        });
+        Op::combine(iter->second, delta);
+    }
+
+    // Dense hash precompute into the caller's scratch (the dead-in-inline-mode agg_states
+    // buffer, 8 bytes per row -- same reuse as the numeric flavor).
+    size_t* _inline_prehash_str(const BinaryColumn* column, size_t n, Buffer<AggDataPtr>* scratch) {
+        static_assert(sizeof(AggDataPtr) == sizeof(size_t));
+        DCHECK_GE(scratch->size(), n);
+        size_t* hashes = reinterpret_cast<size_t*>(scratch->data());
+        const auto hasher = this->hash_map.hash_function();
+        for (size_t i = 0; i < n; ++i) {
+            hashes[i] = hasher(column->get_slice(i));
+        }
+        return hashes;
+    }
+
+    template <typename Op, typename HTBuildOp>
+    ALWAYS_NOINLINE void _inline_agg_str_build(const BinaryColumn* column, size_t n, MemPool* pool,
+                                               Buffer<AggDataPtr>* scratch, ExtraAggParam* extra,
+                                               typename Op::DeltaType delta) {
+        size_t* hashes = _inline_prehash_str(column, n, scratch);
+        const size_t dist = agg_hash_map_default_prefetch_dist();
+        const bool do_pf = dist != 0 && agg_should_prefetch_table(this->hash_map);
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        [[maybe_unused]] size_t prefetch_index = dist;
+        for (size_t i = 0; i < n; ++i) {
+            if (do_pf && prefetch_index < n) {
+                this->hash_map.prefetch_hash(hashes[prefetch_index++]);
+            }
+            const Slice key = column->get_slice(i);
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    _inline_emplace_str<Op>(
+                            key, hashes[i], pool, [&] { hash_table_size++; }, delta);
+                } else {
+                    inline_agg_find_with_hash<Op>(this->hash_map, key, hashes[i], (*not_founds)[i], delta);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                _inline_emplace_str<Op>(key, hashes[i], pool, FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i),
+                                        delta);
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                inline_agg_probe_with_hash(this->hash_map, key, hashes[i], (*not_founds)[i]);
+            }
+        }
+    }
+
+    template <typename Op>
+    ALWAYS_NOINLINE void _inline_agg_str_fold(const BinaryColumn* column, size_t n, MemPool* pool,
+                                              Buffer<AggDataPtr>* scratch, const typename Op::DeltaType* partials,
+                                              const Filter* selection) {
+        size_t* hashes = _inline_prehash_str(column, n, scratch);
+        const size_t dist = agg_hash_map_default_prefetch_dist();
+        const bool do_pf = dist != 0 && agg_should_prefetch_table(this->hash_map);
+        [[maybe_unused]] size_t prefetch_index = dist;
+        for (size_t i = 0; i < n; ++i) {
+            if (do_pf && prefetch_index < n) {
+                this->hash_map.prefetch_hash(hashes[prefetch_index++]);
+            }
+            if (selection != nullptr && (*selection)[i] != 0) continue;
+            _inline_emplace_str<Op>(
+                    column->get_slice(i), hashes[i], pool, [] {}, partials[i]);
+        }
+    }
+
+    template <typename Op>
+    ALWAYS_NOINLINE void _inline_agg_str_commit(const BinaryColumn* column, size_t n, Buffer<AggDataPtr>* scratch,
+                                                const Filter* selection) {
+        size_t* hashes = _inline_prehash_str(column, n, scratch);
+        uint8_t ignore_not_found = 0;
+        for (size_t i = 0; i < n; ++i) {
+            if (selection != nullptr && (*selection)[i] != 0) continue;
+            inline_agg_find_with_hash<Op>(this->hash_map, column->get_slice(i), hashes[i], ignore_not_found, 1);
+        }
+    }
+
+    // Build entry. Mirrors the numeric flavor's NULL-key plumbing: only_null / no-null are
+    // shortcuts, mixed chunks walk the null mask row by row.
+    template <typename Op, typename HTBuildOp>
+    ALWAYS_NOINLINE void build_inline_agg(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                          Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
+                                          typename Op::DeltaType delta) {
+        const Column* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            if (key_column->only_null()) {
+                if constexpr (HTBuildOp::fill_not_found && !HTBuildOp::allocate && !HTBuildOp::process_limit) {
+                    // Selective classify-only: the NULL group is a hit if it already exists,
+                    // otherwise a miss to be streamed -- never created here.
+                    if (!has_null_key()) {
+                        std::fill_n(extra->not_founds->begin(), chunk_size, 1);
+                    }
+                } else {
+                    // Allocate or group-by-limit build: the NULL group always counts (the general
+                    // path never streams an all-null chunk).
+                    _touch_null_acc<Op>();
+                    for (size_t i = 0; i < chunk_size; i++) {
+                        Op::combine(null_key_data, delta);
+                    }
+                }
+                return;
+            }
+            const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+            const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+            if (!nullable_column->has_null()) {
+                _inline_agg_str_build<Op, HTBuildOp>(data_column, chunk_size, pool, agg_states, extra, delta);
+            } else {
+                _inline_str_through_null<Op, HTBuildOp>(chunk_size, nullable_column, pool, extra, delta);
+            }
+        } else {
+            _inline_agg_str_build<Op, HTBuildOp>(down_cast<const BinaryColumn*>(key_column), chunk_size, pool,
+                                                 agg_states, extra, delta);
+        }
+    }
+
+    // Mixed null/non-null build. Same classify/limit/allocate split as the numeric flavor;
+    // rows go one by one (the null mask interleaves the two destinations), so no prehash here.
+    template <typename Op, typename HTBuildOp>
+    ALWAYS_NOINLINE void _inline_str_through_null(size_t chunk_size, const NullableColumn* nullable_column,
+                                                  MemPool* pool, ExtraAggParam* extra, typename Op::DeltaType delta) {
+        const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+        const auto& null_data = nullable_column->null_column_data();
+        if constexpr (HTBuildOp::fill_not_found && !HTBuildOp::allocate && !HTBuildOp::process_limit) {
+            auto* __restrict not_founds = extra->not_founds;
+            const bool null_group_exists = has_null_key();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (!null_group_exists) (*not_founds)[i] = 1;
+                } else {
+                    inline_agg_probe(this->hash_map, data_column->get_slice(i), (*not_founds)[i]);
+                }
+            }
+        } else if constexpr (HTBuildOp::process_limit) {
+            [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+            auto* __restrict not_founds = extra->not_founds;
+            const auto hasher = this->hash_map.hash_function();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    _touch_null_acc<Op>();
+                    Op::combine(null_key_data, delta);
+                } else if (const Slice key = data_column->get_slice(i); hash_table_size < extra->limits) {
+                    _inline_emplace_str<Op>(
+                            key, hasher(key), pool, [&] { hash_table_size++; }, delta);
+                } else {
+                    inline_agg_find<Op>(this->hash_map, key, (*not_founds)[i], delta);
+                }
+            }
+        } else {
+            const auto hasher = this->hash_map.hash_function();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    _touch_null_acc<Op>();
+                    Op::combine(null_key_data, delta);
+                } else {
+                    const Slice key = data_column->get_slice(i);
+                    _inline_emplace_str<Op>(
+                            key, hasher(key), pool, [] {}, delta);
+                }
+            }
+        }
+    }
+
+    // Merge fold: slot += partials[i] for each kept row (selection[i] != 0 rows are streamed
+    // unchanged). Same shape as the numeric flavor's fold.
+    template <typename Op>
+    void build_inline_agg_fold(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                               Buffer<AggDataPtr>* agg_states, const typename Op::DeltaType* partials,
+                               const Filter* selection = nullptr) {
+        const Column* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            if (key_column->only_null()) {
+                _touch_null_acc<Op>();
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (selection == nullptr || (*selection)[i] == 0) {
+                        Op::combine(null_key_data, partials[i]);
+                    }
+                }
+                return;
+            }
+            DCHECK(key_column->is_nullable());
+            const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+            const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+            if (nullable_column->has_null()) {
+                const auto& null_data = nullable_column->null_column_data();
+                const auto hasher = this->hash_map.hash_function();
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (selection != nullptr && (*selection)[i] != 0) continue;
+                    if (null_data[i]) {
+                        _touch_null_acc<Op>();
+                        Op::combine(null_key_data, partials[i]);
+                    } else {
+                        const Slice key = data_column->get_slice(i);
+                        _inline_emplace_str<Op>(
+                                key, hasher(key), pool, [] {}, partials[i]);
+                    }
+                }
+                return;
+            }
+            _inline_agg_str_fold<Op>(data_column, chunk_size, pool, agg_states, partials, selection);
+        } else {
+            DCHECK(!key_column->is_nullable());
+            _inline_agg_str_fold<Op>(down_cast<const BinaryColumn*>(key_column), chunk_size, pool, agg_states, partials,
+                                     selection);
+        }
+    }
+
+    // Commit pass for the selective path: re-probe each kept row and add +1 to its slot
+    // (re-looking-up the key keeps the count valid across a rehash or a two-level conversion).
+    template <typename Op>
+    void commit_inline_agg(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* scratch,
+                           const Filter* selection) {
+        const Column* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            if (key_column->only_null()) {
+                _touch_null_acc<Op>();
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (selection == nullptr || (*selection)[i] == 0) {
+                        Op::combine(null_key_data, 1);
+                    }
+                }
+                return;
+            }
+            const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+            const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+            const auto& null_data = nullable_column->null_column_data();
+            uint8_t ignore_not_found = 0;
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (selection != nullptr && (*selection)[i] != 0) continue;
+                if (null_data[i]) {
+                    _touch_null_acc<Op>();
+                    Op::combine(null_key_data, 1);
+                } else {
+                    inline_agg_find<Op>(this->hash_map, data_column->get_slice(i), ignore_not_found, 1);
+                }
+            }
+        } else {
+            _inline_agg_str_commit<Op>(down_cast<const BinaryColumn*>(key_column), chunk_size, scratch, selection);
+        }
+    }
+
     static constexpr bool has_single_null_key = is_nullable;
 
     AggDataPtr null_key_data = nullptr;
+    // Inline-mode existence bit for the NULL group: a per-row-delta op (count(col) over
+    // all-NULL values) can legally leave the accumulator at 0, so "slot != 0" stopped being
+    // a usable sentinel (see the numeric flavor).
+    bool null_key_exists = false;
     ResultVector results;
 };
 

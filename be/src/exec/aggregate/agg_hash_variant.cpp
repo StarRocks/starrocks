@@ -306,6 +306,15 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if (null_data_ptr != nullptr) {                                                               \
                             dst->set_null_key_data(null_data_ptr);                                                    \
                         }                                                                                             \
+                        /* In inline-agg mode null_key_data is the NULL group's accumulator (whose */                 \
+                        /* legal values include 0 == nullptr) and null_key_exists is the existence */                 \
+                        /* sentinel -- both must survive the conversion verbatim. */                                  \
+                        using SrcMap = std::remove_reference_t<decltype(*hash_map_with_key)>;                         \
+                        using DstMap = std::remove_reference_t<decltype(*dst)>;                                       \
+                        if constexpr (SrcMap::has_single_null_key && DstMap::has_single_null_key) {                   \
+                            dst->null_key_data = hash_map_with_key->null_key_data;                                    \
+                            dst->null_key_exists = hash_map_with_key->null_key_exists;                                \
+                        }                                                                                             \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \

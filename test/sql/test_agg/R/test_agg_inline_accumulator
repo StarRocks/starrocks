@@ -227,6 +227,106 @@ set enable_spill = false;
 set new_planner_agg_stage = 0;
 -- result:
 -- !result
+create table t_str (
+    s_nn string not null,
+    v    int    not null,
+    s    string
+) DUPLICATE KEY(s_nn) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_str
+select concat('k', x % 97), x % 97, concat('s', x % 97)
+from TABLE(generate_series(1, 38800)) as g(x);
+-- result:
+-- !result
+insert into t_str (s_nn, v) select 'k0', 0 from TABLE(generate_series(1, 1000)) as g(x);
+-- result:
+-- !result
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select s, count(*) cnt from t_str group by s) x;
+-- result:
+98	39800	1000	400
+-- !result
+select count(*) grp, sum(cnt) tot, max(cnt) biggest, min(cnt) smallest from (select s_nn, count(*) cnt from t_str group by s_nn) x;
+-- result:
+97	39800	1400	400
+-- !result
+select s, count(*) cnt from t_str group by s order by s nulls last limit 3;
+-- result:
+s0	400
+s1	400
+s10	400
+-- !result
+select count(*) cnt from t_str where s is null;
+-- result:
+1000
+-- !result
+select s_nn, count(s) cnt from t_str group by s_nn order by s_nn limit 3;
+-- result:
+k0	400
+k1	400
+k10	400
+-- !result
+select count(*) grp, sum(sv) tot, min(sv) smallest from (select s, sum(v) sv from t_str group by s) x;
+-- result:
+98	1862400	0
+-- !result
+select count(*) grp, min(mn) lo, max(mn) hi from (select s_nn, min(v) mn from t_str group by s_nn) x;
+-- result:
+97	0	96
+-- !result
+select count(*) grp, min(mx) lo, max(mx) hi from (select s, max(v) mx from t_str group by s) x;
+-- result:
+98	0	96
+-- !result
+select count(*) grp, sum(cnt) tot from (select concat('a-much-longer-prefix-', s_nn) k, count(*) cnt from t_str group by k) x;
+-- result:
+97	39800
+-- !result
+set new_planner_agg_stage = 2;
+-- result:
+-- !result
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select s, count(*) cnt from t_str group by s) x;
+-- result:
+98	39800	1000
+-- !result
+select count(*) grp, sum(sv) tot, min(sv) smallest from (select s, sum(v) sv from t_str group by s) x;
+-- result:
+98	1862400	0
+-- !result
+set enable_spill = true;
+-- result:
+-- !result
+set spill_mode = 'force';
+-- result:
+-- !result
+select count(*) grp, sum(cnt) tot from (select s, count(*) cnt from t_str group by s) x;
+-- result:
+98	39800
+-- !result
+select count(*) grp, sum(s) tot from (select s_nn, sum(v) s from t_str group by s_nn) x;
+-- result:
+97	1862400
+-- !result
+set enable_spill = false;
+-- result:
+-- !result
+set enable_agg_inline_accumulator = false;
+-- result:
+-- !result
+select count(*) grp, sum(cnt) tot, max(cnt) biggest from (select s, count(*) cnt from t_str group by s) x;
+-- result:
+98	39800	1000
+-- !result
+select count(*) grp, sum(sv) tot, min(sv) smallest from (select s, sum(v) sv from t_str group by s) x;
+-- result:
+98	1862400	0
+-- !result
+set enable_agg_inline_accumulator = true;
+-- result:
+-- !result
+set new_planner_agg_stage = 0;
+-- result:
+-- !result
 set new_planner_agg_stage = 2;
 -- result:
 -- !result
@@ -781,6 +881,22 @@ select count(*) from (select line from table(unnest(split(get_query_profile(last
 set enable_group_by_compressed_key = false;
 -- result:
 -- !result
+select s_nn, count(*) cnt from t_str group by s_nn order by s_nn limit 1;
+-- result:
+k0	1400
+-- !result
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
+-- result:
+1
+-- !result
+select s, sum(v) sv from t_str group by s order by s nulls last limit 1;
+-- result:
+s0	0
+-- !result
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: sum(int)%';
+-- result:
+1
+-- !result
 set new_planner_agg_stage = 2;
 -- result:
 -- !result
@@ -829,6 +945,14 @@ select c_big_nn, max(c_int_nn) mx from t group by c_big_nn order by c_big_nn lim
 0	0
 -- !result
 select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: max%';
+-- result:
+2
+-- !result
+select s, count(*) cnt from t_str group by s order by s nulls last limit 1;
+-- result:
+s0	400
+-- !result
+select count(*) from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%InlineAggOptimization: count(*)%';
 -- result:
 2
 -- !result
@@ -896,12 +1020,6 @@ select c_tiny, count(*) cnt from t group by c_tiny order by c_tiny nulls last li
 1	400
 2	400
 -- !result
-select c_str, count(*) cnt from t group by c_str order by c_str nulls last limit 3;
--- result:
-s0	400
-s1	400
-s10	400
--- !result
 select c_big, count(distinct c_int) cnt from t group by c_big order by c_big nulls last limit 3;
 -- result:
 0	1
@@ -922,5 +1040,8 @@ drop table t;
 -- result:
 -- !result
 drop table t_dbl;
+-- result:
+-- !result
+drop table t_str;
 -- result:
 -- !result

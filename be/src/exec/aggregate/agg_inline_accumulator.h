@@ -407,18 +407,22 @@ struct InlineAggMapMixin {
 
     // Public entry points for the flavors whose key columns go straight to the hook (the
     // multi-column fixed-size maps). `agg_states` is forwarded as the hash scratch offer.
+    // `pool`/`scratch` are part of the shared inline entry signature for the key flavors
+    // that duplicate keys (strings); the fixed-size flavors take no per-key memory.
     template <typename Op, typename HTBuildOp>
-    void build_inline_agg(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+    void build_inline_agg(size_t chunk_size, const Columns& key_columns, MemPool* pool, Buffer<AggDataPtr>* agg_states,
                           ExtraAggParam* extra, typename Op::DeltaType delta) {
         inline_agg_build_dense<Op, HTBuildOp>(key_columns, chunk_size, agg_states, extra, delta);
     }
     template <typename Op>
-    void build_inline_agg_fold(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
-                               const typename Op::DeltaType* partials, const Filter* selection = nullptr) {
+    void build_inline_agg_fold(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                               Buffer<AggDataPtr>* agg_states, const typename Op::DeltaType* partials,
+                               const Filter* selection = nullptr) {
         inline_agg_fold_dense<Op>(key_columns, chunk_size, agg_states, partials, selection);
     }
     template <typename Op>
-    void commit_inline_agg(size_t chunk_size, const Columns& key_columns, const Filter* selection) {
+    void commit_inline_agg(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* scratch,
+                           const Filter* selection) {
         inline_agg_commit_dense<Op>(key_columns, chunk_size, selection);
     }
 };
