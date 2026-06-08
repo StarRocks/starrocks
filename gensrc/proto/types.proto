@@ -123,6 +123,13 @@ enum IndexType {
     INDEX_UNKNOWN = 2;
     NGRAMBF = 3;
     VECTOR = 4;
+    // Plain (non-ngram) bloom filter. Used as an IDG key tag only — there is
+    // no TabletIndexPB entry for plain bloom filter on a column; the source
+    // of truth for "column c has a plain bloom filter" remains
+    // ColumnPB.is_bf_column. This enum value lets the lake ADD INDEX fast
+    // path identify IDG .idx payloads that carry plain-BF data separately
+    // from NGRAMBF ones (whose IndexType is NGRAMBF).
+    BLOOM_FILTER = 5;
 }
 
  message ReplicationTxnMetaPB {

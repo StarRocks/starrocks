@@ -50,6 +50,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -57,8 +58,12 @@
 #include "storage/index/index_descriptor.h"
 #include "types/type_descriptor.h"
 #ifndef __APPLE__
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_file_reader.h"
 #endif
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
@@ -357,8 +362,105 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
 }
 
 Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
+    // Lake ADD INDEX fast-path: if the IDG loader has an active entry for
+    // this (segment, col_unique_id, BITMAP), prefer the standalone .idx
+    // file over the segment-footer-embedded bitmap. The footer bitmap is
+    // typically absent in the fast-path case (it was added post-segment),
+    // so without this branch the call would fail at _load_bitmap_index.
+    if (opts.idg_loader != nullptr) {
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            // entries are returned newest-first; pick the first match.
+            for (const auto& e : list) {
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::BITMAP) {
+                        return _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
+                    }
+                }
+            }
+        }
+    }
+
+    // No IDG entry; fall back to the segment-footer-embedded bitmap. If the
+    // footer does not carry a bitmap either (e.g. the column simply has no
+    // bitmap index at all), leave `*iterator` null and return OK so the
+    // caller treats this column as "no bitmap filter".
+    if (_bitmap_index == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_load_bitmap_index(opts));
     RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, iterator));
+    return Status::OK();
+}
+
+Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts,
+                                                           const std::string& idx_filename,
+                                                           const std::string& encryption_meta,
+                                                           BitmapIndexIterator** iterator) {
+    // Resolve the .idx file path. IDG entries store relative filenames
+    // (matching the gen_idx_filename UUID-based scheme) under the same
+    // segment directory as the source segment data file.
+    const std::string& seg_path = _segment->file_name();
+    auto pos = seg_path.find_last_of('/');
+    std::string idx_path = (pos == std::string::npos) ? idx_filename : seg_path.substr(0, pos + 1) + idx_filename;
+
+    // When transparent data encryption is on, AddIndexSchemaChange writes
+    // the .idx file with an EncryptionMetaPB and stores the serialized
+    // bytes on the IDG entry. The read side must unwrap the meta back
+    // into a FileEncryptionInfo and pass it through RandomAccessFileOptions,
+    // otherwise the underlying file is read raw and the .idx footer parse
+    // sees ciphertext.
+    RandomAccessFileOptions raf_opts;
+    if (!encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(raf_opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(raf_opts, idx_path));
+
+    // Parse the .idx footer and look up the bitmap meta for this column.
+    lake::IndexFileReader idx_reader;
+    RETURN_IF_ERROR(idx_reader.init(idx_file.get()));
+    const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, IndexType::BITMAP);
+    if (meta == nullptr || !meta->has_bitmap_index()) {
+        return Status::Corruption("IDG entry references missing bitmap index in .idx file");
+    }
+
+    // Build a transient BitmapIndexReader backed by the .idx file. The
+    // upstream IndexReadOptions points at the original segment data; swap
+    // in the .idx stream so the underlying page reads come from the right
+    // file. Stats / cache options are inherited.
+    IndexReadOptions sub_opts = opts;
+    sub_opts.read_file = idx_file->stream().get();
+
+    auto bitmap_reader = std::make_unique<BitmapIndexReader>();
+    ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
+    (void)first_load;
+    BitmapIndexIterator* inner = nullptr;
+    RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, &inner));
+
+    // Wrap the inner iterator so destruction tears down its backing reader
+    // and file handle deterministically. BitmapIndexIterator has a virtual
+    // destructor, so the caller's `delete iterator` correctly dispatches
+    // into the wrapper's dtor.
+    class OwningBitmapIndexIterator final : public BitmapIndexIterator {
+    public:
+        OwningBitmapIndexIterator(BitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
+                                  std::unique_ptr<RandomAccessFile> file)
+                : BitmapIndexIterator(std::move(base)), _reader(std::move(reader)), _file(std::move(file)) {}
+        ~OwningBitmapIndexIterator() override = default;
+
+    private:
+        std::unique_ptr<BitmapIndexReader> _reader;
+        std::unique_ptr<RandomAccessFile> _file;
+    };
+
+    // Transfer inner iterator state into the wrapper. `inner` was allocated
+    // by BitmapIndexReader::new_iterator via `new`, so we take ownership
+    // through a unique_ptr and move-construct into the wrapper.
+    std::unique_ptr<BitmapIndexIterator> inner_owned(inner);
+    *iterator = new OwningBitmapIndexIterator(std::move(*inner_owned), std::move(bitmap_reader), std::move(idx_file));
     return Status::OK();
 }
 
@@ -432,10 +534,78 @@ Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMap
 template <bool is_original_bf>
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
-    RETURN_IF_ERROR(_load_bloom_filter_index(opts));
-    SparseRange<> bf_row_ranges;
+    // Lake ADD INDEX fast-path for bloom filters: if the IDG loader has an
+    // active entry for this (segment, col_unique_id, <BF flavor>), open a
+    // transient BloomFilterIndexReader from the .idx file. Holders are
+    // kept on this function's stack so they outlive the iterator without
+    // needing a virtual destructor on BloomFilterIndexIterator.
+    //
+    // The IDG key type disambiguates the two flavors. `is_original_bf=true`
+    // (plain BF, driven by the `bloom_filter_columns` table property) looks
+    // for IndexType::BLOOM_FILTER entries; `is_original_bf=false` (NGRAMBF)
+    // looks for IndexType::NGRAMBF. Only one flavor can exist per column at
+    // a time, mirroring the footer constraint.
+    std::unique_ptr<RandomAccessFile> idg_file_holder;
+    std::unique_ptr<BloomFilterIndexReader> idg_reader_holder;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+
+    bool used_idg = false;
+    if (opts.idg_loader != nullptr) {
+        const IndexType wanted = is_original_bf ? IndexType::BLOOM_FILTER : IndexType::NGRAMBF;
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            for (const auto& e : list) {
+                bool match = false;
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == wanted) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match) continue;
+
+                // Resolve .idx path under the segment directory and parse footer.
+                const std::string& seg_path = _segment->file_name();
+                auto pos = seg_path.find_last_of('/');
+                std::string idx_path =
+                        (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
+                // Same encryption plumbing as the bitmap IDG path: when the
+                // entry carries a non-empty EncryptionMetaPB, unwrap it back
+                // into a FileEncryptionInfo so the .idx file is decrypted at
+                // read time.
+                RandomAccessFileOptions raf_opts;
+                if (!e.encryption_meta.empty()) {
+                    ASSIGN_OR_RETURN(raf_opts.encryption_info,
+                                     KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
+                }
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
+
+                lake::IndexFileReader idx_reader;
+                RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
+                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, wanted);
+                if (meta == nullptr || !meta->has_bloom_filter_index()) {
+                    return Status::Corruption("IDG entry references missing bloom filter in .idx file");
+                }
+                IndexReadOptions sub_opts = opts;
+                sub_opts.read_file = idg_file_holder->stream().get();
+                idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
+                ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                (void)bf_first_load;
+                RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
+                used_idg = true;
+                break;
+            }
+        }
+    }
+
+    if (!used_idg) {
+        RETURN_IF_ERROR(_load_bloom_filter_index(opts));
+        RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+    }
+    SparseRange<> bf_row_ranges;
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;

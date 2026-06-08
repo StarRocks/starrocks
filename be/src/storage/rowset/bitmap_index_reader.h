@@ -145,6 +145,19 @@ public:
               _has_null(has_null),
               _num_bitmap(num_bitmap) {}
 
+    // Virtual so subclasses can hang extra owned state (e.g. a transient
+    // BitmapIndexReader + RandomAccessFile backing an Index Delta Group
+    // .idx file) and release it on destruction.
+    virtual ~BitmapIndexIterator() = default;
+
+    // User-declared destructor suppresses the implicit move members, so define
+    // them explicitly; otherwise std::move() silently falls back to copy, which
+    // is deleted because of the unique_ptr members below.
+    BitmapIndexIterator(BitmapIndexIterator&&) = default;
+    BitmapIndexIterator& operator=(BitmapIndexIterator&&) = default;
+    BitmapIndexIterator(const BitmapIndexIterator&) = delete;
+    BitmapIndexIterator& operator=(const BitmapIndexIterator&) = delete;
+
     bool has_null_bitmap() const { return _has_null; }
 
     rowid_t num_dictionaries() const;

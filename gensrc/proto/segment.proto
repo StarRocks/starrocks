@@ -269,6 +269,32 @@ message ColumnIndexMetaPB {
     optional BuiltinInvertedIndexPB builtin_inverted_index = 11;
 }
 
+// Footer layout for a standalone .idx file (Index Delta Group payload).
+//
+// File format:
+//   [ index blob 0 ]
+//   [ index blob 1 ]
+//   ...
+//   [ IndexFileFooterPB (serialized) ]
+//   [ footer_length: uint32 little-endian ]
+//   [ MAGIC: uint32 ]
+//
+// Each column_indexes entry has offset/size within the file implicitly
+// recorded in its ColumnIndexMeta (ordinal_index / bitmap_index /
+// bloom_filter_index point to page/data positions relative to the file).
+message IndexFileFooterPB {
+    message ColumnIndex {
+        optional int32 col_unique_id = 1;
+        optional IndexType index_type = 2;
+        // Reuses existing ColumnIndexMetaPB so the same reader code can
+        // interpret blobs from .idx files or from segment footer.
+        optional ColumnIndexMetaPB index_meta = 3;
+    }
+    repeated ColumnIndex column_indexes = 1;
+    // Format version; readers must fail closed on unknown versions.
+    optional uint32 version = 2 [default = 1];
+}
+
 message OrdinalIndexPB {
     // required: the root page can be data page if there is only one data page,
     // or the only index page if there is more than one data pages.

@@ -383,6 +383,13 @@ public:
     Status get_indexes_for_column(int32_t col_unique_id, std::unordered_map<IndexType, TabletIndex>* res) const;
     Status get_indexes_for_column(int32_t col_unique_id, IndexType index_type, std::shared_ptr<TabletIndex>& res) const;
     bool has_index(int32_t col_unique_id, IndexType index_type) const;
+    // Returns true if (col_unique_id, index_type) was recorded in
+    // TabletSchemaPB.dropped_table_indices — i.e. the index was removed from
+    // table_indices by a lake metadata-only DROP, but stale payload may
+    // still live in existing segment footers. Readers use this to avoid
+    // misinterpreting that payload (e.g. NGRAMBF bloom read as regular
+    // bloom) until compaction rewrites the segment.
+    bool has_dropped_index(int32_t col_unique_id, IndexType index_type) const;
 
 private:
     friend class SegmentReaderWriterTest;
@@ -409,6 +416,7 @@ private:
 
     std::vector<TabletIndex> _indexes;
     std::unordered_map<IndexType, std::shared_ptr<std::unordered_set<int32_t>>> _index_map_col_unique_id;
+    std::unordered_map<IndexType, std::shared_ptr<std::unordered_set<int32_t>>> _dropped_index_map_col_unique_id;
 
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;

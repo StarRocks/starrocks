@@ -132,6 +132,67 @@ TEST(TabletSchemaTest, test_schema_with_index) {
     ASSERT_FALSE(tablet_schema.has_separate_sort_key());
 }
 
+TEST(TabletSchemaTest, test_has_dropped_index) {
+    // Verify TabletSchema::has_dropped_index correctly reflects entries
+    // carried by TabletSchemaPB.dropped_table_indices (the tombstone list
+    // populated by MetaFileBuilder::apply_drop_index). Empty input must
+    // return false.
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(101);
+    c1->set_name("k");
+    c1->set_type("VARCHAR");
+    c1->set_is_key(true);
+
+    auto* c2 = schema_pb.add_column();
+    c2->set_unique_id(202);
+    c2->set_name("v");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+
+    // Two tombstones on the same column, different index types.
+    auto* drop1 = schema_pb.add_dropped_table_indices();
+    drop1->set_index_id(9001);
+    drop1->set_index_type(NGRAMBF);
+    drop1->add_col_unique_id(101);
+
+    auto* drop2 = schema_pb.add_dropped_table_indices();
+    drop2->set_index_id(9002);
+    drop2->set_index_type(BITMAP);
+    drop2->add_col_unique_id(202);
+
+    TabletSchema schema(schema_pb);
+
+    EXPECT_TRUE(schema.has_dropped_index(101, NGRAMBF));
+    EXPECT_TRUE(schema.has_dropped_index(202, BITMAP));
+    // Column has no such tombstoned index.
+    EXPECT_FALSE(schema.has_dropped_index(101, BITMAP));
+    EXPECT_FALSE(schema.has_dropped_index(202, NGRAMBF));
+    // Unknown column uid.
+    EXPECT_FALSE(schema.has_dropped_index(999, NGRAMBF));
+}
+
+TEST(TabletSchemaTest, test_has_dropped_index_empty) {
+    // No dropped_table_indices in the proto — has_dropped_index must return
+    // false for every probe without touching maps.
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    auto* c = schema_pb.add_column();
+    c->set_unique_id(1);
+    c->set_name("c");
+    c->set_type("INT");
+    c->set_is_key(true);
+
+    TabletSchema schema(schema_pb);
+    EXPECT_FALSE(schema.has_dropped_index(1, NGRAMBF));
+    EXPECT_FALSE(schema.has_dropped_index(1, BITMAP));
+    EXPECT_FALSE(schema.has_dropped_index(1, GIN));
+}
+
 TEST(TabletSchemaTest, test_is_support_checksum) {
     // struct<int, varchar>
     TabletColumn struct_column1 = create_struct(0, true);

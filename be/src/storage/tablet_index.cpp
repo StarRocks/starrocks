@@ -103,8 +103,12 @@ StatusOr<IndexType> TabletIndex::_convert_index_type_from_thrift(TIndexType::typ
         return IndexType::BITMAP;
     case TIndexType::GIN:
         return IndexType::GIN;
+    case TIndexType::NGRAMBF:
+        return IndexType::NGRAMBF;
     case TIndexType::VECTOR:
         return IndexType::VECTOR;
+    case TIndexType::BLOOM_FILTER:
+        return IndexType::BLOOM_FILTER;
     default:
         // Handle other potential TIndexTypes or set a default value and/or log an error
         std::string type_str;
