@@ -111,7 +111,7 @@ public class DatabricksUnityMetastore implements IMetastore {
             if (schemaInfo == null) {
                 throw new StarRocksConnectorException("Databricks database [%s] doesn't exist", dbName);
             }
-            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), schemaInfo.getName(),
+            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), schemaInfo.getName(),
                     schemaInfo.getStorageLocation());
         }
     }
