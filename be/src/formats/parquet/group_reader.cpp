@@ -20,7 +20,11 @@
 #include <memory>
 #include <utility>
 
+<<<<<<< HEAD
 #include "agent/master_info.h"
+=======
+#include "base/simd/simd.h"
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -29,6 +33,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
@@ -38,6 +43,7 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Exprs_types.h"
+<<<<<<< HEAD
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -45,6 +51,9 @@
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/stopwatch.hpp"
+=======
+#include "types/type_descriptor.h"
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -53,6 +62,11 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRows
                          int64_t row_group_first_row)
         : _row_group_first_row(row_group_first_row), _skip_rows_ctx(std::move(skip_rows_ctx)), _param(param) {
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
+<<<<<<< HEAD
+=======
+    _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
+    _variant = std::make_unique<VariantProjectionHandler>(this, _param, _row_group_metadata);
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 }
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
@@ -62,6 +76,11 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRows
           _skip_rows_ctx(std::move(skip_rows_ctx)),
           _param(param) {
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
+<<<<<<< HEAD
+=======
+    _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
+    _variant = std::make_unique<VariantProjectionHandler>(this, _param, _row_group_metadata);
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 }
 
 GroupReader::~GroupReader() {
@@ -70,15 +89,15 @@ GroupReader::~GroupReader() {
     }
     // If GroupReader is filtered by statistics, it's _has_prepared = false
     if (_has_prepared) {
-        if (_lazy_column_needed) {
+        if (_column_materializer->lazy_column_needed()) {
             _param.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
         } else {
             _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
         }
-        _param.stats->group_min_round_cost = _param.stats->group_min_round_cost == 0
-                                                     ? _column_read_order_ctx->get_min_round_cost()
-                                                     : std::min(_param.stats->group_min_round_cost,
-                                                                int64_t(_column_read_order_ctx->get_min_round_cost()));
+        _param.stats->group_min_round_cost =
+                _param.stats->group_min_round_cost == 0
+                        ? _column_materializer->min_round_cost()
+                        : std::min(_param.stats->group_min_round_cost, int64_t(_column_materializer->min_round_cost()));
     }
 }
 
@@ -119,8 +138,9 @@ Status GroupReader::prepare() {
         RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
     }
 
-    RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
-    RETURN_IF_ERROR(_init_read_chunk());
+    RETURN_IF_ERROR(_column_materializer->rewrite_dict_conjuncts_to_predicate(&_is_group_filtered));
+    RETURN_IF_ERROR(_column_materializer->init_read_chunk());
+    _variant->init_read_chunk_slots();
 
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
@@ -164,7 +184,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         *row_count = 0;
         return Status::EndOfFile("");
     }
+<<<<<<< HEAD
     _read_chunk->reset();
+=======
+
+    _column_materializer->reset_read_chunk();
+    _variant->reset_iteration_state();
+    ChunkPtr active_chunk = _column_materializer->create_active_chunk();
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 
     ChunkPtr active_chunk = _create_read_chunk(_active_column_indices, false);
     // to complicity with _do_get_next will break and return even active_row is all filtered.
@@ -213,10 +240,28 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
         }
 
+<<<<<<< HEAD
         // deal with lazy columns
         if (!_lazy_column_indices.empty()) {
             _lazy_column_needed = true;
             ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices, true);
+=======
+        // Compute post-filter range for lazy reads (Phase 5/6).
+        Range<uint64_t> post_filter_range;
+        Filter post_filter;
+        if (has_filter) {
+            post_filter_range = r.filter(&chunk_filter);
+            DCHECK(post_filter_range.span_size() > 0);
+            post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
+                           chunk_filter.begin() + post_filter_range.end() - r.begin()};
+        }
+
+        // 5. Backfill lazy physical columns
+        if (!_column_materializer->lazy_column_indices().empty()) {
+            RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter, has_filter,
+                                                                    active_chunk));
+        }
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 
             if (has_filter) {
                 Range<uint64_t> lazy_read_range = r.filter(&chunk_filter);
@@ -229,12 +274,19 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             } else {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk, true));
             }
+<<<<<<< HEAD
 
             if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
                 return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
                                                                  active_chunk->num_rows(), lazy_chunk->num_rows()));
             }
             active_chunk->merge(std::move(*lazy_chunk));
+=======
+            {
+                auto skip_slots = _variant->projection_slot_ids();
+                RETURN_IF_ERROR(_column_materializer->emit_physical_columns(active_chunk, chunk, &skip_slots));
+            }
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
         }
 
         *row_count = active_chunk->num_rows();
@@ -248,6 +300,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     return _range_iter.has_more() ? Status::OK() : Status::EndOfFile("");
 }
 
+<<<<<<< HEAD
 Status GroupReader::_read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
                                 const Filter* filter, ChunkPtr* chunk, bool ignore_reserved_field) {
     if (read_columns.empty() && _param.reserved_field_slots == nullptr) {
@@ -335,6 +388,45 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
     return hit_count;
 }
 
+=======
+// ── 1. Prune deleted rows ──────
+
+StatusOr<bool> GroupReader::_prune_deleted_rows(const Range<uint64_t>& r, Filter& chunk_filter, bool& has_filter,
+                                                size_t count) {
+    if (nullptr == _skip_rows_ctx || !_skip_rows_ctx->has_skip_rows()) {
+        return true;
+    }
+    SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
+    ASSIGN_OR_RETURN(has_filter, _skip_rows_ctx->deletion_bitmap->fill_filter(r.begin(), r.end(), chunk_filter));
+    if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
+        return false;
+    }
+    return true;
+}
+
+// ── 2. Read & filter active columns ──────
+
+StatusOr<bool> GroupReader::_read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
+                                                            ChunkPtr& active_chunk, bool& has_filter, size_t count) {
+    if (_column_materializer->has_predicate_filter()) {
+        has_filter = true;
+        ASSIGN_OR_RETURN(size_t hit_count,
+                         _column_materializer->read_active_range_round_by_round(r, &chunk_filter, &active_chunk));
+        if (hit_count == 0) {
+            _param.stats->late_materialize_skip_rows += count;
+            return false;
+        }
+    } else if (has_filter) {
+        RETURN_IF_ERROR(_column_materializer->read_active_range(r, &chunk_filter, &active_chunk));
+    } else {
+        RETURN_IF_ERROR(_column_materializer->read_active_range(r, nullptr, &active_chunk));
+    }
+    return true;
+}
+
+// ── Column reader creation ─────────────────────────────────────────────────
+
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(const SlotDescriptor* slot,
                                                                               int32_t field_id) {
     // Try to find the physical column in the Parquet file by Iceberg spec field ID first (canonical),
@@ -523,6 +615,7 @@ Status GroupReader::_prepare_column_readers() const {
 }
 
 void GroupReader::_process_columns_and_conjunct_ctxs() {
+<<<<<<< HEAD
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     int read_col_idx = 0;
 
@@ -723,4 +816,38 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+=======
+    // ── Variant setup ─────────────────────────────────────────────────────────
+    auto deferred_slots = _variant->deferred_conjunct_physical_source_slots();
+    _variant->collect_deferred_conjuncts();
+
+    // ── Classify physical columns and conjuncts ───────────────────────────────
+    bool has_reserved_field_filter = false;
+    _column_materializer->classify_columns(deferred_slots, &has_reserved_field_filter);
+
+    // ── Variant hidden source classification ──────────────────────────────────
+    _variant->classify_hidden_sources();
+    for (SlotId sid : _variant->active_hidden_slot_ids()) {
+        _column_materializer->add_active_slot(sid);
+    }
+
+    // ── Promote lazy to active when no active columns exist ───────────────────
+    if (_column_materializer->active_slot_ids().empty() && !has_reserved_field_filter) {
+        _column_materializer->promote_lazy_to_active();
+        _variant->promote_lazy_to_active();
+    }
+}
+
+// ── IO range collection ─────────────────────────────────────────────────────
+
+void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                    ColumnIOTypeFlags types) {
+    int64_t end = 0;
+    _column_materializer->collect_io_ranges(ranges, &end, types);
+    _variant->collect_io_ranges(ranges, &end, types);
+    deduplicate_io_ranges(ranges);
+    *end_offset = end;
+}
+
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 } // namespace starrocks::parquet

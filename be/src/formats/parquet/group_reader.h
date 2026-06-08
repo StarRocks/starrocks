@@ -27,7 +27,6 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
-#include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/utils.h"
@@ -45,6 +44,7 @@ class TIcebergSchemaField;
 class THdfsScanRange;
 
 namespace parquet {
+class ColumnMaterializer;
 class FileMetaData;
 } // namespace parquet
 struct TypeDescriptor;
@@ -168,6 +168,7 @@ private:
 
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                  std::vector<std::string>& sub_field_path, bool is_decode_needed);
+<<<<<<< HEAD
 
     Status _init_read_chunk();
 
@@ -176,6 +177,24 @@ private:
 
     StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
 
+=======
+    Status _prepare_column_readers() const;
+
+    // ── get_next() pipeline phases ───────────────────────────────────────────
+    //
+    // 1. Prune deleted rows: applies deletion bitmap to produce chunk_filter.
+    //    Returns true if rows survive; false to skip this range entirely.
+    StatusOr<bool> _prune_deleted_rows(const Range<uint64_t>& r, Filter& chunk_filter, bool& has_filter, size_t count);
+
+    // 2. Read & filter active columns: reads active physical columns and
+    //    evaluates dict / expression filters.  Populates chunk_filter and
+    //    fills active_chunk.  Returns true if rows survive.
+    StatusOr<bool> _read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
+                                                   ChunkPtr& active_chunk, bool& has_filter, size_t count);
+
+    // ── Member variables ─────────────────────────────────────────────────────
+
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
@@ -185,6 +204,7 @@ private:
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
 
+<<<<<<< HEAD
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
 
@@ -200,6 +220,18 @@ private:
 
     ChunkPtr _read_chunk;
 
+=======
+    // Column materialization layer over ColumnReaders. Predicate classification
+    // still lives in GroupReader until the next refactor steps.
+    std::unique_ptr<ColumnMaterializer> _column_materializer;
+
+    // ── Variant handler (always present; empty() when no variant columns) ───
+    std::unique_ptr<VariantProjectionHandler> _variant;
+
+    // dict value is empty after conjunct eval, file group can be skipped
+    bool _is_group_filtered = false;
+
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
     // param for read row group
     const GroupReaderParam& _param;
 
@@ -209,16 +241,17 @@ private:
 
     int64_t _end_offset = 0;
 
+<<<<<<< HEAD
     // columns(index) use as dict filter column
     std::vector<int> _dict_column_indices;
     std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;
     std::unordered_map<SlotId, std::vector<ExprContext*>> _left_no_dict_filter_conjuncts_by_slot;
+=======
+    bool _global_dict_applied_in_group = false;
+>>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 
     SparseRange<uint64_t> _range;
     SparseRangeIterator<uint64_t> _range_iter;
-
-    // round by round ctx
-    std::unique_ptr<ColumnReadOrderCtx> _column_read_order_ctx;
 
     // a flag to reflect prepare() is called
     bool _has_prepared = false;
