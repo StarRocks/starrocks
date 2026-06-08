@@ -244,7 +244,7 @@ description: "Alphabetical i - p"
 ## `lake_compaction_output_segment_size_bytes`
 
 - 单位：字节
-- 类型：分布（以 gauge 序列暴露：`_count`、`_latency_50/90/99`、`_max_latency`）
+- 类型：分布（以 gauge 序列暴露：`_count`、`_latency_80/90/99`、`_max_latency`；分位数后缀由 BE 的 `bvar_latency_p1/p2/p3` 标志决定，默认 p1=80）
 - 描述：存算分离（lake）压缩任务生成的输出 Segment 文件大小分布。可通过百分位数发现产生大量小文件、增加对象存储 API 成本的低效压缩。注意：该指标基于 bvar `LatencyRecorder` 实现，因此其百分位序列名称带有 `_latency` 后缀，尽管单位为字节。
 
 ## `lake_vacuum_del_file_batch_size_minute`
