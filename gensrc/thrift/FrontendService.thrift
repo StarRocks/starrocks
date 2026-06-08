@@ -1618,6 +1618,10 @@ struct TPartitionMetaInfo {
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
     32: optional i64 path_id // deprecated
+    // [min, max] vector-index built-version span across the partition's base-index
+    // tablets. Only meaningful for tables with an async vector index (shared-data).
+    33: optional i64 min_vi_built_version
+    34: optional i64 max_vi_built_version
 }
 
 struct TGetPartitionsMetaResponse {
