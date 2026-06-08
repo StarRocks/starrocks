@@ -14,13 +14,22 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.sql.analyzer.Authorizer;
+>>>>>>> 467751f0b0 ([BugFix] Catch exceptions in MysqlProto to prevent ERROR 2013 (#70072))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -130,5 +139,38 @@ public class ChangeCatalogDBTest {
         Assertions.assertThrows(DdlException.class, () -> {
             ctx.changeCatalogDb("hive_catalog.nonexistent_db");
         });
+    }
+
+    @Test
+    void testChangeCatalogDbAccessDeniedThrowsRuntimeException(@Mocked MetadataMgr metadataMgr) {
+        new Expectations() {
+            {
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "secret_db");
+                result = new Database(201, "secret_db");
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx,
+                                               String catalogName, String db) throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+
+        ctx.setCurrentCatalog("default_catalog");
+        ctx.setThreadLocalInfo();
+
+        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () -> {
+            ctx.changeCatalogDb("secret_db");
+        });
+
+        Assertions.assertEquals(ErrorCode.ERR_ACCESS_DENIED, ex.getErrorCode(),
+                "Expected ERR_ACCESS_DENIED error code on exception");
+
+        Assertions.assertTrue(ctx.getState().isError(),
+                "QueryState should be ERR after access denied");
+        Assertions.assertEquals(ErrorCode.ERR_ACCESS_DENIED, ctx.getState().getErrorCode(),
+                "QueryState should carry ERR_ACCESS_DENIED error code");
     }
 }

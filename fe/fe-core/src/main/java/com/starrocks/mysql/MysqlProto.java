@@ -42,8 +42,11 @@ import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
+=======
+>>>>>>> 467751f0b0 ([BugFix] Catch exceptions in MysqlProto to prevent ERROR 2013 (#70072))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -188,7 +191,12 @@ public class MysqlProto {
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 context.changeCatalogDb(db);
-            } catch (DdlException e) {
+            } catch (Exception e) {
+                LOG.warn("Set database [{}] failed during negotiate, user={}, reason={}",
+                        db, authPacket.getUser(), e.getMessage(), e);
+                if (!context.getState().isError()) {
+                    context.getState().setError(e.getMessage());
+                }
                 sendResponsePacket(context);
                 return new NegotiateResult(authPacket, NegotiateState.SET_DATABASE_FAILED);
             }
@@ -233,6 +241,8 @@ public class MysqlProto {
         Set<Long> previousRoleIds = context.getCurrentRoleIds();
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
+        String previousCatalog = context.getCurrentCatalog();
+        String previousDb = context.getDatabase();
         // do authenticate again
 
         try {
@@ -250,16 +260,20 @@ public class MysqlProto {
         }
         // set database
         String db = changeUserPacket.getDb();
-        String originalDb = context.getDatabase();
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 context.changeCatalogDb(db);
-            } catch (DdlException e) {
-                LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
-                        previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
+            } catch (Exception e) {
+                LOG.warn("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
+                        previousQualifiedUser, changeUserPacket.getUser(), e.getMessage(), e);
+                if (!context.getState().isError()) {
+                    context.getState().setError(e.getMessage());
+                }
                 sendResponsePacket(context);
                 // reconstruct serializer with context capability
                 context.getSerializer().setCapability(context.getCapability());
+                context.setCurrentCatalog(previousCatalog);
+                context.setDatabase(previousDb);
                 // recover from previous user login info
                 context.getSessionVariable().setResourceGroup(previousResourceGroup);
                 context.setCurrentUserIdentity(previousUserIdentity);
@@ -280,15 +294,8 @@ public class MysqlProto {
             context.setCurrentUserIdentity(previousUserIdentity);
             context.setCurrentRoleIds(previousRoleIds);
             context.setQualifiedUser(previousQualifiedUser);
-
-            if (!context.getDatabase().equals(originalDb)) {
-                try {
-                    context.changeCatalogDb(originalDb);
-                } catch (DdlException e) {
-                    LOG.error("recover original database fail", e);
-                    return false;
-                }
-            }
+            context.setCurrentCatalog(previousCatalog);
+            context.setDatabase(previousDb);
             return false;
         }
 
