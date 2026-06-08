@@ -251,6 +251,9 @@ start_fe_no_meta()
     if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
         opts+=" --logconsole"
     fi
+    if [[ "${RESTORE_CLUSTER_SNAPSHOT}" == "true" ]] ; then
+             opts+=" --cluster_snapshot"
+    fi
     log_stderr "first start with no meta run start_fe.sh with additional options: '$opts'"
     $STARROCKS_HOME/bin/start_fe.sh $opts
 }
