@@ -40,7 +40,6 @@
 #include "exec/pipeline/primitives/fragment_runtime_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/primitives/query_runtime_state.h"
-#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/source_operator.h"
@@ -184,17 +183,17 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DCHECK(_fragment_runtime_state != nullptr);
     const auto use_cache = _fragment_runtime_state->enable_cache();
 
-    // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    // attach ticket_checker to both scan source operator and SplitMorselQueue
+    auto* driver_scan_op = dynamic_cast<DriverScanOperator*>(source_op);
     auto* ticketed_morsel_queue = dynamic_cast<TicketedMorselQueue*>(_morsel_queue);
     auto should_attach_ticket_checker =
-            (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
-            ticketed_morsel_queue != nullptr && ticketed_morsel_queue->could_attch_ticket_checker() &&
+            driver_scan_op != nullptr && _morsel_queue != nullptr && ticketed_morsel_queue != nullptr &&
+            ticketed_morsel_queue->could_attch_ticket_checker() &&
             (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
 
     if (should_attach_ticket_checker) {
-        auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
         auto ticket_checker = std::make_shared<SplitMorselTicketChecker>();
-        scan_op->set_ticket_checker(ticket_checker);
+        driver_scan_op->set_ticket_checker(ticket_checker);
         ticketed_morsel_queue->set_ticket_checker(ticket_checker);
     }
 
@@ -272,9 +271,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     multilane_op != nullptr) {
                     multilane_op->set_lane_arbiter(lane_arbiter);
                     multilane_operators.push_back(multilane_op);
-                } else if (auto* scan_op = dynamic_cast<ScanOperator*>(op.get()); scan_op != nullptr) {
+                } else if (auto* scan_op = dynamic_cast<DriverScanOperator*>(op.get()); scan_op != nullptr) {
                     scan_op->set_cache_context(cache_context);
-                    cache_context->set_scan_operator(scan_op);
+                    cache_context->set_scan_operator(op.get());
                 }
             }
             cache_context->set_multilane_operators(std::move(multilane_operators));
@@ -350,14 +349,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     int64_t time_spent = 0;
     Status return_status = Status::OK();
     DeferOp defer([&]() {
-        if (ScanOperator* scan = source_scan_operator()) {
-            scan->end_driver_process(this);
+        if (auto* scan = source_driver_scan_operator()) {
+            scan->end_driver_process(_state);
         }
 
         _update_statistics(runtime_state, total_chunks_moved, total_rows_moved, time_spent);
     });
 
-    if (ScanOperator* scan = source_scan_operator()) {
+    if (auto* scan = source_driver_scan_operator()) {
         scan->begin_driver_process();
     }
 
@@ -372,7 +371,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         int64_t process_time_ns = 0;
 
         DeferOp defer2([&]() {
-            if (ScanOperator* scan = source_scan_operator()) {
+            if (auto* scan = source_driver_scan_operator()) {
                 scan->end_pull_chunk(process_time_ns);
             }
         });
@@ -1070,7 +1069,7 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
 }
 
 void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
-    if (ScanOperator* scan = source_scan_operator()) {
+    if (auto* scan = source_driver_scan_operator()) {
         int64_t scan_rows = scan->get_last_scan_rows_num();
         int64_t scan_bytes = scan->get_last_scan_bytes();
         int64_t table_id = scan->get_scan_table_id();

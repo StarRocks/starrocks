@@ -21,6 +21,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/spill/dir_manager.h"
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
@@ -30,7 +31,10 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "pipeline_test_base.h"
+#include "runtime/exec_env.h"
 #include "runtime/service_contexts.h"
 
 #define ASSERT_COUNTER_LIFETIME(counter, dop)       \
@@ -541,6 +545,112 @@ private:
     Status _prepare_status;
 };
 
+class TestTicketedMorselQueue final : public MorselQueue, public TicketedMorselQueue {
+public:
+    bool empty() const override { return true; }
+    StatusOr<MorselPtr> try_get() override { return MorselPtr(); }
+    std::string name() const override { return "test_ticketed_morsel_queue"; }
+    Type type() const override { return DYNAMIC; }
+
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
+        this->ticket_checker = ticket_checker;
+    }
+    bool could_attch_ticket_checker() const override { return true; }
+
+    SplitMorselTicketCheckerPtr ticket_checker;
+};
+
+class TestDriverScanSourceOperator final : public SourceOperator, public DriverScanOperator {
+public:
+    TestDriverScanSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                                 int64_t scan_rows, int64_t table_id)
+            : SourceOperator(factory, id, "test_driver_scan_source", plan_node_id, false, driver_sequence),
+              _table_id(table_id) {
+        _chunk = PipelineTestBase::_create_and_fill_chunk(scan_rows);
+        _expected_scan_bytes = _chunk->bytes_usage();
+    }
+
+    Status prepare(RuntimeState* state) override {
+        RETURN_IF_ERROR(SourceOperator::prepare(state));
+        return Status::OK();
+    }
+
+    bool has_output() const override { return !_emitted; }
+    bool is_finished() const override { return _emitted; }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override {
+        _emitted = true;
+        _last_scan_rows_num = _chunk->num_rows();
+        _last_scan_bytes = _chunk->bytes_usage();
+        return _chunk;
+    }
+
+    workgroup::ScanSchedEntityType sched_entity_type() const override { return workgroup::ScanSchedEntityType::OLAP; }
+    void set_scan_executor(workgroup::ScanExecutor* scan_executor) override { _scan_executor = scan_executor; }
+    void set_workgroup(workgroup::WorkGroupPtr wg) override { _workgroup = std::move(wg); }
+    void set_query_ctx(const QueryContextPtr& query_ctx) override { _query_ctx = query_ctx; }
+    void set_cache_context(const query_cache::ScanCacheContextPtr& cache_context) override {
+        _cache_context = cache_context;
+    }
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
+
+    int64_t get_last_scan_rows_num() override { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() override { return _last_scan_bytes.exchange(0); }
+    int64_t get_scan_table_id() const override { return _table_id; }
+
+    void begin_driver_process() override { ++begin_driver_process_count; }
+    void end_driver_process(DriverState driver_state) override {
+        ++end_driver_process_count;
+        last_driver_state = driver_state;
+    }
+    void end_pull_chunk(int64_t time_ns) override {
+        ++end_pull_chunk_count;
+        pull_chunk_time_ns += time_ns;
+    }
+
+    int64_t expected_scan_bytes() const { return _expected_scan_bytes; }
+    const SplitMorselTicketCheckerPtr& ticket_checker() const { return _ticket_checker; }
+
+    int begin_driver_process_count = 0;
+    int end_driver_process_count = 0;
+    int end_pull_chunk_count = 0;
+    int64_t pull_chunk_time_ns = 0;
+    DriverState last_driver_state = DriverState::NOT_READY;
+
+private:
+    ChunkPtr _chunk;
+    bool _emitted = false;
+    const int64_t _table_id;
+    int64_t _expected_scan_bytes = 0;
+    std::atomic<int64_t> _last_scan_rows_num = 0;
+    std::atomic<int64_t> _last_scan_bytes = 0;
+    workgroup::ScanExecutor* _scan_executor = nullptr;
+    workgroup::WorkGroupPtr _workgroup;
+    QueryContextPtr _query_ctx;
+    query_cache::ScanCacheContextPtr _cache_context;
+    SplitMorselTicketCheckerPtr _ticket_checker;
+};
+
+class TestDriverScanSourceOperatorFactory final : public SourceOperatorFactory {
+public:
+    TestDriverScanSourceOperatorFactory(int32_t id, int32_t plan_node_id, int64_t scan_rows, int64_t table_id)
+            : SourceOperatorFactory(id, "test_driver_scan_source", plan_node_id),
+              _scan_rows(scan_rows),
+              _table_id(table_id) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<TestDriverScanSourceOperator>(this, _id, _plan_node_id, driver_sequence, _scan_rows,
+                                                              _table_id);
+    }
+
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+
+private:
+    int64_t _scan_rows;
+    int64_t _table_id;
+};
+
 class TestPipelineDriver final : public PipelineDriver {
 public:
     using PipelineDriver::PipelineDriver;
@@ -567,6 +677,8 @@ struct SpillDriverTestHarness {
         query_execution_services.runtime = &runtime_services;
         query_ctx.set_query_id(generate_uuid());
         query_ctx.set_query_execution_services(&query_execution_services);
+        query_ctx.init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                   GlobalEnv::GetInstance()->query_pool_mem_tracker());
         EXPECT_OK(query_ctx.init_spill_manager(TQueryOptions{}));
         EXPECT_EQ(query_ctx.spill_manager(), query_ctx.query_runtime_state().query_spill_manager());
         query_ctx.set_query_execution_services(nullptr);
@@ -577,6 +689,7 @@ struct SpillDriverTestHarness {
         runtime_state->set_query_execution_services(&query_execution_services);
         runtime_state->set_query_runtime_state(&query_ctx.query_runtime_state());
         runtime_state->set_fragment_ctx(&fragment_ctx);
+        runtime_state->init_mem_trackers(query_ctx.mem_tracker());
         fragment_ctx.set_runtime_state(std::move(runtime_state));
     }
 
@@ -729,6 +842,50 @@ TEST(PipelineDriverFragmentRuntimeStateTest, test_cancelled_state_uses_fragment_
 
     EXPECT_TRUE(driver.check_fragment_is_canceled_for_test(harness.state()));
     EXPECT_EQ(DriverState::CANCELED, driver.driver_state());
+}
+
+TEST(PipelineDriverScanInterfaceTest, test_prepare_attaches_ticket_checker_to_driver_scan_interface) {
+    SpillDriverTestHarness harness;
+    harness.fragment_ctx.fragment_runtime_state().set_enable_cache(true);
+    TestDriverScanSourceOperatorFactory source_factory(1, 10, 1, 100);
+    TestSinkOperatorFactory sink_factory(2, 20, std::make_shared<Counter>());
+    auto source = std::static_pointer_cast<TestDriverScanSourceOperator>(source_factory.create(1, 0));
+    Operators operators{source, sink_factory.create(1, 0)};
+    TestTicketedMorselQueue morsel_queue;
+
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
+                              &harness.pipeline, nullptr, -1);
+    driver.set_morsel_queue(&morsel_queue);
+
+    ASSERT_OK(driver.prepare(harness.state()));
+    ASSERT_NE(nullptr, source->ticket_checker());
+    EXPECT_EQ(source->ticket_checker(), morsel_queue.ticket_checker);
+}
+
+TEST(PipelineDriverScanInterfaceTest, test_process_uses_driver_scan_interface_hooks_and_stats) {
+    SpillDriverTestHarness harness;
+    TestDriverScanSourceOperatorFactory source_factory(1, 10, 3, 100);
+    TestSinkOperatorFactory sink_factory(2, 20, std::make_shared<Counter>());
+    auto source = std::static_pointer_cast<TestDriverScanSourceOperator>(source_factory.create(1, 0));
+    const auto expected_scan_bytes = source->expected_scan_bytes();
+    Operators operators{source, sink_factory.create(1, 0)};
+
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
+                              &harness.pipeline, nullptr, -1);
+
+    ASSERT_OK(driver.prepare(harness.state()));
+    ASSERT_OK(driver.prepare_local_state(harness.state()));
+    ASSIGN_OR_ABORT(auto driver_state, driver.process(harness.state(), 0));
+
+    EXPECT_EQ(DriverState::FINISH, driver_state);
+    EXPECT_EQ(1, source->begin_driver_process_count);
+    EXPECT_EQ(1, source->end_driver_process_count);
+    EXPECT_EQ(DriverState::FINISH, source->last_driver_state);
+    EXPECT_GT(source->end_pull_chunk_count, 0);
+    EXPECT_EQ(3, harness.query_ctx.query_runtime_state().cur_scan_rows_num());
+    EXPECT_EQ(expected_scan_bytes, harness.query_ctx.query_runtime_state().get_scan_bytes());
 }
 
 TEST_F(TestPipelineControlFlow, test_two_operatories) {

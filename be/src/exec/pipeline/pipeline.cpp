@@ -22,9 +22,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/schema_scan_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -106,7 +104,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     for (size_t i = 0; i < dop; ++i) {
         auto& driver = _drivers[i];
         driver->set_morsel_queue(morsel_queue_factory->create(i));
-        if (auto* scan_operator = driver->source_scan_operator()) {
+        if (auto* scan_operator = driver->source_driver_scan_operator()) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
