@@ -672,15 +672,6 @@ public:
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
 
-    // Materialize the global dictionaries referenced by dict-aware aggregate functions. Must be
-    // called from an OperatorFactory::prepare (single-threaded fragment setup, same invariant
-    // get_or_create relies on), never from the per-driver Aggregator::prepare, because
-    // materialization mutates the unlocked global-dict map. Idempotent: repeated serial calls
-    // (e.g. from both the sink and source factories) are harmless.
-    Status prepare_dict_slots(RuntimeState* state) {
-        return prepare_aggregate_dict_slots(state, _aggregator_param->aggregate_functions);
-    }
-
     const AggregatorParamsPtr& aggregator_param() { return _aggregator_param; }
 
     const TPlanNode& t_node() { return _tnode; }
