@@ -49,7 +49,7 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
     auto* runtime_state = driver->fragment_ctx()->runtime_state();
     if (runtime_state->is_cancelled() && !driver->is_operator_cancelled()) {
         add_to_ready_queue = true;
-    } else if (driver->need_report_exec_state()) {
+    } else if (!driver->is_finished() && driver->fragment_ctx()->need_report_exec_state()) {
         add_to_ready_queue = true;
     } else if (driver->pending_finish()) {
         if (!driver->is_still_pending_finish()) {

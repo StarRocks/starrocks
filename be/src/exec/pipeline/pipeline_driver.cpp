@@ -604,22 +604,6 @@ bool PipelineDriver::dependencies_block() {
     return !_all_dependencies_ready;
 }
 
-bool PipelineDriver::need_report_exec_state() {
-    if (is_finished()) {
-        return false;
-    }
-
-    return _fragment_ctx->need_report_exec_state();
-}
-
-void PipelineDriver::report_exec_state_if_necessary() {
-    if (is_finished()) {
-        return;
-    }
-
-    _fragment_ctx->report_exec_state_if_necessary();
-}
-
 void PipelineDriver::runtime_report_action() {
     if (is_finished()) {
         return;

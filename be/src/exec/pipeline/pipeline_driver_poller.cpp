@@ -117,7 +117,7 @@ void PipelineDriverPoller::run_internal() {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
-                } else if (driver->need_report_exec_state()) {
+                } else if (!driver->is_finished() && driver->fragment_ctx()->need_report_exec_state()) {
                     // If the runtime profile is enabled, the driver should be rescheduled after the timeout for triggering
                     // the profile report prcessing.
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
