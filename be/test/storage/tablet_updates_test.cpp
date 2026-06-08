@@ -16,6 +16,7 @@
 
 #include <random>
 
+#include "http/action/compaction_action.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
@@ -4521,6 +4522,103 @@ TEST_F(TabletUpdatesTest, test_make_snapshot_on_tablet_meta_keep_rowsets) {
 
     ASSERT_TRUE(has_meta_file);
     ASSERT_TRUE(still_has_rowset_files);
+}
+
+// Manual compaction of a primary-key tablet goes through run_manual_compaction's updates() branch,
+// which now wraps the parent compaction tracker in a Compaction-<tablet_id> child before delegating to
+// TabletUpdates::compaction. Exercise that path end to end and assert the rowsets are merged.
+TEST_F(TabletUpdatesTest, test_run_manual_compaction) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // Wait for all three commits to apply, otherwise compaction may snapshot a subset of the rowsets.
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    // compaction_type is ignored for primary-key tablets; rowset_ids empty means compact the whole tablet.
+    ASSERT_OK(CompactionAction::do_compaction(_tablet->tablet_id(), "", ""));
+    // compaction() only commits the compaction edit; the rowset replacement applies asynchronously.
+    _tablet->updates()->wait_apply_done();
+
+    ASSERT_EQ(1, _tablet->updates()->num_rowsets());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    EXPECT_TRUE(_tablet->verify().ok());
+}
+
+// Same path but with an explicit rowset_ids list, exercising run_manual_compaction's
+// compaction(mem_tracker.get(), rowset_ids) branch (the one that also backs repair compaction).
+TEST_F(TabletUpdatesTest, test_run_manual_compaction_with_rowset_ids) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // Wait for all three commits to apply before snapshotting the rowset ids to compact.
+    _tablet->updates()->wait_apply_done();
+
+    std::vector<uint32_t> rowset_ids;
+    size_t total_bytes = 0;
+    ASSERT_OK(_tablet->updates()->get_rowsets_for_compaction(INT64_MAX, rowset_ids, total_bytes));
+    ASSERT_FALSE(rowset_ids.empty());
+    std::string rowset_ids_string;
+    for (auto id : rowset_ids) {
+        if (!rowset_ids_string.empty()) {
+            rowset_ids_string += ",";
+        }
+        rowset_ids_string += std::to_string(id);
+    }
+
+    ASSERT_OK(CompactionAction::do_compaction(_tablet->tablet_id(), "", rowset_ids_string));
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    EXPECT_TRUE(_tablet->verify().ok());
+}
+
+// Manual compaction submitted through the task queue runs StorageEngine::do_manual_compaction, which
+// also wraps the parent tracker in a Compaction-<tablet_id> child before delegating to TabletUpdates.
+TEST_F(TabletUpdatesTest, test_do_manual_compaction_via_task_queue) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // Wait for all three commits to apply; do_manual_compaction snapshots the rowsets via
+    // get_rowsets_for_compaction, so an unapplied commit would be left out and num_rowsets would be > 1.
+    _tablet->updates()->wait_apply_done();
+
+    StorageEngine::instance()->submit_manual_compaction_task(_tablet->tablet_id(), INT64_MAX);
+    ASSERT_TRUE(run_pending_manual_compaction());
+    _tablet->updates()->wait_apply_done();
+
+    ASSERT_EQ(1, _tablet->updates()->num_rowsets());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    EXPECT_TRUE(_tablet->verify().ok());
 }
 
 } // namespace starrocks
