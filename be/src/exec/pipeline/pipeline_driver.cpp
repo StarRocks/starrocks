@@ -34,7 +34,6 @@
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/primitives/fragment_runtime_state.h"
@@ -63,7 +62,7 @@ size_t spill_expected_reserved_bytes(const QueryRuntimeState* query_runtime_stat
 
 PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx,
                                QueryRuntimeState* query_runtime_state, FragmentRuntimeState* fragment_runtime_state,
-                               FragmentContext* fragment_ctx, Pipeline* pipeline, DriverObserver* driver_observer,
+                               FragmentContext* fragment_ctx, Event* pipeline_event, DriverObserver* driver_observer,
                                PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id)
         : _observer(this),
           _operator_mem_resource_managers(operators.size()),
@@ -72,7 +71,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
           _query_runtime_state(query_runtime_state),
           _fragment_runtime_state(fragment_runtime_state),
           _fragment_ctx(fragment_ctx),
-          _pipeline(pipeline),
+          _pipeline_event(pipeline_event),
           _driver_observer(driver_observer),
           _pipeline_timer_context(std::move(pipeline_timer_context)),
           _source_node_id(operators[0]->get_plan_node_id()),
@@ -87,7 +86,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
         : PipelineDriver(driver._operators, driver._query_ctx, driver._query_runtime_state,
-                         driver._fragment_runtime_state, driver._fragment_ctx, driver._pipeline,
+                         driver._fragment_runtime_state, driver._fragment_ctx, driver._pipeline_event,
                          driver._driver_observer, driver._pipeline_timer_context, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
@@ -98,7 +97,7 @@ PipelineDriver::PipelineDriver()
           _query_runtime_state(nullptr),
           _fragment_runtime_state(nullptr),
           _fragment_ctx(nullptr),
-          _pipeline(nullptr),
+          _pipeline_event(nullptr),
           _driver_observer(nullptr),
           _pipeline_timer_context(nullptr),
           _source_node_id(0),
@@ -166,6 +165,10 @@ void PipelineDriver::prepare_profile() {
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    if (_pipeline_event == nullptr) {
+        return Status::InternalError("PipelineDriver requires a pipeline event");
+    }
+
     DeferOp defer([&]() {
         if (this->_state != DriverState::READY) {
             LOG(WARNING) << get_raw_string_name() << " prepare failed";
@@ -300,7 +303,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
 
     // Driver has no dependencies always sets _all_dependencies_ready to true;
-    _all_dependencies_ready = _dependencies.empty() && !_pipeline->pipeline_event()->need_wait_dependencies_finished();
+    _all_dependencies_ready = _dependencies.empty() && !_pipeline_event->need_wait_dependencies_finished();
     // Driver has no local rf to wait for completion always sets _all_local_rf_ready to true;
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
@@ -600,10 +603,9 @@ bool PipelineDriver::dependencies_block() {
     if (_all_dependencies_ready) {
         return false;
     }
-    auto pipline_event = _pipeline->pipeline_event();
     _all_dependencies_ready =
             std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); }) &&
-            (!pipline_event->need_wait_dependencies_finished() || pipline_event->dependencies_finished());
+            (!_pipeline_event->need_wait_dependencies_finished() || _pipeline_event->dependencies_finished());
     return !_all_dependencies_ready;
 }
 
