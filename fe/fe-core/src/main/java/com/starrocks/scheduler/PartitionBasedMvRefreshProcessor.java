@@ -1413,9 +1413,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             baseTableInfo.getTableInfoStr());
                 }
 
-                // Check if the table is an Iceberg table with partition evolution
                 Table table = tableOpt.get();
-                if (table instanceof IcebergTable) {
+                // Non-partitioned MVs do full refresh without base partition mapping.
+                if (table instanceof IcebergTable && !mv.getPartitionInfo().isUnPartitioned()) {
                     IcebergTable icebergTable = (IcebergTable) table;
                     if (icebergTable.getNativeTable().specs().size() > 1) {
                         throw new DmlException("Do not support refresh materialized view when base iceberg table " +
