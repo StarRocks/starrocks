@@ -114,6 +114,10 @@ CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
 
+// Enable dictionary-code based optimizations for nested Parquet fields. Turn this off to avoid exposing
+// temporary dictionary-code columns through complex column readers while diagnosing nested string subfield crashes.
+CONF_mBool(parquet_nested_dict_code_optimization_enable, "true");
+
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 
 CONF_Double(parquet_page_cache_decompress_threshold, "1.5");
