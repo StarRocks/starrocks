@@ -1125,8 +1125,13 @@ Status ArrayFunctions::array_contains_generic_prepare(FunctionContext* context,
     if (dict_slots.empty() || dict_slots[0] < 0) {
         return Status::OK(); // array is not dict-encoded -> generic (decoded) path
     }
+
+    // The FE only marks arg0 dict-encoded when the element (arg1) is a constant, so its dictionary
+    // code can be resolved once here. Reaching this with a non-constant (or null-constant) element
+    // is an inconsistent plan: arg0 arrives encoded, so the generic decoded path cannot evaluate it.
+    DCHECK(context->is_constant_column(1));
     if (!context->is_notnull_constant_column(1)) {
-        return Status::OK(); // element is not a constant -> generic path
+        return Status::InternalError("array_contains: dict-encoded array requires a non-null constant element");
     }
 
     // arg0 is dict-encoded, so it arrives as integer codes; a global dictionary MUST exist for its
