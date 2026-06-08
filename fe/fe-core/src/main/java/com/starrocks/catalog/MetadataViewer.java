@@ -166,17 +166,19 @@ public class MetadataViewer {
                             // get missing replicas
                             for (int i = 0; i < count; ++i) {
                                 List<String> row = Lists.newArrayList();
-                                row.add(String.valueOf(tabletId));
-                                row.add("-1");
-                                row.add("-1");
-                                row.add("-1");
-                                row.add("-1");
-                                row.add("-1");
-                                row.add("-1");
-                                row.add("-1");
-                                row.add(FeConstants.NULL_STRING);
-                                row.add(FeConstants.NULL_STRING);
-                                row.add(ReplicaStatus.MISSING.name());
+                                row.add(String.valueOf(tabletId));     // TabletId
+                                row.add("-1");                         // ReplicaId
+                                row.add("-1");                         // BackendId
+                                row.add("-1");                         // Version
+                                row.add("-1");                         // LastFailedVersion
+                                row.add("-1");                         // LastSuccessVersion
+                                row.add("-1");                         // CommittedVersion
+                                row.add("-1");                         // SchemaHash
+                                row.add(FeConstants.NULL_STRING);      // VersionNum
+                                row.add(FeConstants.NULL_STRING);      // IsBad
+                                row.add(FeConstants.NULL_STRING);      // IsSetBadForce
+                                row.add(FeConstants.NULL_STRING);      // State
+                                row.add(ReplicaStatus.MISSING.name()); // Status
                                 result.add(row);
                             }
                         }
