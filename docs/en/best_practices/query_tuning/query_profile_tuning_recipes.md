@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', 'tune']
 sidebar_position: 40
 ---
 
