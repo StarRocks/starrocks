@@ -96,3 +96,20 @@ AS SELECT a.k1, SUM(a.s) AS x FROM agg_jb a JOIN dup_jb d ON a.k1 = d.k GROUP BY
 -- result:
 [REGEX].*IVM on cloud-native AGGREGATE KEY base 'agg_jb' is only supported when the base table is the sole FROM source.*
 -- !result
+
+-- name: test_ivm_agg_approx_count_distinct_rejected @cloud
+CREATE TABLE apx_b (k INT, uid INT SUM) AGGREGATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO apx_b VALUES (1,100),(2,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_apx
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, APPROX_COUNT_DISTINCT(uid) AS a FROM apx_b GROUP BY k;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: IVM on cloud-native AGGREGATE KEY base 'apx_b' does not support aggregate 'approx_count_distinct'; AGG_KEYS base only accepts delta-rollup-compatible aggregates [sum, max, min].")
+-- !result

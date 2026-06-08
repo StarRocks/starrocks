@@ -110,3 +110,54 @@ SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%not active due to base-table optimiz
 FROM information_schema.task_runs
 WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_rs%' OR DEFINITION LIKE '%mv_tr_rs%')
   AND STATE = 'FAILED';
+
+-- name: test_ivm_drop_base_rejected @cloud
+CREATE TABLE dpb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO dpb VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_dpb
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM dpb;
+REFRESH MATERIALIZED VIEW mv_dpb WITH SYNC MODE;
+SELECT k, v FROM mv_dpb ORDER BY k;
+DROP TABLE dpb;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table dropped%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_dpb';
+
+-- name: test_ivm_rename_base_rejected @cloud
+CREATE TABLE rnb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO rnb VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_rnb
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM rnb;
+REFRESH MATERIALIZED VIEW mv_rnb WITH SYNC MODE;
+SELECT k, v FROM mv_rnb ORDER BY k;
+ALTER TABLE rnb RENAME rnb_renamed;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table renamed%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_rnb';
+
+-- name: test_ivm_swap_base_rejected @cloud
+CREATE TABLE swb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE swb_other (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO swb VALUES (1,10),(2,20);
+INSERT INTO swb_other VALUES (9,90);
+CREATE MATERIALIZED VIEW mv_swb
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM swb;
+REFRESH MATERIALIZED VIEW mv_swb WITH SYNC MODE;
+SELECT k, v FROM mv_swb ORDER BY k;
+ALTER TABLE swb SWAP WITH swb_other;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table swapped%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_swb';

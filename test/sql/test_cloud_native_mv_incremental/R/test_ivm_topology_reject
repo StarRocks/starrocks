@@ -224,3 +224,103 @@ WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_tr_rs%' OR DEFINITION
 -- result:
 FAILED	1
 -- !result
+
+-- name: test_ivm_drop_base_rejected @cloud
+CREATE TABLE dpb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dpb VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dpb
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM dpb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dpb WITH SYNC MODE;
+SELECT k, v FROM mv_dpb ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+DROP TABLE dpb;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table dropped%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_dpb';
+-- result:
+false	1
+-- !result
+
+-- name: test_ivm_rename_base_rejected @cloud
+CREATE TABLE rnb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO rnb VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_rnb
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM rnb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_rnb WITH SYNC MODE;
+SELECT k, v FROM mv_rnb ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+ALTER TABLE rnb RENAME rnb_renamed;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table renamed%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_rnb';
+-- result:
+false	1
+-- !result
+
+-- name: test_ivm_swap_base_rejected @cloud
+CREATE TABLE swb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE swb_other (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO swb VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO swb_other VALUES (9,90);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_swb
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM swb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_swb WITH SYNC MODE;
+SELECT k, v FROM mv_swb ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+ALTER TABLE swb SWAP WITH swb_other;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table swapped%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_swb';
+-- result:
+false	1
+-- !result

@@ -174,3 +174,62 @@ AS SELECT k, v FROM uk_b;
 -- result:
 [REGEX].*IVM on cloud-native UNIQUE_KEYS base 'uk_b' is not supported: the CDC delta stream is append-only and cannot maintain replace/upsert semantics, so the MV would retain stale rows after a key update.*
 -- !result
+
+-- name: test_ivm_limit_rejected @cloud
+CREATE TABLE lim_b (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO lim_b VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_lim
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM lim_b LIMIT 100;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to generate IVM refresh plan at CREATE time: Getting analyzing error. Detail message: IVM rewrite failed to fully resolve incremental markers; remaining operators cannot be processed incrementally..')
+-- !result
+
+-- name: test_ivm_cte_rejected @cloud
+CREATE TABLE cte_b (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO cte_b VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cte
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS WITH c AS (SELECT k, v FROM cte_b) SELECT k, v FROM c;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support inner relation type: CTERelation.')
+-- !result
+
+-- name: test_ivm_mv_on_mv_rejected @cloud
+CREATE TABLE mom_b (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO mom_b VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mom_mv1
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM mom_b;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mom_mv1 WITH SYNC MODE;
+CREATE MATERIALIZED VIEW mom_mv2
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM mom_mv1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: IVM on cloud-native PRIMARY_KEYS base 'mom_mv1' is not supported: the CDC delta stream is append-only and cannot maintain replace/upsert semantics, so the MV would retain stale rows after a key update.")
+-- !result
