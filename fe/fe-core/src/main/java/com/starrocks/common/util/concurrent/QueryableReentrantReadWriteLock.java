@@ -47,6 +47,16 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     AtomicLong exclusiveLockTime = new AtomicLong(-1L);
 
+    // Per-instance throttle gates for the three slow-lock log tiers (see SlowLockLogDecision).
+    // Monotonic-clock timestamps (System.nanoTime → ms) so NTP adjustments cannot stretch or
+    // short-circuit the intervals. Per-instance scope so one chronically slow lock cannot starve
+    // the throttle quota of other lock instances (the production symptom that prompted these
+    // throttles). Initialized to the shared GATE_INIT_SENTINEL ("sufficiently in the past") so the
+    // first event always wins regardless of where System.nanoTime() anchors its origin.
+    private final AtomicLong lastStackPrintMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL); // L1
+    private final AtomicLong lastSlowLogMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);    // L2
+    private final AtomicLong lastBriefMs = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL); // L3
+
     public QueryableReentrantReadWriteLock() {
         super();
     }
@@ -85,6 +95,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
         JsonObject currentLockInfo = null;
         boolean interrupted = false;
         long startTime = System.currentTimeMillis();
+        SlowLockLogDecision decision = SlowLockLogDecision.SUPPRESS;
         try {
             if (isExclusive) {
                 if (this.tryExclusiveLock(slowLockThreshold, unit)) {
@@ -95,11 +106,16 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
                     return;
                 }
             }
-            // Slow lock detected, get lock info before acquiring the lock again.
-            // NOTE: Between checking timeout and calling getLockInfoToJson(), lock state might change.
-            // Current state captured may not match final acquisition state. However, this is acceptable
-            // for debugging purposes (approximately accurate is good enough)
-            currentLockInfo = this.getLockInfoToJson(null);
+            // Slow lock detected. Make the tier decision exactly once (this is the only place the
+            // per-instance throttle gates are touched), then render accordingly:
+            //   L1/L2 -> capture a lock-info snapshot now (state may shift slightly before we
+            //            re-acquire; acceptable for diagnostics),
+            //   L3    -> emit only a plain-text brief (built below, no snapshot),
+            //   SUPPRESS -> stay silent.
+            decision = decideSlowLockLog(hasHolder());
+            if (decision.shouldLog() && !decision.isBrief()) {
+                currentLockInfo = this.getLockInfoToJson(null, decision);
+            }
         } catch (InterruptedException exception) {
             interrupted = true;
         }
@@ -109,10 +125,17 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
             } else {
                 this.sharedLock();
             }
-            if (currentLockInfo != null) {
+            if (decision.shouldLog()) {
                 long waitTime = System.currentTimeMillis() - startTime;
-                LOG.warn("slow lock detected on lock (isExclusive={}). waitTime: {}ms, lockInfo: {}",
-                        isExclusive, waitTime, currentLockInfo);
+                if (decision.isBrief()) {
+                    // Floor tier: leave evidence that a slow lock happened without the expensive
+                    // JSON/stack payload.
+                    LOG.warn("slow lock (throttled detail) detected on lock (isExclusive={}). waitTime: {}ms",
+                            isExclusive, waitTime);
+                } else {
+                    LOG.warn("slow lock detected on lock (isExclusive={}). waitTime: {}ms, lockInfo: {}",
+                            isExclusive, waitTime, currentLockInfo);
+                }
             }
         } finally {
             if (interrupted) {
@@ -120,6 +143,20 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
                 Thread.currentThread().interrupt();
             }
         }
+    }
+
+    /** Whether this lock currently has an exclusive owner or any shared reader to dump a stack for. */
+    boolean hasHolder() {
+        return getOwner() != null || !sharedLockThreads.isEmpty();
+    }
+
+    /**
+     * Make the single per-event slow-lock tier decision for this lock instance, consuming the
+     * per-instance throttle gates. See {@link SlowLockLogDecision#decide}.
+     */
+    SlowLockLogDecision decideSlowLockLog(boolean hasHolder) {
+        long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        return SlowLockLogDecision.decide(hasHolder, lastStackPrintMs, lastSlowLogMs, lastBriefMs, monoNowMs);
     }
 
     public void exclusiveLock() {
@@ -200,9 +237,15 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
      *                   if it's null, we dump the owner thread(if exists) of this lock
      * @return The lock information
      */
-    public JsonObject getLockInfoToJson(Thread currThread) {
+    public JsonObject getLockInfoToJson(Thread currThread, SlowLockLogDecision decision) {
         JsonObject lockInfoJsonObj = new JsonObject();
+        int waiterCap = Config.slow_lock_max_waiter_count_to_log;
 
+        // The stack-capture decision was made once by the caller (decideSlowLockLog) and is read
+        // here as decision.captureStack — this method never touches the throttle gates itself, so a
+        // caller can pass SUPPRESS to get a cheap, stack-less structural snapshot without consuming
+        // any quota.
+        boolean captureStack = decision.captureStack;
         if (currThread == null) {
             lockInfoJsonObj.addProperty("isFairLock", isFair());
             JsonObject ownerInfoJsonObj = new JsonObject();
@@ -210,14 +253,16 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
             if (owner == null) {
                 ownerInfoJsonObj.addProperty("status", "shared");
                 // For performance reason, only output the stack trace and other info of oldest reader.
-                ownerInfoJsonObj.add("oldestReader", getOldestSharedLockHolderInfo());
+                ownerInfoJsonObj.add("oldestReader", getOldestSharedLockHolderInfo(captureStack));
             } else {
                 ownerInfoJsonObj.addProperty("status", "exclusive");
                 ownerInfoJsonObj.addProperty("id", owner.getId());
                 ownerInfoJsonObj.addProperty("name", owner.getName());
-                ownerInfoJsonObj.add("stack",
-                        LogUtil.getStackTraceToJsonArray(owner, 0,
-                                Config.slow_lock_stack_trace_reserve_levels));
+                if (captureStack) {
+                    ownerInfoJsonObj.add("stack",
+                            LogUtil.getStackTraceToJsonArray(owner, 0,
+                                    Config.slow_lock_stack_trace_reserve_levels));
+                }
             }
             // append owner info
             lockInfoJsonObj.add("holderInfo", ownerInfoJsonObj);
@@ -225,18 +270,21 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
             JsonObject currentLockHolderJObj = new JsonObject();
             currentLockHolderJObj.addProperty("id", currThread.getId());
             currentLockHolderJObj.addProperty("name", currThread.getName());
-            currentLockHolderJObj.add("stack",
-                    LogUtil.getStackTraceToJsonArray(currThread, 6,
-                            Config.slow_lock_stack_trace_reserve_levels));
+            if (captureStack) {
+                currentLockHolderJObj.add("stack",
+                        LogUtil.getStackTraceToJsonArray(currThread, 6,
+                                Config.slow_lock_stack_trace_reserve_levels));
+            }
             // append current lock holder info
             lockInfoJsonObj.add("holderInfo", currentLockHolderJObj);
         }
 
-        // append waiters info
+        // append waiters info, capped by slow_lock_max_waiter_count_to_log to bound
+        // log line size under extreme contention; remainder is summarized as a trailer.
         lockInfoJsonObj.add("queuedReaders",
-                LockChecker.getLockWaiterInfoJsonArray(getQueuedReaderThreads()));
+                LockChecker.getLockWaiterInfoJsonArray(getQueuedReaderThreads(), waiterCap));
         lockInfoJsonObj.add("queuedWriters",
-                LockChecker.getLockWaiterInfoJsonArray(getQueuedWriterThreads()));
+                LockChecker.getLockWaiterInfoJsonArray(getQueuedWriterThreads(), waiterCap));
 
         return lockInfoJsonObj;
     }
@@ -255,12 +303,15 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
         return readerInfos;
     }
 
-    private JsonObject getOldestSharedLockHolderInfo() {
+    private JsonObject getOldestSharedLockHolderInfo(boolean captureStack) {
         Thread oldestReaderThread = getSharedLockThreads().stream().max((a, b) ->
                 (int) (computeLockHeldTime(getSharedLockStartTimeMs(a)) -
                         computeLockHeldTime(getSharedLockStartTimeMs(b)))).orElse(null);
-        return oldestReaderThread == null ? new JsonObject() : getReaderInfo(
-                true,
+        if (oldestReaderThread == null) {
+            return new JsonObject();
+        }
+        return getReaderInfo(
+                captureStack,
                 oldestReaderThread,
                 computeLockHeldTime(getSharedLockStartTimeMs(oldestReaderThread)),
                 Config.slow_lock_stack_trace_reserve_levels);
