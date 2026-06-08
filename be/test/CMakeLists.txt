@@ -656,6 +656,11 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
+<<<<<<< HEAD
+=======
+    ./storage/storage_metrics_test.cpp
+    ./storage/storage_engine_compaction_test.cpp
+>>>>>>> 9402eeece0 ([Enhancement] Align local compaction MemTracker labels to Compaction-<tablet_id> (#74399))
     ./storage/storage_engine_test.cpp
     ./storage/storage_types_test.cpp
     ./storage/table_reader_remote_test.cpp
