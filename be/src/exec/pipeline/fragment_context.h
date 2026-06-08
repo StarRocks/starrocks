@@ -103,10 +103,7 @@ public:
 
     void set_final_status(const Status& status);
 
-    Status final_status() const {
-        auto* status = _final_status.load();
-        return status == nullptr ? Status::OK() : *status;
-    }
+    Status final_status() const { return _fragment_runtime_state.final_status(); }
 
     void cancel(const Status& status, bool cancelled_by_fe = false);
 
@@ -220,9 +217,6 @@ private:
 
     MorselQueueFactoryMap _morsel_queue_factories;
     workgroup::WorkGroupPtr _workgroup = nullptr;
-
-    std::atomic<Status*> _final_status = nullptr;
-    Status _s_status;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
 

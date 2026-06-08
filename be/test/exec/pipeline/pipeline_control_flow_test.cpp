@@ -545,6 +545,10 @@ class TestPipelineDriver final : public PipelineDriver {
 public:
     using PipelineDriver::PipelineDriver;
 
+    bool check_fragment_is_canceled_for_test(RuntimeState* runtime_state) {
+        return _check_fragment_is_canceled(runtime_state);
+    }
+
     void close_operators_for_test(RuntimeState* runtime_state) { _close_operators(runtime_state); }
 };
 
@@ -705,6 +709,26 @@ TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all
     ASSERT_TRUE(st.is_internal_error());
     EXPECT_EQ(0, harness.global_spill_manager.spill_expected_reserved_bytes());
     EXPECT_EQ(0, harness.global_spill_manager.spillable_operators());
+}
+
+TEST(PipelineDriverFragmentRuntimeStateTest, test_cancelled_state_uses_fragment_runtime_state_final_status) {
+    SpillDriverTestHarness harness;
+    SpillLifecycleSourceOperatorFactory source_factory(1, 10, false, true);
+    SpillLifecycleOperatorFactory operator_factory(2, 20, false, true);
+    Operators operators{source_factory.create(1, 0), operator_factory.create(1, 0)};
+
+    auto& fragment_runtime_state = harness.fragment_ctx.fragment_runtime_state();
+    fragment_runtime_state._s_status = Status::Cancelled("cancelled by test");
+    fragment_runtime_state._final_status.store(&fragment_runtime_state._s_status);
+
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
+                              &fragment_runtime_state, &harness.fragment_ctx, &harness.pipeline, &harness.pipeline,
+                              nullptr, -1);
+
+    harness.state()->set_is_cancelled(true);
+
+    EXPECT_TRUE(driver.check_fragment_is_canceled_for_test(harness.state()));
+    EXPECT_EQ(DriverState::CANCELED, driver.driver_state());
 }
 
 TEST_F(TestPipelineControlFlow, test_two_operatories) {

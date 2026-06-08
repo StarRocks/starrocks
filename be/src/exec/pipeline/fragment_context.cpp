@@ -255,23 +255,25 @@ void FragmentContext::report_exec_state_if_necessary() {
 }
 
 void FragmentContext::set_final_status(const Status& status) {
-    if (_final_status.load() != nullptr) {
+    auto& final_status = _fragment_runtime_state._final_status;
+    auto& s_status = _fragment_runtime_state._s_status;
+    if (final_status.load() != nullptr) {
         return;
     }
     Status* old_status = nullptr;
-    if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
-        _s_status = status;
+    if (final_status.compare_exchange_strong(old_status, &s_status)) {
+        s_status = status;
 
         _driver_token.reset();
 
-        auto detailed_message = _s_status.detailed_message();
+        auto detailed_message = s_status.detailed_message();
         bool is_timeout = detailed_message == "TimeOut";
         if (is_timeout) {
             hook_on_query_timeout(_query_id, _runtime_state->query_runtime_state()->get_query_expire_seconds());
         }
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
-        if (!_s_status.ok() && !finished_cancel) {
+        if (!s_status.ok() && !finished_cancel) {
             const auto* executors = _workgroup != nullptr
                                             ? _workgroup->executors()
                                             : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
@@ -282,7 +284,7 @@ void FragmentContext::set_final_status(const Status& status) {
             }
         }
 
-        if (_s_status.is_cancelled()) {
+        if (s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
                                 print_id(fragment_instance_id()), detailed_message);
@@ -313,7 +315,7 @@ void FragmentContext::set_final_status(const Status& status) {
 
         for (const auto& stream_load_context : _stream_load_contexts) {
             if (stream_load_context->body_sink) {
-                stream_load_context->body_sink->cancel(_s_status);
+                stream_load_context->body_sink->cancel(s_status);
             }
         }
     }

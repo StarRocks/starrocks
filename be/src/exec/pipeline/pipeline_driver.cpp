@@ -34,7 +34,6 @@
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/event.h"
@@ -954,7 +953,8 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
         if (is_still_pending_finish()) {
             set_driver_state(DriverState::PENDING_FINISH);
         } else {
-            set_driver_state(_fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED);
+            set_driver_state(_fragment_runtime_state->final_status().ok() ? DriverState::FINISH
+                                                                          : DriverState::CANCELED);
         }
 
         return true;

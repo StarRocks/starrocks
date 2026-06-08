@@ -54,4 +54,10 @@ TEST(FragmentRuntimeStateTest, RuntimeFilterHubAccessorIsStable) {
     EXPECT_EQ(hub, const_state.runtime_filter_hub());
 }
 
+TEST(FragmentRuntimeStateTest, FinalStatusDefaultsOk) {
+    FragmentRuntimeState state;
+
+    EXPECT_TRUE(state.final_status().ok());
+}
+
 } // namespace starrocks::pipeline
