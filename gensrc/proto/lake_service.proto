@@ -68,6 +68,11 @@ message PublishVersionResponse {
 message VectorIndexBuildInfoPB {
     optional int64 tablet_id = 1;
     optional int64 version = 2;
+    // Whether this version actually needs an async vector index build. False for
+    // bundle/below-threshold segments that intentionally skip the inline .vi: the FE
+    // can advance built_version directly without dispatching a CN build. When absent
+    // (older BE), the FE treats it as true and falls back to enqueueing a build.
+    optional bool build_needed = 3;
 }
 
 message ComputeNodePB {
