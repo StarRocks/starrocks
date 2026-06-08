@@ -653,10 +653,27 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     for (const auto& [lo, hi] : ivals) idx_range->add(Range<>(lo, hi));
                 }
             }
+            // Does this rowset have any delete vector? If none of its segments
+            // appear in the tablet's delvec map, the covering scan can skip the
+            // position column + per-row DelVec test entirely.
+            bool needs_delvec = false;
+            {
+                const auto& dvs = _tablet_metadata->delvec_meta().delvecs();
+                if (!dvs.empty()) {
+                    const uint32_t base = rowset->id();
+                    const int nseg = rowset->metadata().segment_metas_size();
+                    for (int s = 0; s < nseg; ++s) {
+                        if (dvs.find(base + static_cast<uint32_t>(s)) != dvs.end()) {
+                            needs_delvec = true;
+                            break;
+                        }
+                    }
+                }
+            }
             auto cov_or = cit->second->make_covering_iterator(
                     schema(), params.pred_tree, &_obj_pool, static_cast<int64_t>(rowset->id()),
-                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, std::move(idx_range),
-                    &_stats);
+                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, needs_delvec,
+                    std::move(idx_range), &_stats);
             if (cov_or.status().is_end_of_file()) {
                 continue; // index pruned this rowset entirely
             }

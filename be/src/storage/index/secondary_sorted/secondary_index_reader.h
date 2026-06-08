@@ -136,10 +136,16 @@ public:
     // it; the union covers the whole matching range exactly once -- parallel,
     // no redundant rescans, no per-row morsel filter. Null => scan all (single
     // morsel / no split).
+    // |needs_delvec|: when false (the rowset has no delete vector for any of its
+    // segments), the covering scan skips reading the __sidx_pos__ column, the
+    // per-row position decode, and the per-row DelVec test entirely -- every
+    // scanned index row is live, so output columns are bulk-appended. For a
+    // COUNT(*) this collapses to "count the matched .idx rows", removing the
+    // last bit of indirection the index pays over a base ORDER BY scan.
     StatusOr<ChunkIteratorPtr> make_covering_iterator(
             const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
             int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
-            SparseRangePtr idx_rowid_range = nullptr, OlapReaderStatistics* stats = nullptr);
+            bool needs_delvec, SparseRangePtr idx_rowid_range = nullptr, OlapReaderStatistics* stats = nullptr);
 
 private:
     SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr, int64_t tablet_id,
