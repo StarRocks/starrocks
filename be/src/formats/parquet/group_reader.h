@@ -146,39 +146,13 @@ public:
 private:
     void _set_end_offset(int64_t value) { _end_offset = value; }
 
-    // deal_with_pageindex need collect pageindex io range first, it will collect all row groups' io together,
-    // so it should be done in file reader. when reading the current row group, we need first deal_with_pageindex,
-    // and then we can collect io range based on pageindex.
-    Status _deal_with_pageindex();
-
-    void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
-    Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
-
-    StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
-    Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
-
     Status _create_column_readers();
     StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
     StatusOr<Datum> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
     Status _prepare_column_readers() const;
-    ChunkPtr _create_read_chunk(const std::vector<int>& column_indices, bool ignore_reserved_field = false);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
-
-    bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
-                                 std::vector<std::string>& sub_field_path, bool is_decode_needed);
-<<<<<<< HEAD
-
-    Status _init_read_chunk();
-
-    Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
-                       ChunkPtr* chunk, bool ignore_reserved_field = false);
-
-    StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
-
-=======
-    Status _prepare_column_readers() const;
 
     // ── get_next() pipeline phases ───────────────────────────────────────────
     //
@@ -194,7 +168,6 @@ private:
 
     // ── Member variables ─────────────────────────────────────────────────────
 
->>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
@@ -204,34 +177,13 @@ private:
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
 
-<<<<<<< HEAD
-    // conjunct ctxs that eval after chunk is dict decoded
-    std::vector<ExprContext*> _left_conjunct_ctxs;
-
-    // active columns that hold read_col index
-    std::vector<int> _active_column_indices;
-    // lazy conlumns that hold read_col index
-    std::vector<int> _lazy_column_indices;
-    // load lazy column or not
-    bool _lazy_column_needed = false;
-
-    // dict value is empty after conjunct eval, file group can be skipped
-    bool _is_group_filtered = false;
-
-    ChunkPtr _read_chunk;
-
-=======
     // Column materialization layer over ColumnReaders. Predicate classification
     // still lives in GroupReader until the next refactor steps.
     std::unique_ptr<ColumnMaterializer> _column_materializer;
 
-    // ── Variant handler (always present; empty() when no variant columns) ───
-    std::unique_ptr<VariantProjectionHandler> _variant;
-
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
 
->>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
     // param for read row group
     const GroupReaderParam& _param;
 
@@ -241,14 +193,7 @@ private:
 
     int64_t _end_offset = 0;
 
-<<<<<<< HEAD
-    // columns(index) use as dict filter column
-    std::vector<int> _dict_column_indices;
-    std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;
-    std::unordered_map<SlotId, std::vector<ExprContext*>> _left_no_dict_filter_conjuncts_by_slot;
-=======
     bool _global_dict_applied_in_group = false;
->>>>>>> 160b60ca2e ([Refactor] Extract ColumnMaterializer from GroupReader for column state management (#74441))
 
     SparseRange<uint64_t> _range;
     SparseRangeIterator<uint64_t> _range_iter;

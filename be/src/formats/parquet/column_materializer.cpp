@@ -18,14 +18,14 @@
 
 #include <algorithm>
 
-#include "base/simd/simd.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "common/config_scan_io_fwd.h"
-#include "exprs/chunk_predicate_evaluator.h"
+#include "common/config.h"
+#include "exec/exec_node.h"
 #include "exprs/expr.h"
-#include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
+#include "simd/simd.h"
+#include "storage/chunk_helper.h"
+#include "util/defer_op.h"
 
 namespace starrocks::parquet {
 
@@ -91,7 +91,7 @@ Status ColumnMaterializer::init_read_chunk() {
             read_slots.push_back(slot);
         }
     }
-    ASSIGN_OR_RETURN(_read_chunk, RuntimeChunkHelper::new_chunk_checked(read_slots, _param.chunk_size));
+    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, _param.chunk_size));
     return Status::OK();
 }
 
@@ -219,7 +219,7 @@ StatusOr<size_t> ColumnMaterializer::eval_slot_conjuncts(const std::vector<ExprC
     temp_chunk->columns().reserve(1);
     ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
     temp_chunk->append_column(column, slot_id);
-    return ChunkPredicateEvaluator::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter);
+    return ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter);
 }
 
 Status ColumnMaterializer::read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
@@ -245,7 +245,7 @@ Status ColumnMaterializer::fill_dst_column(SlotId slot_id, ColumnPtr& dst, Colum
     return (*_column_readers)[slot_id]->fill_dst_column(dst, src);
 }
 
-void ColumnMaterializer::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end,
+void ColumnMaterializer::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end,
                                            ColumnIOTypeFlags types) {
     for (const auto& index : _active_column_indices) {
         const auto& column = _param.read_cols[index];
@@ -295,16 +295,11 @@ Status ColumnMaterializer::emit_physical_columns(ChunkPtr& active_chunk, ChunkPt
     return Status::OK();
 }
 
-void ColumnMaterializer::classify_columns(const std::unordered_set<SlotId>& deferred_source_slots,
-                                          bool* out_has_reserved_field_filter) {
+void ColumnMaterializer::classify_columns(bool* out_has_reserved_field_filter) {
     *out_has_reserved_field_filter = false;
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     int read_col_idx = 0;
     for (auto& column : _param.read_cols) {
-        if (column.is_extended_variant_virtual) {
-            ++read_col_idx;
-            continue;
-        }
         SlotId slot_id = column.slot_id();
         auto it = conjunct_ctxs_by_slot.find(slot_id);
         if (it != conjunct_ctxs_by_slot.end()) {
@@ -317,7 +312,7 @@ void ColumnMaterializer::classify_columns(const std::unordered_set<SlotId>& defe
                 }
             }
             add_active_column(read_col_idx);
-        } else if (config::parquet_late_materialization_enable && deferred_source_slots.count(slot_id) == 0) {
+        } else if (config::parquet_late_materialization_enable) {
             add_lazy_column(read_col_idx);
             (*_column_readers)[slot_id]->set_can_lazy_decode(true);
         } else {
