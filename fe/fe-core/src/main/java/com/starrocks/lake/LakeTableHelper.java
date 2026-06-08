@@ -368,6 +368,7 @@ public class LakeTableHelper {
         return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
                 sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
                 sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING ||
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 

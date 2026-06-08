@@ -107,6 +107,8 @@ public class LakeTableHelperTest {
         Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
         Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
         Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING));
+        Assertions.assertTrue(
+                LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING));
         Assertions.assertTrue(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.BATCH_LOAD_JOB));
         Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
         Assertions.assertFalse(LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.FRONTEND_STREAMING));
@@ -432,6 +434,8 @@ public class LakeTableHelperTest {
                     TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
         Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
                     TransactionState.LoadJobSourceType.INSERT_STREAMING));
+        Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
+                    TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING));
         Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
                     TransactionState.LoadJobSourceType.BATCH_LOAD_JOB));
         Assertions.assertTrue(LakeTableHelper.isTransactionSupportCombinedTxnLog(
