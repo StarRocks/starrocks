@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-keywords: ['profile', 'query']
-=======
 description: "症状から根本原因、実証済みの修正までを示す、StarRocks クエリチューニング実践ガイド。"
 keywords: ['profile', 'query', 'チューニング']
->>>>>>> 56ec3fa44c ([Doc] Fix Keywords Issue Block Build (#74455))
 sidebar_position: 40
 ---
 
