@@ -312,7 +312,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
         }
     });
 
-    if (!fragment_ctx->is_canceled()) {
+    if (!fragment_ctx->runtime_state()->is_cancelled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
                 RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));

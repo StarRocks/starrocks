@@ -111,8 +111,6 @@ public:
 
     void finish() { cancel(Status::OK()); }
 
-    bool is_canceled() const { return _runtime_state->is_cancelled(); }
-
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
     void set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines);
