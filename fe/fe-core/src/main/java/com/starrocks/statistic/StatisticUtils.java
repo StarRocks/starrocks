@@ -64,7 +64,6 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.ScalarType;
-import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -656,26 +655,51 @@ public class StatisticUtils {
     }
 
     public static Type getQueryStatisticsColumnType(Table table, String column) {
-        String[] parts = column.split("\\.");
-        Preconditions.checkState(parts.length >= 1);
-        Column base = table.getColumn(parts[0]);
-        if (base == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+        // Try the full column name first so that columns with dots in their
+        // names (e.g. "customer.is_verified_email") resolve correctly.
+        Column directMatch = table.getColumn(column);
+        if (directMatch != null) {
+            return directMatch.getType();
         }
 
-        Type baseColumnType = base.getType();
-        for (int i = 1; i < parts.length; i++) {
-            if (baseColumnType.isStructType()) {
-                StructType baseStructType = (StructType) baseColumnType;
-                StructField field = baseStructType.getField(parts[i]);
-                if (field.getType().isStructType()) {
-                    baseColumnType = field.getType();
-                } else {
-                    return field.getType();
-                }
+        // Otherwise the name must be a base column followed by struct subfields.
+        // A base column name may itself contain dots, so we try the candidate
+        // base-column prefixes from the longest to the shortest. A prefix is only
+        // accepted when the remaining suffix fully resolves through struct fields,
+        // which both prefers the most specific base column when several prefixes
+        // exist (e.g. "customer" vs "customer.profile") and avoids returning a
+        // wrong type or NPE-ing when a subfield does not exist.
+        for (int end = column.lastIndexOf('.'); end > 0; end = column.lastIndexOf('.', end - 1)) {
+            String prefix = column.substring(0, end);
+            Column base = table.getColumn(prefix);
+            if (base == null) {
+                continue;
+            }
+            Type resolved = resolveStructFields(base.getType(), column.substring(end + 1));
+            if (resolved != null) {
+                return resolved;
             }
         }
-        return baseColumnType;
+
+        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+        return null;
+    }
+
+    // Walk a dotted subfield path (e.g. "address.zip") through a struct type.
+    // Returns the resolved leaf type, or null if any segment is not a struct
+    // field, so callers can fall back to trying a different base column.
+    private static Type resolveStructFields(Type type, String fieldPath) {
+        for (String fieldName : fieldPath.split("\\.")) {
+            if (!type.isStructType()) {
+                return null;
+            }
+            StructType structType = (StructType) type;
+            if (!structType.containsField(fieldName)) {
+                return null;
+            }
+            type = structType.getField(fieldName).getType();
+        }
+        return type;
     }
 
     // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
