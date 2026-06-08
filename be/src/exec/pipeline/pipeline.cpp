@@ -71,6 +71,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     if (fragment_runtime_state == nullptr && fragment_ctx != nullptr) {
         fragment_runtime_state = &fragment_ctx->fragment_runtime_state();
     }
+    auto pipeline_timer_context = fragment_ctx->pipeline_timer_context();
     auto workgroup = fragment_ctx->workgroup();
 
     size_t dop = degree_of_parallelism();
@@ -84,7 +85,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
         auto&& operators = create_operators(dop, i);
         DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, query_runtime_state,
                                                             fragment_runtime_state, fragment_ctx, this, this,
-                                                            fragment_ctx->next_driver_id());
+                                                            pipeline_timer_context, fragment_ctx->next_driver_id());
 
         if (state->enable_event_scheduler()) {
             driver->assign_observer();

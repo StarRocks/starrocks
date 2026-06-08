@@ -26,6 +26,7 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/query_cache/cache_param.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/exec_node.h"
@@ -102,10 +103,7 @@ public:
 
     void set_final_status(const Status& status);
 
-    Status final_status() const {
-        auto* status = _final_status.load();
-        return status == nullptr ? Status::OK() : *status;
-    }
+    Status final_status() const { return _fragment_runtime_state.final_status(); }
 
     void cancel(const Status& status, bool cancelled_by_fe = false);
 
@@ -133,6 +131,7 @@ public:
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
     Status set_pipeline_timer(PipelineTimer* pipeline_timer);
     void clear_pipeline_timer();
+    PipelineTimerContextPtr pipeline_timer_context() const { return _pipeline_timer_context; }
 
     query_cache::CacheParam& cache_param() { return _cache_param; }
 
@@ -182,10 +181,6 @@ public:
     EventScheduler* event_scheduler() const { return _event_scheduler.get(); }
     void init_event_scheduler();
 
-    PipelineTimer* pipeline_timer() { return _pipeline_timer; }
-    void add_timer_observer(PipelineObserver* observer, uint64_t timeout);
-    Status submit_all_timer();
-
 private:
     void _set_default_workgroup();
     void _close_stream_load_contexts();
@@ -216,16 +211,12 @@ private:
     std::atomic<size_t> _num_finished_execution_groups = 0;
 
     std::unique_ptr<EventScheduler> _event_scheduler;
-    PipelineTimer* _pipeline_timer = nullptr;
+    PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
-    std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
 
     MorselQueueFactoryMap _morsel_queue_factories;
     workgroup::WorkGroupPtr _workgroup = nullptr;
-
-    std::atomic<Status*> _final_status = nullptr;
-    Status _s_status;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
