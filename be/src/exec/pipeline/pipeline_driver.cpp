@@ -952,7 +952,7 @@ void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
-    if (_fragment_ctx->is_canceled()) {
+    if (runtime_state->is_cancelled()) {
         cancel_operators(runtime_state);
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
@@ -1023,7 +1023,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
 Status PipelineDriver::_mark_operator_closed(size_t operator_idx, OperatorPtr& op, RuntimeState* state) {
     auto msg = strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
                                    op->get_name());
-    if (_fragment_ctx->is_canceled()) {
+    if (state->is_cancelled()) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, state), msg + " is failed to cancel");
     } else {
         WARN_IF_ERROR(_mark_operator_finished(op, state), msg + " is failed to finish");

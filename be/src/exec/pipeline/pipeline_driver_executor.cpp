@@ -149,7 +149,7 @@ void GlobalDriverExecutor::_worker_thread() {
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
-            if (fragment_ctx->is_canceled()) {
+            if (runtime_state->is_cancelled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);

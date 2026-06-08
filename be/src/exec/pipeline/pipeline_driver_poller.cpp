@@ -113,7 +113,7 @@ void PipelineDriverPoller::run_internal() {
                     driver->fragment_ctx()->cancel(
                             Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
-                } else if (driver->fragment_ctx()->is_canceled()) {
+                } else if (driver->fragment_ctx()->runtime_state()->is_cancelled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
@@ -132,8 +132,9 @@ void PipelineDriverPoller::run_internal() {
                         // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
                         // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
                         // FragmentContext is unregistered prematurely.
-                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                                       : DriverState::FINISH);
+                        driver->set_driver_state(driver->fragment_ctx()->runtime_state()->is_cancelled()
+                                                         ? DriverState::CANCELED
+                                                         : DriverState::FINISH);
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
