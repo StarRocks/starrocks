@@ -77,6 +77,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | refresh_trigger            | 刷新的触发方式。有效值：`NONE`（同步物化视图）、`MANUAL`（仅通过 REFRESH MATERIALIZED VIEW 触发）、`SCHEDULED`（周期性触发，通过 EVERY 间隔）和 `ON_BASE_TABLE_CHANGE`（基表导入或变更时自动触发）。 |
 | refresh_policy             | 可读的刷新策略。有效值：`NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`，或形如 `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` 的调度（仅当定义了起始时间时才包含 `START` 子句）。 |
 | resource_group             | 物化视图刷新任务所使用的资源组（来自物化视图的 `resource_group` 属性）。未设置时默认为 `default_mv_wg`。 |
+| query_rewrite_status_reason | `query_rewrite_status` 的原因。有效值：`OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION` 和 `UNKNOWN`。 |
 
 ## 示例
 

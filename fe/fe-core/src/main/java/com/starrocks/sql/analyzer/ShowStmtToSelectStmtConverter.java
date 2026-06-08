@@ -94,7 +94,8 @@ public final class ShowStmtToSelectStmtConverter {
             "refresh_mode",
             "refresh_trigger",
             "refresh_policy",
-            "resource_group"
+            "resource_group",
+            "query_rewrite_status_reason"
     );
 
     private static final Map<String, String> MATERIALIZED_VIEW_ALIAS_MAP = ImmutableMap.of(

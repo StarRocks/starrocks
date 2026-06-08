@@ -2295,22 +2295,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Return the status and reason about query rewrite
+     * Return the query rewrite status enum name: VALID, INVALID, or UNKNOWN.
      */
     public String getQueryRewriteStatus() {
+        return getMvPlanValidationResult().getStatus().name();
+    }
+
+    public String getQueryRewriteStatusReason() {
+        return getMvPlanValidationResult().getReasonCode().name();
+    }
+
+    public MVPlanValidationResult getMvPlanValidationResult() {
         // since check mv valid to rewrite query is a heavy operation, we only check it when it's in the plan cache.
         ConnectContext context = ConnectContext.get() == null ? ConnectContext.build() : ConnectContext.get();
-        final MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(context,
+        return MvRewritePreprocessor.isMVValidToRewriteQuery(context,
                 this, Sets.newHashSet(), false, true,
                 context.getSessionVariable().getOptimizerExecuteTimeout());
-        switch (result.getStatus()) {
-            case VALID:
-                return "VALID";
-            case INVALID:
-                return "INVALID: " + result.getReason();
-            default:
-                return "UNKNOWN: " + result.getReason();
-        }
     }
 
     @Override
