@@ -40,6 +40,8 @@ import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionNames;
@@ -183,4 +185,152 @@ public class MetadataViewerTest {
         Assertions.assertEquals(3, result.size());
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testGetTabletStatusWithStatement() throws Exception {
+        // Test with null where clause
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithWhereClause() throws Exception {
+        // Test with where clause: status = 'DEAD'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status = 'DEAD'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("DEAD");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithNotEqualWhereClause() throws Exception {
+        // Test with where clause: status != 'DEAD'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status != 'DEAD'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("DEAD");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.NE, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        Assertions.assertEquals(0, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithInvalidStatusFilter() throws Exception {
+        // Test with where clause: status = 'INVALID_STATUS'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status = 'INVALID_STATUS'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("INVALID_STATUS");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        // Should return all results since invalid status filter is treated as null
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithNonStatusColumn() throws Exception {
+        // Test with where clause on non-status column: name = 'test'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: name = 'test' (not status column)
+        SlotRef leftChild = new SlotRef(tableName, "name");
+        StringLiteral rightChild = new StringLiteral("test");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        // Should return all results since non-status column filter is ignored
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testMissingReplicaRowMatchesMetadataColumnCount() throws Exception {
+        // Regression for the MySQL protocol desync: when a tablet has fewer replicas than
+        // replicationNum, the MISSING-replica branch must emit exactly as many cells as the
+        // ADMIN SHOW REPLICA STATUS result metadata declares. A short row corrupts the
+        // length-encoded row stream and hangs/disconnects the client.
+
+        // Force replicationNum (3 replicas exist) to 4 so the MISSING branch produces one phantom row.
+        PartitionInfo partitionInfo =
+                ((OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME)).getPartitionInfo();
+        new Expectations(partitionInfo) {
+            {
+                partitionInfo.getReplicationNum(anyLong);
+                result = (short) 4;
+            }
+        };
+
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+
+        ShowResultSetMetaData meta = new ShowResultMetaFactory().getMetadata(stmt);
+        int expectedColumnCount = meta.getColumnCount();
+        int statusIdx = meta.getColumnIdx("Status");
+
+        // 3 existing replicas + 1 missing replica.
+        Assertions.assertEquals(4, result.size());
+        boolean sawMissing = false;
+        for (List<String> row : result) {
+            Assertions.assertEquals(expectedColumnCount, row.size(),
+                    "every row must have the same cell count as the declared metadata; row=" + row);
+            if (ReplicaStatus.MISSING.name().equals(row.get(statusIdx))) {
+                sawMissing = true;
+            }
+        }
+        Assertions.assertTrue(sawMissing, "expected at least one MISSING replica row");
+    }
+
+    @Test
+    public void testGetTabletStatusWithOKStatus() throws Exception {
+        // Test with where clause: status = 'OK'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status = 'OK'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("OK");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        // Should return 0 results since no replicas have OK status in the mock
+        Assertions.assertEquals(0, result.size());
+    }
+>>>>>>> e30f74e3f5 ([BugFix] Fix ADMIN SHOW REPLICA STATUS missing-replica row column mismatch (#74393))
 }
