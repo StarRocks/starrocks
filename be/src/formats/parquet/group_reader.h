@@ -21,6 +21,11 @@
 #include <unordered_map>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "cache/scan/shared_buffered_input_stream.h"
+#include "column/column_access_path.h"
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -46,6 +51,7 @@ class THdfsScanRange;
 
 namespace parquet {
 class FileMetaData;
+class VariantProjectionHandler;
 } // namespace parquet
 struct TypeDescriptor;
 } // namespace starrocks
@@ -118,6 +124,8 @@ struct GroupReaderParam {
 };
 
 class GroupReader {
+    friend class VariantProjectionHandler;
+
 public:
     GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
@@ -125,8 +133,6 @@ public:
                 int64_t row_group_first_row, int64_t row_group_first_row_id);
     ~GroupReader();
 
-    // init used to init column reader, and devide active/lazy
-    // then we can use inited column collect io range.
     Status init();
     Status prepare();
     const tparquet::ColumnChunk* get_chunk_metadata(SlotId slot_id);
@@ -144,6 +150,7 @@ public:
     bool& get_is_group_filtered() { return _is_group_filtered; }
 
 private:
+<<<<<<< HEAD
     void _set_end_offset(int64_t value) { _end_offset = value; }
 
     // deal_with_pageindex need collect pageindex io range first, it will collect all row groups' io together,
@@ -157,24 +164,62 @@ private:
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
     Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
 
+=======
+    // ── Initialization ───────────────────────────────────────────────────────
+    void _set_end_offset(int64_t value) { _end_offset = value; }
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
     Status _create_column_readers();
     StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
     StatusOr<Datum> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
+<<<<<<< HEAD
     Status _prepare_column_readers() const;
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices, bool ignore_reserved_field = false);
     // Extract dict filter columns and conjuncts
+=======
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
     void _process_columns_and_conjunct_ctxs();
-
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                  std::vector<std::string>& sub_field_path, bool is_decode_needed);
-
+    Status _prepare_column_readers() const;
+    Status _deal_with_pageindex();
     Status _init_read_chunk();
+    ChunkPtr _create_read_chunk(const std::vector<SlotId>& slot_ids, bool include_reserved_fields = true);
 
+    // ── Dict-filter support ──────────────────────────────────────────────────
+    void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
+    Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
+    StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
+
+    // ── Range read helpers ───────────────────────────────────────────────────
     Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
                        ChunkPtr* chunk, bool ignore_reserved_field = false);
-
     StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
+
+    // ── get_next() pipeline phases ───────────────────────────────────────────
+    //
+    // 1. Prune deleted rows: applies deletion bitmap to produce chunk_filter.
+    //    Returns true if rows survive; false to skip this range entirely.
+    StatusOr<bool> _prune_deleted_rows(const Range<uint64_t>& r, Filter& chunk_filter, bool& has_filter, size_t count);
+
+    // 2. Read & filter active columns: reads active physical columns and
+    //    evaluates dict / expression filters.  Populates chunk_filter and
+    //    fills active_chunk.  Returns true if rows survive.
+    StatusOr<bool> _read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
+                                                   ChunkPtr& active_chunk, bool& has_filter, size_t count);
+
+    // 5. Backfill lazy physical columns (no predicates).
+    Status _read_lazy_columns(const Range<uint64_t>& full_range, const Range<uint64_t>& post_filter_range,
+                              const Filter& post_filter, bool has_filter, ChunkPtr& active_chunk);
+
+    // 7. Emit physical columns from active_chunk into the output chunk.
+    Status _emit_physical_columns(ChunkPtr& active_chunk, ChunkPtr* dst);
+
+    // Rebuild ColumnReadOrderCtx from current _active_column_indices.
+    // Called after variant promotion modifies the active column set.
+    void _rebuild_column_read_order_ctx();
+
+    // ── Member variables ─────────────────────────────────────────────────────
 
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
@@ -185,12 +230,17 @@ private:
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
 
+<<<<<<< HEAD
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
+=======
+    // ── Variant handler (always present; empty() when no variant columns) ───
+    std::unique_ptr<VariantProjectionHandler> _variant;
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;
-    // lazy conlumns that hold read_col index
+    // lazy columns that hold read_col index
     std::vector<int> _lazy_column_indices;
     // load lazy column or not
     bool _lazy_column_needed = false;
@@ -198,6 +248,11 @@ private:
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
 
+<<<<<<< HEAD
+=======
+    // Column backing store for each get_next() call.  Initialized once in
+    // _init_read_chunk() and reset at the start of every range iteration.
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
     ChunkPtr _read_chunk;
 
     // param for read row group
@@ -209,10 +264,18 @@ private:
 
     int64_t _end_offset = 0;
 
+<<<<<<< HEAD
+=======
+    bool _global_dict_applied_in_group = false;
+
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
     // columns(index) use as dict filter column
     std::vector<int> _dict_column_indices;
     std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;
     std::unordered_map<SlotId, std::vector<ExprContext*>> _left_no_dict_filter_conjuncts_by_slot;
+
+    // conjunct ctxs that eval after chunk is dict decoded
+    std::vector<ExprContext*> _left_conjunct_ctxs;
 
     SparseRange<uint64_t> _range;
     SparseRangeIterator<uint64_t> _range_iter;
@@ -222,6 +285,14 @@ private:
 
     // a flag to reflect prepare() is called
     bool _has_prepared = false;
+<<<<<<< HEAD
+=======
+
+    // Unified slot id lists for _create_read_chunk.  Populated by
+    // _process_columns_and_conjunct_ctxs().
+    std::vector<SlotId> _active_slot_ids;
+    std::vector<SlotId> _lazy_slot_ids;
+>>>>>>> 5c371c2226 ([Refactor] Extract VariantProjectionHandler from GroupReader to decouple variant projection logic (#74426))
 };
 
 using GroupReaderPtr = std::shared_ptr<GroupReader>;
