@@ -79,11 +79,11 @@ public class SysFeMemoryUsageTest {
             }
         };
 
-        TException ex = assertThrows(TException.class, () -> SysFeMemoryUsage.listFeMemoryUsage(req));
+        Exception ex = assertThrows(Exception.class, () -> SysFeMemoryUsage.listFeMemoryUsage(req));
         assertNotNull(ex.getMessage(), "AccessDenied message should not be null");
-        assertTrue(ex.getMessage().contains("Access denied"), "Should match canonical format: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("OPERATE"), "Should mention OPERATE: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("SYSTEM"), "Should mention SYSTEM: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains(
+                        "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation."),
+                "Should match canonical format: " + ex.getMessage());
     }
 
 }

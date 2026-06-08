@@ -60,11 +60,11 @@ public class SysFeLocksTest {
             }
         };
 
-        TException ex = assertThrows(TException.class, () -> SysFeLocks.listLocks(req, true));
+        Exception ex = assertThrows(Exception.class, () -> SysFeLocks.listLocks(req, true));
         assertNotNull(ex.getMessage(), "AccessDenied message should not be null");
-        assertTrue(ex.getMessage().contains("Access denied"), "Should match canonical format: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("OPERATE"), "Should mention OPERATE: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("SYSTEM"), "Should mention SYSTEM: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains(
+                        "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation."),
+                "Should match canonical format: " + ex.getMessage());
     }
 
 }
