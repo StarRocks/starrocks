@@ -59,6 +59,19 @@ bool SortContext::is_partition_ready() const {
     });
 }
 
+void SortContext::subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer) {
+    for (auto& sorter : _chunks_sorter_partitions) {
+        if (sorter->spiller() != nullptr) {
+            sorter->spiller()->observable().subscribe_source(state, observer);
+        }
+    }
+}
+
+// Cancel is intentionally minimal. Each partition spiller's cancel is already driven from the sink side
+// (SpillablePartitionSortSinkOperator::set_finishing/set_finished call _chunks_sorter->cancel() ->
+// _spiller->cancel() when cancelled), and any in-flight restore/flush IO holds its own query-lifetime pin
+// for the duration of its completion, so an explicit per-spiller cancel() here would be redundant (and
+// could only race the IO task's own guard); none is issued.
 void SortContext::cancel() {}
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {

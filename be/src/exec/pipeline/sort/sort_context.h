@@ -72,6 +72,12 @@ public:
     bool is_partition_ready() const;
     void cancel();
 
+    // Subscribe a source driver's observer to every non-empty partition spiller's source list, so that a
+    // flush-all ("partition ready") or restore completion of any partition wakes the source. The sort source
+    // merges all partitions, so unlike the single-spiller agg source it creates one subscription per spilled
+    // partition. Unconditional per spiller: the poller gate lives inside SpillEventObservable::subscribe_source.
+    void subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer);
+
     StatusOr<ChunkPtr> pull_chunk();
 
     void set_runtime_filter_collector(RuntimeFilterHub* hub, int32_t plan_node_id,
