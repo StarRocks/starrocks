@@ -421,8 +421,15 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        boolean newInnerCtx = ConnectContext.get() == null;
         ConnectContext ctx = Util.getOrCreateInnerContext();
         ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse(olapTable.getId()).getName());
+        if (newInnerCtx) {
+            // setCurrentWarehouse replaces sessionVariable with a clone of the global default,
+            // discarding ConnectContext.buildInner's MV-rewrite override. Only re-apply when
+            // the context is freshly created so we don't mutate a reused user session.
+            ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        }
 
         Locker locker = new Locker();
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
