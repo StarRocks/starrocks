@@ -48,7 +48,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FlatJsonConfig;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -108,10 +110,12 @@ import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysType;
@@ -182,9 +186,12 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
 
-        // If optimized olap table contains related mvs, set those mv state to inactive.
-        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
+        // Bucket-only optimize changes the physical layout without changing the MV-visible semantics,
+        // so we skip inactivating related MVs in that case.
+        if (shouldInactiveRelatedMaterializedViewsForOptimize(optimizeClause, olapTable)) {
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
+        }
 
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -197,6 +204,48 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withComputeResource(ConnectContext.get().getCurrentComputeResource());
 
         return jobBuilder.build();
+    }
+
+    private boolean shouldInactiveRelatedMaterializedViewsForOptimize(OptimizeClause optimizeClause, OlapTable olapTable) {
+        return !isBucketCountOnlyOptimize(optimizeClause, olapTable);
+    }
+
+    private boolean isBucketCountOnlyOptimize(OptimizeClause optimizeClause, OlapTable olapTable) {
+        if (optimizeClause.getKeysDesc() != null
+                || optimizeClause.getPartitionDesc() != null
+                || optimizeClause.getSortKeys() != null
+                || optimizeClause.getRange() != null) {
+            return false;
+        }
+
+        DistributionDesc distributionDesc = optimizeClause.getDistributionDesc();
+        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
+        if (!(distributionDesc instanceof HashDistributionDesc)
+                || !(defaultDistributionInfo instanceof HashDistributionInfo)) {
+            return false;
+        }
+
+        HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+        if (hashDistributionDesc.getBuckets() <= 0 || optimizeClause.getSourcePartitionIds().isEmpty()) {
+            return false;
+        }
+
+        boolean hasBucketCountChange = false;
+        for (long partitionId : optimizeClause.getSourcePartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null || !(partition.getDistributionInfo() instanceof HashDistributionInfo)) {
+                return false;
+            }
+
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) partition.getDistributionInfo();
+            List<String> originalDistributionColumns = MetaUtils.getColumnNamesByColumnIds(
+                    olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns());
+            if (!originalDistributionColumns.equals(hashDistributionDesc.getDistributionColumnNames())) {
+                return false;
+            }
+            hasBucketCountChange |= hashDistributionDesc.getBuckets() != hashDistributionInfo.getBucketNum();
+        }
+        return hasBucketCountChange;
     }
 
     private Column buildColumnForAdd(ColumnDef columnDef, OlapTable table) throws DdlException {
