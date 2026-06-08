@@ -276,7 +276,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_metrics) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
-    const int64_t output_segments = new_tablet_metadata->rowsets(0).segments_size();
+    const int64_t output_segments = new_tablet_metadata->rowsets(0).segment_metas_size();
     ASSERT_GT(output_segments, 0);
 
     // The size distribution recorder observed exactly one sample per output segment.
