@@ -142,10 +142,12 @@ public:
     // scanned index row is live, so output columns are bulk-appended. For a
     // COUNT(*) this collapses to "count the matched .idx rows", removing the
     // last bit of indirection the index pays over a base ORDER BY scan.
-    StatusOr<ChunkIteratorPtr> make_covering_iterator(
-            const Schema& output_schema, const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
-            int64_t rowset_id_base, int64_t version, std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
-            bool needs_delvec, SparseRangePtr idx_rowid_range = nullptr, OlapReaderStatistics* stats = nullptr);
+    StatusOr<ChunkIteratorPtr> make_covering_iterator(const Schema& output_schema,
+                                                      const PredicateTree& source_pred_tree, ObjectPool* obj_pool,
+                                                      int64_t rowset_id_base, int64_t version,
+                                                      std::shared_ptr<DelvecLoader> delvec_loader, int chunk_size,
+                                                      bool needs_delvec, SparseRangePtr idx_rowid_range = nullptr,
+                                                      OlapReaderStatistics* stats = nullptr);
 
 private:
     SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr, int64_t tablet_id,
