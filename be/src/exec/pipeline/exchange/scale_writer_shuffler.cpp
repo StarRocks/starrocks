@@ -20,8 +20,7 @@
 
 namespace starrocks::pipeline {
 
-ScaleWriterShuffler::ScaleWriterShuffler(int32_t num_channels,
-                                         int64_t min_partition_data_processed_rebalance_threshold,
+ScaleWriterShuffler::ScaleWriterShuffler(int32_t num_channels, int64_t min_partition_data_processed_rebalance_threshold,
                                          int64_t min_data_processed_rebalance_threshold)
         : _num_channels(num_channels),
           _rebalancer(num_channels, min_partition_data_processed_rebalance_threshold,

@@ -81,8 +81,7 @@ public:
     // tasks are the actual unit of fan-out.
     static constexpr int32_t kPartitionCount = 4096;
 
-    SkewedPartitionRebalancer(int32_t task_count,
-                              int64_t min_partition_data_processed_rebalance_threshold,
+    SkewedPartitionRebalancer(int32_t task_count, int64_t min_partition_data_processed_rebalance_threshold,
                               int64_t min_data_processed_rebalance_threshold);
 
     int32_t partition_count() const { return kPartitionCount; }

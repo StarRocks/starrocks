@@ -39,8 +39,7 @@ namespace starrocks::pipeline {
 // This class is NOT thread-safe (single-threaded, owned by one driver).
 class ScaleWriterShuffler {
 public:
-    ScaleWriterShuffler(int32_t num_channels,
-                        int64_t min_partition_data_processed_rebalance_threshold,
+    ScaleWriterShuffler(int32_t num_channels, int64_t min_partition_data_processed_rebalance_threshold,
                         int64_t min_data_processed_rebalance_threshold);
 
     // Produce per-row channel ids using rebalancer-driven assignment.
