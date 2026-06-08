@@ -20,18 +20,16 @@
 
 namespace starrocks::pipeline {
 
-ScaleWriterShuffler::ScaleWriterShuffler(int32_t num_channels, int32_t partition_count,
+ScaleWriterShuffler::ScaleWriterShuffler(int32_t num_channels,
                                          int64_t min_partition_data_processed_rebalance_threshold,
                                          int64_t min_data_processed_rebalance_threshold)
         : _num_channels(num_channels),
-          _partition_count(partition_count),
-          _rebalancer(partition_count, num_channels, min_partition_data_processed_rebalance_threshold,
+          _rebalancer(num_channels, min_partition_data_processed_rebalance_threshold,
                       min_data_processed_rebalance_threshold),
-          _partition_writer_indexes(partition_count, 0),
-          _partition_writer_cache(partition_count, -1),
-          _partition_row_counts(partition_count, 0) {
+          _partition_writer_indexes(SkewedPartitionRebalancer::kPartitionCount, 0),
+          _partition_writer_cache(SkewedPartitionRebalancer::kPartitionCount, -1),
+          _partition_row_counts(SkewedPartitionRebalancer::kPartitionCount, 0) {
     DCHECK_GT(num_channels, 0);
-    DCHECK_GT(partition_count, 0);
 }
 
 void ScaleWriterShuffler::exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids,
@@ -45,7 +43,8 @@ void ScaleWriterShuffler::exchange_shuffle(std::vector<uint32_t>& shuffle_channe
     _rebalancer.rebalance();
 
     for (size_t i = 0; i < num_rows; ++i) {
-        const uint32_t partition_id = hash_values[i] % static_cast<uint32_t>(_partition_count);
+        const uint32_t partition_id =
+                hash_values[i] % static_cast<uint32_t>(SkewedPartitionRebalancer::kPartitionCount);
         _partition_row_counts[partition_id]++;
 
         int32_t writer = _partition_writer_cache[partition_id];
@@ -56,7 +55,7 @@ void ScaleWriterShuffler::exchange_shuffle(std::vector<uint32_t>& shuffle_channe
         shuffle_channel_ids[i] = static_cast<uint32_t>(writer);
     }
 
-    for (int32_t partition = 0; partition < _partition_count; ++partition) {
+    for (int32_t partition = 0; partition < SkewedPartitionRebalancer::kPartitionCount; ++partition) {
         if (_partition_row_counts[partition] > 0) {
             _rebalancer.add_partition_row_count(partition, _partition_row_counts[partition]);
         }

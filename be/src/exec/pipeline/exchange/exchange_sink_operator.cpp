@@ -400,7 +400,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
 
     if (_part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
         _scale_writer_shuffler = std::make_unique<ScaleWriterShuffler>(
-                static_cast<int32_t>(_channels.size()), config::connector_sink_skew_rebalance_partition_count,
+                static_cast<int32_t>(_channels.size()),
                 config::connector_sink_skew_rebalance_min_partition_data_processed,
                 config::connector_sink_skew_rebalance_min_data_processed);
     }
@@ -661,8 +661,11 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             // Compute row indexes for each channel's each shuffle
             _channel_row_idx_start_points.assign(_num_shuffles + 1, 0);
             if (_scale_writer_shuffler != nullptr) {
+                // Use send_chunk bytes (after _output_columns projection), not chunk bytes —
+                // the latter overestimates payload, triggers spread too early, and inflates
+                // writer fanout.
                 _scale_writer_shuffler->exchange_shuffle(_shuffle_channel_ids, _hash_values, num_rows,
-                                                         static_cast<int64_t>(chunk->bytes_usage()));
+                                                         static_cast<int64_t>(send_chunk->bytes_usage()));
             } else {
                 _shuffler->exchange_shuffle(_shuffle_channel_ids, _hash_values, _bucket_ids, num_rows);
             }

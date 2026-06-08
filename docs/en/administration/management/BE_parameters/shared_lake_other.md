@@ -320,15 +320,6 @@ This topic introduces the following types of BE configurations:
 - Description: Per-partition gate for the connector sink skew partition rebalancer. A partition's estimated data size (bytes) must reach this value multiplied by the number of tasks currently assigned to that partition before it becomes eligible to be spread to an additional task. This makes spread gradual: a hot partition only gains one extra writer task per pass, and only after its currently-assigned tasks are saturated. Default is 120 MB.
 - Introduced in: v4.1
 
-### connector_sink_skew_rebalance_partition_count
-
-- Default: 4096
-- Type: Int32
-- Unit: -
-- Is mutable: Yes
-- Description: Number of logical buckets the connector sink skew partition rebalancer uses. Hash values of the partition columns are reduced modulo this value to land in `[0, partition_count)`. This is the rebalancer's internal hash bucket space and is unrelated to the user table's partition count. Matches Trino's hardcoded `SCALE_WRITERS_PARTITION_COUNT`. Raising it lowers the probability of hash collisions when the user table has many distinct partition values, at the cost of slightly higher per-pass rebalance scan time.
-- Introduced in: v4.1
-
 ### enable_connector_sink_spill
 
 - Default: true

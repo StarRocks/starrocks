@@ -326,15 +326,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：外表写入倾斜分区 rebalancer 的单分区门槛。某分区的预估数据量（字节）必须达到该值乘以当前已分配给该分区的 task 数，才可以被 spread 到另一个 task。这一机制使 spread 节奏渐进：热分区每次 pass 最多新增一个 task，且仅在现有 task 已经饱和时才会扩。默认 120 MB。
 - 引入版本：v4.1
 
-### connector_sink_skew_rebalance_partition_count
-
-- 默认值：4096
-- 类型：Int32
-- 单位：-
-- 是否动态：是
-- 描述：外表写入倾斜分区 rebalancer 内部使用的 logical bucket 数量。partition 列的 hash 值会被取模到 `[0, partition_count)` 范围。该值是 rebalancer 算法的内部 hash 桶空间，与用户表本身的分区数无关，对应 Trino 中硬编码的 `SCALE_WRITERS_PARTITION_COUNT`。当用户表有大量不同分区值时，增大该参数可以降低 hash 碰撞概率，代价是每次 rebalance pass 的扫描开销略增。
-- 引入版本：v4.1
-
 ### enable_connector_sink_spill
 
 - 默认值：true

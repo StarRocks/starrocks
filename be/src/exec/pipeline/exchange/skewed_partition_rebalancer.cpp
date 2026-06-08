@@ -26,25 +26,23 @@
 
 namespace starrocks {
 
-SkewedPartitionRebalancer::SkewedPartitionRebalancer(int32_t partition_count, int32_t task_count,
+SkewedPartitionRebalancer::SkewedPartitionRebalancer(int32_t task_count,
                                                      int64_t min_partition_data_processed_rebalance_threshold,
                                                      int64_t min_data_processed_rebalance_threshold)
-        : _partition_count(partition_count),
-          _task_count(task_count),
+        : _task_count(task_count),
           _min_partition_data_processed_rebalance_threshold(min_partition_data_processed_rebalance_threshold),
           _min_data_processed_rebalance_threshold(
                   std::max(min_partition_data_processed_rebalance_threshold, min_data_processed_rebalance_threshold)),
-          _partition_row_count(partition_count, 0),
-          _partition_data_size(partition_count, 0),
-          _partition_data_size_at_last_rebalance(partition_count, 0),
-          _partition_data_size_since_last_rebalance_per_task(partition_count, 0),
+          _partition_row_count(kPartitionCount, 0),
+          _partition_data_size(kPartitionCount, 0),
+          _partition_data_size_at_last_rebalance(kPartitionCount, 0),
+          _partition_data_size_since_last_rebalance_per_task(kPartitionCount, 0),
           _estimated_task_bucket_data_size_since_last_rebalance(task_count * kTaskBucketCount, 0),
-          _partition_assignments(partition_count) {
-    DCHECK_GT(partition_count, 0);
+          _partition_assignments(kPartitionCount) {
     DCHECK_GT(task_count, 0);
 
     std::vector<int32_t> task_bucket_ids(task_count, 0);
-    for (int32_t partition = 0; partition < partition_count; partition++) {
+    for (int32_t partition = 0; partition < kPartitionCount; partition++) {
         int32_t task_id = partition % task_count;
         int32_t bucket_id = task_bucket_ids[task_id]++ % kTaskBucketCount;
         _partition_assignments[partition].emplace_back(task_id, bucket_id);
@@ -81,7 +79,7 @@ int32_t SkewedPartitionRebalancer::max_assigned_tasks() const {
     return mx;
 }
 
-int32_t SkewedPartitionRebalancer::spread_partition_count() const {
+int32_t SkewedPartitionRebalancer::spreadkPartitionCount() const {
     int32_t c = 0;
     for (const auto& a : _partition_assignments) {
         if (a.size() > 1) {
@@ -107,13 +105,13 @@ std::vector<std::vector<int32_t>> SkewedPartitionRebalancer::get_partition_assig
 
 void SkewedPartitionRebalancer::_calculate_partition_data_size(int64_t data_processed) {
     int64_t total_partition_row_count = 0;
-    for (int32_t partition = 0; partition < _partition_count; partition++) {
+    for (int32_t partition = 0; partition < kPartitionCount; partition++) {
         total_partition_row_count += _partition_row_count[partition];
     }
     if (total_partition_row_count == 0) {
         return;
     }
-    for (int32_t partition = 0; partition < _partition_count; partition++) {
+    for (int32_t partition = 0; partition < kPartitionCount; partition++) {
         // Use __int128 to avoid int64 overflow: at large scale (e.g. 100M rows
         // and 100 GB processed in one write, 1e8 * 1e11 = 1e19) the product
         // exceeds INT64_MAX (~9.22e18) and wraps to a negative value, which
@@ -253,7 +251,7 @@ void SkewedPartitionRebalancer::_rebalance_partitions(int64_t data_processed) {
 
     _calculate_partition_data_size(data_processed);
 
-    for (int32_t partition = 0; partition < _partition_count; partition++) {
+    for (int32_t partition = 0; partition < kPartitionCount; partition++) {
         int64_t data_size = _partition_data_size[partition];
         int64_t delta = data_size - _partition_data_size_at_last_rebalance[partition];
         _partition_data_size_since_last_rebalance_per_task[partition] =
@@ -264,7 +262,7 @@ void SkewedPartitionRebalancer::_rebalance_partitions(int64_t data_processed) {
     std::vector<IndexedPriorityQueue<int32_t, IndexedPriorityQueuePriorityOrdering::HIGH_TO_LOW>>
             task_bucket_max_partitions(_task_count * kTaskBucketCount);
 
-    for (int32_t partition = 0; partition < _partition_count; partition++) {
+    for (int32_t partition = 0; partition < kPartitionCount; partition++) {
         const auto& task_assignments = _partition_assignments[partition];
         for (const auto& task_bucket : task_assignments) {
             task_bucket_max_partitions[task_bucket.id].add_or_update(

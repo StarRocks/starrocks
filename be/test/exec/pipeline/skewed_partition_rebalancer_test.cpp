@@ -47,14 +47,15 @@ std::vector<std::vector<int32_t>> drive_one_rebalance(SkewedPartitionRebalancer&
 } // namespace
 
 TEST(SkewedPartitionRebalancerTest, InitialAssignmentRoundRobin) {
-    // 6 partitions across 3 tasks (bucket_count=1) → partitions distribute
-    // round-robin: task 0 = {0, 3}, task 1 = {1, 4}, task 2 = {2, 5}.
-    SkewedPartitionRebalancer r(/*partition_count=*/6, /*task_count=*/3,
+    // kPartitionCount (4096) partitions across 3 tasks (bucket_count=1) →
+    // partitions distribute round-robin: task 0 owns {0, 3, 6, ...},
+    // task 1 owns {1, 4, 7, ...}, task 2 owns {2, 5, 8, ...}.
+    SkewedPartitionRebalancer r(/*task_count=*/3,
                                 /*min_partition_data_processed=*/1 * MB,
                                 /*min_data_processed=*/10 * MB);
 
     auto assignments = r.get_partition_assignments();
-    ASSERT_EQ(assignments.size(), 6);
+    ASSERT_EQ(assignments.size(), SkewedPartitionRebalancer::kPartitionCount);
     for (size_t p = 0; p < assignments.size(); ++p) {
         ASSERT_EQ(assignments[p].size(), 1) << "partition " << p << " should start with exactly 1 task";
         EXPECT_EQ(assignments[p][0], static_cast<int32_t>(p % 3)) << "partition " << p << " task assignment";
@@ -62,7 +63,7 @@ TEST(SkewedPartitionRebalancerTest, InitialAssignmentRoundRobin) {
 }
 
 TEST(SkewedPartitionRebalancerTest, GetTaskIdStableBeforeRebalance) {
-    SkewedPartitionRebalancer r(4, 4, 1 * MB, 10 * MB);
+    SkewedPartitionRebalancer r(4, 1 * MB, 10 * MB);
     // Each partition has one task; get_task_id should always return that task.
     for (int32_t p = 0; p < 4; ++p) {
         for (int64_t idx = 0; idx < 100; ++idx) {
@@ -72,7 +73,7 @@ TEST(SkewedPartitionRebalancerTest, GetTaskIdStableBeforeRebalance) {
 }
 
 TEST(SkewedPartitionRebalancerTest, NoRebalanceWhenBelowThreshold) {
-    SkewedPartitionRebalancer r(4, 4, /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
+    SkewedPartitionRebalancer r(/*task_count=*/4, /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
 
     // 1 MB of total data — well below the 10 MB trigger; no rebalance.
     auto assignments = drive_one_rebalance(r,
@@ -84,10 +85,10 @@ TEST(SkewedPartitionRebalancerTest, NoRebalanceWhenBelowThreshold) {
 }
 
 TEST(SkewedPartitionRebalancerTest, SkewedPartitionGetsSpreadAcrossTasks) {
-    // 4 partitions / 4 tasks. Partition 0 dominates: ~100 MB of total. The cold
-    // partitions are kept well below the per-partition rebalance threshold so
-    // only the hot partition is eligible to spread.
-    SkewedPartitionRebalancer r(/*partition_count=*/4, /*task_count=*/4,
+    // 4 tasks. Partition 0 dominates: ~100 MB of total. The cold partitions
+    // are kept well below the per-partition rebalance threshold so only the
+    // hot partition is eligible to spread.
+    SkewedPartitionRebalancer r(/*task_count=*/4,
                                 /*min_partition=*/1 * MB, /*min_total=*/50 * MB);
 
     auto assignments = drive_one_rebalance(r,
@@ -109,7 +110,7 @@ TEST(SkewedPartitionRebalancerTest, SkewedPartitionGetsSpreadAcrossTasks) {
 TEST(SkewedPartitionRebalancerTest, GetTaskIdRotatesAcrossAssignedTasks) {
     // After spreading, get_task_id(p, idx) must rotate across the assigned tasks
     // so that subsequent rows of the hot partition land on different writers.
-    SkewedPartitionRebalancer r(4, 4, 1 * MB, 50 * MB);
+    SkewedPartitionRebalancer r(4, 1 * MB, 50 * MB);
 
     drive_one_rebalance(r, {100 * MB, 1 * MB, 1 * MB, 1 * MB}, 103 * MB);
     auto assignments = r.get_partition_assignments();
@@ -126,7 +127,7 @@ TEST(SkewedPartitionRebalancerTest, UniformPartitionsDoNotTriggerSpread) {
     // Uniform workload: rebalance pass runs (we cross the data threshold) but
     // no partition exceeds the skewness threshold, so the assignment must not
     // change.
-    SkewedPartitionRebalancer r(/*partition_count=*/4, /*task_count=*/4,
+    SkewedPartitionRebalancer r(/*task_count=*/4,
                                 /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
 
     auto assignments = drive_one_rebalance(r, {25 * MB, 25 * MB, 25 * MB, 25 * MB}, 100 * MB);
@@ -139,7 +140,7 @@ TEST(SkewedPartitionRebalancerTest, PartitionBelowMinThresholdNotSpread) {
     // Total data is large (drives a rebalance pass) but no single partition
     // crosses the per-partition minimum. Spreading the load buys nothing here,
     // so no spread should happen.
-    SkewedPartitionRebalancer r(/*partition_count=*/4, /*task_count=*/4,
+    SkewedPartitionRebalancer r(/*task_count=*/4,
                                 /*min_partition=*/64 * MB, /*min_total=*/50 * MB);
 
     auto assignments = drive_one_rebalance(r, {10 * MB, 10 * MB, 10 * MB, 10 * MB}, 60 * MB);
@@ -150,15 +151,15 @@ TEST(SkewedPartitionRebalancerTest, PartitionBelowMinThresholdNotSpread) {
 }
 
 TEST(SkewedPartitionRebalancerTest, AccessorsReflectConstructor) {
-    SkewedPartitionRebalancer r(13, 5, 7 * MB, 17 * MB);
-    EXPECT_EQ(r.partition_count(), 13);
+    SkewedPartitionRebalancer r(/*task_count=*/5, 7 * MB, 17 * MB);
+    EXPECT_EQ(r.partition_count(), SkewedPartitionRebalancer::kPartitionCount);
     EXPECT_EQ(r.task_count(), 5);
 }
 
 TEST(SkewedPartitionRebalancerTest, MultipleRebalancePassesAccumulateSpread) {
     // First pass spreads partition 0 to a second task. Second pass (more data
     // arriving, partition 0 still hot) should spread it further.
-    SkewedPartitionRebalancer r(/*partition_count=*/4, /*task_count=*/4,
+    SkewedPartitionRebalancer r(/*task_count=*/4,
                                 /*min_partition=*/1 * MB, /*min_total=*/50 * MB);
 
     drive_one_rebalance(r, {100 * MB, 1 * MB, 1 * MB, 1 * MB}, 103 * MB);
@@ -178,7 +179,7 @@ TEST(SkewedPartitionRebalancerTest, NoInt64OverflowAtLargeScale) {
     // the intermediate wraps to a negative value, std::max(neg, prev) keeps the
     // stale prev and the hot partition never gets spread. The fix promotes the
     // multiply to __int128. This test exercises the overflow path.
-    SkewedPartitionRebalancer r(/*partition_count=*/4, /*task_count=*/4,
+    SkewedPartitionRebalancer r(/*task_count=*/4,
                                 /*min_partition=*/1 * MB, /*min_total=*/50 * MB);
 
     constexpr int64_t hot_rows = 100L * 1000 * 1000; // 100M rows on partition 0

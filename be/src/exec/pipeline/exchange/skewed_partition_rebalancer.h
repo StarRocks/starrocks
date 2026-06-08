@@ -76,11 +76,16 @@ public:
     // one bucket and the indirection is free.
     static constexpr int32_t kTaskBucketCount = 1;
 
-    SkewedPartitionRebalancer(int32_t partition_count, int32_t task_count,
+    // Matches Trino's SCALE_WRITERS_PARTITION_COUNT. Hash values are reduced
+    // modulo this; larger values give no extra spreading granularity since
+    // tasks are the actual unit of fan-out.
+    static constexpr int32_t kPartitionCount = 4096;
+
+    SkewedPartitionRebalancer(int32_t task_count,
                               int64_t min_partition_data_processed_rebalance_threshold,
                               int64_t min_data_processed_rebalance_threshold);
 
-    int32_t partition_count() const { return _partition_count; }
+    int32_t partition_count() const { return kPartitionCount; }
     int32_t task_count() const { return _task_count; }
 
     // Hot path: called per-row to decide which task owns the given partition for
@@ -132,7 +137,6 @@ private:
 
     static constexpr double TASK_BUCKET_SKEWNESS_THRESHOLD = 0.7;
 
-    const int32_t _partition_count;
     const int32_t _task_count;
     const int64_t _min_partition_data_processed_rebalance_threshold;
     const int64_t _min_data_processed_rebalance_threshold;

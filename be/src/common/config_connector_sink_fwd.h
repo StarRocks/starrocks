@@ -30,10 +30,6 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.05");
 // Whether enable spill intermediate data for connector sink.
 CONF_mBool(enable_connector_sink_spill, "true");
 
-// Number of logical buckets in the rebalancer (hash values are reduced
-// modulo this). Unrelated to the user table's partition count.
-CONF_mInt32(connector_sink_skew_rebalance_partition_count, "4096");
-
 // Global trigger: don't run a rebalance pass until this many bytes
 // accumulated since the last pass. Protects against per-chunk rebalance
 // cost. Crossing it only invokes rebalance(); whether any partition is

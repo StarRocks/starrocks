@@ -60,7 +60,7 @@ std::vector<uint32_t> make_skewed_hash(size_t num_rows, int32_t num_partitions, 
 TEST(ScaleWriterShufflerTest, SamePartitionSameChunkSameChannel) {
     // Within a single chunk, all rows of the same partition must route to the
     // same channel (per-chunk cache).
-    ScaleWriterShuffler s(/*num_channels=*/4, /*partition_count=*/8,
+    ScaleWriterShuffler s(/*num_channels=*/4,
                           /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
 
     const size_t num_rows = 64;
@@ -80,7 +80,7 @@ TEST(ScaleWriterShufflerTest, SamePartitionSameChunkSameChannel) {
 TEST(ScaleWriterShufflerTest, CrossChunkRotationAfterSpread) {
     // After a rebalance triggers spreading the hot partition, subsequent
     // chunks of that partition rotate among the assigned channels.
-    ScaleWriterShuffler s(/*num_channels=*/4, /*partition_count=*/8,
+    ScaleWriterShuffler s(/*num_channels=*/4,
                           /*min_partition=*/1 * MB, /*min_total=*/50 * MB);
 
     // Feed enough skewed data to trigger one rebalance.
@@ -105,7 +105,7 @@ TEST(ScaleWriterShufflerTest, CrossChunkRotationAfterSpread) {
 TEST(ScaleWriterShufflerTest, UniformInputNoSpread) {
     // Uniform partition distribution. Even after crossing the data threshold,
     // each partition stays on a single channel.
-    ScaleWriterShuffler s(/*num_channels=*/4, /*partition_count=*/8,
+    ScaleWriterShuffler s(/*num_channels=*/4,
                           /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
 
     const size_t feed_rows = 100000;
@@ -126,29 +126,29 @@ TEST(ScaleWriterShufflerTest, UniformInputNoSpread) {
 }
 
 TEST(ScaleWriterShufflerTest, HashIsModuloPartitionCount) {
-    // Hash values >= partition_count should still map cleanly via modulo.
-    ScaleWriterShuffler s(/*num_channels=*/4, /*partition_count=*/8,
+    // Hash values < kPartitionCount map directly to that partition id. The
+    // shuffler's modulo against kPartitionCount is a no-op here, but the
+    // partition->channel mapping (partition % num_channels) still applies.
+    ScaleWriterShuffler s(/*num_channels=*/4,
                           /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
 
     const size_t num_rows = 16;
     std::vector<uint32_t> hash_values(num_rows);
-    // hash=11 -> partition 3, hash=13 -> partition 5
     for (size_t i = 0; i < 8; ++i) hash_values[i] = 11;
     for (size_t i = 8; i < 16; ++i) hash_values[i] = 13;
 
     std::vector<uint32_t> channels(num_rows, 0);
     s.exchange_shuffle(channels, hash_values, num_rows, /*chunk_bytes=*/1024);
 
-    // hash=11 % 8 = 3, hash=13 % 8 = 5 — initial assignment is partition % num_channels:
-    //   partition 3 -> channel 3 % 4 = 3
-    //   partition 5 -> channel 5 % 4 = 1
+    // hash=11 -> partition 11 -> channel 11 % 4 = 3
+    // hash=13 -> partition 13 -> channel 13 % 4 = 1
     EXPECT_EQ(channels[0], 3U);
     EXPECT_EQ(channels[8], 1U);
 }
 
 TEST(ScaleWriterShufflerTest, ChannelIdsWithinNumChannels) {
     // No channel id should ever exceed num_channels - 1.
-    ScaleWriterShuffler s(/*num_channels=*/4, /*partition_count=*/16,
+    ScaleWriterShuffler s(/*num_channels=*/4,
                           /*min_partition=*/1 * MB, /*min_total=*/10 * MB);
 
     const size_t feed_rows = 50000;
