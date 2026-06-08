@@ -678,8 +678,9 @@ public:
     // OperatorFactory::prepare (single-threaded fragment setup), not from the per-driver
     // Aggregator::prepare, because materialization mutates the unlocked global-dict map.
     Status prepare_dict_slots(RuntimeState* state) {
-        std::call_once(_dict_prepare_flag,
-                       [&] { _dict_prepare_status = prepare_aggregate_dict_slots(state, _aggregator_param->aggregate_functions); });
+        std::call_once(_dict_prepare_flag, [&] {
+            _dict_prepare_status = prepare_aggregate_dict_slots(state, _aggregator_param->aggregate_functions);
+        });
         return _dict_prepare_status;
     }
 
