@@ -36,15 +36,19 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -209,7 +213,7 @@ public class MetadataViewerTest {
 
         List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
 
-        ShowResultSetMetaData meta = new ShowResultMetaFactory().getMetadata(stmt);
+        ShowResultSetMetaData meta = stmt.getMetadata();
         int expectedColumnCount = meta.getColumnCount();
         int statusIdx = meta.getColumnIdx("Status");
 
