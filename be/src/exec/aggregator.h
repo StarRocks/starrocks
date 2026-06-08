@@ -19,7 +19,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <new>
 #include <utility>
 
@@ -673,15 +672,13 @@ public:
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
 
-    // Materialize the global dictionaries referenced by dict-aware aggregate functions, exactly
-    // once across all of this node's sink/source operator factories. Must be called from an
-    // OperatorFactory::prepare (single-threaded fragment setup), not from the per-driver
-    // Aggregator::prepare, because materialization mutates the unlocked global-dict map.
+    // Materialize the global dictionaries referenced by dict-aware aggregate functions. Must be
+    // called from an OperatorFactory::prepare (single-threaded fragment setup, same invariant
+    // get_or_create relies on), never from the per-driver Aggregator::prepare, because
+    // materialization mutates the unlocked global-dict map. Idempotent: repeated serial calls
+    // (e.g. from both the sink and source factories) are harmless.
     Status prepare_dict_slots(RuntimeState* state) {
-        std::call_once(_dict_prepare_flag, [&] {
-            _dict_prepare_status = prepare_aggregate_dict_slots(state, _aggregator_param->aggregate_functions);
-        });
-        return _dict_prepare_status;
+        return prepare_aggregate_dict_slots(state, _aggregator_param->aggregate_functions);
     }
 
     const AggregatorParamsPtr& aggregator_param() { return _aggregator_param; }
@@ -697,8 +694,6 @@ private:
     std::unordered_map<size_t, Ptr> _aggregators;
     AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
     std::atomic<int64_t> _shared_limit_countdown;
-    std::once_flag _dict_prepare_flag;
-    Status _dict_prepare_status;
 };
 
 } // namespace starrocks
