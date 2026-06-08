@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 80
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', '指标']
 ---
 
 # 查询概要指标

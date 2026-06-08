@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', '慢查询']
 ---
 
 # Query Profile 概述

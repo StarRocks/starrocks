@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', 'スロー']
 ---
 
 # Query Profile 概要
