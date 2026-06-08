@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -364,10 +365,24 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     private TvrTableDelta getBaseTableChangedDeltaAdaptive(BaseTableInfo baseTableInfo,
                                                            List<TvrTableDeltaTrait> tableDeltaTraits,
                                                            TvrTableDelta maxTvrDelta) {
+        AdaptiveDelta adaptive = computeAdaptiveDelta(baseTableInfo, tableDeltaTraits, maxTvrDelta,
+                Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh);
+        hasNextTaskRun |= adaptive.hasNext;
+        logger.info("Base table: {}, db: {}, max tvr delta: {}, adaptive tvr delta: {}, hasNextTaskRun: {}",
+                baseTableInfo.getTableName(), baseTableInfo.getDbName(), maxTvrDelta, adaptive.delta, hasNextTaskRun);
+        return adaptive.delta;
+    }
+
+    @VisibleForTesting
+    static AdaptiveDelta computeAdaptiveDelta(BaseTableInfo baseTableInfo,
+                                              List<TvrTableDeltaTrait> tableDeltaTraits,
+                                              TvrTableDelta maxTvrDelta, long maxRows, long maxBytes) {
         TvrTableSnapshot fromSnapshot = maxTvrDelta.fromSnapshot();
         TvrTableSnapshot toSnapshot = maxTvrDelta.toSnapshot();
         long addedRows = 0;
         long addedFileSize = 0;
+        boolean consumedAny = false;
+        boolean reachedCap = false;
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             // TODO: We may need to handle the case where the deltaTrait is not append-only.
             if (!deltaTrait.isAppendOnly()) {
@@ -376,27 +391,34 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             }
             addedRows += deltaTrait.getTvrDeltaStats().getAddedRows();
             addedFileSize += deltaTrait.getTvrDeltaStats().getAddedFileSize();
-
-            if (addedRows >= Config.mv_max_rows_per_refresh || addedFileSize >= Config.mv_max_bytes_per_refresh) {
-                logger.info("Base table: {}, db: {}, added rows: {}, added file size:{}, snapshot:{}" +
-                                "reached the max rows per refresh, stop processing further deltas",
-                        baseTableInfo.getTableName(), baseTableInfo.getDbName(), addedRows, addedFileSize, deltaTrait);
+            if (addedRows >= maxRows || addedFileSize >= maxBytes) {
+                reachedCap = true;
+                // A single delta that already meets the cap must still advance one step; otherwise
+                // toSnapshot stays at the range end and the whole backlog refreshes in one run.
+                if (!consumedAny) {
+                    toSnapshot = deltaTrait.getTvrDelta().toSnapshot();
+                }
                 break;
             }
-            logger.info("Base table: {}, db: {}, deltaTrait: {}, added rows: {}, fromSnapshot: {}, toSnapshot: {}",
-                    baseTableInfo.getTableName(), baseTableInfo.getDbName(), deltaTrait, addedRows,
-                    fromSnapshot, toSnapshot);
             toSnapshot = deltaTrait.getTvrDelta().toSnapshot();
+            consumedAny = true;
         }
         TvrTableDelta result = TvrTableDelta.of(fromSnapshot.to, toSnapshot.to);
-        // if the adaptive tvr delta is different from the max tvr delta, generate the next task run
-        hasNextTaskRun |= addedRows >= Config.mv_max_rows_per_refresh
+        boolean hasNext = reachedCap
                 && !toSnapshot.equals(maxTvrDelta.toSnapshot())
                 && !toSnapshot.to.isMax();
-        logger.info("Base table: {}, db: {}, max tvr delta: {}, adaptive tvr delta: {}, " +
-                        "toSnapshot:{}, hasNextTaskRun:{}", baseTableInfo.getTableName(), baseTableInfo.getDbName(),
-                maxTvrDelta, result, toSnapshot, hasNextTaskRun);
-        return result;
+        return new AdaptiveDelta(result, hasNext);
+    }
+
+    @VisibleForTesting
+    static final class AdaptiveDelta {
+        final TvrTableDelta delta;
+        final boolean hasNext;
+
+        AdaptiveDelta(TvrTableDelta delta, boolean hasNext) {
+            this.delta = delta;
+            this.hasNext = hasNext;
+        }
     }
 
     @Override
