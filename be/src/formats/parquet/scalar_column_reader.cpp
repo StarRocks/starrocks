@@ -449,6 +449,25 @@ StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const 
     return filtered;
 }
 
+// If `column` still refers to one of the reader's temporary columns, a previous fill_dst_column()
+// was skipped (e.g. the whole range was filtered out and GroupReader::get_next() continued without
+// filling). Restore the caller-visible column to the original destination column so that no
+// temporary column can leak out of the reader. The set of temporary columns is reader-specific and
+// reported through the _is_tmp_column() override.
+Status RawColumnReader::_restore_tmp_column(ColumnPtr& column) {
+    if (!_is_tmp_column(column)) {
+        return Status::OK();
+    }
+    if (UNLIKELY(_ori_column == nullptr)) {
+        return Status::InternalError("Parquet reader found a temporary column without an original destination column");
+    }
+    column->as_mutable_raw_ptr()->reset_column();
+    _ori_column->as_mutable_raw_ptr()->reset_column();
+    column = _ori_column;
+    _ori_column = nullptr;
+    return Status::OK();
+}
+
 // ScalarColumnReader
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
@@ -637,24 +656,6 @@ bool ScalarColumnReader::_is_intermediate_column(const ColumnPtr& column) const 
     return _tmp_intermediate_column != nullptr && column.get() == _tmp_intermediate_column.get();
 }
 
-// If `column` still refers to one of the reader's temporary columns, a previous fill_dst_column()
-// was skipped (e.g. the whole range was filtered out and GroupReader::get_next() continued without
-// calling _fill_dst_chunk()). Restore the caller-visible column to the original destination column
-// so that no temporary column can leak out of the reader.
-Status ScalarColumnReader::_restore_tmp_column(ColumnPtr& column) {
-    if (!_is_dict_code_column(column) && !_is_intermediate_column(column)) {
-        return Status::OK();
-    }
-    if (UNLIKELY(_ori_column == nullptr)) {
-        return Status::InternalError("Parquet reader found a temporary column without an original destination column");
-    }
-    column->as_mutable_raw_ptr()->reset_column();
-    _ori_column->as_mutable_raw_ptr()->reset_column();
-    column = _ori_column;
-    _ori_column = nullptr;
-    return Status::OK();
-}
-
 void ScalarColumnReader::collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,
                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
@@ -761,21 +762,6 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
 bool LowCardColumnReader::_is_dict_code_column(const ColumnPtr& column) const {
     return _dict_code != nullptr && column.get() == _dict_code.get();
-}
-
-Status LowCardColumnReader::_restore_tmp_column(ColumnPtr& column) {
-    if (!_is_dict_code_column(column)) {
-        return Status::OK();
-    }
-    if (UNLIKELY(_ori_column == nullptr)) {
-        return Status::InternalError(
-                "Parquet low-cardinality reader found a temporary column without an original destination column");
-    }
-    column->as_mutable_raw_ptr()->reset_column();
-    _ori_column->as_mutable_raw_ptr()->reset_column();
-    column = _ori_column;
-    _ori_column = nullptr;
-    return Status::OK();
 }
 
 Status LowCardColumnReader::_check_current_dict() {
@@ -898,21 +884,6 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
 bool LowRowsColumnReader::_is_tmp_column(const ColumnPtr& column) const {
     return _tmp_column != nullptr && column.get() == _tmp_column.get();
-}
-
-Status LowRowsColumnReader::_restore_tmp_column(ColumnPtr& column) {
-    if (!_is_tmp_column(column)) {
-        return Status::OK();
-    }
-    if (UNLIKELY(_ori_column == nullptr)) {
-        return Status::InternalError(
-                "Parquet low-rows reader found a temporary column without an original destination column");
-    }
-    column->as_mutable_raw_ptr()->reset_column();
-    _ori_column->as_mutable_raw_ptr()->reset_column();
-    column = _ori_column;
-    _ori_column = nullptr;
-    return Status::OK();
 }
 
 void LowRowsColumnReader::collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,

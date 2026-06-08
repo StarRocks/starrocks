@@ -405,6 +405,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: パフォーマンスを向上させるために、Parquetリーダーの遅延具体化を有効にするかどうかを制御するブール値です。`true` は遅延具体化を有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: -
 
+### parquet_nested_dict_code_optimization_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: STRUCT、ARRAY、MAP カラム内の文字列サブフィールドなど、ネストされた Parquet フィールドに対して辞書コードベースの最適化（辞書フィルターと遅延辞書デコード）を有効にするかどうかを制御するブール値です。`true` はこれらの最適化を有効にすることを示し、`false` はトップレベルの辞書フィルターと遅延具体化を維持したまま、これらの最適化を無効にすることを示します。
+- 導入バージョン: -
+
 ### parquet_page_index_enable
 
 - デフォルト: true
