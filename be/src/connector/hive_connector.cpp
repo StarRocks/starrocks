@@ -459,6 +459,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
+    if (hdfs_scan_node.__isset.dict_page_shortcut_hint) {
+        _dict_page_shortcut_hint = hdfs_scan_node.dict_page_shortcut_hint;
+    }
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
         _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
     }
@@ -858,6 +861,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_min_max_opt = _use_min_max_opt;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
+    scanner_params.dict_page_shortcut_hint = _dict_page_shortcut_hint;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
     if (!_disable_column_access_path_hints && !_column_access_paths.empty()) {
         scanner_params.column_access_paths = &_column_access_paths;

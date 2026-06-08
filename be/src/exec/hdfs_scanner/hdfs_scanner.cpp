@@ -202,6 +202,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.use_count_opt = _scanner_params.use_count_opt;
+    ctx.dict_page_shortcut_hint = _scanner_params.dict_page_shortcut_hint;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();

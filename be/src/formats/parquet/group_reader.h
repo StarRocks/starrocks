@@ -125,6 +125,11 @@ struct GroupReaderParam {
 
     int32_t scan_range_id = -1;
     const THdfsScanRange* scan_range = nullptr;
+
+    // Hint to short-circuit a row-group by materialising its dict-page values instead
+    // of decoding data pages. Per-RG decision is made in
+    // GroupReader::_maybe_apply_dict_shortcut().
+    bool dict_page_shortcut_hint = false;
 };
 
 class GroupReader {
@@ -361,6 +366,19 @@ private:
     // this value, so avoid failing unrelated scans on malformed session timezone strings.
     cctz::time_zone _timezone_obj = cctz::utc_time_zone();
     bool _timezone_resolved = false;
+
+    // Dict-page shortcut state. Set in prepare() by _maybe_apply_dict_shortcut() when
+    // all per-RG safety gates pass. When active, get_next() emits the prepared values
+    // in chunk_size-bounded batches and returns EOF after the last batch; the normal
+    // read pipeline is bypassed for this row group.
+    bool _dict_shortcut_active = false;
+    size_t _dict_shortcut_offset = 0;
+    SlotId _dict_shortcut_slot_id = -1;
+    ColumnPtr _dict_shortcut_values;
+
+    // Returns OK with *out_active=true when the dict-page shortcut was applied for this
+    // row group; otherwise *out_active=false and the caller continues normal prepare().
+    Status _maybe_apply_dict_shortcut(bool* out_active);
 };
 
 using GroupReaderPtr = std::shared_ptr<GroupReader>;

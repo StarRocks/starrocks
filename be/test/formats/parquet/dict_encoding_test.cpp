@@ -213,4 +213,40 @@ TEST(DictEncodingReadTest, BinaryPageTest) {
     constexpr LogicalType DICT_TYPE = LogicalType::TYPE_INT;
     dict_encoding_test<DICT_TYPE, TARGET_TYPE>();
 }
+
+TEST(DictEncodingReadTest, GetDictValuesInt) {
+    DictDecoder<int32_t> decoder;
+    FakeDictDecoder<TYPE_INT> inner;
+    ASSERT_OK(decoder.set_dict(/*chunk_size=*/16, /*num_values=*/10, &inner));
+
+    auto col = Int32Column::create();
+    ASSERT_OK(decoder.get_dict_values(col.get()));
+    ASSERT_EQ(col->size(), 10);
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_EQ(col->get(i).get_int32(), i);
+    }
+}
+
+TEST(DictEncodingReadTest, GetDictValuesVarchar) {
+    DictDecoder<Slice> decoder;
+    FakeDictDecoder<TYPE_VARCHAR> inner;
+    ASSERT_OK(decoder.set_dict(/*chunk_size=*/16, /*num_values=*/5, &inner));
+
+    auto col = BinaryColumn::create();
+    ASSERT_OK(decoder.get_dict_values(col.get()));
+    ASSERT_EQ(col->size(), 5);
+    for (int i = 0; i < 5; ++i) {
+        EXPECTED_UNQUOTE(col->debug_item(i), std::to_string(i));
+    }
+}
+
+TEST(DictEncodingReadTest, GetDictValuesEmptyDict) {
+    DictDecoder<int64_t> decoder;
+    FakeDictDecoder<TYPE_BIGINT> inner;
+    ASSERT_OK(decoder.set_dict(/*chunk_size=*/8, /*num_values=*/0, &inner));
+
+    auto col = Int64Column::create();
+    ASSERT_OK(decoder.get_dict_values(col.get()));
+    EXPECT_EQ(col->size(), 0);
+}
 } // namespace starrocks::parquet

@@ -302,6 +302,9 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
 
     bool use_count_opt = false;
+    // Hint for parquet reader to emit a row-group's dict-page values directly when
+    // per-RG safety gates pass in GroupReader::prepare().
+    bool dict_page_shortcut_hint = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
     bool parquet_bloom_filter_enable = false;
@@ -381,6 +384,8 @@ struct HdfsScannerContext {
     bool can_use_any_column = false;
 
     bool use_count_opt = false;
+    // Propagated from HdfsScannerParams; consumed by parquet GroupReader.
+    bool dict_page_shortcut_hint = false;
     bool is_first_split = false;
     bool can_use_file_record_count = false;
 

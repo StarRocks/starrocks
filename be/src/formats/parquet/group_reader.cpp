@@ -481,6 +481,19 @@ Status GroupReader::prepare() {
     // select_offset_index (so the underlying typed_value readers already have the correct range).
     RETURN_IF_ERROR(_promote_variant_virtual_columns());
 
+    // Dict-page shortcut decision: must run AFTER _prepare_column_readers (needs
+    // column_all_pages_dict_encoded() and column-chunk statistics) but BEFORE the
+    // coalesced PAGES IO planning below — otherwise the data-page reads we want to
+    // skip have already been scheduled.
+    {
+        bool active = false;
+        RETURN_IF_ERROR(_maybe_apply_dict_shortcut(&active));
+        if (active) {
+            _has_prepared = true;
+            return Status::OK();
+        }
+    }
+
     // if coalesce read enabled, we have to
     // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
@@ -507,6 +520,92 @@ Status GroupReader::prepare() {
     }
 
     _has_prepared = true;
+    return Status::OK();
+}
+
+Status GroupReader::_maybe_apply_dict_shortcut(bool* out_active) {
+    *out_active = false;
+    if (!_param.dict_page_shortcut_hint) {
+        return Status::OK();
+    }
+    // Writer trust: only parquet-mr guarantees the dict page contains only referenced
+    // values (DictionaryValuesWriter.toDictPageAndClose prunes to lastUsedDictionarySize).
+    // Other writers (arrow-cpp / pyarrow / DuckDB / StarRocks BE) may leave unused dict
+    // entries, which would silently over-approximate DISTINCT results.
+    if (_param.file_metadata == nullptr || _param.file_metadata->writer_version().application_ != "parquet-mr") {
+        return Status::OK();
+    }
+    // Single materialised slot only. Multi-column DISTINCT cannot use independent dict
+    // pages without cartesian-product over-approximation.
+    if (_param.read_cols.size() != 1) {
+        return Status::OK();
+    }
+    // Any per-slot conjunct (predicate-pushdown / dict-filter) means rows are filtered
+    // after read; dict-page values would include filtered-out rows.
+    if (!_param.conjunct_ctxs_by_slot.empty()) {
+        return Status::OK();
+    }
+    // Position deletes (iceberg v2 .position-delete.parquet via IcebergDeleteBuilder,
+    // iceberg v3 deletion vectors, paimon deletion files) all land in the same
+    // DeletionBitmap. Only bail if this row group's row range actually contains any
+    // deleted positions — clean RGs of a partially-deleted file still get the shortcut.
+    if (_skip_rows_ctx != nullptr && _skip_rows_ctx->deletion_bitmap != nullptr) {
+        const uint64_t rg_first = static_cast<uint64_t>(_row_group_first_row);
+        const uint64_t rg_end = rg_first + static_cast<uint64_t>(_row_group_metadata->num_rows);
+        if (_skip_rows_ctx->deletion_bitmap->get_range_cardinality(rg_first, rg_end) > 0) {
+            return Status::OK();
+        }
+    }
+    // Page-index narrowed the row group to a sub-range — dict still describes the
+    // full RG and would include values from skipped pages.
+    if (_range.span_size() != static_cast<uint64_t>(_row_group_metadata->num_rows)) {
+        return Status::OK();
+    }
+
+    const auto& column = _param.read_cols[0];
+    SlotId slot_id = column.slot_id();
+    auto it = _column_readers.find(slot_id);
+    if (it == _column_readers.end()) {
+        return Status::OK();
+    }
+    auto* scalar_reader = dynamic_cast<ScalarColumnReader*>(it->second.get());
+    if (scalar_reader == nullptr) {
+        return Status::OK();
+    }
+    if (!scalar_reader->column_all_pages_dict_encoded()) {
+        return Status::OK();
+    }
+
+    // Dict page does not encode nulls (they are tracked via def-levels). To answer
+    // SELECT DISTINCT correctly we need to know whether the column contains NULLs.
+    // Unset null_count statistic means we cannot tell — bail to the normal path
+    // rather than risk emitting (or omitting) a NULL value that doesn't (does)
+    // exist in the data.
+    const auto* chunk_meta = scalar_reader->get_chunk_metadata();
+    if (chunk_meta == nullptr || !chunk_meta->meta_data.__isset.statistics ||
+        !chunk_meta->meta_data.statistics.__isset.null_count) {
+        return Status::OK();
+    }
+    int64_t null_count = chunk_meta->meta_data.statistics.null_count;
+
+    // parquet-mr may omit the dictionary page when every value is NULL even though
+    // encoding_stats still claims dictionary encoding. ColumnChunkReader would then
+    // crash on _try_load_dictionary. Also catch any (rare) chunk without a declared
+    // dictionary_page_offset. The normal read path handles both correctly.
+    if (null_count == _row_group_metadata->num_rows || !chunk_meta->meta_data.__isset.dictionary_page_offset) {
+        return Status::OK();
+    }
+
+    ColumnPtr buf = ColumnHelper::create_column(column.slot_type(), true);
+    RETURN_IF_ERROR(scalar_reader->materialize_dictionary_values(buf));
+    if (null_count > 0) {
+        buf->as_mutable_raw_ptr()->append_default(1);
+    }
+
+    _dict_shortcut_values = std::move(buf);
+    _dict_shortcut_slot_id = slot_id;
+    _dict_shortcut_active = true;
+    *out_active = true;
     return Status::OK();
 }
 
@@ -566,6 +665,25 @@ const tparquet::RowGroup* GroupReader::get_row_group_metadata() const {
 
 Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
+
+    // Dict-page shortcut: prepare() pre-materialised the column-chunk dictionary as
+    // the result for this row group. Emit in chunk_size-bounded batches (caller passes
+    // its desired batch in *row_count) so the upstream aggregate's chunk-size invariant
+    // is preserved even for row groups with very large dictionaries.
+    if (_dict_shortcut_active) {
+        const size_t total = _dict_shortcut_values->size();
+        if (_dict_shortcut_offset >= total) {
+            *row_count = 0;
+            return Status::EndOfFile("");
+        }
+        size_t batch = std::min<size_t>(*row_count, total - _dict_shortcut_offset);
+        auto& dst_col = (*chunk)->get_column_by_slot_id(_dict_shortcut_slot_id);
+        dst_col->as_mutable_raw_ptr()->append(*_dict_shortcut_values, _dict_shortcut_offset, batch);
+        _dict_shortcut_offset += batch;
+        *row_count = batch;
+        return (_dict_shortcut_offset >= total) ? Status::EndOfFile("") : Status::OK();
+    }
+
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");

@@ -1333,6 +1333,10 @@ struct THdfsScanNode {
 
     // database name it scans, used to disambiguate same-named tables across databases
     29: optional string database_name
+
+    // Hint for BE parquet reader: may emit a row-group's dict-page values as the
+    // result instead of decoding data pages. BE applies per-RG safety gates.
+    30: optional bool dict_page_shortcut_hint
 }
 
 struct TProjectNode {
