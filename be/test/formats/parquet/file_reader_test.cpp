@@ -42,6 +42,7 @@
 #include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/column_chunk_reader.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
@@ -1281,8 +1282,10 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
+        const auto& dict_column_indices =
+                file_reader->_row_group_readers[0]->_column_materializer->dict_column_indices();
+        ASSERT_EQ(1, dict_column_indices.size());
+        int col_idx = dict_column_indices[0];
         ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
     }
 
@@ -1309,7 +1312,7 @@ TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     ASSERT_TRUE(status.ok());
 
     // c1 is other conjunct filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    ASSERT_EQ(1u, file_reader->_row_group_readers[0]->_column_materializer->post_read_conjuncts_by_slot().count(0));
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
@@ -1349,13 +1352,15 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
+        const auto& dict_column_indices =
+                file_reader->_row_group_readers[0]->_column_materializer->dict_column_indices();
+        ASSERT_EQ(1, dict_column_indices.size());
+        int col_idx = dict_column_indices[0];
         ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
     }
 
     // c0 is conjunct filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    ASSERT_EQ(1u, file_reader->_row_group_readers[0]->_column_materializer->post_read_conjuncts_by_slot().count(0));
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
@@ -1382,7 +1387,7 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
     ASSERT_TRUE(status.ok());
 
     // c0 is conjunct filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    ASSERT_EQ(1u, file_reader->_row_group_readers[0]->_column_materializer->post_read_conjuncts_by_slot().count(0));
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
@@ -1407,8 +1412,10 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
+        const auto& dict_column_indices =
+                file_reader->_row_group_readers[0]->_column_materializer->dict_column_indices();
+        ASSERT_EQ(1, dict_column_indices.size());
+        int col_idx = dict_column_indices[0];
         ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
     }
 
@@ -2294,7 +2301,7 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
     chunk->append_column(ColumnHelper::create_column(type_b, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_INT_MAP_DESC, true), chunk->num_columns());
 
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    ASSERT_EQ(1u, file_reader->_row_group_readers[0]->_column_materializer->post_read_conjuncts_by_slot().count(0));
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
@@ -2358,7 +2365,7 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     chunk->append_column(ColumnHelper::create_column(type_b, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_INT_MAP_DESC, true), chunk->num_columns());
 
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    ASSERT_EQ(1u, file_reader->_row_group_readers[0]->_column_materializer->post_read_conjuncts_by_slot().count(0));
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
@@ -2762,11 +2769,14 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
-    ASSERT_EQ(3, file_reader->_row_group_readers[0]->_dict_column_indices[0]);
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[3].size());
-    ASSERT_EQ(subfield_path, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[3][0]);
+    const auto& dict_column_indices = file_reader->_row_group_readers[0]->_column_materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths =
+            file_reader->_row_group_readers[0]->_column_materializer->dict_column_sub_field_paths();
+    ASSERT_EQ(1, dict_column_indices.size());
+    ASSERT_EQ(3, dict_column_indices[0]);
+    ASSERT_EQ(1, dict_column_sub_field_paths.size());
+    ASSERT_EQ(1, dict_column_sub_field_paths.at(3).size());
+    ASSERT_EQ(subfield_path, dict_column_sub_field_paths.at(3)[0]);
     size_t total_row_nums = 0;
     while (!status.is_end_of_file()) {
         chunk->reset();
@@ -3341,12 +3351,14 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices[0]);
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[1].size());
-    ASSERT_EQ(std::vector<std::string>({"c_struct", "c0"}),
-              file_reader->_row_group_readers[0]->_dict_column_sub_field_paths[1][0]);
+    const auto& dict_column_indices = file_reader->_row_group_readers[0]->_column_materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths =
+            file_reader->_row_group_readers[0]->_column_materializer->dict_column_sub_field_paths();
+    ASSERT_EQ(1, dict_column_indices.size());
+    ASSERT_EQ(1, dict_column_indices[0]);
+    ASSERT_EQ(1, dict_column_sub_field_paths.size());
+    ASSERT_EQ(1, dict_column_sub_field_paths.at(1).size());
+    ASSERT_EQ(std::vector<std::string>({"c_struct", "c0"}), dict_column_sub_field_paths.at(1)[0]);
     size_t total_row_nums = 0;
     while (!status.is_end_of_file()) {
         chunk->reset();

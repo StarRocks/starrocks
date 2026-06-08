@@ -32,6 +32,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/variant_path_reader.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/group_reader.h" // for GroupReaderParam
@@ -559,8 +560,8 @@ void VariantProjectionHandler::select_hidden_source_offset_index() {
 
 bool VariantProjectionHandler::try_promote() {
     auto& column_readers = _group_reader->_column_readers;
-    auto& active_column_indices = _group_reader->_active_column_indices;
-    auto& active_slot_ids = _group_reader->_active_slot_ids;
+    auto& active_column_indices = _group_reader->_column_materializer->mutable_active_column_indices();
+    auto& active_slot_ids = _group_reader->_column_materializer->mutable_active_slot_ids();
     const auto& read_cols = _param.read_cols;
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     const uint64_t rg_num_rows = _row_group_metadata->num_rows;
@@ -648,10 +649,9 @@ bool VariantProjectionHandler::try_promote() {
                 for (ExprContext* ctx : conjuncts) {
                     std::vector<std::string> sub_field_path;
                     if (proxy->try_to_use_dict_filter(ctx, vsi.decode_needed, vsi.virtual_slot_id, sub_field_path, 0)) {
-                        _group_reader->_use_as_dict_filter_column(vsi.read_col_idx, vsi.virtual_slot_id,
-                                                                  sub_field_path);
+                        _group_reader->_column_materializer->add_dict_filter_column(vsi.read_col_idx, sub_field_path);
                     } else {
-                        _group_reader->_left_no_dict_filter_conjuncts_by_slot[vsi.virtual_slot_id].push_back(ctx);
+                        _group_reader->_column_materializer->add_post_read_conjunct(vsi.virtual_slot_id, ctx);
                     }
                 }
             }
@@ -677,7 +677,7 @@ bool VariantProjectionHandler::try_promote() {
 
     if (!any_promoted) return false;
 
-    _group_reader->_rebuild_column_read_order_ctx();
+    _group_reader->_column_materializer->rebuild_read_order_ctx();
 
     // Rebuild deferred conjunct list excluding promoted slots.
     std::vector<ExprContext*> remaining;
@@ -704,7 +704,7 @@ bool VariantProjectionHandler::try_promote() {
 // ── Lazy→active promotion ───────────
 
 void VariantProjectionHandler::promote_lazy_to_active() {
-    auto& active_slot_ids = _group_reader->_active_slot_ids;
+    auto& active_slot_ids = _group_reader->_column_materializer->mutable_active_slot_ids();
     // When active_chunk is empty (no physical active columns + no active hidden sources),
     // promote lazy hidden sources to active so they contribute a row count.
     // The caller already swapped physical active/lazy; we just migrate hidden sources.
@@ -729,7 +729,7 @@ void VariantProjectionHandler::collect_io_ranges(std::vector<SharedBufferedInput
 // ── Read chunk init ──────────────────────────────────────────────────────────
 
 void VariantProjectionHandler::init_read_chunk_slots() {
-    ChunkPtr& read_chunk = _group_reader->_read_chunk;
+    ChunkPtr& read_chunk = _group_reader->_column_materializer->mutable_read_chunk();
     for (SlotId slot_id : _active_hidden_slot_ids) {
         auto hidden_column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
         read_chunk->append_column(std::move(hidden_column), slot_id);
@@ -880,6 +880,13 @@ const cctz::time_zone& VariantProjectionHandler::projection_timezone() {
         _timezone_obj = cctz::utc_time_zone();
     }
     return _timezone_obj;
+}
+
+std::unordered_set<SlotId> VariantProjectionHandler::projection_slot_ids() const {
+    std::unordered_set<SlotId> ids;
+    ids.reserve(_projections.size());
+    for (const auto& [id, _] : _projections) ids.insert(id);
+    return ids;
 }
 
 } // namespace starrocks::parquet

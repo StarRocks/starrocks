@@ -31,7 +31,6 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
-#include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
@@ -48,6 +47,7 @@ class TIcebergSchemaField;
 class THdfsScanRange;
 
 namespace parquet {
+class ColumnMaterializer;
 class FileMetaData;
 class VariantProjectionHandler;
 } // namespace parquet
@@ -162,19 +162,6 @@ private:
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                  std::vector<std::string>& sub_field_path, bool is_decode_needed);
     Status _prepare_column_readers() const;
-    Status _deal_with_pageindex();
-    Status _init_read_chunk();
-    ChunkPtr _create_read_chunk(const std::vector<SlotId>& slot_ids, bool include_reserved_fields = true);
-
-    // ── Dict-filter support ──────────────────────────────────────────────────
-    void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
-    Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
-    StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
-
-    // ── Range read helpers ───────────────────────────────────────────────────
-    Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
-                       ChunkPtr* chunk, bool ignore_reserved_field = false);
-    StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
 
     // ── get_next() pipeline phases ───────────────────────────────────────────
     //
@@ -188,17 +175,6 @@ private:
     StatusOr<bool> _read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
                                                    ChunkPtr& active_chunk, bool& has_filter, size_t count);
 
-    // 5. Backfill lazy physical columns (no predicates).
-    Status _read_lazy_columns(const Range<uint64_t>& full_range, const Range<uint64_t>& post_filter_range,
-                              const Filter& post_filter, bool has_filter, ChunkPtr& active_chunk);
-
-    // 7. Emit physical columns from active_chunk into the output chunk.
-    Status _emit_physical_columns(ChunkPtr& active_chunk, ChunkPtr* dst);
-
-    // Rebuild ColumnReadOrderCtx from current _active_column_indices.
-    // Called after variant promotion modifies the active column set.
-    void _rebuild_column_read_order_ctx();
-
     // ── Member variables ─────────────────────────────────────────────────────
 
     // row group meta
@@ -210,22 +186,15 @@ private:
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
 
+    // Column materialization layer over ColumnReaders. Predicate classification
+    // still lives in GroupReader until the next refactor steps.
+    std::unique_ptr<ColumnMaterializer> _column_materializer;
+
     // ── Variant handler (always present; empty() when no variant columns) ───
     std::unique_ptr<VariantProjectionHandler> _variant;
 
-    // active columns that hold read_col index
-    std::vector<int> _active_column_indices;
-    // lazy columns that hold read_col index
-    std::vector<int> _lazy_column_indices;
-    // load lazy column or not
-    bool _lazy_column_needed = false;
-
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
-
-    // Column backing store for each get_next() call.  Initialized once in
-    // _init_read_chunk() and reset at the start of every range iteration.
-    ChunkPtr _read_chunk;
 
     // param for read row group
     const GroupReaderParam& _param;
@@ -238,27 +207,11 @@ private:
 
     bool _global_dict_applied_in_group = false;
 
-    // columns(index) use as dict filter column
-    std::vector<int> _dict_column_indices;
-    std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;
-    std::unordered_map<SlotId, std::vector<ExprContext*>> _left_no_dict_filter_conjuncts_by_slot;
-
-    // conjunct ctxs that eval after chunk is dict decoded
-    std::vector<ExprContext*> _left_conjunct_ctxs;
-
     SparseRange<uint64_t> _range;
     SparseRangeIterator<uint64_t> _range_iter;
 
-    // round by round ctx
-    std::unique_ptr<ColumnReadOrderCtx> _column_read_order_ctx;
-
     // a flag to reflect prepare() is called
     bool _has_prepared = false;
-
-    // Unified slot id lists for _create_read_chunk.  Populated by
-    // _process_columns_and_conjunct_ctxs().
-    std::vector<SlotId> _active_slot_ids;
-    std::vector<SlotId> _lazy_slot_ids;
 };
 
 using GroupReaderPtr = std::shared_ptr<GroupReader>;
