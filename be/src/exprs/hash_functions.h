@@ -29,8 +29,6 @@ public:
 
     DEFINE_VECTORIZED_FN(xx_hash64);
 
-    DEFINE_VECTORIZED_FN(xx_hash3_32);
-
     /**
      * @param columns: [BinaryColumn, ...]
      * @return BigIntColumn

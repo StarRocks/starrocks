@@ -245,13 +245,6 @@ public class ScalarOperatorEvaluatorTest {
         assertEquals(ScalarOperatorFunctions.xxHash64(first, second, third).getBigint(),
                 ((ConstantOperator) result).getBigint());
 
-        CallOperator xxHash3Int = constantFunctionCall(FunctionSet.XX_HASH3_32, IntegerType.INT, first, second, third);
-        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash3Int));
-        result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash3Int);
-        assertEquals(OperatorType.CONSTANT, result.getOpType());
-        assertEquals(ScalarOperatorFunctions.xxHash3_32(first, second, third).getInt(),
-                ((ConstantOperator) result).getInt());
-
         CallOperator xxHash3Bigint = constantFunctionCall(
                 FunctionSet.XX_HASH3_64, IntegerType.BIGINT, first, second, third);
         Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash3Bigint));

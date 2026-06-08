@@ -250,7 +250,6 @@ public class ScalarOperatorFunctions {
     public static class HashFunctions {
         private static final int XX_HASH32_SEED = 0;
         private static final long XX_HASH64_SEED = 0;
-        private static final int XX_HASH3_32_SEED = 0;
         private static final long XX_HASH3_64_SEED = 0;
         private static final int XX_HASH32_PRIME1 = 0x9E3779B1;
         private static final int XX_HASH32_PRIME2 = 0x85EBCA77;
@@ -273,12 +272,6 @@ public class ScalarOperatorFunctions {
             byte[] data = value.getBytes(StandardCharsets.UTF_8);
             LongHashFunction hasher = LongHashFunction.xx3(seed);
             return hasher.hashBytes(data, 0, data.length);
-        }
-
-        public static int hash3_32(String value, int seed) {
-            byte[] data = value.getBytes(StandardCharsets.UTF_8);
-            LongHashFunction hasher = LongHashFunction.xx3(Integer.toUnsignedLong(seed));
-            return (int) hasher.hashBytes(data, 0, data.length);
         }
 
         private static int xxHash32(byte[] data, int seed) {
@@ -368,19 +361,6 @@ public class ScalarOperatorFunctions {
             hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
         }
         return ConstantOperator.createBigint(hashValue);
-    }
-
-    @ConstantFunction(name = "xx_hash3_32", argTypes = {VARCHAR}, returnType = INT)
-    public static ConstantOperator xxHash3_32(ConstantOperator... input) {
-        Preconditions.checkArgument(input.length > 0);
-        int hashValue = HashFunctions.XX_HASH3_32_SEED;
-        for (ConstantOperator constantOperator : input) {
-            if (constantOperator.isNull()) {
-                return ConstantOperator.createNull(IntegerType.INT);
-            }
-            hashValue = HashFunctions.hash3_32(constantOperator.getVarchar(), hashValue);
-        }
-        return ConstantOperator.createInt(hashValue);
     }
 
     @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT)

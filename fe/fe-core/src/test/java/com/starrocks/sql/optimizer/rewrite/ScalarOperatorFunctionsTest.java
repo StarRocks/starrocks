@@ -158,24 +158,6 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
-    public void xxHash3_32() {
-        ConstantOperator operator =
-                ScalarOperatorFunctions.xxHash3_32(ConstantOperator.createNull(VarcharType.VARCHAR));
-        assertTrue(operator.isNull());
-        assertEquals(IntegerType.INT, operator.getType());
-
-        assertEquals(97077960, ScalarOperatorFunctions.xxHash3_32(
-                ConstantOperator.createVarchar("NULL")).getInt());
-
-        assertEquals(-1369043673, ScalarOperatorFunctions.xxHash3_32(
-                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getInt());
-
-        assertEquals(910553880, ScalarOperatorFunctions.xxHash3_32(
-                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
-                ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getInt());
-    }
-
-    @Test
     public void xxHash3_64() {
         ConstantOperator operator =
                 ScalarOperatorFunctions.xxHash3_64(ConstantOperator.createNull(VarcharType.VARCHAR));

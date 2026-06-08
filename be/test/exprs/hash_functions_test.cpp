@@ -198,64 +198,6 @@ TEST_F(HashFunctionsTest, test_xx_hash32) {
     }
 }
 
-TEST_F(HashFunctionsTest, test_xx_hash3_32) {
-    {
-        Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-        tc1->append("starrocks");
-        columns.emplace_back(std::move(tc1));
-
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = HashFunctions::xx_hash3_32(ctx.get(), columns).value();
-
-        auto v = ColumnHelper::cast_to<TYPE_INT>(result);
-        ASSERT_EQ(1549982973, v->immutable_data()[0]);
-        ASSERT_EQ(-1267274320, v->immutable_data()[1]);
-    }
-
-    {
-        Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-        tc1->append("hello");
-
-        auto tc2 = BinaryColumn::create();
-        tc2->append("world");
-        tc2->append("starrocks");
-
-        columns.emplace_back(std::move(tc1));
-        columns.emplace_back(std::move(tc2));
-
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = HashFunctions::xx_hash3_32(ctx.get(), columns).value();
-
-        auto v = ColumnHelper::cast_to<TYPE_INT>(result);
-        ASSERT_EQ(-1872669326, v->immutable_data()[0]);
-        ASSERT_EQ(496355858, v->immutable_data()[1]);
-    }
-
-    {
-        Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-
-        auto tc2 = ColumnHelper::create_const_null_column(1);
-
-        auto tc3 = BinaryColumn::create();
-        tc3->append("world");
-
-        columns.emplace_back(std::move(tc1));
-        columns.emplace_back(std::move(tc2));
-        columns.emplace_back(std::move(tc3));
-
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = HashFunctions::xx_hash3_32(ctx.get(), columns).value();
-
-        ASSERT_TRUE(result->is_null(0));
-    }
-}
-
 TEST_F(HashFunctionsTest, test_xx_hash64) {
     {
         Columns columns;

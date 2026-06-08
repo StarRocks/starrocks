@@ -45,7 +45,7 @@ MySQL > select xx_hash32("hello", "world");
 ## 相关函数
 
 - [`xx_hash64`](./xx_hash64.md)
-- [`xx_hash3_32`](./xx_hash3_32.md)
+- [`xx_hash3_64`](./xx_hash3_64.md)
 
 ## keyword
 

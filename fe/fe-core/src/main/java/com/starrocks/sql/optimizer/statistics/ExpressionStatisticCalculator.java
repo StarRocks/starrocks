@@ -580,12 +580,6 @@ public class ExpressionStatisticCalculator {
                     maxValue = Long.MAX_VALUE;
                     distinctValue = rowCount;
                     break;
-                case FunctionSet.XX_HASH3_32:
-                    // xx_hash3_32's range is int32_t
-                    minValue = Integer.MIN_VALUE;
-                    maxValue = Integer.MAX_VALUE;
-                    distinctValue = Math.min(rowCount, UINT32_DOMAIN_CARDINALITY);
-                    break;
                 case FunctionSet.XX_HASH3_64:
                     // xx_hash3_64's range is int64_t
                     minValue = Long.MIN_VALUE;
