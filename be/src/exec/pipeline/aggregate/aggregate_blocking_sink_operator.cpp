@@ -160,7 +160,7 @@ void AggregateBlockingSinkOperator::_build_in_runtime_filters(RuntimeState* stat
 
 Status AggregateBlockingSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(_aggregator_factory->prepare(state));
+    RETURN_IF_ERROR(_aggregator_factory->prepare_dict_slots(state));
     return Status::OK();
 }
 

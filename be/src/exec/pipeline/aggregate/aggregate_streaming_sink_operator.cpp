@@ -31,7 +31,7 @@ Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
 
 Status AggregateStreamingSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(_aggregator_factory->prepare(state));
+    RETURN_IF_ERROR(_aggregator_factory->prepare_dict_slots(state));
     return Status::OK();
 }
 
