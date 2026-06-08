@@ -22,6 +22,7 @@
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
@@ -386,11 +387,11 @@ TEST_F(GroupReaderTest, TestInit) {
 
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
-    group_reader->_active_column_indices.clear();
+    group_reader->_column_materializer->clear_classification();
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
-        group_reader->_active_column_indices.push_back(i);
+        group_reader->_column_materializer->add_active_column(i);
     }
 }
 
@@ -427,7 +428,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     // replace column readers
     replace_column_readers(group_reader, param);
     // create chunk
-    group_reader->_read_chunk = _create_chunk(param);
+    group_reader->_column_materializer->mutable_read_chunk() = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
 
