@@ -243,7 +243,7 @@ StatusOr<ColumnReader*> SegmentMetaCollecter::_get_column_reader(ColumnId cid) c
 }
 
 bool SegmentMetaCollecter::_is_missing_default_column(const TabletColumn& column) const {
-    return !column.is_extended() && _segment->is_default_column(column);
+    return _segment->is_default_column(column);
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
@@ -401,14 +401,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column) {
     std::vector<Slice> words;
     if (!column_iter->all_page_dict_encoded()) {
-        ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
-        // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
-        // but a global dictionary could still be present and usable.
-        if (!tablet_column->is_extended()) {
-            return Status::GlobalDictError("no global dict");
-        } else {
-            return Status::OK();
-        }
+        return Status::GlobalDictError("no global dict");
     } else {
         RETURN_IF_ERROR(column_iter->fetch_all_dict_words(&words));
     }
@@ -475,7 +468,7 @@ Status SegmentMetaCollecter::_collect_dict_for_flatjson(ColumnId cid, Column* co
             RETURN_IF_ERROR(source_iter->init(iter_opts));
 
             Status st = (_collect_dict_for_column(source_iter.get(), cid, column));
-            if (st.is_global_dict_error()) {
+            if (st.code() == TStatusCode::GLOBAL_DICT_ERROR) {
                 // ignore
             } else if (!st.ok()) {
                 return st;
