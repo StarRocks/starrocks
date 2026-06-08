@@ -30,4 +30,28 @@ TEST(FragmentRuntimeStateTest, StoresFragmentInstanceId) {
     EXPECT_EQ(4, state.fragment_instance_id().lo);
 }
 
+TEST(FragmentRuntimeStateTest, EnableCacheDefaultsFalseAndRoundTrips) {
+    FragmentRuntimeState state;
+
+    EXPECT_FALSE(state.enable_cache());
+
+    state.set_enable_cache(true);
+    EXPECT_TRUE(state.enable_cache());
+
+    state.set_enable_cache(false);
+    EXPECT_FALSE(state.enable_cache());
+}
+
+TEST(FragmentRuntimeStateTest, RuntimeFilterHubAccessorIsStable) {
+    FragmentRuntimeState state;
+
+    auto* hub = state.runtime_filter_hub();
+
+    ASSERT_NE(nullptr, hub);
+    EXPECT_EQ(hub, state.runtime_filter_hub());
+
+    const auto& const_state = state;
+    EXPECT_EQ(hub, const_state.runtime_filter_hub());
+}
+
 } // namespace starrocks::pipeline

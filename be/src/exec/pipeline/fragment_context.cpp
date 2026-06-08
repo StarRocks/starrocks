@@ -95,7 +95,7 @@ FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(s
 FragmentContext::~FragmentContext() {
     _close_stream_load_contexts();
     _data_sink.reset();
-    _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
+    _fragment_runtime_state.runtime_filter_hub()->close_all_in_filters(_runtime_state.get());
     close_all_execution_groups();
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
