@@ -483,14 +483,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クエリが遅いクエリかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超えると、**fe.audit.log** に遅いクエリとして記録されます。
 - 導入時期：-
 
-### `slow_lock_log_every_ms`
+### `slow_lock_log_l2_info_interval_ms`
 
 - デフォルト：3000L
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：同じ SlowLockLogStats インスタンスに対して別の「低速ロック」警告を発行するまでに待機する最小間隔 (ミリ秒)。LockUtils は、ロック待機が `slow_lock_threshold_ms` を超えた後にこの値をチェックし、最後のログに記録された低速ロックイベントから `slow_lock_log_every_ms` ミリ秒が経過するまで追加の警告を抑制します。長期的な競合中にログのボリュームを減らすには値を大きくし、より頻繁な診断を得るには値を小さくします。変更は、その後のチェックに対して実行時に有効になります。
-- 導入時期：v3.2.0
+- エイリアス：`slow_lock_log_every_ms`（元の名前。後方互換性のため保持されており、両方の名前は同じパラメータを指します）。
+- 説明：**L2** 低速ロックログ層（スタックを含まない完全なロック情報 JSON 行）の最小間隔。低速ロックログは 3 つの層に段階的に低下し、コストの高い順に厳しく絞られます：**L1** = 完全情報 + スタック（`slow_lock_log_l1_stack_interval_ms`）、**L2** = 完全情報、スタックなし（本パラメータ）、**L3** = プレーンテキストの簡易情報（`slow_lock_log_l3_brief_interval_ms`）。1 回の低速ロックイベントでは、現在スロットルが許可する最も詳細な層が出力されます。上位層を選ぶと下位層のウィンドウも消費されるため、総ログ量が最も緩い許可層のレートを超えることはありません。スコープは発信層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**。`0`（または負の値）に設定すると L2 ゲートが無効になります（常に許可）。長期的な競合中にログ量を減らすには値を大きく、完全情報の診断頻度を上げるには小さく設定します。
+- 導入時期：v3.2.0（`slow_lock_log_every_ms` として）。v4.1 で `slow_lock_log_l2_info_interval_ms` に改名。
 
 ### `slow_lock_print_stack`
 
@@ -498,8 +499,35 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：LockManager が `logSlowLockTrace` によって出力される低速ロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者に関する追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックを提供することでデバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによるログのボリュームと CPU/メモリのオーバーヘッドが減少します。
+- 説明：低速ロック警告で所有スレッド／現在スレッドのスタックトレースをキャプチャするかどうかのマスタースイッチ。`LockManager.logSlowLockTrace`（所有者ごとの `"stack"` フィールド）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる、所有者／最古 reader／現在スレッドの `"stack"` フィールド）の両方に適用されます。有効にするとロックを保持する正確なスレッドスタックを提供してデバッグに役立ち、無効にすると高並列環境におけるスタックトレースのキャプチャとシリアライズによるログ量・CPU／メモリオーバーヘッドを削減できます。有効時、キャプチャ頻度はさらに `slow_lock_log_l1_stack_interval_ms` によってレート制限されます。
 - 導入時期：v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_log_l1_stack_interval_ms`
+
+- デフォルト：30000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：低速ロックログイベント間でのスタックトレースキャプチャの最小間隔。`slow_lock_print_stack` が `true` の場合のみ適用されます。スコープは層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock.getLockInfoToJson` では**per-instance**（各ロックオブジェクトが独自のゲートを持つ）。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、`"stack"` フィールドは LockManager 経路では `"throttled"` マーカーに置き換えられ、QueryableReentrantReadWriteLock 経路では省略されます。warn ログの残り（rid、owners、waiters、queryId、タイミング情報など）は外側のイベントゲート（`slow_lock_log_l2_info_interval_ms`）が許可する限り通常どおり出力されます。`0`（または負の値）に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
+- 導入時期：v4.1
+
+### `slow_lock_max_waiter_count_to_log`
+
+- デフォルト：30
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：単一の低速ロックログイベントでシリアライズされる waiter エントリの最大数。`LockManager.logSlowLockTrace`（`"waiter"` 配列）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる `"queuedReaders"` / `"queuedWriters"` 配列）の両方に適用されます。実際の waiter 数がこの上限を超えると、最初の N 個の waiter のみが個別に列挙され、残りは配列の末尾に追加される単一のトレーラ `{"omitted": "remain M waiters omitted"}` で集約されます。極度の競合シナリオで Gson シリアライゼーションコストとログ行サイズを抑制しつつ、waiter 総数の診断情報を保持します。`0`（または負の値）に設定すると上限を無効化し、すべての waiter をシリアライズします。
+- 導入時期：v4.1
+
+### `slow_lock_log_l3_brief_interval_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：**L3** 低速ロックログ層（より詳細な層 — L1 の `slow_lock_log_l1_stack_interval_ms`、L2 の `slow_lock_log_l2_info_interval_ms` — がスロットルされたときに出力される、単一のプレーンテキスト warn 行。JSON もスタックもなし）の最小間隔。3 層の中で最も緩い層です。簡易情報は**この間隔ごとに最大 1 回**出力されます：L3 ゲートがまだ閉じているウィンドウ内に到着した低速ロックイベントは抑制されます（行なし）。イベントごとに 1 行を保証するものではなく、持続的な競合下での最大の無音時間を 1 簡易情報間隔以内に抑えるだけです。他の 2 つより小さく設定してください：`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。`0`（または負の値）に設定すると簡易情報は無制限になり、スロットルされたすべてのイベントが行を残します（オーバーヘッドは予測可能ですが、ストーム時には毎秒多数になる可能性があります）。スコープ規則は他の低速ロックスロットルと同じです（`LockManager` はグローバル、`QueryableReentrantReadWriteLock` は per-instance）。
+- 導入時期：v4.1
 
 ### `slow_lock_threshold_ms`
 
@@ -507,7 +535,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：ロック操作または保持されているロックを「遅い」と分類するために使用されるしきい値 (ミリ秒)。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は (コンテキストに応じて) 診断ログを出力し、スタックトレースまたは待機者/所有者情報を含め、LockManager ではこの遅延後にデッドロック検出を開始します。これは LockUtils (低速ロックロギング)、QueryableReentrantReadWriteLock (低速リーダーのフィルタリング)、LockManager (デッドロック検出遅延と低速ロックトレース)、LockChecker (定期的な低速ロック検出)、およびその他の呼び出し元 (例: DiskAndTabletLoadReBalancer ロギング) によって使用されます。値を下げると感度とロギング/診断のオーバーヘッドが増加します。0 または負の数に設定すると、初期の待機ベースのデッドロック検出遅延動作が無効になります。`slow_lock_log_every_ms`、`slow_lock_print_stack`、および `slow_lock_stack_trace_reserve_levels` と一緒に調整します。
+- 説明：ロック操作または保持されているロックを「遅い」と分類するために使用されるしきい値 (ミリ秒)。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は (コンテキストに応じて) 診断ログを出力し、スタックトレースまたは待機者/所有者情報を含め、LockManager ではこの遅延後にデッドロック検出を開始します。これは LockUtils (低速ロックロギング)、QueryableReentrantReadWriteLock (低速リーダーのフィルタリング)、LockManager (デッドロック検出遅延と低速ロックトレース)、LockChecker (定期的な低速ロック検出)、およびその他の呼び出し元 (例: DiskAndTabletLoadReBalancer ロギング) によって使用されます。値を下げると感度とロギング/診断のオーバーヘッドが増加します。0 または負の数に設定すると、初期の待機ベースのデッドロック検出遅延動作が無効になります。`slow_lock_log_l2_info_interval_ms`、`slow_lock_print_stack`、および `slow_lock_stack_trace_reserve_levels` と一緒に調整します。
 - 導入時期：3.2.0
 
 ### `sys_log_delete_age`
@@ -957,7 +985,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：StarRocks が遅いロックまたは保持されているロックのロックデバッグ情報をダンプする際に、いくつのスタックトレースフレームをキャプチャして出力するかを制御します。この値は、排他ロック所有者、現在のスレッド、および最古/共有リーダーの JSON を生成する際に `QueryableReentrantReadWriteLock` によって `LogUtil.getStackTraceToJsonArray` に渡されます。この値を増やすと、遅いロックまたはデッドロックの問題の診断に役立つより多くのコンテキストが得られますが、JSON ペイロードが大きくなり、スタックキャプチャの CPU/メモリがわずかに増加します。減らすとオーバーヘッドが減少します。注: リーダーエントリは、低速ロックのみをログに記録する場合、`slow_lock_threshold_ms` によってフィルタリングできます。
+- 説明：StarRocks が遅いロックまたは保持されているロックのロックデバッグ情報をダンプする際に、いくつのスタックトレースフレームをキャプチャして出力するかを制御します。この値は、排他ロック所有者、現在のスレッド、および最古/共有リーダーの JSON を生成する際に `QueryableReentrantReadWriteLock` によって `LogUtil.getStackTraceToJsonArray` に渡されます。この値を増やすと、遅いロックまたはデッドロックの問題の診断に役立つより多くのコンテキストが得られますが、JSON ペイロードが大きくなり、スタックキャプチャの CPU/メモリがわずかに増加します。減らすとオーバーヘッドが減少します。注: この上限は `QueryableReentrantReadWriteLock` のスタックダンプ経路にのみ適用されます。`LockManager` の低速ロック経路は完全なスタック深度をキャプチャし、この値による制限を受けません。リーダーエントリは、低速ロックのみをログに記録する場合、`slow_lock_threshold_ms` によってフィルタリングできます。
 - 導入時期：v3.4.0, v3.5.0
 
 ### `ssl_cipher_blacklist`
