@@ -662,10 +662,18 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
     }
-    if (colocate_column_count < 0 || colocate_column_count > tablet_metadata->schema().sort_key_idxes_size()) {
+    // Resolve the sort-key arity from the materialized TabletSchema, not the raw TabletSchemaPB.
+    // A range-distributed table created without an explicit ORDER BY (e.g. a PRIMARY KEY table)
+    // leaves sort_key_idxes empty in the PB; the "empty sort_key_idxes => sort key is the key
+    // columns" convention (which the FE mirrors in MetaUtils.getRangeDistributionColumns) is only
+    // applied when the schema is materialized. Reading the raw PB here would see arity 0 and reject
+    // every colocate split, silently falling back to an identical tablet so the oversized tablet
+    // never splits. This mirrors the external-boundaries path's use of GlobalTabletSchemaMap.
+    auto tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_metadata->schema()).first;
+    const int32_t sort_key_arity = static_cast<int32_t>(tablet_schema->sort_key_idxes().size());
+    if (colocate_column_count < 0 || colocate_column_count > sort_key_arity) {
         return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}, sort key arity is {}",
-                                                   colocate_column_count,
-                                                   tablet_metadata->schema().sort_key_idxes_size()));
+                                                   colocate_column_count, sort_key_arity));
     }
 
     std::vector<SegmentSplitInfo> segments;
