@@ -24,6 +24,12 @@ Status LocalMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _sort_context->ref();
     _sort_context->attach_source_observer(state, observer());
+    // Subscribe to every partition spiller's source list so flush-all ("partition ready") and restore
+    // completions of any partition wake this INPUT_EMPTY sleeper. The pip-list subscription above only
+    // carries the non-spill "partition ready" axis; on the spill path that wakeup is emitted by the
+    // partition's spiller, which the source is otherwise not subscribed to. N subscriptions, one per spilled
+    // partition.
+    _sort_context->subscribe_source_to_spillers(state, observer());
     return Status::OK();
 }
 void LocalMergeSortSourceOperator::close(RuntimeState* state) {
@@ -44,6 +50,21 @@ Status LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
     auto defer = _sort_context->defer_notify_sink();
     _sort_context->cancel();
     return _sort_context->set_finished();
+}
+
+BlockReason LocalMergeSortSourceOperator::block_reason() const {
+    // Parked INPUT_EMPTY exactly when has_output() == false and not finished. The only non-terminal gates of
+    // has_output() (is_partition_sort_finished / is_partition_ready) are both woken by the partition
+    // spillers' flush-all / restore completions, which prepare()'s subscribe_source_to_spillers covers ->
+    // WAIT_RESTORE. Runnable or finished -> NONE. Both returns go through named<R, kCoveredWakeups>(), so a
+    // reason outside this source's coverage mask would not compile.
+    if (_is_finished || is_finished()) {
+        return named<BlockReason::NONE, kCoveredWakeups>();
+    }
+    if (has_output()) {
+        return named<BlockReason::NONE, kCoveredWakeups>();
+    }
+    return named<BlockReason::WAIT_RESTORE, kCoveredWakeups>();
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
