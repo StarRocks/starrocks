@@ -28,6 +28,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/utils.h"
@@ -333,7 +334,8 @@ static StatusOr<std::string> variant_json_at(const ColumnPtr& column, size_t row
 static Status fill_dst_chunk_without_projected(GroupReader* group_reader, ChunkPtr& active_chunk, ChunkPtr* dst_chunk) {
     RETURN_IF_ERROR(group_reader->_variant->emit_projections(active_chunk, dst_chunk,
                                                              group_reader->_variant->projection_timezone()));
-    return group_reader->_emit_physical_columns(active_chunk, dst_chunk);
+    auto skip_slots = group_reader->_variant->projection_slot_ids();
+    return group_reader->_column_materializer->emit_physical_columns(active_chunk, dst_chunk, &skip_slots);
 }
 
 static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
@@ -794,11 +796,11 @@ TEST_F(GroupReaderTest, TestInit) {
 
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
-    group_reader->_active_column_indices.clear();
+    group_reader->_column_materializer->clear_classification();
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
-        group_reader->_active_column_indices.push_back(i);
+        group_reader->_column_materializer->add_active_column(i);
     }
 }
 
@@ -835,7 +837,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     // replace column readers
     replace_column_readers(group_reader, param);
     // create chunk
-    group_reader->_read_chunk = _create_chunk(param);
+    group_reader->_column_materializer->mutable_read_chunk() = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
 
@@ -3073,8 +3075,9 @@ TEST_F(GroupReaderTest, CollectIORangesDeduplicatesIdenticalRangesAcrossReaders)
     ASSERT_OK(group_reader->init());
 
     group_reader->_column_readers.clear();
-    group_reader->_active_column_indices = {0};
-    group_reader->_lazy_column_indices = {1};
+    group_reader->_column_materializer->clear_classification();
+    group_reader->_column_materializer->add_active_column(0);
+    group_reader->_column_materializer->add_lazy_column(1);
     group_reader->_column_readers.emplace(
             0, std::make_unique<MockIORangeColumnReader>(std::vector<SharedBufferedInputStream::IORange>{{100, 20}}));
     group_reader->_column_readers.emplace(
@@ -3135,7 +3138,7 @@ TEST_F(GroupReaderTest, ProcessColumnsDefersVirtualColumnConjunctsUntilAfterProj
 
     group_reader->_process_columns_and_conjunct_ctxs();
     ASSERT_EQ(1, group_reader->_variant->_deferred_variant_virtual_conjunct_ctxs.size());
-    ASSERT_TRUE(group_reader->_left_conjunct_ctxs.empty());
+    ASSERT_TRUE(group_reader->_column_materializer->post_read_conjuncts_by_slot().empty());
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(variant_source, source_slot->id());
@@ -3321,8 +3324,8 @@ TEST_F(GroupReaderTest, ProcessColumnsClassifiesHiddenSourcesAsActiveOrLazy) {
                           group_reader->_variant->_lazy_hidden_slot_ids.end(),
                           lazy_src_id) != group_reader->_variant->_lazy_hidden_slot_ids.end());
     // active_src_id should also appear in unified _active_slot_ids
-    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
-                          active_src_id) != group_reader->_active_slot_ids.end());
+    const auto& active_slot_ids = group_reader->_column_materializer->active_slot_ids();
+    EXPECT_TRUE(std::find(active_slot_ids.begin(), active_slot_ids.end(), active_src_id) != active_slot_ids.end());
     // _deferred_conjunct_slot_ids must contain vslot_active
     EXPECT_EQ(1u, group_reader->_variant->_deferred_conjunct_slot_ids.count(vslot_active->id()));
 }
@@ -3434,12 +3437,15 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionClassifiesDictFilterConjuncts) {
     group_reader->_variant->try_promote();
 
     EXPECT_EQ(2, group_reader->_variant->_promoted_virtual_slots.size());
-    ASSERT_EQ(1, group_reader->_dict_column_indices.size());
-    EXPECT_EQ(0, group_reader->_dict_column_indices[0]);
-    EXPECT_EQ(1u, group_reader->_dict_column_sub_field_paths.count(0));
-    ASSERT_EQ(1u, group_reader->_left_no_dict_filter_conjuncts_by_slot.count(expr_slot->id()));
-    EXPECT_EQ(1, group_reader->_left_no_dict_filter_conjuncts_by_slot.at(expr_slot->id()).size());
-    EXPECT_EQ(0u, group_reader->_left_no_dict_filter_conjuncts_by_slot.count(dict_slot->id()));
+    const auto& dict_column_indices = group_reader->_column_materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths = group_reader->_column_materializer->dict_column_sub_field_paths();
+    const auto& post_read_conjuncts = group_reader->_column_materializer->post_read_conjuncts_by_slot();
+    ASSERT_EQ(1, dict_column_indices.size());
+    EXPECT_EQ(0, dict_column_indices[0]);
+    EXPECT_EQ(1u, dict_column_sub_field_paths.count(0));
+    ASSERT_EQ(1u, post_read_conjuncts.count(expr_slot->id()));
+    EXPECT_EQ(1, post_read_conjuncts.at(expr_slot->id()).size());
+    EXPECT_EQ(0u, post_read_conjuncts.count(dict_slot->id()));
 }
 
 TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsNonAllNullFallback) {
@@ -3547,7 +3553,7 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionKeepsUnpromotedMixedSourceActiveA
 
     group_reader->_variant->try_promote();
 
-    group_reader->_rebuild_column_read_order_ctx();
+    group_reader->_column_materializer->rebuild_read_order_ctx();
 
     EXPECT_EQ(1u, group_reader->_variant->_promoted_virtual_slots.count(promoted_slot->id()));
     EXPECT_EQ(0u, group_reader->_variant->_promoted_virtual_slots.count(unpromoted_slot->id()));
@@ -3561,8 +3567,10 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionKeepsUnpromotedMixedSourceActiveA
     EXPECT_EQ(group_reader->_variant->_active_hidden_slot_ids.end(),
               std::find(group_reader->_variant->_active_hidden_slot_ids.begin(),
                         group_reader->_variant->_active_hidden_slot_ids.end(), promoted_source_slot_id));
-    EXPECT_EQ(1u, group_reader->_column_read_order_ctx->get_column_read_order().size());
-    EXPECT_EQ(0, group_reader->_column_read_order_ctx->get_column_read_order()[0]);
+    auto* read_order_ctx = group_reader->_column_materializer->read_order_ctx();
+    ASSERT_NE(nullptr, read_order_ctx);
+    EXPECT_EQ(1u, read_order_ctx->get_column_read_order().size());
+    EXPECT_EQ(0, read_order_ctx->get_column_read_order()[0]);
 }
 
 TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForHiddenSource) {
@@ -3637,10 +3645,10 @@ TEST_F(GroupReaderTest, ProcessColumnsPopulatesLazySlotIdsForPhysicalColumnsWith
     // column is expected to land in _lazy_column_indices / _lazy_slot_ids.
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
-                          active_slot->id()) != group_reader->_active_slot_ids.end());
-    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), lazy_slot->id()) !=
-                group_reader->_lazy_slot_ids.end());
+    const auto& active_slot_ids = group_reader->_column_materializer->active_slot_ids();
+    const auto& lazy_slot_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_TRUE(std::find(active_slot_ids.begin(), active_slot_ids.end(), active_slot->id()) != active_slot_ids.end());
+    EXPECT_TRUE(std::find(lazy_slot_ids.begin(), lazy_slot_ids.end(), lazy_slot->id()) != lazy_slot_ids.end());
 }
 
 // Covers: physical VARIANT column with no direct conjuncts must be promoted to
@@ -3689,10 +3697,10 @@ TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredCo
     group_reader->_process_columns_and_conjunct_ctxs();
 
     // Physical slot must be active (not lazy) because a deferred conjunct needs it.
-    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
-                          phys_slot->id()) != group_reader->_active_slot_ids.end());
-    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), phys_slot->id()) ==
-                group_reader->_lazy_slot_ids.end());
+    const auto& active_slot_ids = group_reader->_column_materializer->active_slot_ids();
+    const auto& lazy_slot_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_TRUE(std::find(active_slot_ids.begin(), active_slot_ids.end(), phys_slot->id()) != active_slot_ids.end());
+    EXPECT_TRUE(std::find(lazy_slot_ids.begin(), lazy_slot_ids.end(), phys_slot->id()) == lazy_slot_ids.end());
     // The virtual conjunct slot must be registered.
     EXPECT_EQ(1u, group_reader->_variant->_deferred_conjunct_slot_ids.count(virt_slot->id()));
 }
