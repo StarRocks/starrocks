@@ -103,6 +103,7 @@ class WindowSkewTest extends PlanTestBase {
     public void setUp() {
         super.setUp();
         connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
+        connectContext.getSessionVariable().setSplitWindowSkewToUnionMaxSkewedBranchCount(1);
 
         final var table = table();
         setTableStatistics(table, 1000);
@@ -169,30 +170,30 @@ class WindowSkewTest extends PlanTestBase {
         // Validate Union child expressions match the expected columns from both branches
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
                         " result nullable: true], ]\n" +
-                        "  |  partition by: [5: p, INT, true]\n" +
-                        "  |  order by: [6: s, INT, true] ASC\n" +
+                        "  |  partition by: [1: p, INT, true]\n" +
+                        "  |  order by: [2: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 700\n" +
                         "  |  column statistics: \n" +
                         "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * sum(7: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+                        "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
 
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
                         "result nullable: true], ]\n" +
-                        "  |  order by: [2: s, INT, true] ASC\n" +
+                        "  |  order by: [6: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 300\n" +
                         "  |  column statistics: \n" +
                         "  |  * p-->[-Infinity, Infinity, 1.0, NaN, NaN] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+                        "  |  * sum(7: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
     }
 
     @Test
@@ -234,35 +235,109 @@ class WindowSkewTest extends PlanTestBase {
         String plan = getCostPlan(BASIC_WINDOW_SQL);
 
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [1: p, INT, true] = 1");
+        assertContains(plan, "Predicates: [5: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: ([5: p, INT, true] != 1) OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: (1: p IS NULL) OR (1: p != 1)");
 
-        assertContains(plan,
-                "ANALYTIC\n" +
-                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
-                        " result nullable: true], ]\n" +
-                        "  |  partition by: [5: p, INT, true]\n" +
-                        "  |  order by: [6: s, INT, true] ASC\n" +
-                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                        "  |  cardinality: 730\n" +
-                        "  |  column statistics: \n" +
-                        "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
-                        "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * sum(7: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
         assertContains(plan,
                 "ANALYTIC\n" +
                         "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
                         " result nullable: true], ]\n" +
+                        "  |  partition by: [1: p, INT, true]\n" +
                         "  |  order by: [2: s, INT, true] ASC\n" +
+                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                        "  |  cardinality: 701\n" +
+                        "  |  column statistics: \n" +
+                        "  |  * p-->[-Infinity, Infinity, 1.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
+                        "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                        "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                        "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+        assertContains(plan,
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        " result nullable: true], ]\n" +
+                        "  |  order by: [6: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 300\n" +
                         "  |  column statistics: \n" +
                         "  |  * p-->[1.0, 1.0, 0.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+                        "  |  * sum(7: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+    }
+
+    @Test
+    void testWindowWithMultipleMCVSkew() throws Exception {
+        Histogram histogram = new Histogram(List.of(), Map.ofEntries(
+                Map.entry("997", 500L),
+                Map.entry("998", 501L),
+                Map.entry("999", 502L)));
+
+        refreshAndSetColumnStatForP(
+                ColumnStatistic.builder().setNullsFraction(0.0).setHistogram(histogram).build());
+
+        connectContext.getSessionVariable().setSplitWindowSkewToUnionMaxSkewedBranchCount(3);
+
+        String plan = getCostPlan(BASIC_WINDOW_SQL);
+
+        // Check that UNION is present and has the correct output and child expressions
+        assertContains(plan,
+                "  0:UNION\n" +
+                        "  |  output exprs:\n" +
+                        "  |      [4, BIGINT, true] | [1, INT, true] | [2, INT, true]\n" +
+                        "  |  child exprs:\n" +
+                        "  |      [4: sum(3: x), BIGINT, true] | [1: p, INT, true] | [2: s, INT, true]\n" +
+                        "  |      [8: sum(7: x), BIGINT, true] | [5: p, INT, true] | [6: s, INT, true]\n" +
+                        "  |      [12: sum(11: x), BIGINT, true] | [9: p, INT, true] | [10: s, INT, true]\n" +
+                        "  |      [16: sum(15: x), BIGINT, true] | [13: p, INT, true] | [14: s, INT, true]\n" +
+                        "  |  pass-through-operands: all");
+
+        // Check the skewed branch predicates
+        assertContains(plan, "Predicates: [13: p, INT, true] = 997");
+        assertContains(plan, "Predicates: [9: p, INT, true] = 998");
+        assertContains(plan, "Predicates: [5: p, INT, true] = 999");
+
+        // Check unskewed branch predicate. It must include null values.
+        assertContains(plan, "Predicates: (1: p IS NULL) OR (((1: p != 999) AND (1: p != 998)) AND (1: p != 997))");
+
+    }
+
+    @Test
+    void testWindowWithMultipleMCVAndNullSkew() throws Exception {
+        Histogram histogram = new Histogram(List.of(), Map.ofEntries(
+                Map.entry("997", 500L),
+                Map.entry("998", 501L),
+                Map.entry("999", 502L)));
+
+        refreshAndSetColumnStatForP(
+                ColumnStatistic.builder().setNullsFraction(0.25).setHistogram(histogram).build());
+
+        connectContext.getSessionVariable().setSplitWindowSkewToUnionMaxSkewedBranchCount(4);
+
+        String plan = getCostPlan(BASIC_WINDOW_SQL);
+
+        // Check that UNION is present and has the correct output and child expressions
+        assertContains(plan,
+                "  0:UNION\n" +
+                        "  |  output exprs:\n" +
+                        "  |      [4, BIGINT, true] | [1, INT, true] | [2, INT, true]\n" +
+                        "  |  child exprs:\n" +
+                        "  |      [4: sum(3: x), BIGINT, true] | [1: p, INT, true] | [2: s, INT, true]\n" +
+                        "  |      [8: sum(7: x), BIGINT, true] | [5: p, INT, true] | [6: s, INT, true]\n" +
+                        "  |      [12: sum(11: x), BIGINT, true] | [9: p, INT, true] | [10: s, INT, true]\n" +
+                        "  |      [16: sum(15: x), BIGINT, true] | [13: p, INT, true] | [14: s, INT, true]\n" +
+                        "  |      [20: sum(19: x), BIGINT, true] | [17: p, INT, true] | [18: s, INT, true]\n" +
+                        "  |  pass-through-operands: all");
+
+        // Check the skewed branch predicates
+        assertContains(plan, "Predicates: 5: p IS NULL");
+        assertContains(plan, "Predicates: [17: p, INT, true] = 997");
+        assertContains(plan, "Predicates: [13: p, INT, true] = 998");
+        assertContains(plan, "Predicates: [9: p, INT, true] = 999");
+
+        // Check unskewed branch predicate. It must *not* include null values.
+        assertContains(plan,
+                "Predicates: 1: p IS NOT NULL, [1: p, INT, true] != 999, [1: p, INT, true] != 998, [1: p, INT, true] != 997");
     }
 
     @Test
@@ -276,8 +351,8 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [6: p, INT, true] IS NOT NULL");
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: 1: p IS NOT NULL");
+        assertContains(plan, "Predicates: 6: p IS NULL");
     }
 
     @Test
@@ -373,20 +448,21 @@ class WindowSkewTest extends PlanTestBase {
         // Verify UNION rewrite is triggered
         assertContains(plan, "UNION");
 
-        assertContains(plan, "Predicates: [1: p, INT, true] = 1");
-        assertContains(plan, "Predicates: ([5: p, INT, true] != 1) OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: [5: p, INT, true] = 1");
+        assertContains(plan, "Predicates: (1: p IS NULL) OR (1: p != 1)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
                         "result nullable: true], ]\n" +
-                        "  |  order by: [2: s, INT, true] ASC");
+                        "  |  order by: [6: s, INT, true] ASC");
 
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
                         " result nullable: true], ]\n" +
-                        "  |  partition by: [5: p, INT, true]");
+                        "  |  partition by: [1: p, INT, true]\n" +
+                        "  |  order by: [2: s, INT, true] ASC");
     }
 
     @Test
@@ -413,8 +489,8 @@ class WindowSkewTest extends PlanTestBase {
         String plan = getCostPlan(sql);
 
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [1: p, VARCHAR, true] = 'abc'");
-        assertContains(plan, "Predicates: ([5: p, VARCHAR, true] != 'abc') OR ([5: p, VARCHAR, true] IS NULL)");
+        assertContains(plan, "Predicates: [5: p, VARCHAR, true] = 'abc'");
+        assertContains(plan, "Predicates: (1: p IS NULL) OR (1: p != 'abc')");
     }
 
     @Test
