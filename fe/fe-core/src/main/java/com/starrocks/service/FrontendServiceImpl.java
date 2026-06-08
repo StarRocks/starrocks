@@ -2301,7 +2301,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-<<<<<<< HEAD
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
         TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
@@ -2310,19 +2309,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
             result.setStatus(errorStatus);
             return result;
-=======
-        boolean newInnerCtx = ConnectContext.get() == null;
-        ConnectContext ctx = Util.getOrCreateInnerContext();
-        if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-            ctx.setCurrentWarehouseId(txnState.getWarehouseId());
-            if (newInnerCtx) {
-                // setCurrentWarehouseId replaces sessionVariable with a clone of the global
-                // default, discarding ConnectContext.buildInner's MV-rewrite override. Only
-                // re-apply when the context is freshly created so we don't mutate a reused
-                // user session.
-                ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
-            }
->>>>>>> 009022761e ([BugFix] Fix session variable override caused by SET WAREHOUSE in statistics tasks (#74385))
         }
 
         if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
