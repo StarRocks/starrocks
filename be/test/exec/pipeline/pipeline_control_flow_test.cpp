@@ -30,6 +30,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
@@ -789,8 +790,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
     Operators operators{source_factory.create(1, 0), spillable_factory.create(1, 0)};
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
-                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, nullptr, -1);
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx,
+                              harness.pipeline.pipeline_event(), &harness.pipeline, nullptr, -1);
 
     ASSERT_OK(driver.prepare(harness.state()));
     ASSERT_EQ(config::local_exchange_buffer_mem_limit_per_driver +
@@ -814,8 +815,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all
     Operators operators{source_factory.create(1, 0), failing_factory.create(1, 0)};
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
-                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, nullptr, -1);
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx,
+                              harness.pipeline.pipeline_event(), &harness.pipeline, nullptr, -1);
 
     auto st = driver.prepare(harness.state());
     ASSERT_FALSE(st.ok());
@@ -835,13 +836,35 @@ TEST(PipelineDriverFragmentRuntimeStateTest, test_cancelled_state_uses_fragment_
     fragment_runtime_state._final_status.store(&fragment_runtime_state._s_status);
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
-                              &fragment_runtime_state, &harness.fragment_ctx, &harness.pipeline, &harness.pipeline,
-                              nullptr, -1);
+                              &fragment_runtime_state, &harness.fragment_ctx, harness.pipeline.pipeline_event(),
+                              &harness.pipeline, nullptr, -1);
 
     harness.state()->set_is_cancelled(true);
 
     EXPECT_TRUE(driver.check_fragment_is_canceled_for_test(harness.state()));
     EXPECT_EQ(DriverState::CANCELED, driver.driver_state());
+}
+
+TEST(PipelineDriverDependencyEventTest, test_driver_waits_on_injected_pipeline_event) {
+    SpillDriverTestHarness harness;
+    SpillLifecycleSourceOperatorFactory source_factory(1, 10, false, true);
+    SpillLifecycleOperatorFactory operator_factory(2, 20, false, true);
+    Operators operators{source_factory.create(1, 0), operator_factory.create(1, 0)};
+
+    auto dependency_event = Event::create_event();
+    auto pipeline_event = Event::create_event();
+    pipeline_event->set_need_wait_dependencies_finished(true);
+    pipeline_event->add_dependency(dependency_event.get());
+
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx,
+                              pipeline_event.get(), &harness.pipeline, nullptr, -1);
+
+    ASSERT_OK(driver.prepare(harness.state()));
+    EXPECT_TRUE(driver.dependencies_block());
+
+    dependency_event->finish(harness.state());
+    EXPECT_FALSE(driver.dependencies_block());
 }
 
 TEST(PipelineDriverScanInterfaceTest, test_prepare_attaches_ticket_checker_to_driver_scan_interface) {
@@ -854,8 +877,8 @@ TEST(PipelineDriverScanInterfaceTest, test_prepare_attaches_ticket_checker_to_dr
     TestTicketedMorselQueue morsel_queue;
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
-                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, nullptr, -1);
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx,
+                              harness.pipeline.pipeline_event(), &harness.pipeline, nullptr, -1);
     driver.set_morsel_queue(&morsel_queue);
 
     ASSERT_OK(driver.prepare(harness.state()));
@@ -872,8 +895,8 @@ TEST(PipelineDriverScanInterfaceTest, test_process_uses_driver_scan_interface_ho
     Operators operators{source, sink_factory.create(1, 0)};
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
-                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, nullptr, -1);
+                              &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx,
+                              harness.pipeline.pipeline_event(), &harness.pipeline, nullptr, -1);
 
     ASSERT_OK(driver.prepare(harness.state()));
     ASSERT_OK(driver.prepare_local_state(harness.state()));
