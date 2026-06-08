@@ -858,7 +858,8 @@ Status VariantProjectionHandler::materialize_hidden_source(SlotId slot_id, const
     }
     auto it = _hidden_slot_index.find(slot_id);
     if (it == _hidden_slot_index.end()) {
-        return Status::InternalError(fmt::format("materialize_hidden_source: slot {} not in hidden_slot_index", slot_id));
+        return Status::InternalError(
+                fmt::format("materialize_hidden_source: slot {} not in hidden_slot_index", slot_id));
     }
     ColumnPtr col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
     RETURN_IF_ERROR(it->second->reader->read_range(range, filter, col));

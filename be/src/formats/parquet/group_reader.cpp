@@ -267,14 +267,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // 5. Backfill lazy physical columns.  Pass chunk_filter so that any lazy
         //    columns triggered during step 2 can be filtered to surviving rows.
         {
-            bool has_any_lazy = !_column_materializer->lazy_column_indices().empty() ||
-                                !_variant->lazy_hidden_slot_ids().empty();
+            bool has_any_lazy =
+                    !_column_materializer->lazy_column_indices().empty() || !_variant->lazy_hidden_slot_ids().empty();
             if (has_any_lazy) {
                 _param.stats->parquet_lazy_col_skip_rows += count - active_chunk->num_rows();
             }
             if (!_column_materializer->lazy_column_indices().empty()) {
-                RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter,
-                                                                        chunk_filter, has_filter, active_chunk));
+                RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter, chunk_filter,
+                                                                        has_filter, active_chunk));
             }
         }
 

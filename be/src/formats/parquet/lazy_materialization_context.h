@@ -42,7 +42,10 @@ public:
     // variant may be nullptr when no variant columns are present.
     LazyMaterializationContext(ColumnMaterializer& materializer, VariantProjectionHandler* variant,
                                const Range<uint64_t>& range, const Filter* filter, ChunkPtr& active_chunk)
-            : _materializer(materializer), _variant(variant), _range(range), _filter(filter),
+            : _materializer(materializer),
+              _variant(variant),
+              _range(range),
+              _filter(filter),
               _active_chunk(active_chunk) {}
 
     LazyMaterializationContext(const LazyMaterializationContext&) = delete;

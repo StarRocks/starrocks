@@ -586,8 +586,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.raw_rows_read_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _profile.late_materialize_skip_rows_counter = ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
-    _profile.parquet_lazy_col_skip_rows_counter =
-            ADD_COUNTER(_runtime_profile, "ParquetLazyColSkipRows", TUnit::UNIT);
+    _profile.parquet_lazy_col_skip_rows_counter = ADD_COUNTER(_runtime_profile, "ParquetLazyColSkipRows", TUnit::UNIT);
     _profile.parquet_lazy_slot_triggered_counter =
             ADD_COUNTER(_runtime_profile, "ParquetLazySlotTriggered", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
