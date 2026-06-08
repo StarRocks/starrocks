@@ -138,4 +138,58 @@ TEST_F(ThreadPoolExecutorTest, submit_runs_inline_instead_of_crashing) {
     pool->shutdown();
 }
 
+TEST_F(ThreadPoolExecutorTest, submit_retries_while_busy_then_succeeds) {
+    std::atomic<bool> release{false};
+    auto pool = build_saturated_pool("test_retry", &release);
+    ThreadPoolExecutor executor(pool.get(), kDontTakeOwnership);
+
+    config::enable_load_fail_fast_when_disk_write_hang = true;
+    // A large threshold keeps the pool in the "busy, back off and retry" branch rather than
+    // the "hung, give up" branch, so submit() exercises the retry loop instead of bailing out.
+    config::be_exit_after_disk_write_hang_second = 100000;
+
+    // Release the blocked worker shortly after submit() starts spinning so the queue drains
+    // and the retry loop eventually succeeds in offloading the task to the pool.
+    std::thread releaser([&]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        release.store(true);
+    });
+
+    std::atomic<int> ran{0};
+    auto fn = [](void* arg) -> void* {
+        static_cast<std::atomic<int>*>(arg)->fetch_add(1);
+        return nullptr;
+    };
+    int rc = executor.submit(fn, &ran);
+    ASSERT_EQ(0, rc);
+
+    releaser.join();
+    // The task was offloaded to the pool (not run inline / crashed); draining the pool runs it.
+    pool->shutdown();
+    ASSERT_EQ(1, ran.load());
+}
+
+// Death tests fork; TSAN dies on thread creation after fork, so skip it there (matching
+// the convention in threadpool_test.cpp). The saturated pool is built in the parent so the
+// forked child only hits do_submit()'s capacity check (which returns ServiceUnavailable
+// without spawning a worker) before reaching LOG(FATAL).
+#ifndef THREAD_SANITIZER
+TEST_F(ThreadPoolExecutorTest, submit_crashes_when_fail_fast_disabled) {
+    std::atomic<bool> release{false};
+    auto pool = build_saturated_pool("test_fatal", &release);
+    ThreadPoolExecutor executor(pool.get(), kDontTakeOwnership);
+
+    // Legacy behavior: with fail-fast disabled, a hung pool takes the whole BE down so the
+    // storage error is surfaced instead of being swallowed.
+    config::enable_load_fail_fast_when_disk_write_hang = false;
+    config::be_exit_after_disk_write_hang_second = 0;
+
+    auto fn = [](void*) -> void* { return nullptr; };
+    ASSERT_DEATH({ executor.submit(fn, nullptr); }, "BE exit since submit write fail");
+
+    release.store(true);
+    pool->shutdown();
+}
+#endif
+
 } // namespace starrocks::bthreads
