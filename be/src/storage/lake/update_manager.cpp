@@ -14,6 +14,9 @@
 
 #include "storage/lake/update_manager.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -1616,28 +1619,51 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
     *out = nullptr;
     const uint32_t ucid = column.unique_id();
 
-    // Collect hits newest -> oldest, stopping at the first DENSE file.
+    // Collect file hits newest -> oldest, stopping at the first DENSE file. Also collect inline
+    // sparse patches (a separate axis carried in meta, no file) that contain |ucid|: they are read
+    // exactly like SPARSE files but with ZERO file IO, interleaved with the file layers by version.
     struct Hit {
         DeltaColumnGroupPtr dcg;
         int32_t file_idx = -1;
         DeltaColumnFileKind kind = DeltaColumnFileKind::DENSE_COLS;
     };
+    struct InlineHit {
+        DeltaColumnGroupPtr dcg; // keeps the InlinePatch alive
+        const InlinePatch* patch = nullptr;
+        int32_t value_idx = -1;
+    };
     std::vector<Hit> hits;
+    std::vector<InlineHit> inline_hits;
     bool has_sparse = false;
+    bool has_layer = false; // any file hit OR inline patch carrying |ucid|
     for (const auto& dcg : ctx.dcgs) {
+        // Inline patches in this dcg that carry |ucid| (newer-or-equal to the file hits visited so
+        // far; the dense-terminate version filter below drops those <= the dense base version).
+        for (size_t i = 0; i < dcg->inline_patch_count(); ++i) {
+            const InlinePatch& patch = dcg->inline_patch_at(i);
+            const int32_t vidx = patch.value_idx_of(static_cast<ColumnUID>(ucid));
+            if (vidx < 0) {
+                continue;
+            }
+            inline_hits.push_back(InlineHit{.dcg = dcg, .patch = &patch, .value_idx = vidx});
+            has_sparse = true;
+            has_layer = true;
+        }
+
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first < 0) {
             continue;
         }
         Hit hit{.dcg = dcg, .file_idx = idx.first, .kind = dcg->file_kind(idx.first)};
         hits.push_back(hit);
+        has_layer = true;
         if (hit.kind == DeltaColumnFileKind::SPARSE_PERCOL) {
             has_sparse = true;
         } else {
             break; // first DENSE becomes the base
         }
     }
-    if (hits.empty()) {
+    if (!has_layer) {
         return Status::NotFound(fmt::format("Column {} not found in any DCG", ucid));
     }
     if (!has_sparse) {
@@ -1645,9 +1671,16 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
     }
 
     // --- base iterator ---
+    // The base is the bottom DENSE `.cols` file when the file walk ended at one; otherwise (no file
+    // hits at all, i.e. inline-only; or the walk ran off the end on SPARSE files) it is the original
+    // segment column. A DENSE base is row-complete at its version: only overlays (file SPARSE or
+    // inline) STRICTLY NEWER than it survive (dense_base_version filter below).
+    const bool has_dense_base = !hits.empty() && hits.back().kind == DeltaColumnFileKind::DENSE_COLS;
+    const int64_t dense_base_version =
+            has_dense_base ? hits.back().dcg->version() : std::numeric_limits<int64_t>::min();
     std::unique_ptr<ColumnIterator> base_iter;
-    const Hit& bottom = hits.back();
-    if (bottom.kind == DeltaColumnFileKind::DENSE_COLS) {
+    if (has_dense_base) {
+        const Hit& bottom = hits.back();
         // Route through the metacache (footer parsed once) and fill caches per lake_io_opts.
         ASSIGN_OR_RETURN(auto dense_seg, ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema,
                                                                       lake_io_opts, lake_io_opts.fill_metadata_cache));
@@ -1712,8 +1745,34 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
         layer.read_file = std::move(spcols_file);
         layers.push_back(std::move(layer));
     }
-    // hits newest -> oldest => reverse to version-ASCENDING (oldest applied first, newest last).
-    std::reverse(layers.begin(), layers.end());
+    // Inline patches: materialized from meta (ZERO file IO). Keep only those strictly newer than a
+    // dense base for this uid (older inline patches are superseded by the row-complete dense).
+    for (const auto& ih : inline_hits) {
+        const InlinePatch& patch = *ih.patch;
+        if (patch.version <= dense_base_version) {
+            continue;
+        }
+        LayeredOverlayColumnIterator::SparseLayer layer;
+        layer.is_inline = true;
+        layer.value_column = column;
+        layer.version = patch.version;
+        layer.row_count = patch.row_count;
+        layer.source_segment_num_rows = ih.dcg->source_segment_num_rows();
+        // Decoded source_rowids are seeded directly (DeltaColumnGroup parsed the LE bytes already);
+        // _ensure_layer_loaded only deserializes this layer's value blob.
+        layer.source_rowids = patch.source_rowids;
+        layer.inline_value_blob = patch.column_values[ih.value_idx];
+        layer.presence_min = patch.min_source_rowid;
+        layer.presence_max = patch.max_source_rowid;
+        layer.presence_known = patch.known();
+        layers.push_back(std::move(layer));
+    }
+    // Sort all overlay layers version-ASCENDING (oldest applied first, newest last => last-write-wins).
+    // Stable keeps any same-version layers in collection order (the writer never emits both an inline
+    // patch and a file for the same uid at the same version, so ties are degenerate).
+    std::stable_sort(layers.begin(), layers.end(),
+                     [](const LayeredOverlayColumnIterator::SparseLayer& a,
+                        const LayeredOverlayColumnIterator::SparseLayer& b) { return a.version < b.version; });
 
     *out = std::make_unique<LayeredOverlayColumnIterator>(std::move(base_iter), std::move(layers),
                                                           /*base_initialized=*/true);

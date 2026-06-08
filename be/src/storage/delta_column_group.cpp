@@ -14,6 +14,7 @@
 
 #include "storage/delta_column_group.h"
 
+#include <cstring>
 #include <memory>
 
 #include "storage/protobuf_file.h"
@@ -47,8 +48,18 @@ void DeltaColumnGroup::_calc_memory_usage() {
         total_encryption_meta_size += encryption_meta.length();
     }
 
+    // Inline patches live in meta (resident); account for their value blobs, source rowids and uids.
+    size_t total_inline_bytes = 0;
+    for (const auto& patch : _inline_patches) {
+        total_inline_bytes += patch.source_rowids.size() * sizeof(uint32_t);
+        total_inline_bytes += patch.column_uids.size() * sizeof(ColumnUID);
+        for (const auto& blob : patch.column_values) {
+            total_inline_bytes += blob.size();
+        }
+    }
+
     _memory_usage = sizeof(size_t) + sizeof(int64_t) + sizeof(uint32_t) * total_ids + total_column_name_size +
-                    total_encryption_meta_size;
+                    total_encryption_meta_size + total_inline_bytes;
 }
 
 int DeltaColumnGroup::merge_into_by_version(DeltaColumnGroupList& dcgs, const std::string& dir,
@@ -187,6 +198,37 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
             presences.push_back(p);
         }
         set_sdcg_meta(std::move(kinds), std::move(counts), std::move(presences), dcg_ver_pb.source_segment_num_rows());
+    }
+    // === SDCG inline patches === a SEPARATE axis from the file lists. Decode each
+    // InlineSparsePatchPB into an InlinePatch, eagerly converting the LE source_rowids bytes into
+    // a uint32 vector (ascending) so the reader consumes them directly. column_values blobs are
+    // kept opaque; the reader deserializes them via ColumnArraySerde into the read-schema type.
+    _inline_patches.reserve(dcg_ver_pb.inline_patches_size());
+    for (const auto& pb : dcg_ver_pb.inline_patches()) {
+        InlinePatch patch;
+        patch.version = pb.version();
+        patch.row_count = pb.row_count();
+        patch.column_uids.reserve(pb.column_uids_size());
+        for (uint32_t uid : pb.column_uids()) {
+            patch.column_uids.push_back(static_cast<ColumnUID>(uid));
+        }
+        patch.column_values.reserve(pb.column_values_size());
+        for (const auto& blob : pb.column_values()) {
+            patch.column_values.push_back(blob);
+        }
+        // source_rowids are K x uint32 little-endian, ascending. memcpy is safe on LE hosts
+        // (StarRocks BE is x86_64/aarch64 LE); decode element-wise to stay byte-order explicit.
+        const std::string& rowid_bytes = pb.source_rowids();
+        const size_t n = rowid_bytes.size() / sizeof(uint32_t);
+        patch.source_rowids.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            uint32_t v;
+            std::memcpy(&v, rowid_bytes.data() + i * sizeof(uint32_t), sizeof(uint32_t));
+            patch.source_rowids[i] = v;
+        }
+        if (pb.has_min_source_rowid()) patch.min_source_rowid = pb.min_source_rowid();
+        if (pb.has_max_source_rowid()) patch.max_source_rowid = pb.max_source_rowid();
+        _inline_patches.push_back(std::move(patch));
     }
     _calc_memory_usage();
     return Status::OK();

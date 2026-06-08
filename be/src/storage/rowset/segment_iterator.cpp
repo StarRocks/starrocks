@@ -315,7 +315,9 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -366,8 +368,12 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -483,10 +489,21 @@ private:
         int32_t col_idx = -1;    // index of |ucid| within that file's unique_column_ids
         DeltaColumnFileKind kind = DeltaColumnFileKind::DENSE_COLS;
     };
-    // Walk _dcgs newest -> oldest collecting files that contain |ucid|. Stop after the first DENSE
-    // file (it is row-complete and becomes the base). Returns hits in newest -> oldest order.
-    // |has_sparse| is set true iff any collected hit is SPARSE.
-    StatusOr<std::vector<DcgLayerHit>> _collect_dcg_layers(uint32_t ucid, bool* has_sparse);
+    // One inline-sparse-patch overlay hit for |ucid| (carried in tablet meta, no file). The reader
+    // materializes it with ZERO file IO. Interleaves with DcgLayerHit by `version`.
+    struct InlineLayerHit {
+        DeltaColumnGroupPtr dcg; // owning dcg entry (keeps the InlinePatch alive)
+        const InlinePatch* patch = nullptr;
+        int32_t value_idx = -1; // index of |ucid| within patch->column_uids / column_values
+    };
+    // Walk _dcgs newest -> oldest collecting files AND inline patches that contain |ucid|. Stop the
+    // FILE walk after the first DENSE file (it is row-complete and becomes the base); inline patches
+    // NEWER than that dense still apply and are collected, older ones excluded. Returns file hits in
+    // newest -> oldest order; when |inline_hits| is non-null it is filled with the matching inline
+    // patches (any order; merged/sorted by version in _build_overlay_column_iterator). |has_sparse|
+    // is set true iff any collected layer (SPARSE file OR inline patch) is present.
+    StatusOr<std::vector<DcgLayerHit>> _collect_dcg_layers(uint32_t ucid, bool* has_sparse,
+                                                           std::vector<InlineLayerHit>* inline_hits = nullptr);
 
     // Build a LayeredOverlayColumnIterator from resolved layer hits when at least one is SPARSE.
     // |dense_base_hit| (if non-null) is the bottom DENSE file the walk ended at; otherwise the base
@@ -494,8 +511,8 @@ private:
     // files into the SegmentIterator-owned holders so they outlive the overlay iterator.
     StatusOr<std::unique_ptr<ColumnIterator>> _build_overlay_column_iterator(
             const ColumnId cid, const TabletColumn& column, ColumnAccessPath* path,
-            const std::vector<DcgLayerHit>& hits, const ColumnIteratorOptions& iter_opts,
-            const RandomAccessFileOptions& base_raf_opts);
+            const std::vector<DcgLayerHit>& hits, const std::vector<InlineLayerHit>& inline_hits,
+            const ColumnIteratorOptions& iter_opts, const RandomAccessFileOptions& base_raf_opts);
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
@@ -1312,12 +1329,38 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
     return nullptr;
 }
 
-StatusOr<std::vector<SegmentIterator::DcgLayerHit>> SegmentIterator::_collect_dcg_layers(uint32_t ucid,
-                                                                                         bool* has_sparse) {
+StatusOr<std::vector<SegmentIterator::DcgLayerHit>> SegmentIterator::_collect_dcg_layers(
+        uint32_t ucid, bool* has_sparse, std::vector<InlineLayerHit>* inline_hits) {
     std::vector<DcgLayerHit> hits;
     *has_sparse = false;
     // iterate dcg from new ver to old ver
     for (const auto& dcg : _dcgs) {
+        // Collect inline patches (a separate axis from files) that carry |ucid|. They live in this
+        // dcg's meta and are NEWER-or-equal to any file in dcgs visited so far; the dense-terminate
+        // filtering (version > dense) is applied in _build_overlay_column_iterator. We collect them
+        // for every dcg visited up to and including the one that contributes the terminating dense.
+        if (inline_hits != nullptr) {
+            for (size_t i = 0; i < dcg->inline_patch_count(); ++i) {
+                const InlinePatch& patch = dcg->inline_patch_at(i);
+                const int32_t vidx = patch.value_idx_of(static_cast<ColumnUID>(ucid));
+                if (vidx < 0) {
+                    continue; // this patch does not carry the requested uid
+                }
+                inline_hits->push_back(InlineLayerHit{.dcg = dcg, .patch = &patch, .value_idx = vidx});
+                *has_sparse = true;
+            }
+        } else {
+            // Even when the caller does not want the inline hits themselves (e.g. the bitmap-prune
+            // probe), an inline patch carrying |ucid| means the column has overlay data and must not
+            // be pruned / must take the overlay path.
+            for (size_t i = 0; i < dcg->inline_patch_count(); ++i) {
+                if (dcg->inline_patch_at(i).value_idx_of(static_cast<ColumnUID>(ucid)) >= 0) {
+                    *has_sparse = true;
+                    break;
+                }
+            }
+        }
+
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first < 0) {
             continue;
@@ -1332,6 +1375,8 @@ StatusOr<std::vector<SegmentIterator::DcgLayerHit>> SegmentIterator::_collect_dc
             *has_sparse = true;
         } else {
             // First DENSE file is row-complete: it becomes the base, stop walking older entries.
+            // Inline patches in THIS dcg (already collected above) that are newer than the dense
+            // still apply; the version filter in _build_overlay_column_iterator enforces that.
             break;
         }
     }
@@ -1340,13 +1385,18 @@ StatusOr<std::vector<SegmentIterator::DcgLayerHit>> SegmentIterator::_collect_dc
 
 StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column_iterator(
         const ColumnId cid, const TabletColumn& column, ColumnAccessPath* path, const std::vector<DcgLayerHit>& hits,
-        const ColumnIteratorOptions& iter_opts, const RandomAccessFileOptions& base_raf_opts) {
+        const std::vector<InlineLayerHit>& inline_hits, const ColumnIteratorOptions& iter_opts,
+        const RandomAccessFileOptions& base_raf_opts) {
     // hits are newest -> oldest. The walk stopped either at the first DENSE file (last element) or
     // ran off the end (no dense in the stack). Determine the base.
     const DcgLayerHit* dense_base_hit = nullptr;
     if (!hits.empty() && hits.back().kind == DeltaColumnFileKind::DENSE_COLS) {
         dense_base_hit = &hits.back();
     }
+    // A DENSE base is row-complete at its version: only overlays (file SPARSE or inline) STRICTLY
+    // NEWER than it survive. With no dense base every collected overlay applies.
+    const int64_t dense_base_version =
+            dense_base_hit != nullptr ? dense_base_hit->dcg->version() : std::numeric_limits<int64_t>::min();
 
     // --- Build the base column iterator + wire its read file into _column_files[cid] ---
     std::unique_ptr<ColumnIterator> base_iter;
@@ -1385,12 +1435,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
         RETURN_IF_ERROR(base_iter->init(base_opts));
     }
 
-    // --- Build the SPARSE overlay layers (collect newest -> oldest, then reverse to ASCENDING) ---
+    // --- Build the overlay layers: SPARSE files + inline patches, interleaved by version ---
+    // Both axes are filtered against the dense base (only overlays strictly newer survive) and then
+    // sorted version-ASCENDING so apply order is oldest-first / newest-last (last-write-wins).
     std::vector<LayeredOverlayColumnIterator::SparseLayer> layers;
     for (const auto& hit : hits) {
         if (hit.kind != DeltaColumnFileKind::SPARSE_PERCOL) {
             continue; // skip the trailing dense base (already consumed) — only sparse become layers
         }
+        // SPARSE file hits all precede the dense in the newest->oldest walk, so they are newer than
+        // the dense by construction; no extra version filter needed here.
         LayeredOverlayColumnIterator::SparseLayer layer;
         ASSIGN_OR_RETURN(layer.spcols_segment,
                          _segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, _opts.tablet_schema,
@@ -1413,9 +1467,35 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
         layer.read_file = std::move(spcols_file);
         layers.push_back(std::move(layer));
     }
-    // hits were newest -> oldest, so `layers` is newest -> oldest. Reverse to version-ASCENDING
-    // (oldest first) so the overlay applies oldest first and newest last (last-write-wins).
-    std::reverse(layers.begin(), layers.end());
+    // Inline patches: materialized from meta (ZERO file IO). Keep only those strictly newer than a
+    // dense base for this uid (older inline patches are superseded by the row-complete dense).
+    for (const auto& ih : inline_hits) {
+        const InlinePatch& patch = *ih.patch;
+        if (patch.version <= dense_base_version) {
+            continue;
+        }
+        LayeredOverlayColumnIterator::SparseLayer layer;
+        layer.is_inline = true;
+        layer.value_column = column;
+        layer.version = patch.version;
+        layer.row_count = patch.row_count;
+        layer.source_segment_num_rows = ih.dcg->source_segment_num_rows();
+        // The decoded source_rowids are seeded directly (DeltaColumnGroup already parsed the LE
+        // bytes); _ensure_layer_loaded only deserializes the value blob for this layer.
+        layer.source_rowids = patch.source_rowids;
+        layer.inline_value_blob = patch.column_values[ih.value_idx];
+        // Presence pre-filter from the patch's [min, max]; known iff both bounds are set.
+        layer.presence_min = patch.min_source_rowid;
+        layer.presence_max = patch.max_source_rowid;
+        layer.presence_known = patch.known();
+        layers.push_back(std::move(layer));
+    }
+    // Sort all overlay layers version-ASCENDING (oldest applied first, newest last => last-write-wins).
+    // A stable sort keeps any same-version layers in collection order (the writer never emits both an
+    // inline patch and a file for the same uid at the same version, so ties are degenerate).
+    std::stable_sort(layers.begin(), layers.end(),
+                     [](const LayeredOverlayColumnIterator::SparseLayer& a,
+                        const LayeredOverlayColumnIterator::SparseLayer& b) { return a.version < b.version; });
 
     auto overlay = std::make_unique<LayeredOverlayColumnIterator>(std::move(base_iter), std::move(layers),
                                                                   /*base_initialized=*/true);
@@ -1555,10 +1635,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     // legacy/local tablets whose file kinds are always DENSE.
     if (!_dcgs.empty()) {
         bool has_sparse = false;
-        ASSIGN_OR_RETURN(auto hits, _collect_dcg_layers(static_cast<uint32_t>(ucid), &has_sparse));
+        std::vector<InlineLayerHit> inline_hits;
+        ASSIGN_OR_RETURN(auto hits, _collect_dcg_layers(static_cast<uint32_t>(ucid), &has_sparse, &inline_hits));
         if (has_sparse) {
             ASSIGN_OR_RETURN(_column_iterators[cid],
-                             _build_overlay_column_iterator(cid, col, access_path, hits, iter_opts, opts));
+                             _build_overlay_column_iterator(cid, col, access_path, hits, inline_hits, iter_opts, opts));
             return Status::OK();
         }
     }

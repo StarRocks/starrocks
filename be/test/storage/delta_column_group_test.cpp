@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "fs/key_cache.h"
 
 namespace starrocks {
@@ -402,6 +404,103 @@ TEST(TestDeltaColumnGroup, testSDCGLegacyPresencesAbsentIsUnknown) {
     EXPECT_EQ(5, dcg.presence_min(1));
     EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_max(1));
     EXPECT_FALSE(dcg.presence_known(1)) << "a presence with min but no max must not be skippable";
+}
+
+// SDCG: inline patches load on a SEPARATE axis from the file lists. The LE source_rowids bytes decode
+// into an ascending uint32 vector, column_uids / column_values are carried 1:1, and the presence range
+// resolves to known(). Inline patches must NOT appear in column_files() / get_column_idx() (the file
+// axis), and they coexist with file entries.
+TEST(TestDeltaColumnGroup, testSDCGLoadInlinePatches) {
+    DeltaColumnGroupVerPB dcg_ver;
+    // One file entry (a dense .cols for uid 9) plus two inline patches (uids {3,4} and {3}).
+    dcg_ver.add_versions(60);
+    dcg_ver.add_column_files("d0.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(9);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(DENSE_COLS);
+    dcg_ver.add_sparse_row_counts(0);
+    dcg_ver.add_presences();
+    dcg_ver.set_source_segment_num_rows(1000);
+
+    auto le_bytes = [](const std::vector<uint32_t>& rowids) {
+        std::string s;
+        s.resize(rowids.size() * sizeof(uint32_t));
+        for (size_t i = 0; i < rowids.size(); ++i) {
+            uint32_t v = rowids[i];
+            std::memcpy(s.data() + i * sizeof(uint32_t), &v, sizeof(uint32_t));
+        }
+        return s;
+    };
+
+    auto* ip0 = dcg_ver.add_inline_patches();
+    ip0->set_version(61);
+    ip0->add_column_uids(3);
+    ip0->add_column_uids(4);
+    ip0->set_row_count(3);
+    ip0->set_source_rowids(le_bytes({10, 200, 4000}));
+    ip0->add_column_values("blobA"); // opaque to the loader (reader deserializes later)
+    ip0->add_column_values("blobB");
+    ip0->set_min_source_rowid(10);
+    ip0->set_max_source_rowid(4000);
+
+    auto* ip1 = dcg_ver.add_inline_patches();
+    ip1->set_version(62);
+    ip1->add_column_uids(3);
+    ip1->set_row_count(1);
+    ip1->set_source_rowids(le_bytes({200}));
+    ip1->add_column_values("blobC");
+    ip1->set_min_source_rowid(200);
+    ip1->set_max_source_rowid(200);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(62, dcg_ver).ok());
+
+    // File axis is unaffected: one dense file for uid 9; inline uids 3/4 are NOT on the file axis.
+    ASSERT_EQ(1u, dcg.relative_column_files().size());
+    EXPECT_EQ(0, dcg.get_column_idx(9).first);
+    EXPECT_EQ(-1, dcg.get_column_idx(3).first) << "inline-only uid must not resolve on the file axis";
+    EXPECT_EQ(-1, dcg.get_column_idx(4).first);
+
+    // Inline axis decodes correctly.
+    ASSERT_EQ(2u, dcg.inline_patch_count());
+    const auto& p0 = dcg.inline_patch_at(0);
+    EXPECT_EQ(61, p0.version);
+    EXPECT_EQ(3, p0.row_count);
+    ASSERT_EQ(2u, p0.column_uids.size());
+    EXPECT_EQ(3, p0.column_uids[0]);
+    EXPECT_EQ(4, p0.column_uids[1]);
+    ASSERT_EQ(3u, p0.source_rowids.size());
+    EXPECT_EQ(10u, p0.source_rowids[0]);
+    EXPECT_EQ(200u, p0.source_rowids[1]);
+    EXPECT_EQ(4000u, p0.source_rowids[2]);
+    ASSERT_EQ(2u, p0.column_values.size());
+    EXPECT_EQ("blobA", p0.column_values[0]);
+    EXPECT_EQ("blobB", p0.column_values[1]);
+    EXPECT_TRUE(p0.known());
+    EXPECT_EQ(0, p0.value_idx_of(3));
+    EXPECT_EQ(1, p0.value_idx_of(4));
+    EXPECT_EQ(-1, p0.value_idx_of(9));
+
+    const auto& p1 = dcg.inline_patch_at(1);
+    EXPECT_EQ(62, p1.version);
+    EXPECT_EQ(1, p1.row_count);
+    ASSERT_EQ(1u, p1.source_rowids.size());
+    EXPECT_EQ(200u, p1.source_rowids[0]);
+}
+
+// SDCG: a legacy / dense-only DeltaColumnGroupVerPB with no inline_patches loads to an empty inline axis.
+TEST(TestDeltaColumnGroup, testSDCGNoInlinePatchesIsEmpty) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(70);
+    dcg_ver.add_column_files("d0.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(9);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(70, dcg_ver).ok());
+    EXPECT_EQ(0u, dcg.inline_patch_count());
 }
 
 } // namespace starrocks

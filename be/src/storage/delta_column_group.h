@@ -62,6 +62,42 @@ struct SparsePresence {
     bool known() const { return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown; }
 };
 
+// An inline sparse patch decoded from InlineSparsePatchPB. It is a `.spcols`-equivalent
+// overlay carried in tablet metadata (no file). It is a SEPARATE AXIS from the file lists
+// (_column_files / _column_uids): inline patches are NOT files and never appear in
+// column_ids() / column_files() / get_column_idx(). The layered overlay reader iterates
+// inline patches via inline_patch_count()/inline_patch_at(i) and merges them with the
+// file-backed layers ordered by `version`.
+//
+// Semantics mirror a SPARSE_PERCOL `.spcols`: K rows of a fixed column set, addressed by
+// the ascending `source_rowids` (base-segment ordinals), applied version-ascending as a
+// last-write-wins overlay. `column_values[i]` is the ColumnArraySerde blob for
+// `column_uids[i]` (same order); the reader deserializes it into the read-schema type.
+struct InlinePatch {
+    int64_t version = 0;
+    std::vector<ColumnUID> column_uids;
+    int64_t row_count = 0;
+    // Decoded once from the InlineSparsePatchPB.source_rowids LE bytes (ascending). The
+    // reader consumes this directly instead of re-parsing the wire bytes.
+    std::vector<uint32_t> source_rowids;
+    // One serialized value column per uid (same order as column_uids). The reader
+    // deserializes each via serde::ColumnArraySerde into the column type from the read schema.
+    std::vector<std::string> column_values;
+    int64_t min_source_rowid = kSDCGPresenceUnknown;
+    int64_t max_source_rowid = kSDCGPresenceUnknown;
+    bool known() const {
+        return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown;
+    }
+    // The column-position of |uid| within this patch (index into column_uids / column_values),
+    // or -1 when the patch does not carry that uid.
+    int32_t value_idx_of(ColumnUID uid) const {
+        for (size_t i = 0; i < column_uids.size(); ++i) {
+            if (column_uids[i] == uid) return static_cast<int32_t>(i);
+        }
+        return -1;
+    }
+};
+
 // `DeltaColumnGroup` is used for record the new update columns data
 // It is generated when column mode partial update happen.
 // `_column_ids` record the columns which have been updated, and `_column_file` points to the data file
@@ -199,6 +235,16 @@ public:
         _source_segment_num_rows = source_rows;
     }
 
+    // === SDCG inline sparse patches (separate axis from the file lists) ===
+    // Inline patches are `.spcols`-equivalent overlays carried in this entry's meta (no file).
+    // They are NOT files: they never appear in column_ids() / column_files() / get_column_idx().
+    // The layered overlay reader iterates them here and interleaves them with the file-backed
+    // layers ordered by version (ascending apply, last-write-wins). Loaded only from the lake
+    // VerPB; the local-engine save()/load() path never populates them (stays byte-identical).
+    size_t inline_patch_count() const { return _inline_patches.size(); }
+    const InlinePatch& inline_patch_at(size_t i) const { return _inline_patches[i]; }
+    const std::vector<InlinePatch>& inline_patches() const { return _inline_patches; }
+
 private:
     void _calc_memory_usage();
 
@@ -213,6 +259,9 @@ private:
     std::vector<int64_t> _sparse_row_counts; // K per sparse file; 0 for dense / unknown
     // Per-file presence bounds; 1:1 with _column_files when present, else empty (all unknown).
     std::vector<SparsePresence> _presences;
+    // Inline sparse patches (separate axis: NOT parallel to _column_files). Loaded from the lake
+    // VerPB inline_patches; empty for dense / legacy / local-engine metadata.
+    std::vector<InlinePatch> _inline_patches;
     int64_t _source_segment_num_rows = 0; // M of the source segment; 0 == unknown
     size_t _memory_usage = 0;
     int64_t _file_size = 0; // file size of all column files

@@ -130,7 +130,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<int64_t>& file_sizes,
                                  const std::vector<DeltaColumnFileKindPB>& file_kinds,
                                  const std::vector<int64_t>& sparse_row_counts,
-                                 const std::vector<SparsePresencePB>& presences, int64_t source_segment_num_rows) {
+                                 const std::vector<SparsePresencePB>& presences, int64_t source_segment_num_rows,
+                                 const std::vector<InlineSparsePatchPB>& inline_patches) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     // SDCG semantics: only a DENSE new file supersedes (strips + orphans) older layers of its columns.
@@ -149,7 +150,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     // Presence summary per emitted entry, kept in lockstep with emitted_kinds. Dense / unknown entries
     // get a default (empty) SparsePresencePB so the array stays 1:1 with column_files.
     std::vector<SparsePresencePB> emitted_presences;
-    bool sdcg_active = source_segment_num_rows > 0 || dcg_ver.has_source_segment_num_rows();
+    bool sdcg_active = source_segment_num_rows > 0 || dcg_ver.has_source_segment_num_rows() ||
+                       !inline_patches.empty() || dcg_ver.inline_patches_size() > 0;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
@@ -225,8 +227,37 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         }
     }
 
+    // 3. carry forward old inline patches (separate axis from files), then append the new ones. Inline
+    //    patches are `.spcols`-equivalent overlays in meta. A new DENSE file that FULLY covers a patch's
+    //    uid set supersedes it (drop). A patch only PARTIALLY covered is kept intact: the reader applies
+    //    it version-ascending under the newer dense layer for the uncovered uids (dense base wins for the
+    //    covered ones), so the chain stays correct without per-uid inline splitting (a deliberate PoC
+    //    simplification — splitting inline patches per-uid is not worth the complexity).
+    for (const auto& old_patch : dcg_ver.inline_patches()) {
+        bool all_covered = old_patch.column_uids_size() > 0;
+        for (uint32_t uid : old_patch.column_uids()) {
+            if (need_to_remove_cuids_filter.count(uid) == 0) {
+                all_covered = false;
+                break;
+            }
+        }
+        if (all_covered) {
+            // Every uid of this inline patch was superseded by a DENSE new file -> drop it entirely. No
+            // file to orphan (inline patches own no object); it simply stops being re-uploaded next publish.
+            continue;
+        }
+        new_dcg_ver.add_inline_patches()->CopyFrom(old_patch);
+    }
+    for (const auto& patch : inline_patches) {
+        auto* added = new_dcg_ver.add_inline_patches();
+        added->CopyFrom(patch);
+        // Stamp the publish version so the new inline patch interleaves with the new file entries'
+        // versions[] (both == _tablet_meta->version()). The writer leaves it unset on purpose.
+        added->set_version(_tablet_meta->version());
+    }
+
     // Attach the SDCG arrays only when this message actually carries sparse content (or a base row
-    // count). Dense-only tablets keep absent arrays => byte-identical to pre-SDCG meta.
+    // count, or inline patches). Dense-only tablets keep absent arrays => byte-identical to pre-SDCG meta.
     if (sdcg_active) {
         DCHECK_EQ(static_cast<int>(emitted_kinds.size()), new_dcg_ver.column_files_size());
         DCHECK_EQ(emitted_presences.size(), emitted_kinds.size());

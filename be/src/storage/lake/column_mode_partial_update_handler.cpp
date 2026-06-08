@@ -476,6 +476,64 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     return sparse_chunk;
 }
 
+StatusOr<InlineSparsePatchPB> ColumnModePartialUpdateHandler::_build_inline_patch_from_sparse_chunk(
+        const Chunk& sparse_chunk, const std::vector<ColumnUID>& unique_update_column_ids, int64_t row_count,
+        int64_t min_source_rowid, int64_t max_source_rowid, size_t* out_patch_bytes) {
+    // sparse_chunk layout: column 0 = source_rowid (BIGINT, ascending), columns 1..N = value columns,
+    // 1:1 with unique_update_column_ids by position. This is the same K-row chunk that the file path
+    // would have written into a `.spcols`; here we serialize it into the meta instead.
+    DCHECK_EQ(sparse_chunk.num_columns(), unique_update_column_ids.size() + 1);
+    DCHECK_EQ(static_cast<int64_t>(sparse_chunk.num_rows()), row_count);
+
+    InlineSparsePatchPB patch;
+    // version is left unset here; MetaFileBuilder::append_dcg stamps it with the publish version so the
+    // patch interleaves with the new file entries' versions[]. out_patch_bytes therefore slightly
+    // under-counts (by the eventual version varint), which is harmless for the byte gates.
+    patch.set_row_count(row_count);
+    if (min_source_rowid != kSDCGPresenceUnknown) patch.set_min_source_rowid(min_source_rowid);
+    if (max_source_rowid != kSDCGPresenceUnknown) patch.set_max_source_rowid(max_source_rowid);
+
+    // source_rowids -> K x uint32 little-endian, ascending. Column 0 is a BIGINT (Int64) column (no
+    // unsigned encoding exists), but every value is a valid base-segment ordinal < M <= UINT32_MAX, so
+    // it narrows to uint32 safely. Read element-wise to stay byte-order explicit (BE is LE in practice).
+    {
+        const auto& rowid_col = sparse_chunk.get_column_by_index(0);
+        std::string rowid_bytes;
+        rowid_bytes.resize(static_cast<size_t>(row_count) * sizeof(uint32_t));
+        for (int64_t i = 0; i < row_count; ++i) {
+            const int64_t v = rowid_col->get(i).get_int64();
+            DCHECK_GE(v, 0);
+            const uint32_t u = static_cast<uint32_t>(v);
+            std::memcpy(rowid_bytes.data() + static_cast<size_t>(i) * sizeof(uint32_t), &u, sizeof(uint32_t));
+        }
+        patch.set_source_rowids(std::move(rowid_bytes));
+    }
+
+    // One ColumnArraySerde blob per value column, in unique_update_column_ids order. encode_level 0 keeps
+    // the blob self-describing (header included by the serde) so the reader can deserialize without extra
+    // side metadata. A type the serde cannot handle yields max_serialized_size == 0 -> bail to the file path.
+    for (size_t c = 0; c < unique_update_column_ids.size(); ++c) {
+        patch.add_column_uids(static_cast<uint32_t>(unique_update_column_ids[c]));
+        const auto& value_col = sparse_chunk.get_column_by_index(c + 1);
+        const int64_t max_size = serde::ColumnArraySerde::max_serialized_size(*value_col);
+        if (max_size <= 0) {
+            return Status::NotSupported(fmt::format(
+                    "SDCG inline patch: column uid {} type is not serializable by ColumnArraySerde",
+                    unique_update_column_ids[c]));
+        }
+        std::string blob;
+        blob.resize(static_cast<size_t>(max_size));
+        ASSIGN_OR_RETURN(uint8_t * end,
+                         serde::ColumnArraySerde::serialize(*value_col, reinterpret_cast<uint8_t*>(blob.data())));
+        // serialize returns the one-past-the-end pointer; the real size may be < max_serialized_size.
+        blob.resize(static_cast<size_t>(end - reinterpret_cast<uint8_t*>(blob.data())));
+        patch.add_column_values(std::move(blob));
+    }
+
+    *out_patch_bytes = patch.ByteSizeLong();
+    return patch;
+}
+
 StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepare_sparse_delta_column_group_writer(
         const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& sparse_tschema) {
     // Mirror _prepare_delta_column_group_writer exactly, only swapping the filename to a `.spcols` name
@@ -583,6 +641,21 @@ static void inspect_existing_sparse_chain(const TabletMetadataPtr& metadata, uin
         ++(*out_chain_len);
         *out_cum_k += i < dcg.sparse_row_counts_size() ? dcg.sparse_row_counts(i) : 0;
     }
+    // Inline patches are sparse overlays on the SAME axis as `.spcols` files for promotion purposes:
+    // each existing inline patch that covers any batch column counts toward chain depth and cum_K, so a
+    // long run of micro-batches (which prefer inline) still triggers in-place promotion to a dense rewrite.
+    for (const auto& patch : dcg.inline_patches()) {
+        bool covers_batch_col = false;
+        for (uint32_t uid : patch.column_uids()) {
+            if (batch_uids.count(static_cast<ColumnUID>(uid)) > 0) {
+                covers_batch_col = true;
+                break;
+            }
+        }
+        if (!covers_batch_col) continue;
+        ++(*out_chain_len);
+        *out_cum_k += patch.row_count();
+    }
 }
 
 Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
@@ -674,6 +747,14 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // each sparse `.spcols` file; dense files carry an empty SparsePresencePB. Lets readers skip layers
     // whose range excludes the requested rowid without opening the file.
     std::map<uint32_t, std::vector<SparsePresencePB>> dcg_column_presences;
+    // SDCG inline patches per rssid: micro-batch sparse overlays carried IN-META (no `.spcols` file),
+    // a SEPARATE axis from the file lists above. Filled when a sparse-eligible (column-batch, rssid)
+    // patch fits the inline byte gates; otherwise that batch takes the `.spcols` file path. Riding the
+    // per-publish meta PUT, inline patches cost ZERO new objects.
+    std::map<uint32_t, std::vector<InlineSparsePatchPB>> dcg_inline_patches;
+    // Per-rssid byte size of the EXISTING DCG meta entry (before this publish), used by the cumulative
+    // meta-ceiling gate (sdcg_dcg_meta_max_bytes_per_segment). Resolved once up front (no per-task IO).
+    std::map<uint32_t, size_t> dcg_existing_entry_bytes;
     // Per-rssid base segment row count M (fingerprint), recorded into the DCG meta. 0 = unknown.
     std::map<uint32_t, int64_t> dcg_source_segment_num_rows;
 
@@ -689,6 +770,18 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             // A failure to resolve M just disables the sparse path for this rssid (M stays 0 => dense);
             // it must not fail the whole publish.
             dcg_source_segment_num_rows[rssid] = m_or.ok() ? m_or.value() : 0;
+            // Existing DCG meta byte size for this rssid (the inline patches it already carries are
+            // re-uploaded every publish). Resolved once from the in-memory metadata the publish already
+            // loaded (no IO). 0 when this segment has no DCG entry yet.
+            size_t existing_bytes = 0;
+            if (params.metadata != nullptr) {
+                const auto& dcgs = params.metadata->dcg_meta().dcgs();
+                auto it = dcgs.find(rssid);
+                if (it != dcgs.end()) {
+                    existing_bytes = it->second.ByteSizeLong();
+                }
+            }
+            dcg_existing_entry_bytes[rssid] = existing_bytes;
         }
     }
     // 3. read from raw segment file and update file, and generate `.col` files
@@ -740,12 +833,14 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             const auto* upt_pairs_ptr = &each.second;
 
             const int64_t source_num_rows = sdcg_enabled ? dcg_source_segment_num_rows[rssid] : 0;
+            const size_t existing_entry_bytes = sdcg_enabled ? dcg_existing_entry_bytes[rssid] : 0;
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &sparse_tschema, &sparse_schema,
                          &selective_unique_update_column_ids, rssid, upt_pairs_ptr, condition_idx_in_partial_schema,
-                         sdcg_enabled, source_num_rows, &dcg_column_ids, &dcg_column_file_with_encryption_metas,
-                         &dcg_column_file_sizes, &dcg_column_file_kinds, &dcg_column_sparse_row_counts,
-                         &dcg_column_presences, &result_mutex, &shared_status]() {
+                         sdcg_enabled, source_num_rows, existing_entry_bytes, &dcg_column_ids,
+                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &dcg_column_file_kinds,
+                         &dcg_column_sparse_row_counts, &dcg_column_presences, &dcg_inline_patches, &result_mutex,
+                         &shared_status]() {
                 // SDCG density decision (per (column_batch, rssid)): K = distinct source_rowids for this
                 // rssid; sparse iff K is small both absolutely (< sdcg_sparse_max_rows) and relative to M
                 // (K/M < sdcg_dense_threshold). M==0 (unknown) or no rows => dense fallback.
@@ -795,7 +890,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
                 if (take_sparse) {
                     // SPARSE path: build a K-row [source_rowid + values] chunk from the `.upt` payload
-                    // (no source-segment read) and write it to a `.spcols` file.
+                    // (no source-segment read). The same chunk feeds either the in-meta INLINE patch or
+                    // the `.spcols` FILE — both are sparse overlays, identical content, different carrier.
                     int64_t sparse_rows = 0;
                     int64_t min_source_rowid = kSDCGPresenceUnknown;
                     int64_t max_source_rowid = kSDCGPresenceUnknown;
@@ -814,6 +910,46 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
                     // Pad char value columns (column 0 is the synthetic source_rowid uint32, untouched).
                     padding_char_columns(*sparse_schema, sparse_tschema, sparse_chunk_ptr.get());
+
+                    // INLINE decision: build the patch from the SAME chunk and apply two byte gates:
+                    //   (1) serialized patch bytes <= sdcg_inline_patch_max_bytes  -- per-patch budget, and
+                    //   (2) existing meta entry bytes + patch bytes <= sdcg_dcg_meta_max_bytes_per_segment
+                    //       -- cumulative ceiling (meta is re-uploaded every publish; exceeding it biases
+                    //       to a FILE, a one-time immutable object). Promotion accounting already counted
+                    //       inline patches, so a long inline run still triggers the dense rewrite above.
+                    // A type ColumnArraySerde cannot handle (NotSupported) just falls back to the file path.
+                    {
+                        size_t patch_bytes = 0;
+                        auto patch_or = _build_inline_patch_from_sparse_chunk(
+                                *sparse_chunk_ptr, selective_unique_update_column_ids, sparse_rows, min_source_rowid,
+                                max_source_rowid, &patch_bytes);
+                        if (patch_or.ok()) {
+                            const bool fits_per_patch =
+                                    static_cast<int64_t>(patch_bytes) <= config::sdcg_inline_patch_max_bytes;
+                            const bool fits_meta_ceiling =
+                                    static_cast<int64_t>(existing_entry_bytes + patch_bytes) <=
+                                    config::sdcg_dcg_meta_max_bytes_per_segment;
+                            if (fits_per_patch && fits_meta_ceiling) {
+                                std::lock_guard<std::mutex> l(result_mutex);
+                                if (shared_status.ok()) {
+                                    dcg_inline_patches[rssid].push_back(std::move(patch_or.value()));
+                                    std::string cols_str;
+                                    for (size_t c = 0; c < selective_unique_update_column_ids.size(); ++c) {
+                                        if (c > 0) cols_str += ",";
+                                        cols_str += std::to_string(selective_unique_update_column_ids[c]);
+                                    }
+                                    LOG(INFO) << fmt::format(
+                                            "SDCG inline patch write: tablet_id: {} txn_id: {} rssid: {} K: {} "
+                                            "bytes: {} M: {} min_rowid: {} max_rowid: {} cols: {}",
+                                            params.tablet->id(), _txn_id, rssid, sparse_rows, patch_bytes,
+                                            source_num_rows, min_source_rowid, max_source_rowid, cols_str);
+                                }
+                                TRACE_COUNTER_INCREMENT("pcu_inline_patch_cnt", 1);
+                                return;
+                            }
+                        }
+                        // else: not serializable or over budget -> fall through to the `.spcols` file path.
+                    }
 
                     auto writer_or = _prepare_sparse_delta_column_group_writer(params, sparse_tschema);
                     if (!writer_or.ok()) {
@@ -945,19 +1081,24 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         const auto& kinds = dcg_column_file_kinds[rssid];
         const bool rssid_has_sparse =
                 std::any_of(kinds.begin(), kinds.end(), [](DeltaColumnFileKindPB k) { return k == SPARSE_PERCOL; });
-        if (sdcg_enabled && rssid_has_sparse) {
+        // Inline patches are a SEPARATE axis from files: a rssid may have NO `.spcols` file yet still
+        // carry inline patches (the common micro-batch case). Either makes the entry SDCG-active.
+        auto inline_it = dcg_inline_patches.find(rssid);
+        const bool rssid_has_inline = inline_it != dcg_inline_patches.end() && !inline_it->second.empty();
+        if (sdcg_enabled && (rssid_has_sparse || rssid_has_inline)) {
             // Density-aware: pass per-file kinds + sparse row counts (1:1 with the file list) plus the
-            // base segment row count M. The arrays were built in lockstep with the file list inside the
-            // task, so they stay aligned even with mixed dense/sparse files for a single rssid. Only when
-            // this rssid actually has a sparse file do we record M (avoids carrying SDCG meta on an
-            // all-dense rssid even when the flag is on).
+            // base segment row count M and any inline patches. The arrays were built in lockstep with the
+            // file list inside the task, so they stay aligned even with mixed dense/sparse files for a
+            // single rssid. Inline patches ride the meta on a separate axis (no file).
+            static const std::vector<InlineSparsePatchPB> kNoInlinePatches;
+            const auto& inline_patches = rssid_has_inline ? inline_it->second : kNoInlinePatches;
             builder->append_dcg(rssid, dcg_column_file_with_encryption_metas[rssid], dcg_column_ids[rssid],
                                 dcg_column_file_sizes[rssid], dcg_column_file_kinds[rssid],
                                 dcg_column_sparse_row_counts[rssid], dcg_column_presences[rssid],
-                                dcg_source_segment_num_rows[rssid]);
+                                dcg_source_segment_num_rows[rssid], inline_patches);
         } else {
-            // No sparse file for this rssid: byte-identical to pre-SDCG behavior (all-DENSE, no sparse
-            // counts, no source row count) regardless of the flag.
+            // No sparse file/inline for this rssid: byte-identical to pre-SDCG behavior (all-DENSE, no
+            // sparse counts, no source row count) regardless of the flag.
             builder->append_dcg(rssid, dcg_column_file_with_encryption_metas[rssid], dcg_column_ids[rssid],
                                 dcg_column_file_sizes[rssid]);
         }

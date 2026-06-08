@@ -61,8 +61,18 @@ public:
     // layers); dense slots carry an empty SparsePresencePB. |source_segment_num_rows| is the row count M of
     // the base segment this DCG overlays (0 = unknown). See the SPARSE/DENSE rules in append_dcg().
     //
+    // |inline_patches| are SDCG inline sparse patches (`.spcols`-equivalent overlays carried in meta, NOT
+    // files): a SEPARATE axis from the file parallel arrays. Each NEW inline patch is appended to the
+    // entry's inline_patches; like a SPARSE file it strips nothing. A NEW DENSE file that fully covers an
+    // existing inline patch's uid set DROPS that patch (a dense rewrite supersedes the overlay); a patch
+    // only PARTIALLY covered by the dense uid set is KEPT intact (this PoC does not split inline patches
+    // per-uid — partial-uid splitting is not worth the complexity, and keeping the patch is still correct:
+    // the reader applies it version-ascending under the newer dense layer for the uncovered uids and the
+    // dense base wins for the covered ones at its own version).
+    //
     // Back-compat overload: callers that only emit dense `.cols` use the 4-arg form, which forwards to the
-    // density-aware form with all-DENSE kinds, zero sparse counts and empty presences (byte-identical).
+    // density-aware form with all-DENSE kinds, zero sparse counts, empty presences and no inline patches
+    // (byte-identical). The density-aware form's |inline_patches| defaults to empty for existing callers.
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes);
@@ -70,7 +80,8 @@ public:
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes, const std::vector<DeltaColumnFileKindPB>& file_kinds,
                     const std::vector<int64_t>& sparse_row_counts, const std::vector<SparsePresencePB>& presences,
-                    int64_t source_segment_num_rows);
+                    int64_t source_segment_num_rows,
+                    const std::vector<InlineSparsePatchPB>& inline_patches = {});
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);

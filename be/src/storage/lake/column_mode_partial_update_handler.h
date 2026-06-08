@@ -77,6 +77,20 @@ private:
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_sparse_delta_column_group_writer(
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& sparse_tschema);
 
+    // Build an InlineSparsePatchPB from the K-row sparse chunk produced by _build_sparse_chunk_from_upt
+    // (column 0 = source_rowid, columns 1..N = value columns). Serializes each value column via
+    // serde::ColumnArraySerde (one blob per uid, in |unique_update_column_ids| order) and the
+    // source_rowid column to K x uint32 little-endian bytes. The patch is the in-meta equivalent of a
+    // `.spcols` file: no file IO, no source-segment read. Sets |out_patch_bytes| to the serialized
+    // ByteSizeLong of the produced patch so the writer can apply the inline byte gates BEFORE committing
+    // to the inline path. |min_source_rowid| / |max_source_rowid| / |row_count| are the presence range
+    // and K already computed by _build_sparse_chunk_from_upt. NOTE: the patch's `version` is left UNSET;
+    // MetaFileBuilder::append_dcg stamps it with the publish version (_tablet_meta->version()) so a new
+    // inline patch interleaves with the file entries' versions[] at the same publish version.
+    static StatusOr<InlineSparsePatchPB> _build_inline_patch_from_sparse_chunk(
+            const Chunk& sparse_chunk, const std::vector<ColumnUID>& unique_update_column_ids, int64_t row_count,
+            int64_t min_source_rowid, int64_t max_source_rowid, size_t* out_patch_bytes);
+
     // Build the synthetic [source_rowid] + value-columns TabletSchema for a sparse `.spcols` file.
     static std::shared_ptr<TabletSchema> _build_sparse_tablet_schema(
             const TabletSchemaCSPtr& base_tablet_schema, const std::shared_ptr<TabletSchema>& value_tschema);

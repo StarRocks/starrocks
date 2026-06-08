@@ -24,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "fmt/format.h"
+#include "serde/column_array_serde.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 
@@ -56,9 +57,57 @@ Status LayeredOverlayColumnIterator::seek_to_ordinal(ordinal_t ord) {
     return Status::OK();
 }
 
+Status LayeredOverlayColumnIterator::_load_inline_layer(SparseLayer& l) {
+    // INLINE layer: source_rowids were already decoded by DeltaColumnGroup (seeded into
+    // l.source_rowids by the stack builder) and the value blob is resident in the tablet meta
+    // (copied into l.inline_value_blob). Materialize the value column with ZERO file IO. Mirrors
+    // the FILE path's post-conditions: l.source_rowids ascending (size K), l.values size K in
+    // value_column logical type/nullability.
+    const int64_t k = l.row_count;
+
+    if (static_cast<int64_t>(l.source_rowids.size()) != k) {
+        return Status::Corruption(fmt::format("sdcg inline patch: source_rowid count {} != K {} (version {})",
+                                              l.source_rowids.size(), k, l.version));
+    }
+
+    // Fingerprint guard (§4.3 / §8): max(source_rowid) must address a row that exists in the base
+    // segment. Identical to the FILE path's guard.
+    if (l.source_segment_num_rows > 0 && k > 0) {
+        const uint32_t max_rowid = l.source_rowids.back(); // ascending => last is max
+        if (static_cast<int64_t>(max_rowid) >= l.source_segment_num_rows) {
+            return Status::Corruption(
+                    fmt::format("sdcg inline patch: max(source_rowid)={} >= source_segment_num_rows={} (version {})",
+                                max_rowid, l.source_segment_num_rows, l.version));
+        }
+    }
+
+    // --- Deserialize the value blob via serde::ColumnArraySerde ---
+    // The writer serialized the value column directly (carrying its nullability), so we deserialize
+    // into a column built with the SAME logical type / nullability. ColumnArraySerde round-trips the
+    // null markers when the column is nullable, exactly mirroring how `.spcols` value columns and
+    // del-vec columns are (de)serialized elsewhere.
+    l.values = ChunkFactory::column_from_field_type(l.value_column.type(), l.value_column.is_nullable());
+    {
+        const auto* buff = reinterpret_cast<const uint8_t*>(l.inline_value_blob.data());
+        const auto* end = buff + l.inline_value_blob.size();
+        StatusOr<const uint8_t*> res = serde::ColumnArraySerde::deserialize(buff, end, l.values.get());
+        RETURN_IF_ERROR(res.status());
+    }
+    if (static_cast<int64_t>(l.values->size()) != k) {
+        return Status::Corruption(fmt::format("sdcg inline patch: value row count {} != expected K {} (version {})",
+                                              l.values->size(), k, l.version));
+    }
+
+    l.loaded = true;
+    return Status::OK();
+}
+
 Status LayeredOverlayColumnIterator::_ensure_layer_loaded(SparseLayer& l) {
     if (l.loaded) {
         return Status::OK();
+    }
+    if (l.is_inline) {
+        return _load_inline_layer(l);
     }
     DCHECK(l.spcols_segment != nullptr);
     const int64_t k = l.row_count;

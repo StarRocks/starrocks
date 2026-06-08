@@ -623,6 +623,21 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
             }
         }
     }
+    // SDCG inline patches (separate axis from files). Each patch must be a well-formed overlay: a
+    // non-empty uid set, K > 0, and exactly one serialized value blob per uid. Inline patches count as
+    // SPARSE for the duplicate-uid legality rule above (they never claim a DENSE rewrite of a uid), so
+    // they impose no extra cross-entry constraint here.
+    for (const auto& patch : dcg.inline_patches()) {
+        if (patch.column_uids_size() == 0) {
+            return Status::Corruption("DCG inline patch invalid: empty column_uids");
+        }
+        if (patch.row_count() <= 0) {
+            return Status::Corruption("DCG inline patch invalid: non-positive row_count");
+        }
+        if (patch.column_values_size() != patch.column_uids_size()) {
+            return Status::Corruption("DCG inline patch invalid: column_values size != column_uids size");
+        }
+    }
     return Status::OK();
 }
 
@@ -774,6 +789,11 @@ struct DcgSourceRowsetReference {
 struct DcgTargetWorkItem {
     std::vector<DcgSurvivingEntry> entries;
     std::vector<DcgSourceRowsetReference> source_refs;
+    // SDCG inline patches collected for this target rssid (a SEPARATE axis from per-file entries; one
+    // source segment contributes its whole inline_patches list once). Carried to the final DCG ordered
+    // by version (ascending) alongside the file entries. Keyed by version to dedup identical patches that
+    // a cross-tablet split may surface from sibling old tablets.
+    std::map<int64_t, InlineSparsePatchPB> inline_patches_by_version;
 };
 
 DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source, int entry_index) {
@@ -849,6 +869,13 @@ Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContex
             DeltaColumnGroupVerPB normalized = dcg_value;
             RETURN_IF_ERROR(validate_dcg_shape(normalized));
             normalize_dcg_optional_fields(&normalized);
+
+            // SDCG inline patches are a per-segment axis (not per-file): collect them once per target,
+            // keyed by version so a cross-tablet split surfacing the same patch from sibling old tablets
+            // dedups instead of duplicating. They are re-attached to the final DCG ordered by version.
+            for (const auto& patch : normalized.inline_patches()) {
+                (*work_by_target)[target_rssid].inline_patches_by_version[patch.version()] = patch;
+            }
 
             for (int entry_index = 0; entry_index < normalized.column_files_size(); ++entry_index) {
                 const std::string& file_name = normalized.column_files(entry_index);
@@ -1406,7 +1433,33 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             g_tablet_merge_dcg_rebuild_total << 1;
         }
 
-        if (final_dcg.column_files_size() == 0) continue;
+        // SDCG inline patches (separate axis from files): re-attach them ordered by version (ascending),
+        // dropping any patch whose uid set is FULLY covered by a DENSE entry in final_dcg (the dense
+        // rewrite supersedes that overlay — same DROP-when-fully-covered rule as MetaFileBuilder::append_dcg;
+        // a partially-covered patch is kept intact, this PoC does not split inline patches per-uid).
+        std::unordered_set<uint32_t> dense_covered_uids;
+        for (int e = 0; e < final_dcg.column_files_size(); ++e) {
+            if (dcg_entry_kind(final_dcg, e) != DENSE_COLS) continue;
+            for (auto uid : final_dcg.unique_column_ids(e).column_ids()) {
+                dense_covered_uids.insert(uid);
+            }
+        }
+        bool target_has_inline = false;
+        for (const auto& [version, patch] : target_work.inline_patches_by_version) {
+            bool all_covered = patch.column_uids_size() > 0;
+            for (uint32_t uid : patch.column_uids()) {
+                if (dense_covered_uids.count(uid) == 0) {
+                    all_covered = false;
+                    break;
+                }
+            }
+            if (all_covered) continue;
+            final_dcg.add_inline_patches()->CopyFrom(patch);
+            target_has_inline = true;
+            sdcg_active = true;
+        }
+        // Skip targets that ended up empty on BOTH axes (no files, no inline patches).
+        if (final_dcg.column_files_size() == 0 && !target_has_inline) continue;
         // Attach SDCG arrays only when sparse content is present; keep dense-only merges byte-identical.
         if (sdcg_active) {
             DCHECK_EQ(static_cast<int>(emitted_kinds.size()), final_dcg.column_files_size());

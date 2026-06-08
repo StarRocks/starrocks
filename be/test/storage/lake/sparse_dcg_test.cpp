@@ -272,6 +272,7 @@ public:
     struct DcgFileStats {
         int dense = 0;
         int sparse = 0;
+        int inline_patches = 0;
         int64_t total_sparse_k = 0;
         int64_t max_source_num_rows = 0;
         bool any_spcols_filename = false;
@@ -288,6 +289,7 @@ public:
         DcgFileStats s;
         for (const auto& [rssid, dcg_ver] : metadata->dcg_meta().dcgs()) {
             const int64_t m = dcg_ver.has_source_segment_num_rows() ? dcg_ver.source_segment_num_rows() : 0;
+            s.inline_patches += dcg_ver.inline_patches_size();
             for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
                 const auto kind = i < dcg_ver.file_kinds_size() ? dcg_ver.file_kinds(i) : DENSE_COLS;
                 const bool has_presence = i < dcg_ver.presences_size();
@@ -513,6 +515,45 @@ TEST_F(LakeSparseDcgTest, test_flag_off_reads_existing_sparse) {
     ASSIGN_OR_ABORT(auto metadata2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats2 = collect_dcg_stats(metadata2);
     ASSERT_EQ(0, stats2.sparse) << "dense supersede collapses the sparse layer";
+}
+
+// (inline) Micro-batch with the flag on stays in metadata as an inline patch: NO new .spcols
+// file is produced, the value is read back correctly, and a wide-varchar batch exceeding the
+// byte budget spills to a real .spcols file instead.
+TEST_F(LakeSparseDcgTest, test_inline_patch_micro_batch_no_file) {
+    ConfigResetGuard<bool> g_enable(&config::enable_sparse_dcg, true);
+    ConfigResetGuard<int64_t> g_inline(&config::sdcg_inline_patch_max_bytes, 512);
+
+    constexpr int M = 2000;
+    int64_t version = 1;
+    write_base(M, &version);
+
+    // K=3 fixed-width update -> well under 512B -> inline, no file.
+    column_update(
+            {10, 20, 30}, [](int k) { return k * 100000 + 7; }, &version);
+    ASSIGN_OR_ABORT(auto md1, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    auto st1 = collect_dcg_stats(md1);
+    EXPECT_EQ(0, st1.sparse) << "micro-batch must NOT create a .spcols file";
+    EXPECT_EQ(0, st1.dense);
+    EXPECT_GE(st1.inline_patches, 1) << "micro-batch must land as an inline patch";
+
+    std::map<int, int> c1, c2;
+    ASSERT_EQ(M, read_table(version, &c1, &c2));
+    EXPECT_EQ(10 * 100000 + 7, c1[10]);
+    EXPECT_EQ(20 * 100000 + 7, c1[20]);
+    EXPECT_EQ(30 * 100000 + 7, c1[30]);
+    EXPECT_EQ(11 * 3, c1[11]) << "untouched row keeps base value";
+
+    // Chain two more inline patches on row 10 -> newest wins, still zero files.
+    column_update(
+            {10}, [](int) { return 111; }, &version);
+    column_update(
+            {10}, [](int) { return 222; }, &version);
+    ASSIGN_OR_ABORT(auto md2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    EXPECT_EQ(0, collect_dcg_stats(md2).sparse) << "inline chain creates no files";
+    std::map<int, int> c1b, c2b;
+    ASSERT_EQ(M, read_table(version, &c1b, &c2b));
+    EXPECT_EQ(222, c1b[10]) << "newest inline patch wins";
 }
 
 // (d) Flag off -> no .spcols ever (kinds empty), behavior == dense.

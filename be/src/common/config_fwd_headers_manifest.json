@@ -733,6 +733,8 @@
         "sdcg_promotion_hard_count",
         "sdcg_promotion_threshold",
         "sdcg_enable_per_column_zone_map",
+        "sdcg_inline_patch_max_bytes",
+        "sdcg_dcg_meta_max_bytes_per_segment",
         "enable_pk_index_eager_build",
         "pk_index_eager_build_threshold_bytes",
         "pk_index_parallel_compaction_threadpool_max_threads",

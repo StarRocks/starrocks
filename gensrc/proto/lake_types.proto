@@ -122,6 +122,43 @@ message SparsePresencePB {
     optional int64 row_count = 3;
 }
 
+// An inline sparse patch is a `.spcols`-equivalent overlay carried INSIDE the tablet
+// metadata instead of in a separate file. It rides the per-publish TabletMetadataPB PUT
+// that lake already does, so micro-batches pay ZERO new object PUTs (no .spcols file, no
+// extra meta-cost object). It is semantically identical to a SPARSE_PERCOL `.spcols`
+// layer: K updated rows of a fixed column set, keyed by an ascending source_rowid list,
+// applied version-ascending as a last-write-wins overlay. It interleaves with the
+// file-backed entries by `version`: a reader merges file layers (versions[]) and inline
+// patches (this version) into one version-ordered stack.
+//
+// Sizing: inline patches are byte-budgeted (config sdcg_inline_patch_max_bytes per patch
+// and sdcg_dcg_meta_max_bytes_per_segment for the cumulative per-segment meta), because
+// the enclosing TabletMetadataPB is RE-UPLOADED every publish for its whole lifetime; a
+// large/long-lived inline patch would be retransmitted O(versions) times. Exceeding the
+// budget biases the writer to a `.spcols` FILE instead (a one-time immutable object).
+message InlineSparsePatchPB {
+    // Publish version this patch was produced at. Interleaves with DeltaColumnGroupVerPB
+    // file entries' versions[] to give the version-ordered (ascending-apply) overlay stack.
+    optional int64 version = 1;
+    // The UPDATE column unique ids this patch carries. Parallel to column_values: the i-th
+    // blob in column_values is the value column for column_uids[i]. Must be non-empty.
+    repeated uint32 column_uids = 2;
+    // K = number of rows in this patch (== source_rowids length == each column_values
+    // column's row count). Must be > 0.
+    optional int64 row_count = 3;
+    // K x uint32 little-endian, ascending. Base-segment ordinals (source rowids) the patch
+    // touches. Same role as the source_rowid column of a `.spcols` file.
+    optional bytes source_rowids = 4;
+    // One serialized value column per column_uids entry (same order). Each blob is the K-row
+    // value column serialized via serde::ColumnArraySerde. The reader deserializes into the
+    // column type taken from the read schema for that uid.
+    repeated bytes column_values = 5;
+    // Presence pre-filter: the [min, max] closed range of source_rowids (== first/last of the
+    // ascending list). Lets a reader skip an out-of-range inline layer with zero work.
+    optional int64 min_source_rowid = 6;
+    optional int64 max_source_rowid = 7;
+}
+
 message DeltaColumnGroupVerPB {
     repeated DeltaColumnGroupColumnIdsPB unique_column_ids = 1;
     repeated string column_files = 2;
@@ -157,6 +194,13 @@ message DeltaColumnGroupVerPB {
     // were derived from. Used as a fingerprint guard (max(source_rowid) < M).
     // 0 / absent == unknown (legacy or dense-only metadata).
     optional int64 source_segment_num_rows = 10;
+    // Inline sparse patches: `.spcols`-equivalent overlays carried in meta (no file). A
+    // SEPARATE AXIS from column_files (they are not files; do NOT count toward the file
+    // parallel arrays above). Each rides the per-publish meta PUT (zero new objects). The
+    // reader merges these with the file entries ordered by version (ascending apply,
+    // last-write-wins); a DENSE file below an inline layer still terminates the walk for
+    // its covered uids. Empty (legacy / no micro-batch inline) => behaves exactly as before.
+    repeated InlineSparsePatchPB inline_patches = 11;
 }
 
 message DeltaColumnGroupMetadataPB {

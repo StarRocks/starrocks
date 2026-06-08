@@ -79,6 +79,21 @@ CONF_mDouble(sdcg_promotion_threshold, "0.3");
 // false to restore the historical all-or-nothing behavior.
 CONF_mBool(sdcg_enable_per_column_zone_map, "true");
 
+// Inline sparse patch byte budget (per patch). A sparse-eligible (column-batch, rssid) whose
+// serialized inline patch (ascending source_rowids + ColumnArraySerde value blobs) is at or
+// below this many bytes is carried INSIDE the tablet metadata (no `.spcols` file), riding the
+// per-publish TabletMetadataPB PUT instead of paying a separate small-object PUT. Above the
+// budget the writer falls back to a `.spcols` file (a one-time immutable object), because the
+// enclosing meta is re-uploaded every publish for the patch's whole lifetime.
+CONF_mInt64(sdcg_inline_patch_max_bytes, "512");
+
+// Cumulative ceiling on the inline-patch bytes carried in one segment's DCG meta. Because the
+// TabletMetadataPB is re-uploaded every publish, unbounded inline accumulation would amplify the
+// per-version meta transfer. When an existing entry's serialized size plus the new patch would
+// exceed this, the writer biases to a `.spcols` FILE (and the promotion accounting still applies),
+// converting "re-transmitted-every-version meta bytes" into a one-time immutable object.
+CONF_mInt64(sdcg_dcg_meta_max_bytes_per_segment, "262144");
+
 // Enable eager build of PK index files during import and compaction.
 CONF_mBool(enable_pk_index_eager_build, "true");
 

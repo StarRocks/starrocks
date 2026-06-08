@@ -48,6 +48,9 @@ class Segment;
 //                original base segment column. It is row-complete over the base segment ordinal space.
 //   - `layers` : SPARSE overlay layers in version-ASCENDING order (oldest first, newest last).
 //                Apply order is ascending so the newest version is applied last => last-write-wins.
+//                A layer is either a `.spcols` FILE or an INLINE patch carried in the tablet meta
+//                (DeltaColumnGroupVerPB.inline_patches). File and inline layers interleave purely by
+//                version; the apply machinery is identical (inline layers just skip all file IO).
 //
 // A SPARSE layer's `.spcols` file is a standard Segment v2 file whose column0 is the
 // source_rowid (reserved uid kSDCGSourceRowidUid, u32, non-nullable, ascending) and whose
@@ -67,8 +70,19 @@ class Segment;
 // first-hit-replaces-base path is taken and this iterator is never built.
 class LayeredOverlayColumnIterator final : public ColumnIterator {
 public:
-    // One SPARSE overlay layer over the base segment.
+    // One overlay layer over the base segment. A layer is one of two physical flavors:
+    //   - FILE   : a `.spcols` Segment v2 file (source_rowid column + value columns), loaded on
+    //              first use (zero or one file IO per layer).
+    //   - INLINE : an inline sparse patch carried directly in the tablet meta
+    //              (DeltaColumnGroupVerPB.inline_patches). Its source_rowids (decoded by
+    //              DeltaColumnGroup from the LE u32 bytes) and per-uid value blob
+    //              (serde::ColumnArraySerde) travel inside the meta PUT, so the read path
+    //              materializes them WITHOUT any file IO. See design §5.4/§5.7.
+    // Both flavors share the same SparseLayer overlay machinery (binary-search positional apply,
+    // presence pre-filter, version-ascending last-write-wins): only the materialization source
+    // differs, fully hidden behind _ensure_layer_loaded.
     struct SparseLayer {
+        // === FILE layer state (unused for INLINE) ===
         // The `.spcols` Segment, opened with a schema that contains BOTH the value column(s)
         // and the synthetic source_rowid column (uid == kSDCGSourceRowidUid). See
         // Segment::new_sparse_dcg_segment.
@@ -77,11 +91,27 @@ public:
         // iterators created during _ensure_layer_loaded. Each `.spcols` is its own physical file,
         // distinct from the base column's read file.
         std::shared_ptr<io::SeekableInputStream> read_file;
-        // The value column to read from `spcols_segment` for this overlay (its real uid/type).
+
+        // === INLINE layer state (unused for FILE) ===
+        // When true this layer materializes from the inline patch data carried in the tablet meta
+        // (DeltaColumnGroup::InlinePatch) instead of opening a `.spcols` file. _ensure_layer_loaded
+        // deserializes the value blob; ZERO file IO. The decoded source_rowids are seeded directly
+        // into the shared `source_rowids` member below (DeltaColumnGroup already decoded the LE
+        // bytes), so an inline layer is "loaded" except for its value column.
+        bool is_inline = false;
+        // The serde::ColumnArraySerde blob for THIS layer's value column: the inline patch's
+        // column_values[value_idx_of(uid)] for the requested uid. Copied from meta so it outlives
+        // the InlinePatch / PB.
+        std::string inline_value_blob;
+
+        // === Shared layer state ===
+        // The value column to read for this overlay (its real uid/type/nullability). For a FILE
+        // layer it selects the `.spcols` value column; for an INLINE layer it drives the type and
+        // nullability the value blob is deserialized into.
         TabletColumn value_column;
-        // The DCG entry version of this layer (used only for ordering / diagnostics).
+        // The DCG entry version of this layer (used for version-ascending ordering / diagnostics).
         int64_t version = 0;
-        // Number of rows (K) in the `.spcols` file == footer.num_rows.
+        // Number of rows (K): footer.num_rows for FILE, InlineSparsePatchPB.row_count for INLINE.
         int64_t row_count = 0;
         // Source segment row count fingerprint (M). 0 means unknown (skip the guard).
         int64_t source_segment_num_rows = 0;
@@ -175,7 +205,12 @@ public:
 
 private:
     // Materialize layer `l` (source_rowids + values, full K rows) into memory if not already done.
+    // FILE layers read their `.spcols` (one IO pass); INLINE layers decode the LE source_rowids and
+    // deserialize the value blob already resident in the tablet meta (zero file IO).
     Status _ensure_layer_loaded(SparseLayer& l);
+    // INLINE materialization helper: decode `inline_source_rowids` (LE u32) and deserialize
+    // `inline_value_blob` (serde::ColumnArraySerde) into the layer's value_column type/nullability.
+    Status _load_inline_layer(SparseLayer& l);
 
     // Apply all overlay layers (ascending) onto `dst` for a contiguous base ordinal window
     // [base_begin, base_begin + n), whose corresponding rows were just appended into `dst`
