@@ -16,12 +16,14 @@ package com.starrocks.connector.lance;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,15 +57,14 @@ public class LanceMetadata implements ConnectorMetadata {
                 String tblName = key.substring(6, key.length() - 4);
                 String uri = entry.getValue();
                 String schemaStr = properties.get("table." + tblName + ".schema");
-                java.util.ArrayList<com.starrocks.catalog.Column> columns = new java.util.ArrayList<>();
+                ArrayList<Column> columns = new ArrayList<>();
                 if (schemaStr != null) {
-                    String[] fields = schemaStr.split(",");
-                    for (String field : fields) {
+                    for (String field : LanceApiConverter.splitTopLevel(schemaStr, ',')) {
                         int colonIdx = field.indexOf(':');
                         if (colonIdx > 0) {
                             String name = field.substring(0, colonIdx).trim();
                             String typeStr = field.substring(colonIdx + 1).trim();
-                            columns.add(new com.starrocks.catalog.Column(name, LanceApiConverter.parseType(typeStr)));
+                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr)));
                         }
                     }
                 }

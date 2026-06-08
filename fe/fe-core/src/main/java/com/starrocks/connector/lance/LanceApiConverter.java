@@ -20,6 +20,7 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import static com.starrocks.type.BooleanType.BOOLEAN;
 import static com.starrocks.type.DateType.DATE;
@@ -81,34 +82,55 @@ public class LanceApiConverter {
             }
         }
 
+        if (lower.startsWith("fixed_size_list:")) {
+            // "fixed_size_list:float:128" -> mapped to Array of Float
+            int sizeSeparatorIdx = clean.lastIndexOf(":");
+            if (sizeSeparatorIdx > 16) {
+                String inner = clean.substring(16, sizeSeparatorIdx).trim();
+                return new ArrayType(parseType(inner));
+            }
+        }
+
         if (lower.startsWith("struct<") && lower.endsWith(">")) {
             String inner = clean.substring(7, clean.length() - 1);
             ArrayList<StructField> fields = new ArrayList<>();
-            // Split fields by comma, being careful not to split nested structs
-            int bracketDepth = 0;
-            StringBuilder fieldBuilder = new StringBuilder();
-            for (int i = 0; i < inner.length(); i++) {
-                char ch = inner.charAt(i);
-                if (ch == '<') {
-                    bracketDepth++;
-                }
-                if (ch == '>') {
-                    bracketDepth--;
-                }
-                if (ch == ',' && bracketDepth == 0) {
-                    parseAndAddField(fieldBuilder.toString(), fields);
-                    fieldBuilder.setLength(0);
-                } else {
-                    fieldBuilder.append(ch);
-                }
-            }
-            if (fieldBuilder.length() > 0) {
-                parseAndAddField(fieldBuilder.toString(), fields);
+            for (String field : splitTopLevel(inner, ',')) {
+                parseAndAddField(field, fields);
             }
             return new StructType(fields);
         }
 
         return VARCHAR; // Fallback
+    }
+
+    static List<String> splitTopLevel(String value, char delimiter) {
+        ArrayList<String> parts = new ArrayList<>();
+        int bracketDepth = 0;
+        StringBuilder partBuilder = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == '<') {
+                bracketDepth++;
+            }
+            if (ch == '>') {
+                bracketDepth--;
+            }
+            if (ch == delimiter && bracketDepth == 0) {
+                addPart(parts, partBuilder);
+            } else {
+                partBuilder.append(ch);
+            }
+        }
+        addPart(parts, partBuilder);
+        return parts;
+    }
+
+    private static void addPart(ArrayList<String> parts, StringBuilder partBuilder) {
+        String part = partBuilder.toString().trim();
+        if (!part.isEmpty()) {
+            parts.add(part);
+        }
+        partBuilder.setLength(0);
     }
 
     private static void parseAndAddField(String fieldStr, ArrayList<StructField> fields) {

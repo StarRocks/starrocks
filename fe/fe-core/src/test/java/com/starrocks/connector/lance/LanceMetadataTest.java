@@ -56,6 +56,10 @@ public class LanceMetadataTest {
         Assertions.assertTrue(vectorType.isArrayType());
         Assertions.assertEquals(FLOAT, ((ArrayType) vectorType).getItemType());
 
+        Type lanceVectorType = LanceApiConverter.parseType("fixed_size_list:float:128");
+        Assertions.assertTrue(lanceVectorType.isArrayType());
+        Assertions.assertEquals(FLOAT, ((ArrayType) lanceVectorType).getItemType());
+
         // Struct types with case preservation
         Type structType = LanceApiConverter.parseType("struct<UserID:int64,embedding:fixed_size_list<float32,512>>");
         Assertions.assertTrue(structType.isStructType());
@@ -70,7 +74,8 @@ public class LanceMetadataTest {
         java.util.Map<String, String> properties = new java.util.HashMap<>();
         properties.put("database", "vectors_db");
         properties.put("table.users.uri", "s3://bucket/users");
-        properties.put("table.users.schema", "UserID:int64,embedding:fixed_size_list<float32,128>");
+        properties.put("table.users.schema",
+                "UserID:int64,embedding:fixed_size_list<float32, 128>,lance_embedding:fixed_size_list:float:128");
 
         LanceMetadata metadata = new LanceMetadata("lance_catalog", properties);
         Assertions.assertTrue(metadata.listDbNames(null).contains("vectors_db"));
@@ -86,6 +91,17 @@ public class LanceMetadataTest {
         com.starrocks.catalog.Column userIdCol = lanceDiscovered.getColumn("UserID");
         Assertions.assertNotNull(userIdCol);
         Assertions.assertEquals(BIGINT, userIdCol.getType());
+
+        Assertions.assertEquals(3, lanceDiscovered.getColumns().size());
+        Column embeddingCol = lanceDiscovered.getColumn("embedding");
+        Assertions.assertNotNull(embeddingCol);
+        Assertions.assertTrue(embeddingCol.getType().isArrayType());
+        Assertions.assertEquals(FLOAT, ((ArrayType) embeddingCol.getType()).getItemType());
+
+        Column lanceEmbeddingCol = lanceDiscovered.getColumn("lance_embedding");
+        Assertions.assertNotNull(lanceEmbeddingCol);
+        Assertions.assertTrue(lanceEmbeddingCol.getType().isArrayType());
+        Assertions.assertEquals(FLOAT, ((ArrayType) lanceEmbeddingCol.getType()).getItemType());
     }
 
     @Test
