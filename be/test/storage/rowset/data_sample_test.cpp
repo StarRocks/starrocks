@@ -108,9 +108,7 @@ TEST(DataSampleTest, test_page_sample_sub_one_percent) {
     int64_t random_seed = 123;
     size_t num_pages = 100'000;
     double percentage = 0.5;
-    auto page_indexer = [](size_t page_index) {
-        return std::make_pair(page_index * 1024, (page_index + 1) * 1024);
-    };
+    auto page_indexer = [](size_t page_index) { return std::make_pair(page_index * 1024, (page_index + 1) * 1024); };
 
     auto data_sample = DataSample::make_page_sample(percentage, random_seed, num_pages, std::move(page_indexer));
     ASSERT_NE(data_sample, nullptr);
