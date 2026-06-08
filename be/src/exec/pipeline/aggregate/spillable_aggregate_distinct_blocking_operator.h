@@ -14,19 +14,28 @@
 
 #pragma once
 
+#include <optional>
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator_factory.h"
+#include "exec/pipeline/primitives/block_reason.h"
+#include "exec/pipeline/primitives/spillable_flat_sink_mixin.h"
+#include "exec/pipeline/primitives/spillable_simple_source_mixin.h"
 #include "exec/pipeline/source_operator.h"
 #include "exprs/sort_exec_exprs.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
-class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctBlockingSinkOperator {
+class SpillableAggregateDistinctBlockingSinkOperator
+        : public AggregateDistinctBlockingSinkOperator,
+          public SpillableFlatSinkMixin<SpillableAggregateDistinctBlockingSinkOperator> {
+    friend class SpillableFlatSinkMixin<SpillableAggregateDistinctBlockingSinkOperator>;
+
 public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
@@ -37,6 +46,13 @@ public:
     bool need_input() const override;
     bool is_finished() const override;
     Status set_finishing(RuntimeState* state) override;
+
+    // The sink sleeps OUTPUT_FULL on need_input(): is_full() (writer full, woken by the flush-completion
+    // defer on the sink list) or the spill-process channel still holding a task (woken by the channel
+    // handshake). covered_wakeups() declares both reasons the prepare() sink-list subscription covers.
+    BlockReason block_reason() const override;
+    static constexpr uint32_t kCoveredWakeups = kSpillSinkCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
 
     Status prepare(RuntimeState* state) override;
     Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
@@ -66,6 +82,12 @@ public:
     SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
 
 private:
+    // Spiller/spill-channel pair that the SpillableFlatSinkMixin reads to compute
+    // need_input()/block_reason(): this sink reaches them through its aggregator. Defined
+    // out-of-line where Aggregator is complete.
+    const std::shared_ptr<spill::Spiller>& _spiller() const;
+    SpillProcessChannelPtr _spill_channel() const;
+
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     Status _spill_aggregated_data(RuntimeState* state);
 
@@ -74,6 +96,11 @@ private:
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
     bool _is_finished = false;
 };
+
+static_assert(SpillableAggregateDistinctBlockingSinkOperator::kCoveredWakeups &
+              block_reason_bit(BlockReason::WAIT_FLUSH));
+static_assert(SpillableAggregateDistinctBlockingSinkOperator::kCoveredWakeups &
+              block_reason_bit(BlockReason::WAIT_CHANNEL));
 
 class SpillableAggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
@@ -90,7 +117,9 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_agg_events (default false). The kill-switch demotes the
+    // whole agg fragment back to the poller without a rebuild.
+    bool support_event_scheduler() const override { return config::enable_spill_agg_events; }
 
 private:
     ObjectPool _pool;
@@ -103,7 +132,11 @@ private:
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 
-class SpillableAggregateDistinctBlockingSourceOperator : public AggregateDistinctBlockingSourceOperator {
+class SpillableAggregateDistinctBlockingSourceOperator
+        : public AggregateDistinctBlockingSourceOperator,
+          public SpillableSimpleRestoreSourceMixin<SpillableAggregateDistinctBlockingSourceOperator> {
+    friend class SpillableSimpleRestoreSourceMixin<SpillableAggregateDistinctBlockingSourceOperator>;
+
 public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSourceOperator(AggregatorPtr aggregator,
@@ -119,6 +152,13 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
+    // The source sleeps INPUT_EMPTY on has_output(): when spilled and no restored chunk is buffered yet it
+    // waits on restore IO, woken by the restore-completion defer on the spiller source list. covered_wakeups()
+    // declares the one reason the prepare() source-list subscription covers.
+    BlockReason block_reason() const override;
+    static constexpr uint32_t kCoveredWakeups = kSpillSourceRestoreCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
+
     Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
@@ -129,11 +169,28 @@ public:
 private:
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
+    // The spiller that the SpillableSimpleRestoreSourceMixin predicates read: this source reaches it
+    // through its aggregator. spill::Spiller stays forward-declared here; only the shared_ptr ref crosses.
+    const std::shared_ptr<spill::Spiller>& _spiller() const { return _aggregator->spiller(); }
+
+    // The parking-reason predicate for has_output()'s spilled branch. Returns WAIT_RESTORE when the source
+    // is parked waiting on restore IO, or nullopt on every branch where has_output() reports work is ready
+    // or the source is not parked on a spill block. Distinct's has_output() is not computed directly from
+    // this (it leads with the base AggregateDistinctBlockingSourceOperator::has_output() check
+    // unconditionally), so _blocked_on()'s runnable disjunction matches every has_output() == true branch --
+    // the base ready check, buffered accumulator/spiller output, a failed spiller, the cancel branch, and
+    // the eos chunk -- and only the genuine restore park returns WAIT_RESTORE. block_reason() is
+    // value_or(NONE), read only when has_output() == false.
+    std::optional<BlockReason> _blocked_on() const;
+
     bool _is_finished = false;
     bool _has_last_chunk = true;
     ChunkPipelineAccumulator _accumulator;
     SortedStreamingAggregatorPtr _stream_aggregator = nullptr;
 };
+
+static_assert(SpillableAggregateDistinctBlockingSourceOperator::kCoveredWakeups &
+              block_reason_bit(BlockReason::WAIT_RESTORE));
 
 class SpillableAggregateDistinctBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
@@ -148,7 +205,9 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_agg_events (default false; kill-switch demotes the agg
+    // fragment to the poller without a rebuild).
+    bool support_event_scheduler() const override { return config::enable_spill_agg_events; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

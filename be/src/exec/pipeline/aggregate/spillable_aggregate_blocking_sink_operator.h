@@ -13,21 +13,27 @@
 // limitations under the License.
 
 #pragma once
+#include <optional>
 #include <utility>
 
 #include "aggregate_blocking_sink_operator.h"
 #include "base/concurrency/race_detect.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/primitives/spillable_flat_sink_mixin.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
-class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
+class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator,
+                                               public SpillableFlatSinkMixin<SpillableAggregateBlockingSinkOperator> {
+    friend class SpillableFlatSinkMixin<SpillableAggregateBlockingSinkOperator>;
+
 public:
     template <class... Args>
     SpillableAggregateBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
@@ -38,6 +44,16 @@ public:
 
     bool need_input() const override;
     bool is_finished() const override;
+
+    // The sink sleeps OUTPUT_FULL on need_input(): is_full() (writer full, woken by the flush-completion
+    // defer on the sink list) or the spill-process channel still holding a task (woken by the channel
+    // handshake). covered_wakeups() declares both reasons the prepare() sink-list subscription covers.
+    BlockReason block_reason() const override;
+    // Compile-time copy of the wakeup table: the declared coverage sits next to the class, and the
+    // static_assert below keeps every reason this operator can name inside the mask.
+    static constexpr uint32_t kCoveredWakeups = kSpillSinkCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
+
     Status set_finishing(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
@@ -71,6 +87,11 @@ public:
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
+    // Spiller/spill-channel pair that the SpillableFlatSinkMixin reads to compute
+    // need_input()/block_reason(): this sink reaches them through its aggregator.
+    const std::shared_ptr<spill::Spiller>& _spiller() const { return _aggregator->spiller(); }
+    SpillProcessChannelPtr _spill_channel() const { return _aggregator->spill_channel(); }
+
 private:
     Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
 
@@ -99,6 +120,9 @@ private:
     static constexpr int32_t HT_LOW_REDUCTION_CHUNK_LIMIT = 5;
 };
 
+static_assert(SpillableAggregateBlockingSinkOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_FLUSH));
+static_assert(SpillableAggregateBlockingSinkOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_CHANNEL));
+
 class SpillableAggregateBlockingSinkOperatorFactory : public AggregateBlockingSinkOperatorFactory {
 public:
     SpillableAggregateBlockingSinkOperatorFactory(
@@ -115,7 +139,9 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_agg_events (default false). The kill-switch demotes the
+    // whole agg fragment back to the poller without a rebuild.
+    bool support_event_scheduler() const override { return config::enable_spill_agg_events; }
 
 private:
     ObjectPool _pool;

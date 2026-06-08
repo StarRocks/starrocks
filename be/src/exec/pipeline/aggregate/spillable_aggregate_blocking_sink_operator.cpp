@@ -38,7 +38,11 @@ DEFINE_FAIL_POINT(spill_always_selection_streaming);
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
-    return !is_finished() && !_aggregator->is_full() && !_aggregator->spill_channel()->has_task();
+    return spill_sink_need_input();
+}
+
+BlockReason SpillableAggregateBlockingSinkOperator::block_reason() const {
+    return spill_sink_block_reason();
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
@@ -120,6 +124,12 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
     _agg_group_by_with_limit = false;
     _aggregator->params()->enable_pipeline_share_limit = false;
+
+    // Subscribe this sink driver to the spiller's sink list so flush/channel
+    // completions wake the OUTPUT_FULL sleeper directly. Unconditional: the gate
+    // for the poller mode lives inside subscribe_sink (no-op when the event
+    // scheduler is disabled). observer() is valid here (assigned before prepare).
+    _aggregator->spiller()->observable().subscribe_sink(state, observer());
 
     return Status::OK();
 }

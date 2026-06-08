@@ -25,8 +25,20 @@
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
+const std::shared_ptr<spill::Spiller>& SpillableAggregateDistinctBlockingSinkOperator::_spiller() const {
+    return _aggregator->spiller();
+}
+
+SpillProcessChannelPtr SpillableAggregateDistinctBlockingSinkOperator::_spill_channel() const {
+    return _aggregator->spill_channel();
+}
+
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
-    return !is_finished() && !_aggregator->is_full() && !_aggregator->spill_channel()->has_task();
+    return spill_sink_need_input();
+}
+
+BlockReason SpillableAggregateDistinctBlockingSinkOperator::block_reason() const {
+    return spill_sink_block_reason();
 }
 
 bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
@@ -89,6 +101,11 @@ Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* sta
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    // Subscribe this sink driver to the spiller's sink list so flush/channel completions wake the
+    // OUTPUT_FULL sleeper directly. Unconditional: the gate for the poller mode lives inside subscribe_sink
+    // (no-op when the event scheduler is disabled). observer() is valid here (assigned before prepare).
+    _aggregator->spiller()->observable().subscribe_sink(state, observer());
     return Status::OK();
 }
 
@@ -188,7 +205,55 @@ Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* s
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
     _accumulator.set_max_size(state->chunk_size());
+
+    // Subscribe this source driver to the spiller's source list so restore / flush-all completions wake the
+    // INPUT_EMPTY sleeper. Unconditional: the poller-mode gate lives inside subscribe_source. observer() is
+    // valid here.
+    _aggregator->spiller()->observable().subscribe_source(state, observer());
     return Status::OK();
+}
+
+std::optional<BlockReason> SpillableAggregateDistinctBlockingSourceOperator::_blocked_on() const {
+    // Repeats has_output()'s branch order so block_reason() answers exactly when has_output() parks. A
+    // finished or non-spilled source is not parked on a spill block (the non-spilled base output is handled
+    // by has_output() directly). The base ready check (is_sink_complete && !is_ht_eos), buffered accumulator
+    // output, and spiller output data are runnable -> nullopt. A failed spiller is runnable (the run carries
+    // the status out through the RETURN_TRUE_IF_SPILL_TASK_ERROR guard in has_output()) -> nullopt. The
+    // spiller cancel branch and the eos chunk are runnable too (has_output() returns true on both); the
+    // is_cancel() runnable branch is the distinct-specific extra over the blocking source, added here so
+    // has_output() == !_blocked_on() stays in sync on cancel. Otherwise the source waits on the restore IO
+    // that the source-list subscription is woken by -> WAIT_RESTORE.
+    if (_is_finished) {
+        return std::nullopt;
+    }
+    if (AggregateDistinctBlockingSourceOperator::has_output()) {
+        return std::nullopt;
+    }
+    // Non-spilled path parks on NONE on purpose (matching the non-spilled blocking source): the wakeup comes
+    // from the aggregator-pip source observable, and the named WAIT_RESTORE reason is only declared once
+    // spilled().
+    if (!_aggregator->spiller()->spilled()) {
+        return std::nullopt;
+    }
+    if (_accumulator.has_output() || _aggregator->spiller()->has_output_data()) {
+        return std::nullopt;
+    }
+    if (!_aggregator->spiller()->task_status().ok()) {
+        return std::nullopt;
+    }
+    if (_aggregator->spiller()->is_cancel()) {
+        return std::nullopt;
+    }
+    if (_aggregator->is_spilled_eos() && _has_last_chunk) {
+        return std::nullopt;
+    }
+    // Passed through named<R, kCoveredWakeups>(): a restore park outside this source's source-list coverage
+    // mask does not compile, so the value spill_source_block_reason() returns is always a covered reason.
+    return named<BlockReason::WAIT_RESTORE, kCoveredWakeups>();
+}
+
+BlockReason SpillableAggregateDistinctBlockingSourceOperator::block_reason() const {
+    return spill_source_block_reason();
 }
 
 bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
