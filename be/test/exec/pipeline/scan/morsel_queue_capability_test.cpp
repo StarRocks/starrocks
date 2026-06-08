@@ -72,7 +72,10 @@ TEST_F(MorselQueueCapabilityTest, bucket_sequence_queue_is_olap_and_ticket_capab
     BucketSequenceMorselQueue queue(std::move(nested_queue));
 
     EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+    auto* ticketed_queue = dynamic_cast<TicketedMorselQueue*>(&queue);
+    ASSERT_NE(nullptr, ticketed_queue);
+    EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(false));
+    EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(true));
 }
 
 } // namespace starrocks::pipeline

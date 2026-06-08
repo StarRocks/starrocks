@@ -169,7 +169,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
-    pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
@@ -514,6 +513,30 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET pipeline_extensions_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
 
+ADD_BE_LIB(ExecRuntime
+    pipeline/pipeline_driver.cpp
+)
+
+target_link_libraries(ExecRuntime PUBLIC
+    ComputeEnv
+    ExecPrimitive
+    StoragePrimitive
+    ExprCore
+    Serde
+    RuntimeEnv
+    RuntimeCore
+    Platform
+    FSCore
+    IO
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
     ${EXEC_DATA_SINK_FILES}
@@ -522,5 +545,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

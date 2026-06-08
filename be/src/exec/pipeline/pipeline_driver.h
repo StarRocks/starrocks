@@ -29,7 +29,6 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "fmt/printf.h"
