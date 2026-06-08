@@ -1129,20 +1129,18 @@ Status ArrayFunctions::array_contains_generic_prepare(FunctionContext* context,
         return Status::OK(); // element is not a constant -> generic path
     }
 
+    // arg0 is dict-encoded, so it arrives as integer codes; a global dictionary MUST exist for its
+    // slot. Any failure to obtain it is an inconsistent plan, not a fall-back case, because the
+    // generic (decoded) path cannot evaluate an encoded array.
     RuntimeState* runtime_state = context->state();
-    if (runtime_state == nullptr) {
-        return Status::OK();
-    }
-    const FragmentDictState* dict_state = runtime_state->fragment_dict_state();
+    const FragmentDictState* dict_state = runtime_state != nullptr ? runtime_state->fragment_dict_state() : nullptr;
     if (dict_state == nullptr) {
-        return Status::OK();
+        return Status::InternalError("array_contains: missing dict state for dict-encoded array slot " +
+                                     std::to_string(dict_slots[0]));
     }
     const GlobalDictMaps& dicts = dict_state->query_global_dicts();
     auto it = dicts.find(static_cast<uint32_t>(dict_slots[0]));
     if (it == dicts.end()) {
-        // The FE marked arg0 as dict-encoded, so it arrives as integer codes; without the
-        // dictionary we cannot resolve the constant's code and the generic (decoded) path would
-        // mis-evaluate the encoded array. A missing dict here is an inconsistent plan.
         return Status::InternalError("array_contains: global dictionary not found for dict-encoded array slot " +
                                      std::to_string(dict_slots[0]));
     }
