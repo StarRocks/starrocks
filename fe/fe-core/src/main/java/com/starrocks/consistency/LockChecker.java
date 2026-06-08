@@ -44,16 +44,38 @@ public class LockChecker extends FrontendDaemon {
     }
 
     public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters) {
-        JsonArray waiterInfos = new JsonArray();
-        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
-            if (th != null) {
-                JsonObject waiter = new JsonObject();
-                waiter.addProperty("threadId", th.getId());
-                waiter.addProperty("threadName", th.getName());
-                waiterInfos.add(waiter);
-            }
-        }
+        return getLockWaiterInfoJsonArray(waiters, 0);
+    }
 
+    /**
+     * Build a JSON array of waiter thread info, capped at {@code cap} entries when {@code cap > 0}.
+     * If the source list contains more than {@code cap} non-null entries, a trailer object
+     * {@code {"omitted": "remain N waiters omitted"}} is appended so the total count is still
+     * visible. {@code cap <= 0} disables the cap and serializes every waiter.
+     */
+    public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters, int cap) {
+        JsonArray waiterInfos = new JsonArray();
+        int emitted = 0;
+        int totalNonNull = 0;
+        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
+            if (th == null) {
+                continue;
+            }
+            totalNonNull++;
+            if (cap > 0 && emitted >= cap) {
+                continue;
+            }
+            JsonObject waiter = new JsonObject();
+            waiter.addProperty("threadId", th.getId());
+            waiter.addProperty("threadName", th.getName());
+            waiterInfos.add(waiter);
+            emitted++;
+        }
+        if (cap > 0 && totalNonNull > cap) {
+            JsonObject omitted = new JsonObject();
+            omitted.addProperty("omitted", "remain " + (totalNonNull - cap) + " waiters omitted");
+            waiterInfos.add(omitted);
+        }
         return waiterInfos;
     }
 
