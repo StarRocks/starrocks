@@ -82,6 +82,54 @@ TEST(DataSampleTest, test_page_sample) {
     }
 }
 
+// Regression test for sub-1% sampling on large tables. Previously the probability percent was an
+// integer, so a ratio below 1% was truncated to 0 and rejected. It is now a double, so 0.5% must be
+// accepted and produce a small but non-empty sample.
+TEST(DataSampleTest, test_block_sample_sub_one_percent) {
+    int64_t random_seed = 123;
+    size_t rows_per_block = 1024;
+    size_t total_rows = 10'000'000;
+    double percentage = 0.5;
+
+    auto data_sample = DataSample::make_block_sample(percentage, random_seed, rows_per_block, total_rows);
+    ASSERT_NE(data_sample, nullptr);
+
+    OlapReaderStatistics stats;
+    auto sampled_ranges = data_sample->sample(&stats);
+    ASSERT_TRUE(sampled_ranges.ok());
+    EXPECT_GT(sampled_ranges.value().size(), 0);
+    // Sampled blocks should be well below the population and roughly bounded by the ratio (with slack).
+    size_t total_blocks = total_rows / rows_per_block;
+    EXPECT_LT(sampled_ranges.value().size(), total_blocks);
+    EXPECT_LE(stats.sample_size, (size_t)(percentage / 100.0 * total_blocks * 3 + 8));
+}
+
+TEST(DataSampleTest, test_page_sample_sub_one_percent) {
+    int64_t random_seed = 123;
+    size_t num_pages = 100'000;
+    double percentage = 0.5;
+    auto page_indexer = [](size_t page_index) {
+        return std::make_pair(page_index * 1024, (page_index + 1) * 1024);
+    };
+
+    auto data_sample = DataSample::make_page_sample(percentage, random_seed, num_pages, std::move(page_indexer));
+    ASSERT_NE(data_sample, nullptr);
+
+    OlapReaderStatistics stats;
+    auto sampled_ranges = data_sample->sample(&stats);
+    ASSERT_TRUE(sampled_ranges.ok());
+    EXPECT_GT(sampled_ranges.value().size(), 0);
+    EXPECT_LT(sampled_ranges.value().size(), num_pages);
+}
+
+// A non-positive percent (including a value that used to be produced by integer truncation) must still error.
+TEST(DataSampleTest, test_block_sample_zero_percent_rejected) {
+    int64_t random_seed = 123;
+    auto data_sample = DataSample::make_block_sample(0.0, random_seed, 1024, 100'000);
+    OlapReaderStatistics stats;
+    ASSERT_FALSE(data_sample->sample(&stats).ok());
+}
+
 class PageSampleTestSuite : public testing::Test {
 protected:
     void SetUp() override {

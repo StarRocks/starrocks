@@ -40,13 +40,15 @@ public final class TableSampleClause implements ParseNode {
 
     // Default values for sampling
     private static final SampleMethod DEFAULT_SAMPLE_METHOD = SampleMethod.BY_BLOCK;
-    private static final long DEFAULT_RANDOM_PROBABILITY_PERCENT = 1;
+    private static final double DEFAULT_RANDOM_PROBABILITY_PERCENT = 1;
 
     private final NodePosition pos;
     private boolean useSampling = true;
     private SampleMethod sampleMethod = DEFAULT_SAMPLE_METHOD;
     private long randomSeed = ThreadLocalRandom.current().nextLong();
-    private long randomProbabilityPercent = DEFAULT_RANDOM_PROBABILITY_PERCENT;
+    // Sampling probability as a percent in the open range (0, 100). Allows fractional values such as 0.5
+    // so that very large tables can be sampled below 1% without being truncated to 0.
+    private double randomProbabilityPercent = DEFAULT_RANDOM_PROBABILITY_PERCENT;
 
     public TableSampleClause(NodePosition pos) {
         this.pos = pos;
@@ -69,7 +71,7 @@ public final class TableSampleClause implements ParseNode {
                     this.sampleMethod = SampleMethod.mustParse(value);
                     break;
                 case SAMPLE_PROPERTY_PERCENT:
-                    long percent = ParseUtil.analyzeLongValue(value);
+                    double percent = ParseUtil.analyzeDoubleValue(value);
                     if (!(0 < percent && percent < 100)) {
                         throw new AnalysisException("invalid " + entry.getKey() + " which should in (0, 100)");
                     }
@@ -86,7 +88,11 @@ public final class TableSampleClause implements ParseNode {
 
     public void toThrift(TTableSampleOptions msg) {
         msg.setEnable_sampling(true);
-        msg.setProbability_percent(randomProbabilityPercent);
+        // Keep the legacy integer field populated for backward compatibility with old BE that only reads it.
+        // Round to the nearest integer in (0, 100) so old BE still produces a sane (non-zero) sample.
+        msg.setProbability_percent(Math.max(1L, Math.min(99L, Math.round(randomProbabilityPercent))));
+        // New field carries the exact (possibly sub-1%) value; new BE prefers this.
+        msg.setProbability_percent_v2(randomProbabilityPercent);
         msg.setSample_method(sampleMethod.toThrift());
         msg.setRandom_seed(randomSeed);
     }
@@ -101,12 +107,18 @@ public final class TableSampleClause implements ParseNode {
         return sb.toString();
     }
 
+    // Render the percent without a trailing ".0" for integral values (e.g. "1" instead of "1.0"), while
+    // keeping fractional values intact (e.g. "0.5") and avoiding scientific notation that the parser rejects.
+    private String percentToString() {
+        return java.math.BigDecimal.valueOf(randomProbabilityPercent).stripTrailingZeros().toPlainString();
+    }
+
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("SAMPLE(");
         sb.append("'method'=").append(Strings.quote(sampleMethod.toString())).append(",");
         sb.append("'seed'=").append(Strings.quote(String.valueOf(randomSeed))).append(",");
-        sb.append("'percent'=").append(Strings.quote(String.valueOf(randomProbabilityPercent)));
+        sb.append("'percent'=").append(Strings.quote(percentToString()));
         sb.append(")");
         return sb.toString();
     }
@@ -115,7 +127,7 @@ public final class TableSampleClause implements ParseNode {
         StringBuffer sb = new StringBuffer("SAMPLE: ");
         sb.append("method=").append(sampleMethod);
         sb.append(" seed=").append(randomSeed);
-        sb.append(" probability=").append(randomProbabilityPercent);
+        sb.append(" probability=").append(percentToString());
         return sb.toString();
     }
 

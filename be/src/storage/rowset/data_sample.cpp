@@ -27,18 +27,18 @@
 
 namespace starrocks {
 
-std::unique_ptr<BlockDataSample> DataSample::make_block_sample(int64_t probability_percent, int64_t random_seed,
+std::unique_ptr<BlockDataSample> DataSample::make_block_sample(double probability_percent, int64_t random_seed,
                                                                size_t rows_per_block, size_t total_rows) {
     return std::make_unique<BlockDataSample>(probability_percent, random_seed, rows_per_block, total_rows);
 }
 
-std::unique_ptr<PageDataSample> DataSample::make_page_sample(int64_t probability_percent, int64_t random_seed,
+std::unique_ptr<PageDataSample> DataSample::make_page_sample(double probability_percent, int64_t random_seed,
                                                              size_t num_pages, PageIndexer page_indexer) {
     return std::make_unique<PageDataSample>(probability_percent, random_seed, num_pages, std::move(page_indexer));
 }
 
 StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) {
-    RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
+    RETURN_IF(_probability_percent <= 0 || _probability_percent >= 100,
               Status::InvalidArgument("percent should be in (0, 100)"));
     std::mt19937 mt(_random_seed);
     std::bernoulli_distribution dist(_probability_percent / 100.0);
@@ -263,7 +263,7 @@ void SortableZoneMap::build_histogram(size_t buckets) {
 }
 
 StatusOr<RowIdSparseRange> PageDataSample::sample(OlapReaderStatistics* stats) {
-    RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
+    RETURN_IF(_probability_percent <= 0 || _probability_percent >= 100,
               Status::InvalidArgument("percent should be in (0, 100)"));
     if (_zonemap) {
         _prepare_histogram(stats);
@@ -308,7 +308,7 @@ bool PageDataSample::_has_histogram() const {
 // Build a histogram based on zonemap to make the data sampling more even
 // Without histogram, page sampling may fall into local optimal but not global uniform
 void PageDataSample::_prepare_histogram(OlapReaderStatistics* stats) {
-    size_t expected_pages = _probability_percent * _num_pages / 100;
+    size_t expected_pages = static_cast<size_t>(_probability_percent * _num_pages / 100.0);
     if (expected_pages <= 1) {
         return;
     }

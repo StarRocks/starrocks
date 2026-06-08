@@ -82,3 +82,15 @@ select count(k1), sum(k1), sum(k2) from pk_t1 sample('seed'='1', 'method'='by_bl
 -- result:
 49152	24024997888	24748888
 -- !result
+select count(k1) > 0 from t1 sample('seed'='1', 'method'='by_block', 'percent'='0.5');
+-- result:
+1
+-- !result
+select count(k1) > 0 from t1 sample('seed'='1', 'method'='by_block', 'percent'='0.01');
+-- result:
+1
+-- !result
+select count(k1) > 0 from pk_t1 sample('seed'='1', 'method'='by_block', 'percent'='0.5');
+-- result:
+1
+-- !result

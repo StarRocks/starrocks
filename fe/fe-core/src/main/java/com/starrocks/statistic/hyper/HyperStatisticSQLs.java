@@ -202,7 +202,9 @@ public class HyperStatisticSQLs {
                             " ) %s",
                     table, tabletHint, ratio, alias);
         } else {
-            int percent = (int) (ratio * 100);
+            // Clamp to [1, 100] like the sibling sample-hint builders so a sub-1% ratio is not truncated to 0,
+            // which would otherwise produce the illegal SAMPLE('percent'='0').
+            int percent = Math.max(1, Math.min(100, (int) (ratio * 100)));
             return String.format(" SELECT * FROM (SELECT * FROM %s TABLET(%s) SAMPLE('percent'='%d')) %s",
                     table, tabletHint, percent, alias);
         }
