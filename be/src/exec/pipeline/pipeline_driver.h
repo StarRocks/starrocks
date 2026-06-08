@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 
+#include "base/concurrency/race_detect.h"
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -27,10 +28,10 @@
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_state.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "fmt/printf.h"
@@ -63,7 +64,7 @@ enum OperatorStage {
     CLOSED = 7,
 };
 
-class PipelineDriver {
+class PipelineDriver : private PipelineObserver {
     friend class PipelineDriverPoller;
 
 public:
@@ -399,11 +400,35 @@ public:
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
 
-    PipelineObserver* observer() { return &_observer; }
+    PipelineObserver* observer() { return static_cast<PipelineObserver*>(this); }
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
     bool local_prepare_is_done() const { return _local_prepare_is_done; }
+
+private:
+    void source_trigger() override {
+        _active_event(SOURCE_CHANGE_EVENT);
+        _update();
+    }
+
+    void sink_trigger() override {
+        _active_event(SINK_CHANGE_EVENT);
+        _update();
+    }
+
+    void cancel_trigger() override {
+        _active_event(CANCEL_EVENT);
+        _update();
+    }
+
+    void all_trigger() override {
+        _active_event(SOURCE_CHANGE_EVENT | SINK_CHANGE_EVENT);
+        _update();
+    }
+
+    void runtime_filter_timeout_trigger() override;
+    std::string debug_string() const override;
 
 protected:
     PipelineDriver();
@@ -441,11 +466,26 @@ protected:
     // used in event scheduler
     void _update_global_rf_timer();
 
+    static constexpr inline int32_t CANCEL_EVENT = 1 << 2;
+    static constexpr inline int32_t SINK_CHANGE_EVENT = 1 << 1;
+    static constexpr inline int32_t SOURCE_CHANGE_EVENT = 1;
+
+    void _update();
+    void _do_update(int event);
+    // fetch event
+    int _fetch_event() { return _events.fetch_and(0, std::memory_order_acq_rel); }
+
+    bool _is_sink_changed(int event) { return event & SINK_CHANGE_EVENT; }
+    bool _is_source_changed(int event) { return event & SOURCE_CHANGE_EVENT; }
+    bool _is_cancel_changed(int event) { return event & CANCEL_EVENT; }
+    bool _is_all_changed(int event) { return _is_source_changed(event) && _is_sink_changed(event); }
+
+    void _active_event(int event) { _events.fetch_or(event, std::memory_order_acq_rel); }
+
     // Helper function to build readable string with option to use raw operator names
     std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
-    PipelineDriverObserver _observer;
     // Keep this before _operators so driver teardown destroys operators first, then their managers.
     std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;
@@ -502,6 +542,10 @@ protected:
     std::shared_ptr<PipelineTimerTask> _global_rf_timer;
 
     std::atomic<bool> _local_prepare_is_done{false};
+
+    DECLARE_RACE_DETECTOR(detect_do_update)
+    std::atomic_int32_t _pending_event_cnt{};
+    std::atomic_int32_t _events{};
 
 protected:
     // metrics

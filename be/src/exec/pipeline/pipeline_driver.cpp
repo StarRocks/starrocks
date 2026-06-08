@@ -34,6 +34,7 @@
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/primitives/fragment_runtime_state.h"
@@ -41,6 +42,8 @@
 #include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/pipeline/schedule/utils.h"
 #include "exec/pipeline/source_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
@@ -64,8 +67,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
                                QueryRuntimeState* query_runtime_state, FragmentRuntimeState* fragment_runtime_state,
                                FragmentContext* fragment_ctx, Event* pipeline_event, DriverObserver* driver_observer,
                                PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id)
-        : _observer(this),
-          _operator_mem_resource_managers(operators.size()),
+        : _operator_mem_resource_managers(operators.size()),
           _operators(operators),
           _query_ctx(query_ctx),
           _query_runtime_state(query_runtime_state),
@@ -90,8 +92,7 @@ PipelineDriver::PipelineDriver(const PipelineDriver& driver)
                          driver._driver_observer, driver._pipeline_timer_context, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
-        : _observer(this),
-          _operator_mem_resource_managers(),
+        : _operator_mem_resource_managers(),
           _operators(),
           _query_ctx(nullptr),
           _query_runtime_state(nullptr),
@@ -231,7 +232,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 #ifdef FIU_ENABLE
                     FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
 #endif
-                    desc->add_observer(_runtime_state, [observer = &_observer]() { observer->source_trigger(); });
+                    desc->add_observer(_runtime_state, [observer = observer()]() { observer->source_trigger(); });
                 }
             }
 
@@ -252,7 +253,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _local_rf_holders =
             _fragment_runtime_state->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
     for (auto rf_holder : _local_rf_holders) {
-        rf_holder->add_observer(_runtime_state, &_observer);
+        rf_holder->add_observer(_runtime_state, observer());
     }
     if (use_cache) {
         ssize_t cache_op_idx = -1;
@@ -892,10 +893,89 @@ void PipelineDriver::_update_global_rf_timer() {
         return;
     }
     auto timer = std::make_shared<RFScanWaitTimeout>(true);
-    timer->add_observer(_runtime_state, &_observer);
+    timer->add_observer(_runtime_state, observer());
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_pipeline_timer_context->schedule(_global_rf_timer.get(), abstime), "schedule:");
+}
+
+static void on_update(PipelineDriver* driver) {
+    auto sink = driver->sink_operator();
+    auto source = driver->source_operator();
+    if (sink->is_finished() || sink->need_input() || source->is_finished() || source->has_output()) {
+        driver->fragment_ctx()->event_scheduler()->try_schedule(driver);
+    }
+}
+
+static void on_sink_update(PipelineDriver* driver) {
+    auto sink = driver->sink_operator();
+    if (sink->is_finished() || sink->need_input()) {
+        driver->fragment_ctx()->event_scheduler()->try_schedule(driver);
+    }
+}
+
+static void on_source_update(PipelineDriver* driver) {
+    auto source = driver->source_operator();
+    if (source->is_finished() || source->has_output()) {
+        driver->fragment_ctx()->event_scheduler()->try_schedule(driver);
+    }
+}
+
+void PipelineDriver::_update() {
+    int event = 0;
+    AtomicRequestControler(_pending_event_cnt, [&]() {
+        RACE_DETECT(detect_do_update);
+        event |= _fetch_event();
+        _do_update(event);
+    });
+}
+
+void PipelineDriver::_do_update(int event) {
+    auto driver = this;
+    auto token = driver->acquire_schedule_token();
+    auto sink = driver->sink_operator();
+    auto source = driver->source_operator();
+
+    if (!driver->is_finished() && !driver->pending_finish()) {
+        TRACE_SCHEDULE_LOG << "notify driver:" << driver << " state:" << driver->driver_state() << " event:" << event
+                           << " in_block_queue:" << driver->is_in_blocked()
+                           << " source finished:" << source->is_finished()
+                           << " operator has output:" << source->has_output()
+                           << " sink finished:" << sink->is_finished() << " sink need input:" << sink->need_input()
+                           << ":" << driver->to_readable_string();
+    }
+
+    if (driver->is_in_blocked()) {
+        // When the driver is blocked for a reason other than INPUT_EMPTY / OUTPUT_FULL
+        // (e.g. PRECONDITION_BLOCK), source->has_output() / sink->need_input() may
+        // return false while the driver still needs to be rescheduled. In that case
+        // we try_schedule directly; for INPUT_EMPTY / OUTPUT_FULL we dispatch to the
+        // event-specific handlers below.
+        bool pipeline_block = driver->driver_state() != DriverState::INPUT_EMPTY &&
+                              driver->driver_state() != DriverState::OUTPUT_FULL;
+        if (pipeline_block || _is_cancel_changed(event)) {
+            driver->fragment_ctx()->event_scheduler()->try_schedule(driver);
+        } else if (_is_all_changed(event)) {
+            on_update(driver);
+        } else if (_is_source_changed(event)) {
+            on_source_update(driver);
+        } else if (_is_sink_changed(event)) {
+            on_sink_update(driver);
+        } else {
+            // nothing to do
+        }
+    } else {
+        driver->set_need_check_reschedule(true);
+    }
+}
+
+void PipelineDriver::runtime_filter_timeout_trigger() {
+    set_all_global_rf_timeout();
+    source_trigger();
+}
+
+std::string PipelineDriver::debug_string() const {
+    return to_readable_string();
 }
 
 std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
@@ -1091,7 +1171,7 @@ void PipelineDriver::increment_schedule_times() {
 
 void PipelineDriver::assign_observer() {
     for (const auto& op : _operators) {
-        op->set_observer(&_observer);
+        op->set_observer(observer());
     }
 }
 
