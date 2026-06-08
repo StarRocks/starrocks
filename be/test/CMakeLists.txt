@@ -628,8 +628,224 @@ if (USE_AVX2)
 endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
+<<<<<<< HEAD
 SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
+=======
+target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
+if (NOT STARROCKS_JIT_ENABLE)
+    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+else()
+    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+endif ()
+add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
+
+TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
+
+
+SET(DW_TEST_FILES
+    ./storage/aggregate_iterator_test.cpp
+    ./storage/base_compaction_test.cpp
+    ./storage/binlog_builder_test.cpp
+    ./storage/binlog_file_test.cpp
+    ./storage/binlog_manager_test.cpp
+    ./storage/binlog_reader_test.cpp
+    ./storage/binlog_test_base.cpp
+    ./storage/chunk_aggregator_test.cpp
+    ./storage/chunk_helper_test.cpp
+    ./storage/column_aggregator_test.cpp
+    ./storage/column_and_predicate_test.cpp
+    ./storage/column_or_predicate_test.cpp
+    ./storage/column_predicate_test.cpp
+    ./storage/column_predicate_inverted_index_fallback_test.cpp
+    ./storage/compaction_manager_test.cpp
+    ./storage/compaction_parallelization_test.cpp
+    ./storage/compaction_utils_test.cpp
+    ./storage/conjunctive_predicates_test.cpp
+    ./storage/convert_helper_test.cpp
+    ./storage/cumulative_compaction_test.cpp
+    ./storage/data_dir_test.cpp
+    ./storage/datum_variant_test.cpp
+    ./base/types/decimal12_test.cpp
+    ./storage/default_compaction_policy_test.cpp
+    ./storage/delete_handler_test.cpp
+    ./storage/delete_predicates_test.cpp
+    ./storage/delta_column_group_test.cpp
+    ./storage/delta_writer_test.cpp
+    ./storage/del_vector_test.cpp
+    ./storage/dictionary_cache_manager_test.cpp
+    ./storage/disjunctive_predicates_test.cpp
+    ./storage/fast_schema_evolution_test.cpp
+    ./storage/get_use_pk_index_test.cpp
+    ./storage/index/vector_index_test.cpp
+    ./storage/index/vector_search_test.cpp
+    ./storage/index/vector/vector_index_cache_test.cpp
+    ./storage/index/builtin_inverted_index_test.cpp
+    ./storage/kv_store_test.cpp
+    ./storage/lake/alter_tablet_meta_test.cpp
+    ./storage/lake/async_delta_writer_test.cpp
+    ./storage/lake/index_delta_group_loader_test.cpp
+    ./storage/lake/index_file_writer_reader_test.cpp
+    ./storage/lake/auto_increment_partial_update_test.cpp
+    ./storage/lake/compaction_policy_test.cpp
+    ./storage/lake/compaction_scheduler_test.cpp
+    ./storage/lake/compaction_task_context_test.cpp
+    ./storage/lake/condition_update_test.cpp
+    ./storage/lake/segment_pk_iterator_test.cpp
+    ./storage/lake/delta_writer_test.cpp
+    ./storage/lake/filenames_test.cpp
+    ./storage/lake/lake_data_source_test.cpp
+    ./storage/lake/shared_data_vector_index_test.cpp
+    ./storage/lake/vector_index_build_task_test.cpp
+    ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_meta_reader_test.cpp
+    ./storage/lake/lake_persistent_index_test.cpp
+    ./storage/lake/lake_primary_key_consistency_test.cpp
+    ./storage/lake/lake_scan_node_test.cpp
+    ./storage/lake/metacache_test.cpp
+    ./storage/lake/meta_file_test.cpp
+    ./storage/lake/lake_proto_normalizer_test.cpp
+    ./storage/lake/partial_update_test.cpp
+    ./storage/lake/persistent_index_memtable_test.cpp
+    ./storage/lake/persistent_index_sstable_test.cpp
+    ./storage/lake/primary_key_compaction_task_test.cpp
+    ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_helper_test.cpp
+    ./storage/lake/tablet_reshard_test.cpp
+    ./storage/lake/tablet_splitter_test.cpp
+    ./storage/lake/replication_txn_manager_test.cpp
+    ./storage/lake/rowset_test.cpp
+    ./storage/lake/segment_metadata_filter_test.cpp
+    ./storage/lake/segment_task_runner_test.cpp
+    ./storage/lake/add_index_schema_change_test.cpp
+    ./storage/lake/schema_change_test.cpp
+    ./storage/lake/lake_replication_txn_manager_test.cpp
+    ./storage/lake/spill_mem_table_sink_test.cpp
+    ./storage/lake/starlet_location_provider_test.cpp
+    ./storage/lake/tablet_manager_test.cpp
+    ./storage/lake/tablet_range_helper_test.cpp
+    ./storage/lake/sst_seek_range_test.cpp
+    ./storage/lake/tablet_parallel_compaction_manager_test.cpp
+    ./storage/lake/tablet_reader_test.cpp
+    ./storage/lake/tablet_retain_info_test.cpp
+    ./storage/lake/tablet_test.cpp
+    ./storage/lake/tablet_writer_test.cpp
+    ./storage/lake/delete_test.cpp
+    ./storage/lake/transactions_test.cpp
+    ./storage/lake/pk_tablet_sst_writer_test.cpp
+    ./storage/lake/txn_log_applier_test.cpp
+    ./storage/lake/txn_log_applier_idg_test.cpp
+    ./storage/lake/vacuum_test.cpp
+    ./storage/lake/write_combined_txn_log_test.cpp
+    ./storage/lake/lake_persistent_index_fileset_test.cpp
+    ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
+    ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
+    ./storage/lake/tablet_write_log_manager_test.cpp
+    ./storage/load_spill_block_manager_test.cpp
+    ./storage/load_spill_pipeline_merge_test.cpp
+    ./storage/memtable_flush_executor_test.cpp
+    ./storage/memtable_test.cpp
+    ./storage/metadata_util_test.cpp
+    ./storage/meta_reader_test.cpp
+    ./storage/non_retryable_load_errors_test.cpp
+    ./storage/olap_meta_reader_test.cpp
+    ./storage/olap_runtime_range_pruner_test.cpp
+    ./storage/persistent_index_consistency_test.cpp
+    ./storage/persistent_index_load_executor_test.cpp
+    ./storage/persistent_index_snapshot_load_test.cpp
+    ./storage/persistent_index_test.cpp
+    ./storage/primary_index_test.cpp
+    ./storage/primary_key_encoder_test.cpp
+    ./storage/protobuf_file_test.cpp
+    ./storage/publish_version_manager_test.cpp
+    ./storage/publish_version_task_test.cpp
+    ./storage/push_handler_test.cpp
+    ./storage/replication_txn_manager_test.cpp
+    ./storage/replication_utils_test.cpp
+    ./storage/rowset/binary_dict_page_test.cpp
+    ./storage/rowset/binary_plain_page_test.cpp
+    ./storage/rowset/binary_prefix_page_test.cpp
+    ./storage/rowset/bitmap_index_test.cpp
+    ./storage/rowset/bitshuffle_page_test.cpp
+    ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
+    ./storage/rowset/cast_column_iterator_test.cpp
+    ./storage/rowset/column_iterator_decorator_test.cpp
+    ./storage/rowset_column_partial_update_test.cpp
+    ./storage/rowset/column_reader_writer_test.cpp
+    ./storage/rowset/object_column_writer_test.cpp
+    ./storage/rowset_column_update_state_test.cpp
+    ./storage/rowset/data_sample_test.cpp
+    ./storage/rowset/default_value_column_iterator_test.cpp
+    ./storage/rowset/dict_page_test.cpp
+    ./storage/rowset/encoding_info_test.cpp
+    ./storage/rowset/flat_json_column_compact_test.cpp
+    ./storage/rowset/flat_json_column_rw_test.cpp
+    ./storage/rowset/frame_of_reference_page_test.cpp
+    ./storage/rowset/index_page_test.cpp
+    ./storage/rowset/map_column_rw_test.cpp
+    ./storage/rowset_merger_test.cpp
+    ./storage/rowset/metadata_cache_test.cpp
+    ./storage/rowset/ordinal_page_index_test.cpp
+    ./storage/rowset/page_handle_test.cpp
+    ./storage/rowset/page_io_test.cpp
+    ./storage/rowset/plain_page_test.cpp
+    ./storage/rowset/rle_page_test.cpp
+    ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/segment_iterator_test.cpp
+    ./storage/rowset/segment_rewriter_test.cpp
+    ./storage/rowset/segment_test.cpp
+    ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
+    ./storage/rowset/series_column_iterator_test.cpp
+    ./storage/rowset/struct_column_rw_test.cpp
+    ./storage/rowset/unique_rowset_id_generator_test.cpp
+    ./storage/rowset_update_state_test.cpp
+    ./storage/rowset/zone_map_index_test.cpp
+    ./storage/rows_mapper_test.cpp
+    ./storage/row_store_encoder_test.cpp
+    ./storage/schema_change_test.cpp
+    ./storage/segment_flush_executor_test.cpp
+    ./storage/segment_stream_converter_test.cpp
+    ./storage/del_file_stream_converter_test.cpp
+    ./storage/size_tiered_compaction_policy_test.cpp
+    ./storage/snapshot_meta_test.cpp
+    ./storage/sstable/concatenating_iterator_test.cpp
+    ./storage/storage_metrics_test.cpp
+    ./storage/storage_engine_compaction_test.cpp
+    ./storage/storage_engine_test.cpp
+    ./storage/table_reader_remote_test.cpp
+    ./storage/table_reader_test.cpp
+    ./storage/tablet_binlog_test.cpp
+    ./storage/tablet_index_test.cpp
+    ./storage/tablet_meta_manager_test.cpp
+    ./storage/tablet_meta_test.cpp
+    ./storage/tablet_mgr_test.cpp
+    ./storage/tablet_schema_helper.cpp
+    ./storage/tablet_schema_map_test.cpp
+    ./storage/tablet_schema_test.cpp
+    ./storage/tablet_test.cpp
+    ./storage/tablet_updates_schema_change_test.cpp
+    ./storage/tablet_updates_test.cpp
+    ./storage/unique_iterator_test.cpp
+    ./storage/update_manager_test.cpp
+    ./storage/utils_test.cpp
+    ./storage/version_graph_test.cpp
+    ./storage/lake/table_schema_service_test.cpp
+    ./storage/lake/fast_schema_evolution_v2_test.cpp
+)
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND DW_TEST_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND DW_TEST_FILES ./storage/lake/local_pk_index_manager_test.cpp)
+endif ()
+
+add_library(starrocks_dw_objs OBJECT ${DW_TEST_FILES})
+SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
+add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
+TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
+>>>>>>> 9402eeece0 ([Enhancement] Align local compaction MemTracker labels to Compaction-<tablet_id> (#74399))
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 
