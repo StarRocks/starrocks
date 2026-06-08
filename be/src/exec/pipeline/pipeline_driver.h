@@ -91,7 +91,7 @@ public:
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, QueryRuntimeState* query_runtime_state,
-                   FragmentRuntimeState* fragment_runtime_state, FragmentContext* fragment_ctx, Pipeline* pipeline,
+                   FragmentRuntimeState* fragment_runtime_state, FragmentContext* fragment_ctx, Event* pipeline_event,
                    DriverObserver* driver_observer, PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
@@ -466,7 +466,7 @@ protected:
     QueryRuntimeState* _query_runtime_state;
     FragmentRuntimeState* _fragment_runtime_state;
     FragmentContext* _fragment_ctx;
-    Pipeline* _pipeline;
+    Event* _pipeline_event;
     DriverObserver* _driver_observer;
     PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     // The default value -1 means no source
