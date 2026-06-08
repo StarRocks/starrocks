@@ -86,6 +86,7 @@ ADD_BE_LIB(Formats
         parquet/column_reader_factory.cpp
         parquet/scalar_column_reader.cpp
         parquet/complex_column_reader.cpp
+        parquet/variant_projection.cpp
         parquet/encoding.cpp
         parquet/level_codec.cpp
         parquet/page_reader.cpp
