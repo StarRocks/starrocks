@@ -124,7 +124,8 @@ public:
     void clear_all_drivers();
     void close_all_execution_groups();
 
-    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+    RuntimeFilterHub* runtime_filter_hub() { return _fragment_runtime_state.runtime_filter_hub(); }
+    const RuntimeFilterHub* runtime_filter_hub() const { return _fragment_runtime_state.runtime_filter_hub(); }
 
     RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
@@ -137,9 +138,9 @@ public:
 
     query_cache::CacheParam& cache_param() { return _cache_param; }
 
-    void set_enable_cache(bool flag) { _enable_cache = flag; }
+    void set_enable_cache(bool flag) { _fragment_runtime_state.set_enable_cache(flag); }
 
-    bool enable_cache() const { return _enable_cache; }
+    bool enable_cache() const { return _fragment_runtime_state.enable_cache(); }
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
@@ -222,8 +223,6 @@ private:
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
     std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
 
-    RuntimeFilterHub _runtime_filter_hub;
-
     MorselQueueFactoryMap _morsel_queue_factories;
     workgroup::WorkGroupPtr _workgroup = nullptr;
 
@@ -235,7 +234,6 @@ private:
     std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
 
     query_cache::CacheParam _cache_param;
-    bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
 
     bool _enable_adaptive_dop = false;

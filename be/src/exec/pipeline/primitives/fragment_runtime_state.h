@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 
 namespace starrocks::pipeline {
@@ -27,8 +28,16 @@ public:
     }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
 
+    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+    const RuntimeFilterHub* runtime_filter_hub() const { return &_runtime_filter_hub; }
+
+    void set_enable_cache(bool flag) { _enable_cache = flag; }
+    bool enable_cache() const { return _enable_cache; }
+
 private:
     TUniqueId _fragment_instance_id;
+    RuntimeFilterHub _runtime_filter_hub;
+    bool _enable_cache = false;
 };
 
 } // namespace starrocks::pipeline
