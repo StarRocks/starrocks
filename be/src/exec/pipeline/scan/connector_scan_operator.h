@@ -118,7 +118,7 @@ public:
 
     int available_pickup_morsel_count() override;
     void begin_driver_process() override;
-    void end_driver_process(PipelineDriver* driver) override;
+    void end_driver_process(DriverState driver_state) override;
     bool is_running_all_io_tasks() const override;
 
     Status append_morsels(std::vector<MorselPtr>&& morsels);
