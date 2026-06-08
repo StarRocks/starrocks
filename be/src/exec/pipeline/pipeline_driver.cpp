@@ -28,6 +28,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
@@ -43,7 +44,6 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
-#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
@@ -66,7 +66,7 @@ size_t spill_expected_reserved_bytes(const QueryRuntimeState* query_runtime_stat
 PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx,
                                QueryRuntimeState* query_runtime_state, FragmentRuntimeState* fragment_runtime_state,
                                FragmentContext* fragment_ctx, Pipeline* pipeline, DriverObserver* driver_observer,
-                               int32_t driver_id)
+                               PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id)
         : _observer(this),
           _operator_mem_resource_managers(operators.size()),
           _operators(operators),
@@ -76,6 +76,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
           _fragment_ctx(fragment_ctx),
           _pipeline(pipeline),
           _driver_observer(driver_observer),
+          _pipeline_timer_context(std::move(pipeline_timer_context)),
           _source_node_id(operators[0]->get_plan_node_id()),
           _driver_id(driver_id) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
@@ -89,7 +90,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
         : PipelineDriver(driver._operators, driver._query_ctx, driver._query_runtime_state,
                          driver._fragment_runtime_state, driver._fragment_ctx, driver._pipeline,
-                         driver._driver_observer, driver._driver_id) {}
+                         driver._driver_observer, driver._pipeline_timer_context, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
         : _observer(this),
@@ -101,6 +102,7 @@ PipelineDriver::PipelineDriver()
           _fragment_ctx(nullptr),
           _pipeline(nullptr),
           _driver_observer(nullptr),
+          _pipeline_timer_context(nullptr),
           _source_node_id(0),
           _driver_id(0) {}
 
@@ -236,7 +238,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         }
     }
     if (!_global_rf_descriptors.empty() && runtime_state->enable_event_scheduler()) {
-        _fragment_ctx->add_timer_observer(observer(), _global_rf_wait_timeout_ns);
+        if (_pipeline_timer_context == nullptr) {
+            return Status::InternalError("Pipeline timer context is not initialized");
+        }
+        _pipeline_timer_context->add_rf_timeout_observer(runtime_state, observer(), _global_rf_wait_timeout_ns);
     }
 
     if (!all_local_rf_set.empty()) {
@@ -839,7 +844,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     _update_driver_level_timer();
 
     if (_global_rf_timer != nullptr) {
-        _global_rf_timer->unschedule_and_join(_fragment_ctx->pipeline_timer());
+        if (_pipeline_timer_context != nullptr) {
+            _pipeline_timer_context->unschedule_and_join(_global_rf_timer.get());
+        }
     }
 
     if (_driver_observer != nullptr) {
@@ -880,11 +887,15 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
+    if (_pipeline_timer_context == nullptr) {
+        LOG(WARNING) << "Pipeline timer context is not initialized";
+        return;
+    }
     auto timer = std::make_shared<RFScanWaitTimeout>(true);
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
-    WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
+    WARN_IF_ERROR(_pipeline_timer_context->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
 std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {

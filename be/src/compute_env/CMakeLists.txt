@@ -76,6 +76,7 @@ ADD_BE_LIB(ComputeEnv
     data_stream/local_pass_through_buffer.cpp
     data_stream/sender_queue.cpp
     pipeline/driver_limiter.cpp
+    pipeline/pipeline_timer_context.cpp
     profile_report_worker.cpp
     result/buffer_control_block.cpp
     result/record_batch_queue.cpp

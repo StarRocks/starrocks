@@ -673,7 +673,7 @@ TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
                               &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, -1);
+                              &harness.pipeline, nullptr, -1);
 
     ASSERT_OK(driver.prepare(harness.state()));
     ASSERT_EQ(config::local_exchange_buffer_mem_limit_per_driver +
@@ -698,7 +698,7 @@ TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all
 
     TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
                               &harness.fragment_ctx.fragment_runtime_state(), &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, -1);
+                              &harness.pipeline, nullptr, -1);
 
     auto st = driver.prepare(harness.state());
     ASSERT_FALSE(st.ok());
