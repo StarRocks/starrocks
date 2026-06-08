@@ -688,6 +688,11 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
+    // Drains one queued manual compaction task through StorageEngine::do_manual_compaction. The work
+    // happens in StorageEngine's private _check_and_run_manual_compaction_task, which this fixture is
+    // befriended to call; TEST_F bodies cannot reach it directly because friendship is not inherited.
+    bool run_pending_manual_compaction() { return StorageEngine::instance()->_check_and_run_manual_compaction_task(); }
+
     void SetUp() override {
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         config::enable_pk_size_tiered_compaction_strategy = false;
