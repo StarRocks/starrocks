@@ -70,15 +70,17 @@ public class LanceApiConverter {
 
         if (lower.startsWith("list<") && lower.endsWith(">")) {
             String inner = clean.substring(5, clean.length() - 1);
-            return new ArrayType(parseType(inner));
+            return new ArrayType(parseType(stripTopLevelFieldLabel(inner)));
         }
 
-        if (lower.startsWith("fixed_size_list<") && lower.endsWith(">")) {
-            // "fixed_size_list<float32, 128>" -> mapped to Array of Float
-            int commaIdx = clean.lastIndexOf(",");
-            if (commaIdx > 16) {
-                String inner = clean.substring(16, commaIdx).trim();
-                return new ArrayType(parseType(inner));
+        if (lower.startsWith("fixed_size_list<")) {
+            // "fixed_size_list<float32, 128>" and "fixed_size_list<item: float>[128]" -> Array of item type
+            int closeIdx = clean.lastIndexOf(">");
+            if (closeIdx > 16) {
+                List<String> parts = splitTopLevel(clean.substring(16, closeIdx), ',');
+                if (!parts.isEmpty()) {
+                    return new ArrayType(parseType(stripTopLevelFieldLabel(parts.get(0))));
+                }
             }
         }
 
@@ -131,6 +133,31 @@ public class LanceApiConverter {
             parts.add(part);
         }
         partBuilder.setLength(0);
+    }
+
+    private static String stripTopLevelFieldLabel(String typeStr) {
+        int colonIdx = topLevelDelimiterIndex(typeStr, ':');
+        if (colonIdx > 0) {
+            return typeStr.substring(colonIdx + 1).trim();
+        }
+        return typeStr.trim();
+    }
+
+    private static int topLevelDelimiterIndex(String value, char delimiter) {
+        int bracketDepth = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == '<') {
+                bracketDepth++;
+            }
+            if (ch == '>') {
+                bracketDepth--;
+            }
+            if (ch == delimiter && bracketDepth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static void parseAndAddField(String fieldStr, ArrayList<StructField> fields) {

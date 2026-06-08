@@ -51,10 +51,18 @@ public class LanceMetadataTest {
         Assertions.assertTrue(arrayType.isArrayType());
         Assertions.assertEquals(FLOAT, ((ArrayType) arrayType).getItemType());
 
+        Type arrowArrayType = LanceApiConverter.parseType("list<item: int32>");
+        Assertions.assertTrue(arrowArrayType.isArrayType());
+        Assertions.assertEquals(INT, ((ArrayType) arrowArrayType).getItemType());
+
         // Vector embeddings as fixed_size_list
         Type vectorType = LanceApiConverter.parseType("fixed_size_list<float32, 128>");
         Assertions.assertTrue(vectorType.isArrayType());
         Assertions.assertEquals(FLOAT, ((ArrayType) vectorType).getItemType());
+
+        Type arrowVectorType = LanceApiConverter.parseType("fixed_size_list<item: float>[128]");
+        Assertions.assertTrue(arrowVectorType.isArrayType());
+        Assertions.assertEquals(FLOAT, ((ArrayType) arrowVectorType).getItemType());
 
         Type lanceVectorType = LanceApiConverter.parseType("fixed_size_list:float:128");
         Assertions.assertTrue(lanceVectorType.isArrayType());
