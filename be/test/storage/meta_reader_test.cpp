@@ -473,7 +473,7 @@ TEST_F(SegmentMetaCollecterTest, test_collect_drop_rename_reorder_column_by_uid)
 
     std::string segment_name = "test_schema_change_uid_meta.dat";
     DeferOp defer_op([&] { delete_file(segment_name); });
-    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(segment_name));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
     auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
     WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                      .encryption_info = encryption_pair.info};
@@ -558,7 +558,7 @@ TEST_F(SegmentMetaCollecterTest, test_collect_added_column_default_values) {
 
     std::string segment_name = "test_add_column_default_meta.dat";
     DeferOp defer_op([&] { delete_file(segment_name); });
-    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(segment_name));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
     auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
     WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                      .encryption_info = encryption_pair.info};
