@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-keywords: ['profile', 'query']
-=======
-description: "Symptom-to-fix playbook using StarRocks query profiles to diagnose and resolve slow operators, data skew, spill, and join issues."
+description: "利用 StarRocks 查询配置文件诊断并解决操作符运行缓慢、数据偏斜、溢出和连接问题的一套“症状与解决方案”指南。"
 keywords: ['profile', 'query', '调优']
->>>>>>> 56ec3fa44c ([Doc] Fix Keywords Issue Block Build (#74455))
 sidebar_position: 40
 ---
 
