@@ -110,6 +110,13 @@ public class Replica implements Writable {
     // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
     private volatile long lastReportVersion = 0;
 
+    // The continuous version of the previous tablet report that carried version_miss=true while the replica
+    // was behind the visible version, or -1 otherwise. Used by ReportHandler to require a permanent version
+    // hole to persist across two consecutive reports before triggering recovery, so a transient out-of-order
+    // publish that fills quickly is not mistaken for a stuck hole. Not serialized; leader-local, reset after a
+    // failover (which only delays detection by one report, never compromises safety).
+    private volatile long versionMissBaselineVersion = -1L;
+
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
     private volatile long dataSize = 0;
@@ -712,5 +719,13 @@ public class Replica implements Writable {
 
     public long getLastReportVersion() {
         return this.lastReportVersion;
+    }
+
+    public void setVersionMissBaselineVersion(long versionMissBaselineVersion) {
+        this.versionMissBaselineVersion = versionMissBaselineVersion;
+    }
+
+    public long getVersionMissBaselineVersion() {
+        return this.versionMissBaselineVersion;
     }
 }

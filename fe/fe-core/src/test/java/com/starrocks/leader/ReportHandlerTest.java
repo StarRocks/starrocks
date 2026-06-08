@@ -18,6 +18,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -65,6 +67,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -524,5 +527,153 @@ public class ReportHandlerTest {
         Assertions.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
         reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
         Assertions.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
+    }
+
+    private static final long VERSION_MISS_VISIBLE = 100L;
+    private static final long HOLED_BACKEND_ID = 20001L;
+    private static final long ALIVE_SOURCE_BACKEND_ID = 20002L;
+    private static final long DEAD_SOURCE_BACKEND_ID = 20003L;
+
+    private static boolean invokeNeedRecoverVersionMiss(OlapTable table, LocalTablet tablet, Replica holed,
+                                                        TTabletInfo info) throws Exception {
+        Method method = ReportHandler.class.getDeclaredMethod("needRecoverVersionMiss",
+                OlapTable.class, LocalTablet.class, Replica.class, long.class, TTabletInfo.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(null, table, tablet, holed, VERSION_MISS_VISIBLE, info);
+    }
+
+    private static Replica versionMissReplica(long replicaId, long backendId, long lastReportVersion, boolean bad) {
+        // version is masked high (>= visible) to mimic the bug; lastReportVersion carries the BE truth.
+        Replica replica = new Replica(replicaId, backendId, 200L, 0, 0L, 0L, ReplicaState.NORMAL, -1L, 200L);
+        replica.setLastReportVersion(lastReportVersion);
+        if (bad) {
+            replica.setBad(true);
+        }
+        return replica;
+    }
+
+    private static TTabletInfo versionMissInfo(long reportedVersion) {
+        TTabletInfo info = new TTabletInfo();
+        info.setVersion(reportedVersion);
+        info.setVersion_miss(true);
+        return info;
+    }
+
+    private void mockVersionMissBackends() {
+        Backend alive1 = new Backend(HOLED_BACKEND_ID, "h1", 9050);
+        alive1.setAlive(true);
+        Backend alive2 = new Backend(ALIVE_SOURCE_BACKEND_ID, "h2", 9050);
+        alive2.setAlive(true);
+        Backend dead3 = new Backend(DEAD_SOURCE_BACKEND_ID, "h3", 9050);
+        dead3.setAlive(false);
+        Map<Long, Backend> backends = new HashMap<>();
+        backends.put(HOLED_BACKEND_ID, alive1);
+        backends.put(ALIVE_SOURCE_BACKEND_ID, alive2);
+        backends.put(DEAD_SOURCE_BACKEND_ID, dead3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long id) {
+                return backends.get(id);
+            }
+        };
+    }
+
+    @Test
+    public void testNeedRecoverVersionMiss() throws Exception {
+        mockVersionMissBackends();
+        OlapTable dupTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test").getTable("binlog_report_handler_test");
+        OlapTable pkTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test").getTable("properties_change_test");
+
+        Replica holed = versionMissReplica(1L, HOLED_BACKEND_ID, 50L, false);
+        Replica caughtUpSource = versionMissReplica(2L, ALIVE_SOURCE_BACKEND_ID, VERSION_MISS_VISIBLE, false);
+        LocalTablet tablet = new LocalTablet(1000L, Lists.newArrayList(holed, caughtUpSource));
+
+        // Debounce: the first version_miss report only records the baseline (not flagged); the second
+        // consecutive report at the same frozen continuous version (50 < visible) is flagged, given a
+        // genuine caught-up source.
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, versionMissInfo(50L)));
+        Assertions.assertEquals(50L, holed.getVersionMissBaselineVersion());
+        Assertions.assertTrue(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, versionMissInfo(50L)));
+
+        // A prior healthy report at the same version must NOT count as a confirmation: a healthy report
+        // resets the baseline, so the first following version_miss report is not flagged on first sight.
+        TTabletInfo healthyAt50 = new TTabletInfo();
+        healthyAt50.setVersion(50L);
+        healthyAt50.setVersion_miss(false);
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, healthyAt50));
+        Assertions.assertEquals(-1L, holed.getVersionMissBaselineVersion());
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, versionMissInfo(50L)));
+
+        // An advancing continuous version is not a frozen hole: a baseline of 40 does not confirm 50.
+        holed.setVersionMissBaselineVersion(40L);
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, versionMissInfo(50L)));
+
+        // The remaining cases prime the baseline so the debounce passes and the specific guard is isolated.
+
+        // reportedVersion >= visible -> replica still usable, not flagged.
+        holed.setVersionMissBaselineVersion(100L);
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, versionMissInfo(100L)));
+
+        // used==false is handled by needRecover, not here.
+        holed.setVersionMissBaselineVersion(50L);
+        TTabletInfo usedFalse = versionMissInfo(50L);
+        usedFalse.setUsed(false);
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, usedFalse));
+
+        // Already bad -> not flagged.
+        Replica holedBad = versionMissReplica(3L, HOLED_BACKEND_ID, 50L, true);
+        holedBad.setVersionMissBaselineVersion(50L);
+        LocalTablet badTablet = new LocalTablet(1001L, Lists.newArrayList(holedBad, caughtUpSource));
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, badTablet, holedBad, versionMissInfo(50L)));
+
+        // Primary-key table -> not flagged.
+        holed.setVersionMissBaselineVersion(50L);
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(pkTable, tablet, holed, versionMissInfo(50L)));
+
+        // RF=1 (only the holed replica, no other source) -> not flagged.
+        holed.setVersionMissBaselineVersion(50L);
+        LocalTablet singleReplica = new LocalTablet(1002L, Lists.newArrayList(holed));
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, singleReplica, holed, versionMissInfo(50L)));
+
+        // All replicas holed but FE-masked: the sibling's version is masked high but its lastReportVersion
+        // (BE truth) is below visible -> no genuine source -> not flagged.
+        holed.setVersionMissBaselineVersion(50L);
+        Replica maskedSource = versionMissReplica(4L, ALIVE_SOURCE_BACKEND_ID, 50L, false);
+        LocalTablet allHoled = new LocalTablet(1003L, Lists.newArrayList(holed, maskedSource));
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, allHoled, holed, versionMissInfo(50L)));
+
+        // The only caught-up source is on a dead backend -> not flagged.
+        holed.setVersionMissBaselineVersion(50L);
+        Replica deadSource = versionMissReplica(5L, DEAD_SOURCE_BACKEND_ID, VERSION_MISS_VISIBLE, false);
+        LocalTablet deadSourceTablet = new LocalTablet(1004L, Lists.newArrayList(holed, deadSource));
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, deadSourceTablet, holed, versionMissInfo(50L)));
+
+        // An error-state sibling is not a usable source -> not flagged.
+        holed.setVersionMissBaselineVersion(50L);
+        Replica errorStateSource = versionMissReplica(6L, ALIVE_SOURCE_BACKEND_ID, VERSION_MISS_VISIBLE, false);
+        errorStateSource.setIsErrorState(true);
+        LocalTablet errorStateTablet = new LocalTablet(1006L, Lists.newArrayList(holed, errorStateSource));
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, errorStateTablet, holed, versionMissInfo(50L)));
+    }
+
+    @Test
+    public void testNeedRecoverVersionMissSkipsColocate() throws Exception {
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isColocateTable(long tableId) {
+                return true;
+            }
+        };
+        mockVersionMissBackends();
+        OlapTable dupTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test").getTable("binlog_report_handler_test");
+        Replica holed = versionMissReplica(1L, HOLED_BACKEND_ID, 50L, false);
+        holed.setVersionMissBaselineVersion(50L);
+        Replica caughtUpSource = versionMissReplica(2L, ALIVE_SOURCE_BACKEND_ID, VERSION_MISS_VISIBLE, false);
+        LocalTablet tablet = new LocalTablet(1005L, Lists.newArrayList(holed, caughtUpSource));
+        // Colocate tables are excluded even when every other condition for recovery holds (baseline primed).
+        Assertions.assertFalse(invokeNeedRecoverVersionMiss(dupTable, tablet, holed, versionMissInfo(50L)));
     }
 }
