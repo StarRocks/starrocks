@@ -56,7 +56,7 @@ public class ShowMaterializedViewStatusTest {
 
         List<String> resultSet = viewStatus.toResultSet();
 
-        Assertions.assertEquals(33, resultSet.size());
+        Assertions.assertEquals(34, resultSet.size());
         Assertions.assertEquals("", resultSet.get(3)); // refresh type
         Assertions.assertEquals("false", resultSet.get(4)); // is active
         Assertions.assertEquals("", resultSet.get(5)); // inactive reason
@@ -85,6 +85,7 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertEquals("", resultSet.get(30)); // refresh trigger
         Assertions.assertEquals("", resultSet.get(31)); // refresh policy
         Assertions.assertEquals("", resultSet.get(32)); // resource group
+        Assertions.assertEquals("", resultSet.get(33)); // query rewrite status reason
     }
 
     @Test

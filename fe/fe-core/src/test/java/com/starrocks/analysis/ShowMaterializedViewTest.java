@@ -35,9 +35,12 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -130,7 +133,8 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.refresh_mode AS refresh_mode, " +
                         "information_schema.materialized_views.refresh_trigger AS refresh_trigger, " +
                         "information_schema.materialized_views.refresh_policy AS refresh_policy, " +
-                        "information_schema.materialized_views.resource_group AS resource_group" +
+                        "information_schema.materialized_views.resource_group AS resource_group, " +
+                        "information_schema.materialized_views.query_rewrite_status_reason AS query_rewrite_status_reason" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
@@ -167,7 +171,30 @@ public class ShowMaterializedViewTest {
     public void testResourceGroupColumn() {
         List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
         Assertions.assertTrue(schema.stream().anyMatch(c -> c.getName().equalsIgnoreCase("RESOURCE_GROUP")));
-        Assertions.assertEquals("RESOURCE_GROUP", schema.get(schema.size() - 1).getName());
+    }
+
+    @Test
+    public void testQueryRewriteStatusReasonColumn() {
+        List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
+        Assertions.assertTrue(schema.stream()
+                .anyMatch(c -> c.getName().equalsIgnoreCase("QUERY_REWRITE_STATUS_REASON")));
+        Assertions.assertEquals("QUERY_REWRITE_STATUS_REASON", schema.get(schema.size() - 1).getName());
+    }
+
+    @Test
+    public void testSyncMvStatusLeavesQueryRewriteFieldsEmpty() throws Exception {
+        starRocksAssert.withDatabase("db_sync_mv_qr").useDatabase("db_sync_mv_qr");
+        starRocksAssert.withTable("CREATE TABLE agg_base (k1 int, v1 bigint SUM) " +
+                "AGGREGATE KEY(k1) DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num' = '1')");
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("db_sync_mv_qr", "agg_base");
+        MaterializedIndexMeta indexMeta = olapTable.getVisibleIndexMetas().get(0);
+
+        ShowMaterializedViewStatus status = ShowMaterializedViewStatus.of("db_sync_mv_qr", olapTable, indexMeta);
+
+        Assertions.assertEquals("SYNC", status.getRefreshType());
+        // Sync MVs aren't evaluated by the async rewrite framework these columns describe; both stay empty.
+        Assertions.assertTrue(status.getQueryRewriteStatus() == null || status.getQueryRewriteStatus().isEmpty());
+        Assertions.assertTrue(status.getQueryRewriteStatusReason() == null || status.getQueryRewriteStatusReason().isEmpty());
     }
 
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
