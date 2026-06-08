@@ -517,9 +517,9 @@ StatusOr<InlineSparsePatchPB> ColumnModePartialUpdateHandler::_build_inline_patc
         const auto& value_col = sparse_chunk.get_column_by_index(c + 1);
         const int64_t max_size = serde::ColumnArraySerde::max_serialized_size(*value_col);
         if (max_size <= 0) {
-            return Status::NotSupported(fmt::format(
-                    "SDCG inline patch: column uid {} type is not serializable by ColumnArraySerde",
-                    unique_update_column_ids[c]));
+            return Status::NotSupported(
+                    fmt::format("SDCG inline patch: column uid {} type is not serializable by ColumnArraySerde",
+                                unique_update_column_ids[c]));
         }
         std::string blob;
         blob.resize(static_cast<size_t>(max_size));
@@ -926,9 +926,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                         if (patch_or.ok()) {
                             const bool fits_per_patch =
                                     static_cast<int64_t>(patch_bytes) <= config::sdcg_inline_patch_max_bytes;
-                            const bool fits_meta_ceiling =
-                                    static_cast<int64_t>(existing_entry_bytes + patch_bytes) <=
-                                    config::sdcg_dcg_meta_max_bytes_per_segment;
+                            const bool fits_meta_ceiling = static_cast<int64_t>(existing_entry_bytes + patch_bytes) <=
+                                                           config::sdcg_dcg_meta_max_bytes_per_segment;
                             if (fits_per_patch && fits_meta_ceiling) {
                                 std::lock_guard<std::mutex> l(result_mutex);
                                 if (shared_status.ok()) {

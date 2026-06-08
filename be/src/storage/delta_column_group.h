@@ -85,9 +85,7 @@ struct InlinePatch {
     std::vector<std::string> column_values;
     int64_t min_source_rowid = kSDCGPresenceUnknown;
     int64_t max_source_rowid = kSDCGPresenceUnknown;
-    bool known() const {
-        return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown;
-    }
+    bool known() const { return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown; }
     // The column-position of |uid| within this patch (index into column_uids / column_values),
     // or -1 when the patch does not carry that uid.
     int32_t value_idx_of(ColumnUID uid) const {

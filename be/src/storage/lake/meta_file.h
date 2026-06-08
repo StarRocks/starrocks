@@ -80,8 +80,7 @@ public:
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes, const std::vector<DeltaColumnFileKindPB>& file_kinds,
                     const std::vector<int64_t>& sparse_row_counts, const std::vector<SparsePresencePB>& presences,
-                    int64_t source_segment_num_rows,
-                    const std::vector<InlineSparsePatchPB>& inline_patches = {});
+                    int64_t source_segment_num_rows, const std::vector<InlineSparsePatchPB>& inline_patches = {});
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
