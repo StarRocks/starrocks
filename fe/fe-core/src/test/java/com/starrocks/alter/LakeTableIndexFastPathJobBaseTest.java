@@ -385,6 +385,92 @@ public class LakeTableIndexFastPathJobBaseTest {
     }
 
     @Test
+    public void testReplay_FinishedRewritingBumpsNextVersion() throws Exception {
+        // Regression: the live runRunningJob bumps each partition's nextVersion
+        // to commitVersion+1 at FINISHED_REWRITING. Replay must reproduce it,
+        // otherwise the partition stays one version behind and a later job that
+        // asserts nextVersion == its reserved commitVersion (e.g.
+        // LakeTableSchemaChangeJob.updateNextVersion) aborts journal replay.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(12L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        verify(pp).setNextVersion(13L);
+    }
+
+    @Test
+    public void testReplay_FinishedBumpsNextVersionWhenStale() throws Exception {
+        // FINISHED replay must reproduce BOTH the nextVersion bump (in case the
+        // image predates the FINISHED_REWRITING journal) and the visibleVersion
+        // bump.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(12L);
+        when(pp.getVisibleVersion()).thenReturn(11L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(pp).setNextVersion(13L);
+        verify(pp).setVisibleVersion(12L, 12345L);
+    }
+
+    @Test
+    public void testReplay_NextVersionBumpIsIdempotent() throws Exception {
+        // A later operation already advanced the partition past commitVersion+1
+        // (e.g. replay-after-checkpoint); replay must not regress nextVersion.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(20L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(pp, never()).setNextVersion(anyLong());
+    }
+
+    @Test
+    public void testReplay_CancelledBumpsNextVersionWhenReserved() throws Exception {
+        // Force-cancelled out of FINISHED_REWRITING: the version was reserved
+        // and nextVersion bumped on the live FE, so replay must reproduce it.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.CANCELLED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(12L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        verify(pp).setNextVersion(13L);
+    }
+
+    @Test
     public void testReplay_CancelledFlipsToNormal() throws Exception {
         LakeTableAddIndexJob target = newJob();
         LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.CANCELLED);
