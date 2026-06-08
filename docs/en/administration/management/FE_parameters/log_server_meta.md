@@ -482,14 +482,15 @@ This topic introduces the following types of FE configurations:
 - Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in **fe.audit.log**.
 - Introduced in: -
 
-### `slow_lock_log_every_ms`
+### `slow_lock_log_l2_info_interval_ms`
 
 - Default: 3000L
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval (in ms) to wait before emitting another "slow lock" warning for the same SlowLockLogStats instance. LockUtils checks this value after a lock wait exceeds `slow_lock_threshold_ms` and will suppress additional warnings until `slow_lock_log_every_ms` milliseconds have passed since the last logged slow-lock event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics. Changes take effect at runtime for subsequent checks.
-- Introduced in: v3.2.0
+- Alias: `slow_lock_log_every_ms` (the original name, retained for backward compatibility — both names refer to the same parameter).
+- Description: Minimum interval (in ms) for the **L2** slow-lock log tier — a full lock-info JSON line **without** stack traces. Slow-lock logging degrades across three tiers, throttled progressively (strictest first): **L1** = full info + stacks (`slow_lock_log_l1_stack_interval_ms`), **L2** = full info, no stacks (this parameter), **L3** = a plain-text brief line (`slow_lock_log_l3_brief_interval_ms`). For one slow-lock event the richest tier whose throttle currently admits is emitted; choosing a higher tier also consumes the looser tiers' windows, so total log volume never exceeds the loosest admitted tier's rate. The throttle scope depends on the emitting layer: **GLOBAL** in `LockManager.logSlowLockTrace` (one static gate across all rids), **per-instance** in `QueryableReentrantReadWriteLock` (each lock object — e.g. each `RoutineLoadJob` — has its own gate), and **per-Database** in the legacy `LockUtils` path. Set to `0` (or negative) to disable the L2 gate (always admit). Use a larger value to reduce log volume during prolonged contention or a smaller value for more frequent full-info diagnostics.
+- Introduced in: v3.2.0 (as `slow_lock_log_every_ms`); renamed to `slow_lock_log_l2_info_interval_ms` in v4.1.
 
 ### `slow_lock_print_stack`
 
@@ -497,8 +498,35 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments.
+- Description: Master switch for capturing owner / current-thread stack traces inside slow-lock warnings. Applies to both `LockManager.logSlowLockTrace` (per-owner `"stack"` field) and `QueryableReentrantReadWriteLock.getLockInfoToJson` (owner / oldest-reader / current-thread `"stack"` field used by the legacy db-lock path and `RoutineLoadJob`'s per-job lock). Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments. When enabled, the capture frequency is additionally rate-limited by `slow_lock_log_l1_stack_interval_ms`.
 - Introduced in: v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_log_l1_stack_interval_ms`
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between stack-trace captures across slow-lock log events. Only applies when `slow_lock_print_stack` is `true`. The throttle scope depends on the layer: **GLOBAL** in `LockManager.logSlowLockTrace` (one static gate across all rids) and **per-instance** in `QueryableReentrantReadWriteLock.getLockInfoToJson` (each lock object has its own gate). When the switch is on but the interval has not elapsed since the last capture, the `"stack"` field is replaced with the marker `"throttled"` (LockManager path) or omitted (QueryableReentrantReadWriteLock path), and the rest of the warn log (rid, owners, waiters, queryIds, timings) is still emitted if the outer event gate (`slow_lock_log_l2_info_interval_ms`) lets it through. Set to `0` (or negative) to disable rate limiting and restore the prior behavior of capturing stacks on every slow-lock event. `Thread.getStackTrace` triggers a JVM safepoint that becomes expensive in large clusters where slow-lock events are frequent — this gate caps that cost without suppressing the diagnostic log itself.
+- Introduced in: v4.1
+
+### `slow_lock_max_waiter_count_to_log`
+
+- Default: 30
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of waiter entries serialized into a single slow-lock log event. Applies to both `LockManager.logSlowLockTrace` (the `"waiter"` array) and `QueryableReentrantReadWriteLock.getLockInfoToJson` (the `"queuedReaders"` / `"queuedWriters"` arrays consumed by the legacy db-lock path and `RoutineLoadJob`'s per-job lock). When the actual waiter count exceeds this cap, the first N waiters are listed individually and the remainder is summarized as a single trailer entry `{"omitted": "remain M waiters omitted"}` appended to the array. Bounds Gson serialization cost and log-line size under extreme contention without losing the count diagnostic. Set to `0` (or negative) to disable the cap and serialize every waiter.
+- Introduced in: v4.1
+
+### `slow_lock_log_l3_brief_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval for the **L3** slow-lock log tier — a single plain-text warn line (no JSON, no stacks) emitted when the richer tiers (`slow_lock_log_l1_stack_interval_ms` for L1, `slow_lock_log_l2_info_interval_ms` for L2) are throttled. This is the loosest of the three tiers. The brief line is emitted **at most once per this interval**: slow-lock events that arrive while the L3 gate is still closed are suppressed (no line). It does **not** guarantee a log line per event — it bounds the worst-case silence to one brief interval during sustained contention. Tune it smaller than the other two: `slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`. Set to `0` (or negative) to make the brief line unthrottled — then every otherwise-throttled event leaves a line (predictable but potentially many per second under a storm). Same scope rules as the other slow-lock throttles (GLOBAL in `LockManager`, per-instance in `QueryableReentrantReadWriteLock`).
+- Introduced in: v4.1
 
 ### `slow_lock_threshold_ms`
 
@@ -506,7 +534,7 @@ This topic introduces the following types of FE configurations:
 - Type: long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Threshold (in ms) used to classify a lock operation or a held lock as "slow". When the elapsed wait or hold time for a lock exceeds this value, StarRocks will (depending on context) emit diagnostic logs, include stack traces or waiter/owner info, and—in LockManager—start deadlock detection after this delay. It's used by LockUtils (slow-lock logging), QueryableReentrantReadWriteLock (filtering slow readers), LockManager (deadlock-detection delay and slow-lock trace), LockChecker (periodic slow-lock detection), and other callers (e.g., DiskAndTabletLoadReBalancer logging). Lowering the value increases sensitivity and logging/diagnostic overhead; setting it to 0 or negative disables the initial wait-based deadlock-detection delay behavior. Tune together with `slow_lock_log_every_ms`, `slow_lock_print_stack`, and `slow_lock_stack_trace_reserve_levels`.
+- Description: Threshold (in ms) used to classify a lock operation or a held lock as "slow". When the elapsed wait or hold time for a lock exceeds this value, StarRocks will (depending on context) emit diagnostic logs, include stack traces or waiter/owner info, and—in LockManager—start deadlock detection after this delay. It's used by LockUtils (slow-lock logging), QueryableReentrantReadWriteLock (filtering slow readers), LockManager (deadlock-detection delay and slow-lock trace), LockChecker (periodic slow-lock detection), and other callers (e.g., DiskAndTabletLoadReBalancer logging). Lowering the value increases sensitivity and logging/diagnostic overhead; setting it to 0 or negative disables the initial wait-based deadlock-detection delay behavior. Tune together with `slow_lock_log_l2_info_interval_ms`, `slow_lock_print_stack`, and `slow_lock_stack_trace_reserve_levels`.
 - Introduced in: 3.2.0
 
 ### `sys_log_delete_age`
@@ -956,7 +984,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls how many stack-trace frames are captured and emitted when StarRocks dumps lock debug information for slow or held locks. This value is passed to `LogUtil.getStackTraceToJsonArray` by `QueryableReentrantReadWriteLock` when producing JSON for the exclusive lock owner, current thread, and oldest/shared readers. Increasing this value provides more context for diagnosing slow-lock or deadlock issues at the cost of larger JSON payloads and slightly higher CPU/memory for stack capture; decreasing it reduces overhead. Note: reader entries can be filtered by `slow_lock_threshold_ms` when only logging slow locks.
+- Description: Controls how many stack-trace frames are captured and emitted when StarRocks dumps lock debug information for slow or held locks. This value is passed to `LogUtil.getStackTraceToJsonArray` by `QueryableReentrantReadWriteLock` when producing JSON for the exclusive lock owner, current thread, and oldest/shared readers. Increasing this value provides more context for diagnosing slow-lock or deadlock issues at the cost of larger JSON payloads and slightly higher CPU/memory for stack capture; decreasing it reduces overhead. Note: this cap applies only to the `QueryableReentrantReadWriteLock` stack-dump path; the `LockManager` slow-lock path captures full stack depth and is not bounded by this value. Reader entries can be filtered by `slow_lock_threshold_ms` when only logging slow locks.
 - Introduced in: v3.4.0, v3.5.0
 
 ### `ssl_cipher_blacklist`
