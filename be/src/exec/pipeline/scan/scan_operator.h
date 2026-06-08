@@ -16,6 +16,7 @@
 
 #include "base/concurrency/race_detect.h"
 #include "base/concurrency/spinlock.h"
+#include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -35,8 +36,7 @@ namespace pipeline {
 
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
-class PipelineDriver;
-class ScanOperator : public SourceOperator {
+class ScanOperator : public SourceOperator, public DriverScanOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
 
@@ -64,11 +64,11 @@ public:
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
-    virtual workgroup::ScanSchedEntityType sched_entity_type() const { return workgroup::ScanSchedEntityType::OLAP; }
+    workgroup::ScanSchedEntityType sched_entity_type() const override { return workgroup::ScanSchedEntityType::OLAP; }
 
-    void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
+    void set_scan_executor(workgroup::ScanExecutor* scan_executor) override { _scan_executor = scan_executor; }
 
-    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
+    void set_workgroup(workgroup::WorkGroupPtr wg) override { _workgroup = std::move(wg); }
 
     int64_t global_rf_wait_timeout_ns() const override;
 
@@ -77,13 +77,17 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-    int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
-    int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
+    int64_t get_last_scan_rows_num() override { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() override { return _last_scan_bytes.exchange(0); }
 
-    void set_cache_context(const query_cache::ScanCacheContextPtr& cache_context) { _cache_context = cache_context; }
-    void set_ticket_checker(SplitMorselTicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+    void set_cache_context(const query_cache::ScanCacheContextPtr& cache_context) override {
+        _cache_context = cache_context;
+    }
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
 
-    void set_query_ctx(const QueryContextPtr& query_ctx);
+    void set_query_ctx(const QueryContextPtr& query_ctx) override;
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
     bool output_chunk_by_bucket() const { return _output_chunk_by_bucket; }
@@ -92,12 +96,12 @@ public:
         _op_pull_rows += res->num_rows();
     }
     bool is_asc() const { return _is_asc; }
-    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
-    virtual void begin_driver_process() {}
-    virtual void end_driver_process(PipelineDriver* driver) {}
+    void end_pull_chunk(int64_t time) override { _op_running_time_ns += time; }
+    void begin_driver_process() override {}
+    void end_driver_process(DriverState driver_state) override {}
     virtual bool is_running_all_io_tasks() const;
 
-    virtual int64_t get_scan_table_id() const { return -1; }
+    int64_t get_scan_table_id() const override { return -1; }
 
     OperatorExecStatsSnapshot exec_stats_snapshot() const override;
 

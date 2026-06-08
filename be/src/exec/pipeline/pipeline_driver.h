@@ -20,6 +20,7 @@
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/operator.h"
@@ -28,7 +29,6 @@
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/source_operator.h"
@@ -172,8 +172,8 @@ public:
     }
 
     Operators& operators() { return _operators; }
-    ScanOperator* source_scan_operator() {
-        return _operators.empty() ? nullptr : dynamic_cast<ScanOperator*>(_operators.front().get());
+    DriverScanOperator* source_driver_scan_operator() {
+        return _operators.empty() ? nullptr : dynamic_cast<DriverScanOperator*>(_operators.front().get());
     }
     SourceOperator* source_operator() {
         return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
