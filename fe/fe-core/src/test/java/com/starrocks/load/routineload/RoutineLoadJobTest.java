@@ -1047,7 +1047,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY ';'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
@@ -1057,7 +1057,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY '\n'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
@@ -1068,7 +1068,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`, `b`, `c`=1)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1) " +
@@ -1080,7 +1080,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "TEMPORARY PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -1093,7 +1093,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 1", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -1107,7 +1107,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY '\t'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -1121,7 +1121,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY 'a'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -1135,7 +1135,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -1148,7 +1148,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         " PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -1162,7 +1162,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -1176,7 +1176,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5 and b like 'c1%' and c between 1 and 100 and substring(d,1,5) = 'cefd' ", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `unknown` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -1211,12 +1211,47 @@ public class RoutineLoadJobTest {
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
 
         // The regenerated statement must keep the reserved-keyword table name backquoted.
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON `order` " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `order` " +
                 "COLUMNS(`a`, `b`, `c` = 1) " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
         // Re-parsing the persisted statement must succeed (this is what happens on FE restart).
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed);
+    }
+
+    @Test
+    public void testMergeLoadDescToOriginStatementWithBackquoteInTableName() throws Exception {
+        // A table name that itself contains a backquote must have the embedded backquote doubled
+        // (ta`ble -> `ta``ble`), otherwise the regenerated statement is malformed and cannot be
+        // re-parsed on FE restart. Naive string concatenation (`%s`) would produce `ta`ble`, which
+        // is unparseable.
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.2:10000", "topic") {
+            @Override
+            public String getTableName() {
+                return "ta`ble";
+            }
+        };
+        String originStmt = "CREATE ROUTINE LOAD `job` ON `ta``ble` " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
+
+        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR job COLUMNS(`a`, `b`, `c` = 1)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+
+        // The embedded backquote must be escaped (doubled) in the regenerated statement.
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `ta``ble` " +
+                "COLUMNS(`a`, `b`, `c` = 1) " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // Re-parsing the persisted statement must succeed: `ta``ble` is a single valid
+        // BACKQUOTED_IDENTIFIER token, so getLoadDesc() parses it and routineLoadDesc is preserved.
+        // Naive concatenation (`ta`ble`) would instead be a parse error, dropping routineLoadDesc.
         RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
         Assertions.assertNotNull(reparsed);
     }
