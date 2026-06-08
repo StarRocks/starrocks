@@ -85,7 +85,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     int timeout_us = 5 * 1000 * 1000; // 5s
 
     Awaitility await;
-    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _fragment_ctx->is_canceled(); }));
+    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _runtime_state->is_cancelled(); }));
 
     // now cancel the operator
     export_op->set_finishing(_runtime_state);

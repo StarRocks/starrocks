@@ -149,7 +149,7 @@ void GlobalDriverExecutor::_worker_thread() {
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
-            if (fragment_ctx->is_canceled()) {
+            if (runtime_state->is_cancelled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
@@ -164,7 +164,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             } else if (!driver->is_ready()) {
                 // Offer blocked driver a chance to trigger profile report.
-                driver->report_exec_state_if_necessary();
+                if (!driver->is_finished()) {
+                    fragment_ctx->report_exec_state_if_necessary();
+                }
                 _blocked_driver_poller->add_blocked_driver(driver);
                 continue;
             }
@@ -223,7 +225,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
 
-            driver->report_exec_state_if_necessary();
+            if (!driver->is_finished()) {
+                fragment_ctx->report_exec_state_if_necessary();
+            }
 
             auto driver_state = maybe_state.value();
             switch (driver_state) {
