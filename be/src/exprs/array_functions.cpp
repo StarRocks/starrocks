@@ -1183,8 +1183,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_contains_generic([[maybe_unused]] Func
     // against the constant element's resolved code instead of its string value. This only fires
     // when the dict-passthrough optimization delivers an encoded array; otherwise state->active is
     // false and the generic decoded path below runs unchanged.
-    if (auto* state = reinterpret_cast<ArrayContainsDictState*>(
-                context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (auto* state =
+                reinterpret_cast<ArrayContainsDictState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         state != nullptr && state->active) {
         const auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg0.get()));
         MutableColumnPtr code_holder = array->elements_column()->clone_empty();
