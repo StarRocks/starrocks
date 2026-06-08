@@ -21,14 +21,19 @@
 
 #include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
 #include "compute_env/spill/spiller.h"
 #include "exec/join/join_hash_table.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
+#include "exec/pipeline/primitives/spillable_flat_sink_mixin.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::pipeline {
-class SpillableHashJoinBuildOperator final : public HashJoinBuildOperator {
+class SpillableHashJoinBuildOperator final : public HashJoinBuildOperator,
+                                             public SpillableFlatSinkMixin<SpillableHashJoinBuildOperator> {
+    friend class SpillableFlatSinkMixin<SpillableHashJoinBuildOperator>;
+
 public:
     template <class... Args>
     SpillableHashJoinBuildOperator(Args&&... args) : HashJoinBuildOperator(std::forward<Args>(args)...) {}
@@ -40,6 +45,14 @@ public:
     void close(RuntimeState* state) override;
 
     bool need_input() const override;
+
+    // The build sink sleeps OUTPUT_FULL on need_input(): is_full() (writer full, woken by the flush-completion
+    // defer on the sink list) or the spill-process channel still holding a task (woken by the channel
+    // handshake). covered_wakeups() declares both reasons the prepare() sink-list subscription covers.
+    // Same as the agg sink.
+    BlockReason block_reason() const override;
+    static constexpr uint32_t kCoveredWakeups = kSpillSinkCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
 
     Status set_finishing(RuntimeState* state) override;
 
@@ -54,6 +67,12 @@ public:
     size_t estimated_memory_reserved() override;
 
 private:
+    // Spiller/spill-channel pair that the SpillableFlatSinkMixin reads to compute
+    // need_input()/block_reason(): the build reaches them through its joiner. Defined
+    // out-of-line where HashJoiner is complete.
+    const std::shared_ptr<spill::Spiller>& _spiller() const;
+    SpillProcessChannelPtr _spill_channel() const;
+
     void set_spill_strategy(spill::SpillStrategy strategy);
     spill::SpillStrategy spill_strategy() const;
 
@@ -73,6 +92,9 @@ private:
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
+static_assert(SpillableHashJoinBuildOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_FLUSH));
+static_assert(SpillableHashJoinBuildOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_CHANNEL));
+
 class SpillableHashJoinBuildOperatorFactory final : public HashJoinBuildOperatorFactory {
 public:
     template <class... Args>
@@ -88,7 +110,11 @@ public:
 
     const std::vector<ExprContext*>& build_side_partition() { return _build_side_partition; }
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_join_events (default false -> stays on the poller).
+    // Effective only together with the driver-core INTERMEDIATE_BLOCK mirrors and the pure probe
+    // predicates; the fragment gate ANDs support over every factory, so the probe factory must report
+    // true as well.
+    bool support_event_scheduler() const override { return config::enable_spill_join_events; }
 
 private:
     ObjectPool _pool;

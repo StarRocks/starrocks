@@ -57,6 +57,10 @@ set(EXEC_FILES
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/block_reason_join_test.cpp
+        ./exec/pipeline/spillable_hash_join_probe_event_test.cpp
+        ./exec/pipeline/spillable_probe_cancel_test.cpp
+        ./exec/pipeline/spillable_hash_join_build_event_test.cpp
         ./exec/pipeline/intermediate_block_event_test.cpp
         ./exec/pipeline/intermediate_block_driver_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
