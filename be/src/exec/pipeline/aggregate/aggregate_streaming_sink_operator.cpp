@@ -29,6 +29,12 @@ Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status AggregateStreamingSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(_aggregator_factory->prepare(state));
+    return Status::OK();
+}
+
 Status AggregateStreamingSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));

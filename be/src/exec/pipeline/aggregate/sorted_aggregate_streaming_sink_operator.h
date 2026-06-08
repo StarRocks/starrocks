@@ -60,6 +60,8 @@ public:
 
     ~SortedAggregateStreamingSinkOperatorFactory() override = default;
 
+    Status prepare(RuntimeState* state) override;
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:

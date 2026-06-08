@@ -104,6 +104,8 @@ public:
 
     const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() { return _build_runtime_filters; }
 
+    Status prepare(RuntimeState* state) override;
+
     bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {

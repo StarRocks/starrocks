@@ -96,6 +96,12 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
     return Status::OK();
 }
 
+Status SortedAggregateStreamingSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(_aggregator_factory->prepare(state));
+    return Status::OK();
+}
+
 OperatorPtr SortedAggregateStreamingSinkOperatorFactory::create(int32_t degree_of_parallelism,
                                                                 int32_t driver_sequence) {
     return std::make_shared<SortedAggregateStreamingSinkOperator>(this, _id, _plan_node_id, driver_sequence,

@@ -41,6 +41,8 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
@@ -202,6 +204,29 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     }
     params->init();
     return params;
+}
+
+Status prepare_aggregate_dict_slots(RuntimeState* state, const std::vector<TExpr>& aggregate_functions) {
+    auto* dict_state = state->fragment_dict_state();
+    if (dict_state == nullptr) {
+        return Status::OK();
+    }
+    const auto& dicts = dict_state->query_global_dicts();
+    auto* parser = dict_state->mutable_dict_optimize_parser();
+    for (const auto& texpr : aggregate_functions) {
+        if (texpr.nodes.empty() || !texpr.nodes[0].__isset.dict_slot_ids) {
+            continue;
+        }
+        for (int32_t slot_id : texpr.nodes[0].dict_slot_ids) {
+            // Scan-column dicts are already materialized at fragment init; only derived
+            // (expression-backed) dicts need on-demand materialization. Ignore errors so a
+            // missing dict degrades to non-dict behavior in the aggregate function.
+            if (slot_id >= 0 && !dicts.contains(static_cast<uint32_t>(slot_id))) {
+                (void)parser->eval_dict_expr(state, slot_id);
+            }
+        }
+    }
+    return Status::OK();
 }
 
 void AggregatorParams::init() {
@@ -576,6 +601,14 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
+
+        // Dict-aware aggregate functions: hand the per-argument global-dict slot ids (provided by
+        // the FE via TExprNode.dict_slot_ids) to the FunctionContext, so the function can fetch the
+        // dictionary from runtime state. The dictionaries themselves are materialized once in the
+        // operator-factory prepare (prepare_aggregate_dict_slots); this only stores slot ids.
+        if (!aggregate_functions[i].nodes.empty() && aggregate_functions[i].nodes[0].__isset.dict_slot_ids) {
+            _agg_fn_ctxs[i]->set_dict_slots(aggregate_functions[i].nodes[0].dict_slot_ids);
+        }
     }
 
     // save TFunction object
