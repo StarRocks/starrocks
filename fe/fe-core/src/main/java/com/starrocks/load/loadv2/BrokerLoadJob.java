@@ -425,7 +425,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             unprotectedUpdateState(JobState.LOADING);
             return true;
         } catch (LabelAlreadyUsedException | RunningTxnExceedException | AnalysisException
-                | DuplicatedRequestException transactionFailure) {
+                | DuplicatedRequestException | BeginTransactionException transactionFailure) {
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                     .add("error_msg", "Failed to begin broker-load transaction after pre-split hook: "
                             + transactionFailure.getMessage())
