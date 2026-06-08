@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', 'slow']
 sidebar_position: 30
 description: "Query Profile records execution information for all working nodes involved in a query, helping you quickly identify bottlenecks affecting query performance."
 ---
