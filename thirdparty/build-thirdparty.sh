@@ -1496,6 +1496,17 @@ export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
 
 
+# If TP_BUILD_TARGETS is set, only build the selected targets. Used by build.sh
+# to incrementally add newly introduced libraries on top of a prebuilt thirdparty.
+if [[ -n "${TP_BUILD_TARGETS}" ]]; then
+    echo "Only building selected thirdparty targets: ${TP_BUILD_TARGETS}"
+    for tp_target in ${TP_BUILD_TARGETS}; do
+        build_${tp_target}
+    done
+    echo "Finished building selected thirdparty targets"
+    exit 0
+fi
+
 build_libevent
 build_zlib
 build_lz4

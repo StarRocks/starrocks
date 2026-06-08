@@ -476,19 +476,19 @@ HADOOPSRC_SOURCE="hadoop-3.4.2-src"
 HADOOPSRC_MD5SUM="7fa559909899a2e45bcd2e192358d93b"
 
 # libunistring
-LIBUNISTRING_DOWNLOAD="https://ftp.gnu.org/gnu/libunistring/libunistring-1.2.tar.gz"
+LIBUNISTRING_DOWNLOAD="https://cdn-thirdparty.starrocks.com/libunistring-1.2.tar.gz"
 LIBUNISTRING_NAME="libunistring-1.2.tar.gz"
 LIBUNISTRING_SOURCE="libunistring-1.2"
 LIBUNISTRING_MD5SUM="71ddadc6482184d5936c4afd5d712ec0"
 
 # gmp
-GMP_DOWNLOAD="https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
+GMP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/gmp-6.3.0.tar.xz"
 GMP_NAME="gmp-6.3.0.tar.xz"
 GMP_SOURCE="gmp-6.3.0"
 GMP_MD5SUM="956dc04e864001a9c22429f761f2c283"
 
 # libfpe
-LIBFPE_DOWNLOAD="https://github.com/ubiqsecurity/ubiq-fpe-c/archive/refs/tags/0.1.1.tar.gz"
+LIBFPE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/ubiq-fpe-c-0.1.1.tar.gz"
 LIBFPE_NAME="ubiq-fpe-c-0.1.1.tar.gz"
 LIBFPE_SOURCE="ubiq-fpe-c-0.1.1"
 LIBFPE_MD5SUM="4bbc09ec01448a6155af17a41331cc99"
@@ -500,3 +500,9 @@ TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSO
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU LIBXML2 AZURE LIBDIVIDE \
             LIBUNISTRING GMP LIBFPE"
+
+# Allow caller to narrow the archive set to download, e.g. incrementally adding
+# newly introduced libraries on top of an existing prebuilt thirdparty.
+if [[ -n "${TP_ARCHIVES_OVERRIDE}" ]]; then
+    TP_ARCHIVES="${TP_ARCHIVES_OVERRIDE}"
+fi
