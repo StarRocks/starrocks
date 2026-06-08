@@ -87,15 +87,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     // where parallel merge benefits outweigh task coordination overhead.
     if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
         config::enable_load_spill_parallel_merge) {
-        // Disable auto-flush to manually control segment finalization timing
-        _writer->set_auto_flush(false);
-
-        // For PK tables in bulk load, eagerly build primary key index during merge
-        // instead of waiting until commit. This parallelizes expensive index construction.
-        _writer->try_enable_pk_index_eager_build();
-
-        // Lazy initialization: create thread pool token only when first needed
-        _pipeline_merge_context->create_thread_pool_token();
+        _pipeline_merge_context->init_parallel_merge();
         if (!_pipeline_merge_context->token()) {
             // Thread pool exhausted - cannot submit merge tasks now
             // Skip eager merge for this flush
