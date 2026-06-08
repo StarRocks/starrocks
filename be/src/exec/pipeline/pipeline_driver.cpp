@@ -64,14 +64,15 @@ size_t spill_expected_reserved_bytes(const QueryRuntimeState* query_runtime_stat
 } // namespace
 
 PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx,
-                               QueryRuntimeState* query_runtime_state, FragmentContext* fragment_ctx,
-                               Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id)
+                               QueryRuntimeState* query_runtime_state, FragmentRuntimeState* fragment_runtime_state,
+                               FragmentContext* fragment_ctx, Pipeline* pipeline, DriverObserver* driver_observer,
+                               int32_t driver_id)
         : _observer(this),
           _operator_mem_resource_managers(operators.size()),
           _operators(operators),
           _query_ctx(query_ctx),
           _query_runtime_state(query_runtime_state),
-          _fragment_runtime_state(fragment_ctx == nullptr ? nullptr : &fragment_ctx->fragment_runtime_state()),
+          _fragment_runtime_state(fragment_runtime_state),
           _fragment_ctx(fragment_ctx),
           _pipeline(pipeline),
           _driver_observer(driver_observer),
@@ -86,8 +87,9 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 }
 
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
-        : PipelineDriver(driver._operators, driver._query_ctx, driver._query_runtime_state, driver._fragment_ctx,
-                         driver._pipeline, driver._driver_observer, driver._driver_id) {}
+        : PipelineDriver(driver._operators, driver._query_ctx, driver._query_runtime_state,
+                         driver._fragment_runtime_state, driver._fragment_ctx, driver._pipeline,
+                         driver._driver_observer, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
         : _observer(this),
@@ -178,7 +180,8 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DCHECK(_state == DriverState::NOT_READY);
 
     auto* source_op = source_operator();
-    const auto use_cache = _fragment_ctx->enable_cache();
+    DCHECK(_fragment_runtime_state != nullptr);
+    const auto use_cache = _fragment_runtime_state->enable_cache();
 
     // attach ticket_checker to both ScanOperator and SplitMorselQueue
     auto* ticketed_morsel_queue = dynamic_cast<TicketedMorselQueue*>(_morsel_queue);
@@ -241,7 +244,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     size_t subscribe_filter_sequence = source_op->get_driver_sequence();
     _local_rf_holders =
-            fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
+            _fragment_runtime_state->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
     for (auto rf_holder : _local_rf_holders) {
         rf_holder->add_observer(_runtime_state, &_observer);
     }
@@ -622,13 +625,15 @@ void PipelineDriver::runtime_report_action() {
         return;
     }
 
+    DCHECK(_runtime_state != nullptr);
+
     _update_driver_level_timer();
 
     for (auto& op : _operators) {
         COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
                                               COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +
                                               COUNTER_VALUE(op->_close_timer));
-        op->update_metrics(_fragment_ctx->runtime_state());
+        op->update_metrics(_runtime_state);
     }
 }
 
