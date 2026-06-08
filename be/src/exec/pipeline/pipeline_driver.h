@@ -401,6 +401,14 @@ public:
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
+    // BlockReason park-time check: when a wakeable operator is parked, check that the reason it names is
+    // covered by its declared wakeups. An uncovered reason is a gap in the wakeup table that would leave the
+    // driver asleep with nobody to wake it. In debug this fails a DCHECK with a dump (driver string +
+    // operator name + reason); in release it increments spill_parked_with_uncovered_reason_total and emits a
+    // rate-limited WARN (fail-soft: degrade instead of abort). It is called from the edge park in
+    // EventScheduler::add_blocked_driver (source/sink with covered_wakeups() != 0).
+    void verify_block_reason_covered();
+
     bool local_prepare_is_done() const { return _local_prepare_is_done; }
 
 protected:
