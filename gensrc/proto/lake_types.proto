@@ -122,6 +122,52 @@ message SparsePresencePB {
     optional int64 row_count = 3;
 }
 
+// Per-COLUMN presence inside a PACKED SPARSE_PERCOL `.spcols` file (flexible / per-row
+// heterogeneous partial update). A packed file is a UNION over several rowid equivalence
+// classes: column 0 is the ascending union source_rowid vector (K_union rows), and every
+// value column physically has K_union rows -- real values at the union ordinals that column
+// actually covers, append_default placeholders elsewhere. The placeholder rows are PHYSICAL
+// NULLs that MUST NEVER be applied: a [min,max] range is INSUFFICIENT to gate them because
+// columns interleave within the union (applying at a placeholder ordinal would overwrite a
+// real base value with NULL == silent corruption). Therefore each entry carries the EXACT
+// covered base-segment rowid set as a serialized 32-bit CRoaring bitmap so the reader applies
+// a column's overlay ONLY at the rows that column truly covers. min/max/count still serve the
+// cheap zero-IO range skip; `roaring` is the authoritative apply gate.
+//
+// One entry per UPDATE column uid carried by the packed file (NOT the reserved source_rowid
+// uid). For a HOMOGENEOUS (single equivalence class) `.spcols` the packing degenerates to one
+// class with no placeholders: the per-file SparsePresencePB already describes every column, so
+// the writer OMITS the ColumnPresenceListPB for that file (an empty entry => "no per-column
+// override; the whole file's source_rowid column is each column's covered set"). The reader
+// falls back to the file-level presence when this list is absent/empty.
+message ColumnSparsePresencePB {
+    optional uint32 column_uid = 1;
+    // Cheap pre-filter: [min, max] closed range of THIS column's covered source_rowids
+    // (== first/last of its covered set). Used for the zero-IO range skip; NOT sufficient
+    // as the apply gate (see `roaring`).
+    optional int64 min_source_rowid = 2;
+    optional int64 max_source_rowid = 3;
+    // Exact number of union rows this column covers (== set bits in `roaring`). Differs from
+    // the packed file's K_union when the column does not cover the whole union.
+    optional int64 count = 4;
+    // Serialized 32-bit CRoaring portable bitmap of the EXACT base-segment rowids this column
+    // covers. The authoritative apply gate: the reader applies the column's overlay only at
+    // these rowids, never at the union placeholders. Absent => fall back to the file-level
+    // presence (homogeneous / single-class file).
+    optional bytes roaring = 5;
+}
+
+// Per-column presence for ONE packed `.spcols` file: a list with one ColumnSparsePresencePB
+// per UPDATE column uid the file carries. This is the transposed (column-view) form of the
+// row-view `__cset__` set-id dictionary that the `.upt` carries: the finalize handler reads
+// `__cset__` from the `.upt`, decodes each upt row's set-id into a column-uid mask via the
+// RowsetTxnMetaPB.distinct_column_sets dictionary, groups columns into equivalence classes by
+// identical covered rowid set, packs all sparse classes into one union file, and emits this
+// list so the reader can gate each column independently.
+message ColumnPresenceListPB {
+    repeated ColumnSparsePresencePB entries = 1;
+}
+
 // An inline sparse patch is a `.spcols`-equivalent overlay carried INSIDE the tablet
 // metadata instead of in a separate file. It rides the per-publish TabletMetadataPB PUT
 // that lake already does, so micro-batches pay ZERO new object PUTs (no .spcols file, no
@@ -201,6 +247,21 @@ message DeltaColumnGroupVerPB {
     // last-write-wins); a DENSE file below an inline layer still terminates the walk for
     // its covered uids. Empty (legacy / no micro-batch inline) => behaves exactly as before.
     repeated InlineSparsePatchPB inline_patches = 11;
+    // Per-COLUMN presence for PACKED SPARSE_PERCOL files (flexible / per-row heterogeneous
+    // partial update). Parallel to column_files (1:1 when present, same normalization rule as
+    // file_kinds / presences). Each slot is the per-column presence list of the corresponding
+    // packed `.spcols` file: one ColumnSparsePresencePB per UPDATE column uid the file carries,
+    // each carrying the EXACT covered base-segment rowid set (roaring) so the reader applies a
+    // column's overlay ONLY at the rows it truly covers and never at a union placeholder.
+    //
+    // A DENSE entry, a legacy slot, or a HOMOGENEOUS (single equivalence class) sparse file
+    // carries an EMPTY ColumnPresenceListPB (entries_size() == 0): the reader then falls back
+    // to the file-level SparsePresencePB (whose source_rowid column IS every column's covered
+    // set, since a single-class file has no placeholders). The array is only emitted when at
+    // least one packed sparse file carries a non-empty per-column list; otherwise it is absent
+    // and every entry is treated as "fall back to file-level presence" (== homogeneous, no
+    // regression). NEVER reuse ordinal 12 for anything else.
+    repeated ColumnPresenceListPB column_presence_lists = 12;
 }
 
 message DeltaColumnGroupMetadataPB {

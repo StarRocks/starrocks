@@ -62,6 +62,47 @@ struct SparsePresence {
     bool known() const { return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown; }
 };
 
+// Per-COLUMN presence inside a PACKED SPARSE_PERCOL `.spcols` file, mirroring
+// ColumnSparsePresencePB in lake_types.proto. A packed file is a UNION over several rowid
+// equivalence classes; every value column physically has K_union rows (real values where the
+// column covers the union, append_default placeholders elsewhere). The placeholder rows are
+// physical NULLs that MUST NEVER be applied. `roaring` is the AUTHORITATIVE apply gate: the
+// exact base-segment rowid set this column covers. [min,max]+count are the cheap zero-IO
+// pre-filter (range skip) only -- they are INSUFFICIENT to gate apply because columns
+// interleave within the union. All bounds default to kSDCGPresenceUnknown; `roaring` empty
+// (the default) means "no per-column override recorded -- fall back to the file-level
+// presence" (a homogeneous / single-class file has no placeholders, so its source_rowid
+// column already IS every column's covered set).
+struct ColumnSparsePresence {
+    ColumnUID column_uid = 0;
+    int64_t min_source_rowid = kSDCGPresenceUnknown;
+    int64_t max_source_rowid = kSDCGPresenceUnknown;
+    int64_t count = kSDCGPresenceUnknown;
+    // Serialized 32-bit CRoaring portable bitmap (read via roaring::Roaring::readSafe). Empty
+    // => no exact set recorded; the reader must fall back to the file-level presence.
+    std::string roaring;
+    bool known() const { return min_source_rowid != kSDCGPresenceUnknown && max_source_rowid != kSDCGPresenceUnknown; }
+    bool has_roaring() const { return !roaring.empty(); }
+};
+
+// Per-COLUMN presence list for ONE packed `.spcols` file: one ColumnSparsePresence per UPDATE
+// column uid the file carries. Mirrors ColumnPresenceListPB. EMPTY (entries.empty()) for a
+// DENSE entry, a legacy slot, or a HOMOGENEOUS (single equivalence class) sparse file: the
+// reader then gates on the file-level presence. Parallel to the file list, 1:1 with
+// column_files when present (same normalization rule as file_kinds / presences).
+struct ColumnPresenceList {
+    std::vector<ColumnSparsePresence> entries;
+    bool empty() const { return entries.empty(); }
+    // The per-column presence for |uid|, or nullptr when this file carries no override for it
+    // (homogeneous file, dense entry, or a uid absent from this packed file).
+    const ColumnSparsePresence* find(ColumnUID uid) const {
+        for (const auto& e : entries) {
+            if (e.column_uid == uid) return &e;
+        }
+        return nullptr;
+    }
+};
+
 // An inline sparse patch decoded from InlineSparsePatchPB. It is a `.spcols`-equivalent
 // overlay carried in tablet metadata (no file). It is a SEPARATE AXIS from the file lists
 // (_column_files / _column_uids): inline patches are NOT files and never appear in
@@ -215,6 +256,53 @@ public:
     // when its requested base rowid falls outside [presence_min, presence_max].
     bool presence_known(size_t idx) const { return idx < _presences.size() && _presences[idx].known(); }
     const std::vector<SparsePresence>& presences() const { return _presences; }
+
+    // === SDCG per-column presence (packed `.spcols` files) ===
+    // The per-column presence list of file |file_idx| (indexes into relative_column_files()).
+    // Returns an EMPTY list (no entries) when the file is dense, legacy, or a homogeneous
+    // single-class sparse file: the reader then gates on the file-level presence above. Packed
+    // files return one entry per UPDATE column uid, each with the exact covered-rowid roaring.
+    static const ColumnPresenceList& empty_column_presence_list() {
+        static const ColumnPresenceList kEmpty;
+        return kEmpty;
+    }
+    const ColumnPresenceList& column_presence_list(size_t file_idx) const {
+        return file_idx < _column_presence_lists.size() ? _column_presence_lists[file_idx]
+                                                        : empty_column_presence_list();
+    }
+    const std::vector<ColumnPresenceList>& column_presence_lists() const { return _column_presence_lists; }
+    // Per-column presence accessors keyed by (file_idx, uid). When file |file_idx| carries a
+    // per-column override for |uid|, returns its exact bound / serialized roaring; otherwise
+    // signals "unknown / fall back to the file-level presence" (kSDCGPresenceUnknown / empty).
+    // These are exactly the gates the reader (Agent D) needs to apply a column at ONLY its
+    // covered rows inside a packed union file.
+    int64_t column_presence_min(size_t file_idx, ColumnUID uid) const {
+        const auto* e = column_presence_list(file_idx).find(uid);
+        return e != nullptr ? e->min_source_rowid : kSDCGPresenceUnknown;
+    }
+    int64_t column_presence_max(size_t file_idx, ColumnUID uid) const {
+        const auto* e = column_presence_list(file_idx).find(uid);
+        return e != nullptr ? e->max_source_rowid : kSDCGPresenceUnknown;
+    }
+    int64_t column_presence_count(size_t file_idx, ColumnUID uid) const {
+        const auto* e = column_presence_list(file_idx).find(uid);
+        return e != nullptr ? e->count : kSDCGPresenceUnknown;
+    }
+    // True iff file |file_idx| records a known [min,max] per-column range for |uid|. When false
+    // the reader must fall back to the file-level presence (homogeneous / single-class file).
+    bool column_presence_known(size_t file_idx, ColumnUID uid) const {
+        const auto* e = column_presence_list(file_idx).find(uid);
+        return e != nullptr && e->known();
+    }
+    // The serialized 32-bit CRoaring portable bitmap of the EXACT base-segment rowids |uid|
+    // covers inside file |file_idx| (the authoritative apply gate). Empty string => no exact
+    // set recorded; the reader falls back to the file-level presence.
+    const std::string& column_presence_roaring(size_t file_idx, ColumnUID uid) const {
+        static const std::string kEmpty;
+        const auto* e = column_presence_list(file_idx).find(uid);
+        return e != nullptr ? e->roaring : kEmpty;
+    }
+
     // Install SDCG metadata. `kinds`/`counts`/`presences` are parallel to column_files
     // (either empty == legacy all-dense, or strictly 1:1 with column_files). `source_rows`
     // is M (0 == unknown). Lake-only path: local-engine serializers never call this,
@@ -230,6 +318,19 @@ public:
         _file_kinds = std::move(kinds);
         _sparse_row_counts = std::move(counts);
         _presences = std::move(presences);
+        _source_segment_num_rows = source_rows;
+    }
+    // Packing-aware overload: also installs the per-column presence lists (1:1 with column_files
+    // when present, else empty == every file gates on its file-level presence). Used by the lake
+    // load path when the VerPB carries column_presence_lists; the local-engine save()/load()
+    // path never calls this, so local behavior stays byte-identical.
+    void set_sdcg_meta(std::vector<DeltaColumnFileKind> kinds, std::vector<int64_t> counts,
+                       std::vector<SparsePresence> presences, std::vector<ColumnPresenceList> column_presence_lists,
+                       int64_t source_rows) {
+        _file_kinds = std::move(kinds);
+        _sparse_row_counts = std::move(counts);
+        _presences = std::move(presences);
+        _column_presence_lists = std::move(column_presence_lists);
         _source_segment_num_rows = source_rows;
     }
 
@@ -257,6 +358,10 @@ private:
     std::vector<int64_t> _sparse_row_counts; // K per sparse file; 0 for dense / unknown
     // Per-file presence bounds; 1:1 with _column_files when present, else empty (all unknown).
     std::vector<SparsePresence> _presences;
+    // Per-COLUMN presence for packed sparse files; 1:1 with _column_files when present, else
+    // empty. A dense / legacy / homogeneous slot carries an empty ColumnPresenceList (the
+    // reader then gates on the file-level _presences entry).
+    std::vector<ColumnPresenceList> _column_presence_lists;
     // Inline sparse patches (separate axis: NOT parallel to _column_files). Loaded from the lake
     // VerPB inline_patches; empty for dense / legacy / local-engine metadata.
     std::vector<InlinePatch> _inline_patches;

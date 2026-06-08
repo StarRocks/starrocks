@@ -76,11 +76,18 @@ public:
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes);
+    // |column_presence_lists| (PACKED flexible files): per-COLUMN presence, parallel to
+    // |file_with_encryption_metas| (1:1 when present, else empty == every file gates on its file-level
+    // presence). Each packed `.spcols` carries one ColumnSparsePresencePB per UPDATE column it covers,
+    // with the EXACT covered-rowid roaring (the reader's authoritative per-column apply gate); dense /
+    // homogeneous files carry an empty ColumnPresenceListPB. Emitted into the VerPB only when at least one
+    // entry is non-empty (homogeneous tablets keep absent column_presence_lists => byte-identical meta).
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes, const std::vector<DeltaColumnFileKindPB>& file_kinds,
                     const std::vector<int64_t>& sparse_row_counts, const std::vector<SparsePresencePB>& presences,
-                    int64_t source_segment_num_rows, const std::vector<InlineSparsePatchPB>& inline_patches = {});
+                    int64_t source_segment_num_rows, const std::vector<InlineSparsePatchPB>& inline_patches = {},
+                    const std::vector<ColumnPresenceListPB>& column_presence_lists = {});
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);

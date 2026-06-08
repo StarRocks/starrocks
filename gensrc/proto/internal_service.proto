@@ -225,6 +225,11 @@ message PTabletWriterOpenRequest {
     // for multi olap table sink
     optional int64 sink_id = 36 [default = 0];
     optional bytes encryption_meta = 37;
+    // SDCG flexible partial update: tells the BE tablet writer that incoming chunks
+    // carry a hidden per-row "__cset__" set-id column (immediately before "__op") and
+    // that the rowset must be written with a per-row heterogeneous column-set
+    // dictionary. Mirrors TOlapTableSink.flexible_partial_update (field 36).
+    optional bool flexible_partial_update = 38;
 };
 
 message PTabletWriterOpenResult {

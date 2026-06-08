@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <roaring/roaring.hh>
 
 #include "column/append_with_mask.h"
 #include "column/chunk_factory.h"
@@ -33,6 +34,22 @@ namespace starrocks {
 LayeredOverlayColumnIterator::LayeredOverlayColumnIterator(ColumnIteratorUPtr base, std::vector<SparseLayer> layers,
                                                            bool base_initialized)
         : _base(std::move(base)), _layers(std::move(layers)), _base_initialized(base_initialized) {}
+
+StatusOr<std::vector<uint32_t>> LayeredOverlayColumnIterator::decode_covered_rowids(const std::string& roaring_bytes) {
+    // Decode Agent C's serialized 32-bit CRoaring portable bitmap into an ASCENDING base-rowid
+    // vector. readSafe validates against the byte length (corruption-safe). The toUint32Array
+    // output is already ascending (Roaring iterates in value order), so the apply gate can binary
+    // search it directly. Wrapped against CRoaring throwing on a malformed blob.
+    std::vector<uint32_t> covered;
+    RETURN_IF_EXCEPTION({
+        roaring::Roaring r = roaring::Roaring::readSafe(roaring_bytes.data(), roaring_bytes.size());
+        covered.resize(r.cardinality());
+        // toUint32Array fills the buffer in ASCENDING value order, exactly the form the apply gate
+        // binary-searches. The 32-bit CRoaring container holds base-segment ordinals (< INT32_MAX).
+        r.toUint32Array(covered.data());
+    });
+    return covered;
+}
 
 Status LayeredOverlayColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
@@ -235,7 +252,10 @@ Status LayeredOverlayColumnIterator::_apply_layers_contiguous(rowid_t base_begin
         if (l.source_rowids.front() >= base_end || l.source_rowids.back() < base_begin) {
             continue; // disjoint window
         }
-        // Binary-search the covered rowids intersecting [base_begin, base_end).
+        // Binary-search the union source_rowids intersecting [base_begin, base_end). For a packed
+        // file source_rowids is the UNION (superset of this column's covered set), so each matched
+        // union ordinal MUST be gated on the per-column covered set before applying: a placeholder
+        // ordinal (not covered) would overwrite a real base value with NULL == corruption (§4.1).
         auto lo = std::lower_bound(l.source_rowids.begin(), l.source_rowids.end(), base_begin);
         auto hi = std::lower_bound(l.source_rowids.begin(), l.source_rowids.end(), base_end);
         std::vector<uint32_t> dst_offsets;
@@ -244,8 +264,12 @@ Status LayeredOverlayColumnIterator::_apply_layers_contiguous(rowid_t base_begin
         local_ordinals.reserve(hi - lo);
         for (auto it = lo; it != hi; ++it) {
             const uint32_t base_rowid = *it;
+            if (!l.column_covers(base_rowid)) {
+                continue; // placeholder union ordinal: never apply (corruption-prevention gate)
+            }
             const auto local_ord = static_cast<uint32_t>(it - l.source_rowids.begin());
-            // dst position for base_rowid within this contiguous window.
+            // dst position for base_rowid within this contiguous window. The value column is read
+            // union-indexed, so local_ord (the union ordinal) is the row to gather from `values`.
             dst_offsets.push_back(static_cast<uint32_t>(dst_offset + (base_rowid - base_begin)));
             local_ordinals.push_back(local_ord);
         }
@@ -308,11 +332,16 @@ Status LayeredOverlayColumnIterator::_apply_layers_range(const SparseRange<>& ra
             Range<> sub = iter.next(std::numeric_limits<rowid_t>::max());
             const rowid_t sub_begin = sub.begin();
             const rowid_t sub_end = sub.end(); // exclusive
-            // Covered layer rowids within [sub_begin, sub_end).
+            // Union source_rowids within [sub_begin, sub_end). For a packed file these are the UNION;
+            // each matched union ordinal MUST be gated on the per-column covered set before applying
+            // (placeholder ordinals are skipped — corruption-prevention gate, §4.1).
             auto lo = std::lower_bound(l.source_rowids.begin(), l.source_rowids.end(), sub_begin);
             auto hi = std::lower_bound(l.source_rowids.begin(), l.source_rowids.end(), sub_end);
             for (auto it = lo; it != hi; ++it) {
                 const uint32_t base_rowid = *it;
+                if (!l.column_covers(base_rowid)) {
+                    continue; // placeholder union ordinal: never apply
+                }
                 const auto local_ord = static_cast<uint32_t>(it - l.source_rowids.begin());
                 dst_offsets.push_back(static_cast<uint32_t>(dst_offset + rows_before + (base_rowid - sub_begin)));
                 local_ordinals.push_back(local_ord);
@@ -372,7 +401,9 @@ Status LayeredOverlayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids
         }
         std::vector<uint32_t> dst_offsets;
         std::vector<uint32_t> local_ordinals;
-        // Two-pointer merge: both `rowids` (requested) and `l.source_rowids` (layer) are ascending.
+        // Two-pointer merge: both `rowids` (requested) and `l.source_rowids` (layer UNION) are
+        // ascending. A union match at base_rowid is only applied when this column actually covers it
+        // (packed files); a placeholder union ordinal is skipped — corruption-prevention gate (§4.1).
         size_t i = 0;
         size_t j = 0;
         const size_t m = l.source_rowids.size();
@@ -384,8 +415,10 @@ Status LayeredOverlayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids
             } else if (want > have) {
                 ++j;
             } else {
-                dst_offsets.push_back(static_cast<uint32_t>(dst_offset + i));
-                local_ordinals.push_back(static_cast<uint32_t>(j));
+                if (l.column_covers(have)) {
+                    dst_offsets.push_back(static_cast<uint32_t>(dst_offset + i));
+                    local_ordinals.push_back(static_cast<uint32_t>(j)); // union ordinal == value row
+                }
                 ++i;
                 ++j;
             }

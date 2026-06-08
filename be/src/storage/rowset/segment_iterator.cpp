@@ -1447,11 +1447,31 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
         layer.version = hit.dcg->version();
         layer.row_count = hit.dcg->sparse_row_count(hit.file_idx);
         layer.source_segment_num_rows = hit.dcg->source_segment_num_rows();
-        // Carry the meta-provided presence range for the zero-IO pre-filter (skip a disjoint layer
-        // without opening its `.spcols`). Unknown bounds (legacy/pre-presence writer) => no skip.
-        layer.presence_min = hit.dcg->presence_min(hit.file_idx);
-        layer.presence_max = hit.dcg->presence_max(hit.file_idx);
-        layer.presence_known = hit.dcg->presence_known(hit.file_idx);
+        // === Per-column presence (packed `.spcols`) ===
+        // A packed file carries the UNION of several classes' source_rowids; the value column for
+        // `column.unique_id()` covers only a SUBSET, the other union ordinals being placeholders.
+        // When Agent C records an exact per-column roaring for this (file, uid), use it as BOTH
+        //   (a) the zero-IO pre-filter range — the PER-COLUMN [min,max], NOT the file-level union
+        //       range (requirement 3); the per-column range is tighter and still safe, and
+        //   (b) the exact covered set the apply gate consults (decoded into covered_rowids).
+        // When absent (legacy / homogeneous single-class file: empty roaring), fall back to the
+        // file-level presence range and treat the whole source_rowids as the covered set
+        // (covered_known stays false => column_covers() returns true for every union ordinal).
+        const ColumnUID ucid = column.unique_id();
+        const std::string& col_roaring = hit.dcg->column_presence_roaring(hit.file_idx, ucid);
+        if (!col_roaring.empty()) {
+            layer.presence_min = hit.dcg->column_presence_min(hit.file_idx, ucid);
+            layer.presence_max = hit.dcg->column_presence_max(hit.file_idx, ucid);
+            layer.presence_known = hit.dcg->column_presence_known(hit.file_idx, ucid);
+            ASSIGN_OR_RETURN(layer.covered_rowids, LayeredOverlayColumnIterator::decode_covered_rowids(col_roaring));
+            layer.covered_known = true;
+        } else {
+            // Carry the file-level presence range for the zero-IO pre-filter (skip a disjoint layer
+            // without opening its `.spcols`). Unknown bounds (legacy/pre-presence writer) => no skip.
+            layer.presence_min = hit.dcg->presence_min(hit.file_idx);
+            layer.presence_max = hit.dcg->presence_max(hit.file_idx);
+            layer.presence_known = hit.dcg->presence_known(hit.file_idx);
+        }
 
         RandomAccessFileOptions opts = base_raf_opts;
         if (layer.spcols_segment->encryption_info()) {

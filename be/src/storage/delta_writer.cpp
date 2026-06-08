@@ -30,6 +30,7 @@
 #include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
+#include "storage/flexible_partial_update.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -255,6 +256,17 @@ Status DeltaWriter::_init() {
         }
     }();
 
+    // SDCG flexible partial update: flexible iff FE injected the hidden "__cset__" slot
+    // (directly before "__op"). Detect from the slots so the local path is self-contained
+    // and consistent with the scanner and the lake writer; _opt.flexible_partial_update
+    // (mirrored from PTabletWriterOpenRequest) is OR-ed in for completeness.
+    const bool flexible_partial_update = _opt.flexible_partial_update || [this]() {
+        const bool has_op = _opt.slots->size() > 0 && _opt.slots->back()->col_name() == "__op";
+        const size_t cset_pos = has_op ? (_opt.slots->size() >= 2 ? _opt.slots->size() - 2 : _opt.slots->size())
+                                       : (_opt.slots->empty() ? 0 : _opt.slots->size() - 1);
+        return cset_pos < _opt.slots->size() && (*_opt.slots)[cset_pos]->col_name() == LOAD_CSET_COLUMN;
+    }();
+
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, tablet_schema_ptr));
@@ -271,6 +283,13 @@ Status DeltaWriter::_init() {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
+            // SDCG flexible partial update: the hidden "__cset__" slot is NOT a real tablet
+            // column, so it is excluded from referenced_column_ids (which must stay the set
+            // of real value columns == the UNION). A synthetic "__cset__" column is appended
+            // to the partial schema below so the set-id still flows into the .upt.
+            if (flexible_partial_update && slot_col_name == LOAD_CSET_COLUMN) {
+                continue;
+            }
             int32_t index = _tablet_schema->field_index(slot_col_name);
             if (index < 0) {
                 auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
@@ -313,12 +332,29 @@ Status DeltaWriter::_init() {
             partial_update_schema->set_num_short_key_columns(1);
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
         }
+        // SDCG flexible partial update: append the synthetic "__cset__" set-id column to the
+        // partial schema so it is written into the .upt as a real Segment v2 column (the
+        // lake apply / finalize handler reads it by upt_rowid -> set-id -> distinct_column_sets
+        // -> column-uid mask). It carries a reserved uid (kCsetReservedColumnUid) that avoids
+        // real column uids and the FULL_ROW/op sentinels. It is appended LAST so it does not
+        // shift any real value column position; the partial chunk presents it last after the
+        // memtable splits "__op" out.
+        if (flexible_partial_update) {
+            TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, LogicalType::TYPE_SMALLINT, /*is_nullable=*/false);
+            cset_col.set_name(LOAD_CSET_COLUMN);
+            cset_col.set_unique_id(kCsetReservedColumnUid);
+            cset_col.set_length(sizeof(int16_t));
+            partial_update_schema->append_column(cset_col);
+        }
 
         writer_context.tablet_schema = partial_update_schema;
         writer_context.full_tablet_schema = _tablet_schema;
         writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
         writer_context.column_to_expr_value = _opt.column_to_expr_value;
+        // SDCG: carry the flexible flag so the rowset writer folds the per-load set-id
+        // dictionary (interned by the scanner, keyed by txn_id) into RowsetTxnMetaPB.
+        writer_context.flexible_partial_update = flexible_partial_update;
         _tablet_schema = partial_update_schema;
     } else {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {

@@ -39,6 +39,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "storage/chunk_helper.h"
+#include "storage/flexible_partial_update.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
@@ -1128,6 +1129,393 @@ TEST_F(LakeSparseDcgVarcharTest, test_varchar_sparse_roundtrip) {
         EXPECT_EQ("second_overlay_wins", c1[512]) << "newest string overlay must win";
         EXPECT_EQ(fmt::format("updated_value_for_key_{}_xyz", 77), c1[77]) << "first overlay still applies to key 77";
         EXPECT_EQ(base_str(1000), c1[1000]) << "untouched key keeps base string";
+    }
+}
+
+// ============================================================================================
+// SDCG FLEXIBLE (per-row heterogeneous) PACKED partial update.
+//
+// Different rows of one load update different column subsets. FE injects a hidden "__cset__"
+// SMALLINT set-id column (here we inject it directly as the last value slot, since the UT has no
+// "__op" column). The rowset writer folds the per-load set-id dictionary
+// (FlexiblePartialUpdateRegistry, keyed by txn_id) into RowsetTxnMetaPB.distinct_column_sets. At
+// apply, the handler reads "__cset__" from the .upt, decodes each row's set-id into a column-uid
+// mask, groups columns into equivalence classes, and PACKS all sparse classes of a (segment,batch)
+// into ONE union .spcols (rows = union of class rowids; each value column NULL-padded where it does
+// not cover the union) with PER-COLUMN presence (exact roaring). The reader applies a column ONLY at
+// its covered rows (placeholders never applied).
+//
+// Table here: c0 (INT key), c1 (INT value), c2 (INT value). Two distinct column-sets exercised:
+// {c1} and {c2}, plus {c1,c2}.
+// ============================================================================================
+class LakeFlexiblePackedDcgTest : public TestBase {
+public:
+    LakeFlexiblePackedDcgTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+            c1->set_default_value("0");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("INT");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+            c2->set_default_value("0");
+        }
+
+        // Flexible partial-update slots: c0 (key) + c1 + c2 + "__cset__" set-id column LAST (no
+        // "__op" in this UT, so the writer detects flexible from the trailing "__cset__" slot).
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(3, LOAD_CSET_COLUMN, TypeDescriptor{LogicalType::TYPE_SMALLINT});
+        for (auto& s : _slots) {
+            _slot_pointers.emplace_back(&s);
+        }
+
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
+        _slot_cid_map.emplace(3, 3); // __cset__ chunk column index
+
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override { remove_test_dir_or_die(); }
+
+    // Full-row base chunk for keys [0, n): c0=i, c1=i*3, c2=i*4.
+    Chunk full_chunk(int n) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        for (int i = 0; i < n; ++i) {
+            c0->append(i);
+            c1->append(i * 3);
+            c2->append(i * 4);
+        }
+        Chunk::SlotHashMap base_map;
+        base_map.emplace(0, 0);
+        base_map.emplace(1, 1);
+        base_map.emplace(2, 2);
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, base_map);
+    }
+
+    int64_t write_base(int n, int64_t* version) {
+        auto chunk = full_chunk(n);
+        std::vector<uint32_t> indexes(n);
+        for (int i = 0; i < n; ++i) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(_tablet_metadata->id())
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        CHECK_OK(publish_single_version(_tablet_metadata->id(), *version + 1, txn_id).status());
+        ++(*version);
+        return txn_id;
+    }
+
+    // One flexible row's intent: which columns it updates (a subset of {"c1","c2"}) and the new
+    // values. A column not in `cols` is NOT touched for that key (it keeps its base value).
+    struct FlexRow {
+        int key;
+        std::vector<std::string> cols; // present value columns (the row's set)
+        int c1;                        // ignored unless "c1" in cols
+        int c2;                        // ignored unless "c2" in cols
+    };
+
+    // Flexible packed partial update. Builds the [c0,c1,c2,__cset__] chunk: every row physically
+    // carries c1 and c2 (omitted columns are placeholders, never applied at the right rows), plus the
+    // per-row set-id in __cset__. The dictionary is interned into the registry under the writer's
+    // txn_id (mirroring what the JSON scanner would do), so the rowset writer can fold it into
+    // RowsetTxnMetaPB.distinct_column_sets. Returns the txn id.
+    int64_t flexible_update(const std::vector<FlexRow>& rows, int64_t* version) {
+        auto txn_id = next_id();
+        // Intern each row's column-set into the per-load dictionary keyed by txn_id (the scanner's job).
+        auto dict = FlexiblePartialUpdateRegistry::instance()->get_or_create(txn_id);
+        auto c0 = Int32Column::create();
+        auto c1_data = Int32Column::create();
+        auto c1_null = NullColumn::create();
+        auto c2_data = Int32Column::create();
+        auto c2_null = NullColumn::create();
+        auto cset = Int16Column::create();
+        for (const auto& r : rows) {
+            c0->append(r.key);
+            const bool has_c1 = std::find(r.cols.begin(), r.cols.end(), "c1") != r.cols.end();
+            const bool has_c2 = std::find(r.cols.begin(), r.cols.end(), "c2") != r.cols.end();
+            // Present columns carry the real value; omitted columns carry a placeholder. The packed
+            // apply must NEVER write the placeholder at this row for the omitted column.
+            c1_data->append(has_c1 ? r.c1 : -999);
+            c1_null->append(0);
+            c2_data->append(has_c2 ? r.c2 : -999);
+            c2_null->append(0);
+            ColumnSetId sid = dict->intern(r.cols);
+            cset->append(static_cast<int16_t>(sid));
+        }
+        auto c1 = NullableColumn::create(std::move(c1_data), std::move(c1_null));
+        auto c2 = NullableColumn::create(std::move(c2_data), std::move(c2_null));
+        Chunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(cset)}, _slot_cid_map);
+
+        const size_t n = chunk.num_rows();
+        std::vector<uint32_t> indexes(n);
+        for (size_t i = 0; i < n; ++i) indexes[i] = static_cast<uint32_t>(i);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(_tablet_metadata->id())
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        CHECK_OK(publish_single_version(_tablet_metadata->id(), *version + 1, txn_id).status());
+        ++(*version);
+        FlexiblePartialUpdateRegistry::instance()->erase(txn_id);
+        return txn_id;
+    }
+
+    int read_table(int64_t version, std::map<int, int>* c1_by_key, std::map<int, int>* c2_by_key) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 256);
+        int rows = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            auto cols = chunk->columns();
+            for (int i = 0; i < chunk->num_rows(); ++i) {
+                int k = cols[0]->get(i).get_int32();
+                (*c1_by_key)[k] = cols[1]->get(i).get_int32();
+                (*c2_by_key)[k] = cols[2]->get(i).get_int32();
+            }
+            rows += chunk->num_rows();
+            chunk->reset();
+        }
+        return rows;
+    }
+
+    // Count packed (SPARSE_PERCOL) files and assert per-column presence lists are emitted 1:1.
+    struct FlexStats {
+        int sparse_files = 0;
+        int dense_files = 0;
+        int total_presence_list_entries = 0;
+        bool presence_lists_present = false;
+        bool presence_lists_1to1 = true;
+        std::map<uint32_t, int64_t> col_uid_to_count; // per-column covered-row count across packed files
+    };
+    FlexStats collect_flex_stats(const TabletMetadataPtr& metadata) {
+        FlexStats s;
+        for (const auto& [rssid, dcg_ver] : metadata->dcg_meta().dcgs()) {
+            if (dcg_ver.column_presence_lists_size() > 0) {
+                s.presence_lists_present = true;
+                if (dcg_ver.column_presence_lists_size() != dcg_ver.column_files_size()) {
+                    s.presence_lists_1to1 = false;
+                }
+            }
+            for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+                const auto kind = i < dcg_ver.file_kinds_size() ? dcg_ver.file_kinds(i) : DENSE_COLS;
+                if (kind == SPARSE_PERCOL) {
+                    ++s.sparse_files;
+                } else {
+                    ++s.dense_files;
+                }
+                if (i < dcg_ver.column_presence_lists_size()) {
+                    const auto& list = dcg_ver.column_presence_lists(i);
+                    s.total_presence_list_entries += list.entries_size();
+                    for (const auto& e : list.entries()) {
+                        s.col_uid_to_count[e.column_uid()] += e.count();
+                    }
+                }
+            }
+        }
+        return s;
+    }
+
+    uint32_t uid_of(const std::string& name) {
+        for (size_t i = 0; i < _tablet_schema->num_columns(); ++i) {
+            if (_tablet_schema->column(i).name() == name) return _tablet_schema->column(i).unique_id();
+        }
+        return 0;
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_flexible_packed_dcg";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = 7731;
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _slot_cid_map;
+};
+
+// (1) Heterogeneous pack roundtrip: two column sets ({c1} and {c2}) over OVERLAPPING base rowids in
+// ONE apply must produce per-rssid packing, with each column applied only at its rows; untouched rows
+// keep their base values.
+TEST_F(LakeFlexiblePackedDcgTest, test_hetero_pack_roundtrip) {
+    ConfigResetGuard<bool> g_enable(&config::enable_sparse_dcg, true);
+
+    constexpr int M = 2000;
+    int64_t version = 1;
+    write_base(M, &version);
+
+    // Rows interleave the two sets over overlapping keys:
+    //   key 100: update c1 only -> c1=100000, c2 keeps base (400)
+    //   key 200: update c2 only -> c2=200000, c1 keeps base (600)
+    //   key 300: update both    -> c1=300001, c2=300002
+    //   key 500: update c1 only -> c1=500000
+    //   key 700: update c2 only -> c2=700000
+    std::vector<FlexRow> rows = {
+            {100, {"c1"}, 100000, 0}, {200, {"c2"}, 0, 200000}, {300, {"c1", "c2"}, 300001, 300002},
+            {500, {"c1"}, 500000, 0}, {700, {"c2"}, 0, 700000},
+    };
+    flexible_update(rows, &version);
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    auto fs = collect_flex_stats(metadata);
+    EXPECT_GE(fs.sparse_files, 1) << "flexible heterogeneous update must produce >=1 packed .spcols";
+    EXPECT_TRUE(fs.presence_lists_present) << "packed files must emit per-column presence lists";
+    EXPECT_TRUE(fs.presence_lists_1to1) << "column_presence_lists must be 1:1 with column_files when present";
+    // c1 covered keys: {100,300,500} = 3 ; c2 covered keys: {200,300,700} = 3.
+    EXPECT_EQ(3, fs.col_uid_to_count[uid_of("c1")]) << "c1 must cover exactly its 3 rows";
+    EXPECT_EQ(3, fs.col_uid_to_count[uid_of("c2")]) << "c2 must cover exactly its 3 rows";
+
+    std::map<int, int> c1, c2;
+    int total = read_table(version, &c1, &c2);
+    EXPECT_EQ(M, total);
+    for (int k = 0; k < M; ++k) {
+        ASSERT_TRUE(c1.count(k)) << "missing key " << k;
+        // c1 expectations
+        if (k == 100) {
+            EXPECT_EQ(100000, c1[k]);
+        } else if (k == 300) {
+            EXPECT_EQ(300001, c1[k]);
+        } else if (k == 500) {
+            EXPECT_EQ(500000, c1[k]);
+        } else {
+            EXPECT_EQ(k * 3, c1[k]) << "c1 untouched key " << k << " must keep base";
+        }
+        // c2 expectations
+        if (k == 200) {
+            EXPECT_EQ(200000, c2[k]);
+        } else if (k == 300) {
+            EXPECT_EQ(300002, c2[k]);
+        } else if (k == 700) {
+            EXPECT_EQ(700000, c2[k]);
+        } else {
+            EXPECT_EQ(k * 4, c2[k]) << "c2 untouched key " << k << " must keep base";
+        }
+    }
+}
+
+// (2) Placeholder-not-applied: a key covered by c1 but NOT c2 must keep its base c2 (the union .spcols
+// physically holds a c2 placeholder at that union ordinal; the per-column roaring must gate it out).
+TEST_F(LakeFlexiblePackedDcgTest, test_placeholder_not_applied) {
+    ConfigResetGuard<bool> g_enable(&config::enable_sparse_dcg, true);
+
+    constexpr int M = 1000;
+    int64_t version = 1;
+    write_base(M, &version);
+
+    // key 10 updates ONLY c1; key 11 updates ONLY c2. They are adjacent in the union, so a range-only
+    // gate (min/max) would wrongly apply each column's placeholder to the other key. The roaring gate
+    // must prevent that.
+    std::vector<FlexRow> rows = {
+            {10, {"c1"}, 1010, 0},
+            {11, {"c2"}, 0, 1111},
+    };
+    flexible_update(rows, &version);
+
+    std::map<int, int> c1, c2;
+    int total = read_table(version, &c1, &c2);
+    EXPECT_EQ(M, total);
+    // key 10: c1 updated, c2 MUST keep base (40). key 11: c2 updated, c1 MUST keep base (33).
+    EXPECT_EQ(1010, c1[10]) << "key 10 c1 updated";
+    EXPECT_EQ(10 * 4, c2[10]) << "key 10 c2 MUST keep base (placeholder must not be applied)";
+    EXPECT_EQ(11 * 3, c1[11]) << "key 11 c1 MUST keep base (placeholder must not be applied)";
+    EXPECT_EQ(1111, c2[11]) << "key 11 c2 updated";
+    // a totally untouched key keeps both base values.
+    EXPECT_EQ(500 * 3, c1[500]);
+    EXPECT_EQ(500 * 4, c2[500]);
+}
+
+// (3) Homogeneous degrade: when EVERY row uses the same single column-set ({c1}), the flexible path
+// collapses to a single equivalence class. Verify correctness: c1 updated only where touched, c2 never
+// touched, untouched c1 keeps base.
+TEST_F(LakeFlexiblePackedDcgTest, test_homogeneous_single_set) {
+    ConfigResetGuard<bool> g_enable(&config::enable_sparse_dcg, true);
+
+    constexpr int M = 2000;
+    int64_t version = 1;
+    write_base(M, &version);
+
+    std::vector<FlexRow> rows;
+    for (int k : {3, 50, 123, 800, 1999}) {
+        rows.push_back({k, {"c1"}, k * 1000, 0});
+    }
+    flexible_update(rows, &version);
+
+    std::map<int, int> c1, c2;
+    int total = read_table(version, &c1, &c2);
+    EXPECT_EQ(M, total);
+    std::set<int> updated = {3, 50, 123, 800, 1999};
+    for (int k = 0; k < M; ++k) {
+        if (updated.count(k)) {
+            EXPECT_EQ(k * 1000, c1[k]) << "updated key " << k;
+        } else {
+            EXPECT_EQ(k * 3, c1[k]) << "untouched key " << k;
+        }
+        // c2 is never in any row's set: must stay base for ALL keys.
+        EXPECT_EQ(k * 4, c2[k]) << "c2 must be untouched for key " << k;
     }
 }
 

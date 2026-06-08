@@ -234,8 +234,20 @@ public class StreamLoadKvParams implements StreamLoadParams {
             case "row":
                 mode = TPartialUpdateMode.ROW_MODE;
                 break;
+            case "flexible":
+                // SDCG flexible partial update: per-row heterogeneous column sets. The
+                // underlying storage mode is the sparse/column mode; flexibility is
+                // surfaced separately via isFlexiblePartialUpdate().
+                mode = TPartialUpdateMode.COLUMN_UPDATE_MODE;
+                break;
         }
         return Optional.ofNullable(mode);
+    }
+
+    @Override
+    public Optional<Boolean> isFlexiblePartialUpdate() {
+        String partialUpdateMode = params.get(HTTP_PARTIAL_UPDATE_MODE);
+        return Optional.of("flexible".equals(partialUpdateMode));
     }
 
     @Override

@@ -91,6 +91,13 @@ enum PartialUpdateMode {
     AUTO_MODE = 3;
     COLUMN_UPDATE_MODE = 4;
 }
+// SDCG flexible partial update: one distinct column-set in the per-rowset dictionary.
+// column_unique_ids = the column uids carried by every row whose __cset__ set-id is the
+// index of this entry in RowsetTxnMetaPB.distinct_column_sets.
+message PartialUpdateColumnSetPB {
+    repeated uint32 column_unique_ids = 1;
+}
+
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
     repeated uint32 partial_update_column_unique_ids = 2;
@@ -107,6 +114,18 @@ message RowsetTxnMetaPB {
     optional int32 auto_increment_partial_update_column_uid = 7;
     // the value of the column express
     map<string, string> column_to_expr_value = 8;
+
+    // === SDCG flexible partial update ===
+    // Per-rowset dictionary of distinct column-sets. A per-row uint16 set-id (carried
+    // in the hidden "__cset__" column, which survives into the .upt) indexes into this
+    // list to recover that row's updated column-uid mask. Empty unless flexible.
+    // partial_update_column_ids / partial_update_column_unique_ids above keep meaning
+    // the UNION of all sets, so legacy / old-BE readers degrade to one wider homogeneous
+    // partial update.
+    repeated PartialUpdateColumnSetPB distinct_column_sets = 9;
+    // True when this rowset was written in flexible (per-row heterogeneous) partial
+    // update mode. proto2 default-unset keeps homogeneous rowsets byte-identical.
+    optional bool flexible_partial_update = 10;
 }
 
 message RowsetMetaPB {

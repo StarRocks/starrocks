@@ -71,6 +71,44 @@ private:
                                                     int64_t source_segment_num_rows, int64_t* out_num_rows,
                                                     int64_t* out_min_source_rowid, int64_t* out_max_source_rowid);
 
+    // Per-column presence of one column inside a PACKED `.spcols` file, returned alongside the packed
+    // chunk by _build_packed_sparse_chunk_from_upt. `roaring` is the serialized 32-bit CRoaring portable
+    // bitmap of the EXACT base-segment rowids this column covers (the authoritative apply gate);
+    // min/max/count are the cheap zero-IO pre-filter. column_uid is the UPDATE column uid (NOT the
+    // reserved source_rowid uid).
+    struct PackedColumnPresence {
+        ColumnUID column_uid = 0;
+        int64_t min_source_rowid = 0;
+        int64_t max_source_rowid = 0;
+        int64_t count = 0;
+        std::string roaring;
+    };
+
+    // FLEXIBLE packing builder. Replaces _build_sparse_chunk_from_upt for the per-row heterogeneous case.
+    // Reads the hidden "__cset__" set-id column from the `.upt` (by upt_rowid), decodes each upt row's
+    // set-id into a column-uid mask via |distinct_column_sets| (the RowsetTxnMetaPB dictionary), builds a
+    // PER-COLUMN (source_rowid, upt_rowid) list (a pair enters column c only if its row's mask covers c),
+    // then packs ALL the batch's value columns into ONE union `.spcols`: column 0 = ascending union
+    // source_rowids (K_union rows), each value column default-filled to K_union and update_rows ONLY at its
+    // covered union ordinals (placeholders elsewhere). |value_schema| / |sparse_schema| are as in
+    // _build_sparse_chunk_from_upt. |selective_unique_update_column_ids| is the batch's UPDATE column uids,
+    // 1:1 by position with value_schema's columns. On success returns the K_union-row packed chunk and fills
+    // |out_num_rows| (K_union), |out_min_source_rowid| / |out_max_source_rowid| (file-level union range),
+    // and |out_column_presences| (one entry per UPDATE column that actually covers >=1 row; columns covering
+    // NO row are omitted from the file's column id list by the caller). No source-segment read.
+    StatusOr<ChunkPtr> _build_packed_sparse_chunk_from_upt(
+            const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& value_schema, const Schema& sparse_schema,
+            const std::vector<ColumnUID>& selective_unique_update_column_ids,
+            const std::vector<std::vector<ColumnUID>>& distinct_column_sets, int64_t source_segment_num_rows,
+            int64_t* out_num_rows, int64_t* out_min_source_rowid, int64_t* out_max_source_rowid,
+            std::vector<PackedColumnPresence>* out_column_presences);
+
+    // Read the hidden "__cset__" set-id column from the `.upt` for one upt_id. Returns a per-upt-row
+    // vector of set-ids (size == upt segment row count). The column is read by NAME (kSDCGCsetColumnName)
+    // via a synthetic single-column schema; if the upt segment does not carry it (non-flexible payload) the
+    // caller must not invoke this. SMALLINT/INT/BIGINT storage are all accepted (value is a small set-id).
+    StatusOr<std::vector<int32_t>> _read_cset_column_from_upt(uint32_t upt_id);
+
     // Prepare a SegmentWriter for a sparse `.spcols` file. Identical construction to the dense `.cols`
     // writer (options/encryption/init(false)) except the filename is a `.spcols` name and the schema is
     // |sparse_tschema| (source_rowid + value columns).

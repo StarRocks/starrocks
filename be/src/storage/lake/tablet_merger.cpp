@@ -607,6 +607,10 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
     if (dcg.presences_size() != 0 && dcg.presences_size() != dcg.column_files_size()) {
         return Status::Corruption("DCG shape invalid: presences size neither 0 nor column_files size");
     }
+    // Per-column presence lists (packed flexible files): empty (legacy / no packed file) or 1:1.
+    if (dcg.column_presence_lists_size() != 0 && dcg.column_presence_lists_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: column_presence_lists size neither 0 nor column_files size");
+    }
     // Duplicate column UID across entries: legal for sparse chains (col_a sparse at v2, v3, ...), where
     // at least one involved entry's file (for that uid) is SPARSE. Two DENSE entries sharing a uid is a
     // genuine conflict (two independent full rewrites of the same column) and stays Corruption.
@@ -665,6 +669,14 @@ void normalize_dcg_optional_fields(DeltaColumnGroupVerPB* dcg) {
     while (dcg->presences_size() < dcg->column_files_size()) {
         dcg->add_presences();
     }
+    // SDCG per-column presence lists: only normalized to 1:1 when the entry already carries ANY (a packed
+    // flexible file is present). When absent (homogeneous / legacy), leave it empty so byte-identical metas
+    // stay byte-identical and the reader falls back to file-level presence for every entry.
+    if (dcg->column_presence_lists_size() > 0) {
+        while (dcg->column_presence_lists_size() < dcg->column_files_size()) {
+            dcg->add_column_presence_lists();
+        }
+    }
 }
 
 Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j, const DeltaColumnGroupVerPB& incoming,
@@ -710,6 +722,15 @@ Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j
         e_p.row_count() != i_p.row_count() || e_p.has_min_source_rowid() != i_p.has_min_source_rowid() ||
         e_p.has_max_source_rowid() != i_p.has_max_source_rowid() || e_p.has_row_count() != i_p.has_row_count()) {
         return Status::Corruption("DCG same column_file but presences differ");
+    }
+    // SDCG: the same physical packed file must carry the same per-column presence list. Compare with the
+    // legacy hinge (absent slot == empty list) by serialized bytes (deterministic for the same content).
+    const ColumnPresenceListPB e_cpl =
+            j < existing.column_presence_lists_size() ? existing.column_presence_lists(j) : ColumnPresenceListPB();
+    const ColumnPresenceListPB i_cpl =
+            i < incoming.column_presence_lists_size() ? incoming.column_presence_lists(i) : ColumnPresenceListPB();
+    if (e_cpl.SerializeAsString() != i_cpl.SerializeAsString()) {
+        return Status::Corruption("DCG same column_file but column_presence_lists differ");
     }
     return Status::OK();
 }
@@ -810,6 +831,11 @@ DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source,
     out.add_sparse_row_counts(source.sparse_row_counts(entry_index));
     // source is normalized => presences is 1:1 with column_files; carry the per-file summary.
     out.add_presences()->CopyFrom(source.presences(entry_index));
+    // Per-column presence list (packed flexible files). Only 1:1 when the source carries any; carry the
+    // matching entry so the single-entry copy keeps its per-column apply gate. Absent => leave empty.
+    if (entry_index < source.column_presence_lists_size()) {
+        out.add_column_presence_lists()->CopyFrom(source.column_presence_lists(entry_index));
+    }
     // source_segment_num_rows is a per-segment scalar; preserve it on the single-entry copy so the
     // merge can reconcile it across siblings of the same target rssid.
     if (source.has_source_segment_num_rows()) {
@@ -1343,6 +1369,9 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
         std::vector<int64_t> emitted_sparse_counts;
         // Presence summary per emitted entry, kept in lockstep with emitted_kinds.
         std::vector<SparsePresencePB> emitted_presences;
+        // Per-column presence list per emitted entry (packed flexible files), in lockstep with emitted_kinds.
+        std::vector<ColumnPresenceListPB> emitted_column_presence_lists;
+        bool any_column_presence = false;
         bool sdcg_active = false;
         int64_t target_source_num_rows = 0;
 
@@ -1363,6 +1392,12 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             emitted_sparse_counts.push_back(entry.single_entry.sparse_row_counts(0));
             // Carry the per-file presence summary; make_single_entry_dcg populated index 0.
             emitted_presences.push_back(entry.single_entry.presences(0));
+            // Carry the per-column presence list (packed flexible file) if present; else pad empty.
+            ColumnPresenceListPB cpl = entry.single_entry.column_presence_lists_size() > 0
+                                               ? entry.single_entry.column_presence_lists(0)
+                                               : ColumnPresenceListPB();
+            if (cpl.entries_size() > 0) any_column_presence = true;
+            emitted_column_presence_lists.push_back(std::move(cpl));
             if (kind == SPARSE_PERCOL) {
                 sdcg_active = true;
             }
@@ -1430,6 +1465,8 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
             emitted_kinds.push_back(DENSE_COLS);
             emitted_sparse_counts.push_back(0);
             emitted_presences.push_back(SparsePresencePB());
+            // Rebuilt dense file has no per-column presence (it is row-complete); pad empty.
+            emitted_column_presence_lists.push_back(ColumnPresenceListPB());
             g_tablet_merge_dcg_rebuild_total << 1;
         }
 
@@ -1464,10 +1501,17 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
         if (sdcg_active) {
             DCHECK_EQ(static_cast<int>(emitted_kinds.size()), final_dcg.column_files_size());
             DCHECK_EQ(emitted_presences.size(), emitted_kinds.size());
+            DCHECK_EQ(emitted_column_presence_lists.size(), emitted_kinds.size());
             for (size_t i = 0; i < emitted_kinds.size(); ++i) {
                 final_dcg.add_file_kinds(emitted_kinds[i]);
                 final_dcg.add_sparse_row_counts(emitted_sparse_counts[i]);
                 final_dcg.add_presences()->CopyFrom(emitted_presences[i]);
+            }
+            // Per-column presence lists emitted 1:1 ONLY when at least one packed file carries one.
+            if (any_column_presence) {
+                for (size_t i = 0; i < emitted_column_presence_lists.size(); ++i) {
+                    final_dcg.add_column_presence_lists()->CopyFrom(emitted_column_presence_lists[i]);
+                }
             }
             if (target_source_num_rows > 0) {
                 final_dcg.set_source_segment_num_rows(target_source_num_rows);

@@ -116,6 +116,13 @@ public class Load {
     public static final String VERSION = "v1";
 
     public static final String LOAD_OP_COLUMN = "__op";
+    // SDCG flexible partial update: hidden per-row column-set id column. Carries a
+    // SMALLINT set-id that indexes into RowsetTxnMetaPB.distinct_column_sets so that
+    // different rows of one load can update different column subsets. Injected as a
+    // tuple slot immediately BEFORE the "__op" slot (so "__op" stays the last column)
+    // and added to the index column list right before "__op". Only present in flexible
+    // mode. Reserved name on the BE side.
+    public static final String LOAD_CSET_COLUMN = "__cset__";
     // load job meta
     private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
 
@@ -659,9 +666,31 @@ public class Load {
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                                       List<Boolean> missAutoIncrementColumn) throws StarRocksException {
+        return getPartialUpateColumns(tbl, columnExprs, missAutoIncrementColumn, false, null);
+    }
+
+    /**
+     * Compute the union of partial-update columns for a load.
+     *
+     * <p>In SDCG flexible mode the per-row column sets are heterogeneous, but a few columns
+     * must be present in EVERY row's set so the storage layer can always arbitrate: the
+     * merge-condition column (so condition evaluation never reads a missing column) and the
+     * auto-increment column (existing force-include). This overload force-includes the
+     * merge-condition column into the returned union when {@code flexible} is true and a
+     * non-empty {@code mergeCondition} column name is given. The auto-increment column is
+     * already force-included by the loop below.
+     */
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                                      List<Boolean> missAutoIncrementColumn,
+                                                      boolean flexible, String mergeCondition)
+            throws StarRocksException {
         Set<String> specified = columnExprs.stream()
                 .map(desc -> desc.getColumnName())
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+        if (flexible && mergeCondition != null && !mergeCondition.isEmpty()) {
+            // Force the merge-condition column into the union so it is present in every set.
+            specified.add(mergeCondition);
+        }
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {

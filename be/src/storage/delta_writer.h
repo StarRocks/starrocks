@@ -67,6 +67,11 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    // SDCG flexible partial update: mirrors PTabletWriterOpenRequest.flexible_partial_update
+    // (and TOlapTableSink.flexible_partial_update). When true, "__cset__" is among `slots`
+    // (immediately before "__op") and the per-load set-id dictionary is in
+    // FlexiblePartialUpdateRegistry keyed by `txn_id`.
+    bool flexible_partial_update = false;
     // `ptable_schema_param` is valid during initialization.
     // And it will be set to nullptr because we only need to access it during intialization.
     // If you need to access it after intialization, please make sure the pointer is valid.

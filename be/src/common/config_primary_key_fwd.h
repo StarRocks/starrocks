@@ -85,7 +85,14 @@ CONF_mBool(sdcg_enable_per_column_zone_map, "true");
 // per-publish TabletMetadataPB PUT instead of paying a separate small-object PUT. Above the
 // budget the writer falls back to a `.spcols` file (a one-time immutable object), because the
 // enclosing meta is re-uploaded every publish for the patch's whole lifetime.
-CONF_mInt64(sdcg_inline_patch_max_bytes, "512");
+//
+// EXPERIMENTAL, DISABLED BY DEFAULT (0 = never inline; the writer always emits a .spcols file).
+// The inline read path crashes the promotion (dense-rewrite) source read under a high-concurrency
+// 100M-row micro-batch workload: a column reader's ordinal index null-derefs inside
+// LayeredOverlayColumnIterator::seek_to_ordinal with the signature of delayed heap corruption (the
+// faulting column is unrelated to the inline data being applied). The file-based sparse tier is
+// unaffected and remains the validated path. Set > 0 only to reproduce/debug under ASAN.
+CONF_mInt64(sdcg_inline_patch_max_bytes, "0");
 
 // Cumulative ceiling on the inline-patch bytes carried in one segment's DCG meta. Because the
 // TabletMetadataPB is re-uploaded every publish, unbounded inline accumulation would amplify the

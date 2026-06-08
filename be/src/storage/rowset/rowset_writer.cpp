@@ -62,6 +62,7 @@
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
+#include "storage/flexible_partial_update.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
@@ -100,6 +101,38 @@ ssize_t SegmentFileWriter::WriteV(const iovec* iov, int iovcnt) {
 }
 
 RowsetWriter::RowsetWriter(const RowsetWriterContext& context) : _context(context) {}
+
+void RowsetWriter::_populate_flexible_column_sets() {
+    if (!_context.flexible_partial_update || _rowset_txn_meta_pb == nullptr) {
+        return;
+    }
+    auto dict = FlexiblePartialUpdateRegistry::instance()->get(_context.txn_id);
+    if (dict == nullptr || dict->size() == 0) {
+        // Flexible flag set but no distinct sets interned (e.g. all rows ended up with the
+        // same column set, or the scanner ran on a different node -- see the registry's
+        // cross-node note). Leave distinct_column_sets empty; readers degrade to the union
+        // carried by partial_update_column_unique_ids. Do not set the flexible flag.
+        return;
+    }
+    // Resolve value-column NAMES -> tablet-column unique-ids via the full tablet schema
+    // (the partial schema only holds the union; the full schema is authoritative for uids).
+    const auto& schema = _context.full_tablet_schema != nullptr ? _context.full_tablet_schema : _context.tablet_schema;
+    auto sets = dict->snapshot();
+    for (const auto& names : sets) {
+        auto* set_pb = _rowset_txn_meta_pb->add_distinct_column_sets();
+        for (const auto& name : names) {
+            size_t idx = schema->field_index(name);
+            if (idx >= schema->num_columns()) {
+                // Unknown column name in the interned set: skip it. The union
+                // (partial_update_column_unique_ids) still covers it, so this only loses
+                // per-row precision for that column, never correctness.
+                continue;
+            }
+            set_pb->add_column_unique_ids(schema->column(idx).unique_id());
+        }
+    }
+    _rowset_txn_meta_pb->set_flexible_partial_update(true);
+}
 
 Status RowsetWriter::init() {
     _rowset_meta_pb = std::make_unique<RowsetMetaPB>();
@@ -194,13 +227,25 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         }
         // if load only has delete, we can skip the partial update logic
         if (_context.is_partial_update && _flush_chunk_state != FlushChunkState::DELETE) {
-            DCHECK(_context.referenced_column_ids.size() == _context.tablet_schema->columns().size());
+            // SDCG flexible: the partial schema has one extra trailing synthetic "__cset__"
+            // column (uid == kCsetReservedColumnUid) that is NOT in referenced_column_ids
+            // (it maps to no base column). It is still physically written to the .upt; it is
+            // simply absent from the partial_update_column_ids/unique_ids arrays, which keep
+            // describing only the real value columns (the UNION). Hence the column count may
+            // exceed referenced_column_ids by exactly one when flexible.
+            DCHECK(_context.referenced_column_ids.size() == _context.tablet_schema->columns().size() ||
+                   (_context.flexible_partial_update &&
+                    _context.referenced_column_ids.size() + 1 == _context.tablet_schema->columns().size()));
             RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
                       Status::InternalError(fmt::format("segment number {} not equal to partial_rowset_footers size {}",
                                                         _num_segment,
                                                         _rowset_txn_meta_pb->partial_rowset_footers().size())));
             for (auto i = 0; i < _context.tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.tablet_schema->column(i);
+                if (tablet_column.unique_id() == kCsetReservedColumnUid) {
+                    // synthetic __cset__ column: physical in the .upt, no base mapping.
+                    continue;
+                }
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
@@ -223,6 +268,13 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             }
             // set partial update mode
             _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
+            // SDCG flexible partial update: fold the per-load set-id dictionary (interned by
+            // the JSON scanner, keyed by txn_id) into RowsetTxnMetaPB.distinct_column_sets.
+            // distinct_column_sets[set_id].column_unique_ids = the tablet-column unique-ids
+            // of the value columns that every row with that set-id updates. The existing
+            // partial_update_column_unique_ids above keep meaning the UNION, so an old BE /
+            // legacy reader degrades to one wider homogeneous partial update.
+            _populate_flexible_column_sets();
             if (_context.column_to_expr_value != nullptr) {
                 for (auto& [name, value] : (*_context.column_to_expr_value)) {
                     _rowset_txn_meta_pb->mutable_column_to_expr_value()->insert({name, value});

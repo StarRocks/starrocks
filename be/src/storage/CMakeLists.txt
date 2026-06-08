@@ -204,6 +204,7 @@ set(STORAGE_FILES
     column_aggregate_func.cpp
     chunk_aggregator.cpp
     delta_writer.cpp
+    flexible_partial_update.cpp
     memtable.cpp
     base_compaction.cpp
     cumulative_compaction.cpp

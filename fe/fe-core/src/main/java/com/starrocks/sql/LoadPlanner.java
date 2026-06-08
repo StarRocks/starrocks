@@ -135,6 +135,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    // SDCG flexible partial update: per-row heterogeneous column sets.
+    private boolean flexiblePartialUpdate = false;
 
     private final ComputeResource computeResource;
 
@@ -236,6 +238,8 @@ public class LoadPlanner {
         this.sessionVariables = sessionVariables;
         this.computeResource = streamLoadInfo.getComputeResource();
         this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
+        this.flexiblePartialUpdate = this.isPrimaryKey && partialUpdate
+                && streamLoadInfo.isFlexiblePartialUpdate();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -270,6 +274,10 @@ public class LoadPlanner {
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
+    }
+
+    public void setFlexiblePartialUpdate(boolean flexiblePartialUpdate) {
+        this.flexiblePartialUpdate = flexiblePartialUpdate;
     }
 
     public void setMergeConditionStr(String mergeConditionStr) {
@@ -309,9 +317,10 @@ public class LoadPlanner {
         if (partialUpdate) {
             if (this.etlJobType == EtlJobType.BROKER) {
                 destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList(),
-                        isMissAutoIncrementColumn);
+                        isMissAutoIncrementColumn, flexiblePartialUpdate, mergeConditionStr);
             } else {
-                destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn);
+                destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn,
+                        flexiblePartialUpdate, mergeConditionStr);
             }
         } else {
             destColumns = destTable.getFullSchema();
@@ -421,6 +430,15 @@ public class LoadPlanner {
         }
         // Add op type slotdesc for primary tabale
         if (isPrimaryKey) {
+            // SDCG flexible partial update: inject the hidden per-row column-set id slot
+            // IMMEDIATELY BEFORE the __op slot so __op stays the last column (BE reads
+            // __op positionally as num_columns()-1).
+            if (flexiblePartialUpdate) {
+                SlotDescriptor csetSlot = descTable.addSlotDescriptor(tupleDesc);
+                csetSlot.setIsMaterialized(true);
+                csetSlot.setColumn(new Column(Load.LOAD_CSET_COLUMN, IntegerType.SMALLINT));
+                csetSlot.setIsNullable(false);
+            }
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
@@ -510,6 +528,7 @@ public class LoadPlanner {
             if (olapTable.getAutomaticBucketSize() > 0) {
                 ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
             }
+            ((OlapTableSink) dataSink).setFlexiblePartialUpdate(flexiblePartialUpdate);
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
@@ -533,6 +552,7 @@ public class LoadPlanner {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
             dataSink.setPartialUpdateMode(partialUpdateMode);
+            dataSink.setFlexiblePartialUpdate(flexiblePartialUpdate);
             dataSink.complete(mergeConditionStr);
         }
         this.txnId = txnId;

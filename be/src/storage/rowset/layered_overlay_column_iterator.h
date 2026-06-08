@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -141,13 +142,56 @@ public:
             return presence_max < static_cast<int64_t>(win_begin) || presence_min >= static_cast<int64_t>(win_end);
         }
 
+        // === PER-COLUMN PRESENCE (packed `.spcols`: corruption-prevention apply gate) ===
+        // A PACKED `.spcols` (design §4.1/§5.6) holds the UNION of several equivalence classes'
+        // source_rowids in its leading column (K_union rows). Each value column physically has
+        // K_union rows, but column `value_column.unique_id()` only carries REAL values at the rowids
+        // it actually covers; the other union ordinals hold append_default PLACEHOLDERS. The
+        // file-level source_rowids vector (column 0) is the UNION and is therefore a SUPERSET of this
+        // column's covered set. Applying the overlay at a placeholder ordinal would overwrite a real
+        // base value with NULL == silent corruption (§4.1). So for a packed file the apply machinery
+        // MUST gate every candidate ordinal on this column's EXACT covered base-rowid set.
+        //
+        // `covered_known == true`  => `covered_rowids` is the exact sorted (ascending) set of base
+        //                             rowids this column covers in this layer (decoded from C's
+        //                             ColumnSparsePresencePB.roaring). The apply gate consults it.
+        // `covered_known == false` => legacy / homogeneous single-class / inline layer: the whole
+        //                             `source_rowids` IS this column's covered set (every union
+        //                             ordinal is real), so no gating is needed and `covered_rowids`
+        //                             stays unused. This is the zero-regression fallback.
+        bool covered_known = false;
+        std::vector<uint32_t> covered_rowids; // ascending; only consulted when covered_known
+
+        // True iff base_rowid is covered by THIS column in THIS layer. For a packed file (covered_known)
+        // this is exact-set membership (binary search of `covered_rowids`); for a non-packed layer
+        // every matched union ordinal is real, so membership is unconditionally true.
+        bool column_covers(uint32_t base_rowid) const {
+            if (!covered_known) {
+                return true; // whole source_rowids is the covered set
+            }
+            return std::binary_search(covered_rowids.begin(), covered_rowids.end(), base_rowid);
+        }
+
         // Lazily-loaded full materialization (loaded on first use by load()):
         bool loaded = false;
-        // The K source_rowids, ascending. Read from the reserved-uid column.
+        // The K source_rowids, ascending. Read from the reserved-uid column. For a packed file this is
+        // the UNION (K_union) across all packed classes; per-column gating happens via `column_covers`.
         std::vector<uint32_t> source_rowids;
-        // The K value rows, in the same order as `source_rowids` (i.e. local ordinal order).
+        // The K value rows, in the same order as `source_rowids` (i.e. local/union ordinal order).
+        // For a packed file, placeholder rows are physically present here but are never applied
+        // (gated out by `column_covers`).
         MutableColumnPtr values;
     };
+
+    // Decode a serialized 32-bit CRoaring portable bitmap (Agent C's
+    // ColumnSparsePresencePB.roaring, the exact per-column covered base-rowid set inside a packed
+    // `.spcols`) into an ASCENDING `uint32_t` vector. The layer builders call this to populate
+    // SparseLayer::covered_rowids so the apply gate can do exact-set membership. `roaring_bytes` is
+    // the wire blob from DeltaColumnGroup::column_presence_roaring(file_idx, uid); an EMPTY blob
+    // (homogeneous / single-class file, or a uid with no exact set) is NOT a valid packed presence
+    // and the caller must instead fall back to the whole-source_rowids covered set. Mirrors the
+    // del_vector roaring decode (roaring::Roaring::readSafe).
+    static StatusOr<std::vector<uint32_t>> decode_covered_rowids(const std::string& roaring_bytes);
 
     // |base_initialized| indicates the caller already wired the base iterator's own read file and
     // called base->init(...). When true, init() does NOT re-init the base (its read file differs
