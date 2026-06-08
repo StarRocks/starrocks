@@ -79,7 +79,7 @@ int32_t SkewedPartitionRebalancer::max_assigned_tasks() const {
     return mx;
 }
 
-int32_t SkewedPartitionRebalancer::spreadkPartitionCount() const {
+int32_t SkewedPartitionRebalancer::spread_partition_count() const {
     int32_t c = 0;
     for (const auto& a : _partition_assignments) {
         if (a.size() > 1) {
