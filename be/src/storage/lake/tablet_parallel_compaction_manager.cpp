@@ -40,6 +40,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -1579,6 +1580,17 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
             op_parallel->add_output_sstables()->CopyFrom(output_sst);
         }
 
+        // Observability: count the PK persistent-index SST files this parallel-compaction run
+        // wrote to object storage. The per-subtask CompactionTask::execute_index_major_compaction
+        // returns early when subtask_id >= 0, so those SSTs are accounted for here instead.
+        int64_t index_sst_puts = temp_op.output_sstables_size();
+        if (temp_op.has_output_sstable()) {
+            ++index_sst_puts;
+        }
+        if (index_sst_puts > 0) {
+            StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(index_sst_puts);
+        }
+
         // Log SST compaction results
         if (!temp_op.input_sstables().empty()) {
             size_t total_input_sst_size = 0;
@@ -2351,6 +2363,10 @@ Status TabletParallelCompactionManager::_merge_subtask_lcrm_files(int64_t tablet
         auto file_info = builder.file_info();
         if (!file_info.path.empty()) {
             to_file_meta_pb(file_info, merged_compaction->mutable_lcrm_file());
+            // Observability: each successful merge writes one new .lcrm file to object storage.
+            // The per-subtask writer->lcrm_file() PUTs are counted by fill_compaction_segment_info();
+            // this is an extra file produced by the parallel manager itself.
+            StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(1);
             VLOG(1) << "Merged " << lcrm_files.size() << " subtask LCRM files into " << file_info.path
                     << ", tablet=" << tablet_id << ", txn_id=" << txn_id << ", total_rows=" << total_rows
                     << ", size=" << (file_info.size.has_value() ? file_info.size.value() : -1);
