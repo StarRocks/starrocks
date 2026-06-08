@@ -656,6 +656,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
+    ./storage/storage_engine_compaction_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/storage_types_test.cpp
     ./storage/table_reader_remote_test.cpp
