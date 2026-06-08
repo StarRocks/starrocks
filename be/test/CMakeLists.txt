@@ -411,6 +411,7 @@ set(EXEC_FILES
         ./storage/schema_change_test.cpp
         ./storage/row_store_encoder_test.cpp
         ./storage/segment_flush_executor_test.cpp
+        ./storage/storage_engine_compaction_test.cpp
         ./storage/storage_engine_test.cpp
         ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp
