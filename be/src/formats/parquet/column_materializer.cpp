@@ -362,7 +362,7 @@ void ColumnMaterializer::classify_columns(const std::unordered_set<SlotId>& defe
             // ScalarColumnReader will still set _need_lazy_decode via _dict_filter_ctx,
             // but the explicit flag also enables lazy type conversion and unifies the
             // policy with the output-only lazy column path.
-            if (all_dict_filter && _param.enable_lazy_materialization) {
+            if (all_dict_filter && config::parquet_late_materialization_enable) {
                 (*_column_readers)[slot_id]->set_can_lazy_decode(true);
             }
             add_active_column(read_col_idx);

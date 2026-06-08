@@ -311,7 +311,6 @@ struct HdfsScannerParams {
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
     bool parquet_bloom_filter_enable = false;
-    bool parquet_lazy_materialization_enable = true;
 
     int64_t connector_max_split_size = 0;
 
@@ -402,8 +401,6 @@ struct HdfsScannerContext {
     bool parquet_page_index_enable = false;
 
     bool parquet_bloom_filter_enable = false;
-
-    bool parquet_lazy_materialization_enable = true;
 
     std::string timezone;
 

@@ -1130,7 +1130,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PREDICATE_EXPR_REUSE = "enable_predicate_expr_reuse";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
-    public static final String ENABLE_PARQUET_LAZY_MATERIALIZATION = "enable_parquet_lazy_materialization";
 
     public static final String ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN = "enable_rewrite_or_to_union_all_join";
 
@@ -3469,9 +3468,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PARQUET_READER_PAGE_INDEX)
     private boolean enableParquetReaderPageIndex = true;
-
-    @VarAttr(name = ENABLE_PARQUET_LAZY_MATERIALIZATION)
-    private boolean enableParquetLazyMaterialization = true;
 
     public int getPhasedSchedulerMaxConcurrency() {
         return phasedSchedulerMaxConcurrency;
@@ -6517,7 +6513,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_pipeline_event_scheduler(enablePipelineEventScheduler);
         tResult.setEnable_parquet_reader_bloom_filter(enableParquetReaderBloomFilter);
         tResult.setEnable_parquet_reader_page_index(enableParquetReaderPageIndex);
-        tResult.setEnable_parquet_lazy_materialization(enableParquetLazyMaterialization);
         tResult.setColumn_view_concat_rows_limit(columnViewConcatRowsLimit);
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
         tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);

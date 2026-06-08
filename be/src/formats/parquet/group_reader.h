@@ -124,9 +124,6 @@ struct GroupReaderParam {
 
     int32_t scan_range_id = -1;
     const THdfsScanRange* scan_range = nullptr;
-
-    // Gate for Parquet lazy materialization.  When false, all columns are active.
-    bool enable_lazy_materialization = true;
 };
 
 class GroupReader {

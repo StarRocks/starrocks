@@ -568,7 +568,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     for (SlotId sid : _variant->active_hidden_slot_ids()) {
         _column_materializer->add_active_slot(sid);
     }
-    if (!_param.enable_lazy_materialization) {
+    if (!config::parquet_late_materialization_enable) {
         _variant->promote_lazy_to_active();
     }
 

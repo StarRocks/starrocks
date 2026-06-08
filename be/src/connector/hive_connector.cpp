@@ -927,10 +927,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                   ? state->query_options().enable_parquet_reader_bloom_filter
                                   : true
                         : false;
-        scanner_params.parquet_lazy_materialization_enable =
-                state->query_options().__isset.enable_parquet_lazy_materialization
-                        ? state->query_options().enable_parquet_lazy_materialization
-                        : true;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;

@@ -215,7 +215,6 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
     ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
     ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
-    ctx.parquet_lazy_materialization_enable = _scanner_params.parquet_lazy_materialization_enable;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
