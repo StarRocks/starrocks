@@ -14,12 +14,19 @@
 
 #pragma once
 
+#include <atomic>
+
+#include "common/status.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 
 namespace starrocks::pipeline {
 
+class FragmentContext;
+
 class FragmentRuntimeState {
+    friend class FragmentContext;
+
 public:
     FragmentRuntimeState() = default;
 
@@ -34,10 +41,17 @@ public:
     void set_enable_cache(bool flag) { _enable_cache = flag; }
     bool enable_cache() const { return _enable_cache; }
 
+    Status final_status() const {
+        auto* status = _final_status.load();
+        return status == nullptr ? Status::OK() : *status;
+    }
+
 private:
     TUniqueId _fragment_instance_id;
     RuntimeFilterHub _runtime_filter_hub;
     bool _enable_cache = false;
+    std::atomic<Status*> _final_status = nullptr;
+    Status _s_status;
 };
 
 } // namespace starrocks::pipeline

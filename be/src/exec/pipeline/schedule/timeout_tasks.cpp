@@ -40,12 +40,4 @@ void CheckFragmentTimeout::Run() {
     });
 }
 
-void RFScanWaitTimeout::Run() {
-    if (_all_rf_timeout) {
-        _timeout.notify_runtime_filter_timeout();
-    } else {
-        _timeout.notify_source_observers();
-    }
-}
-
 } // namespace starrocks::pipeline

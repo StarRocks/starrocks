@@ -20,7 +20,7 @@
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "compute_env/pipeline/pipeline_timer.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
@@ -92,7 +92,7 @@ public:
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, QueryRuntimeState* query_runtime_state,
                    FragmentRuntimeState* fragment_runtime_state, FragmentContext* fragment_ctx, Pipeline* pipeline,
-                   DriverObserver* driver_observer, int32_t driver_id);
+                   DriverObserver* driver_observer, PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
 
@@ -468,6 +468,7 @@ protected:
     FragmentContext* _fragment_ctx;
     Pipeline* _pipeline;
     DriverObserver* _driver_observer;
+    PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
