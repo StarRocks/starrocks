@@ -1268,8 +1268,9 @@ CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
-// Enable dictionary-code based optimizations for nested Parquet fields. Turn this off to avoid exposing
-// temporary dictionary-code columns through complex column readers while diagnosing nested string subfield crashes.
+// Whether to enable dictionary-code based optimizations (dictionary filter and lazy dictionary decode) for
+// nested Parquet string subfields, such as string subfields within a STRUCT, ARRAY, or MAP column. When
+// disabled, the top-level dictionary filter and late materialization are still kept.
 CONF_mBool(parquet_nested_dict_code_optimization_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
