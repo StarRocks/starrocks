@@ -370,6 +370,13 @@ public class ConnectContext {
 
     /**
      * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     * <p>
+     * Note: callers that subsequently invoke {@link #setCurrentWarehouse(String)} or
+     * {@link #setCurrentWarehouseId(long)} must re-apply
+     * {@code setEnableMaterializedViewRewrite(false)} (and any other per-context
+     * session-variable override) AFTER the warehouse switch, because setCurrentWarehouse
+     * replaces the sessionVariable with a fresh clone of the global default and silently
+     * discards earlier overrides.
      */
     public static ConnectContext buildInner() {
         ConnectContext connectContext = new ConnectContext();

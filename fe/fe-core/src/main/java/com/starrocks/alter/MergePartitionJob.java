@@ -337,8 +337,16 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 distributionDesc = distributionInfo.toDistributionDesc(olapTable.getIdToColumn());
                 addPartitionClause.setDistributionDesc(distributionDesc);
             }
+            boolean newInnerCtx = ConnectContext.get() == null;
             ConnectContext context = Util.getOrCreateInnerContext();
             context.setCurrentWarehouseId(warehouseId);
+            if (newInnerCtx) {
+                // setCurrentWarehouseId replaces sessionVariable with a clone of the global
+                // default, discarding ConnectContext.buildInner's MV-rewrite override. Only
+                // re-apply when the context is freshly created so we don't mutate a reused
+                // user session.
+                context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+            }
             try {
                 try (AutoCloseableLock ignore = new AutoCloseableLock(
                         new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
