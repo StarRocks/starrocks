@@ -15,6 +15,7 @@ package com.starrocks.sql.optimizer.skew;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -139,6 +140,20 @@ public class DataSkew {
     }
 
     /**
+     * In some cases the row count in statistics can be inaccurate,
+     * and enforcing skew detection in those cases can lead to false positives.
+     * This utility checks whether the inaccurate stats should be ignored for
+     * skew detection based on the session variable enableSkewDetectWithInaccurateStats
+     */
+    private static boolean shouldEnforceRowCountAccuracy() {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && ctx.getSessionVariable() != null) {
+            return !ctx.getSessionVariable().isEnableSkewDetectWithInaccurateStats();
+        }
+        return true;
+    }
+
+    /**
      * Utility method to get detailed information about if a column is skewed and how it is skewed.
      */
     public static SkewInfo getColumnSkewInfo(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic) {
@@ -151,7 +166,7 @@ public class DataSkew {
     public static SkewInfo getColumnSkewInfo(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic,
                                              Thresholds thresholds) {
         final var rowCount = statistics.getOutputRowCount();
-        if (statistics.isTableRowCountMayInaccurate() || rowCount < 1) {
+        if (rowCount < 1 || (statistics.isTableRowCountMayInaccurate() && shouldEnforceRowCountAccuracy())) {
             // Without sufficient information we can not make a decision.
             return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.INACCURATE_ROW_COUNT);
         }
@@ -180,6 +195,48 @@ public class DataSkew {
         return new SkewInfo(SkewType.NOT_SKEWED, mcvSkewInfo.additionalInfo);
     }
 
+<<<<<<< HEAD
+=======
+    public static SkewCandidates getSkewCandidates(@NotNull Statistics statistics,
+                                                   @NotNull ColumnStatistic columnStatistic,
+                                                   Thresholds thresholds,
+                                                   double singleMcvThreshold) {
+        if (statistics.getOutputRowCount() < 1 ||
+                (statistics.isTableRowCountMayInaccurate() && shouldEnforceRowCountAccuracy())) {
+            return new SkewCandidates(false, List.of(), Optional.empty(), Optional.empty(), Optional.empty());
+        }
+
+        final var rowCount = statistics.getOutputRowCount();
+        final var nullSkewInfo = getNullSkewInfo(columnStatistic, thresholds);
+        final var mcvSkewInfo = getMcvSkewInfo(statistics, columnStatistic, thresholds);
+
+        boolean includeNull = nullSkewInfo.skewed;
+
+        List<Pair<String, Long>> mcvCandidates = List.of();
+        Optional<Double> maxMcvRatio = Optional.empty();
+        if (mcvSkewInfo.skewed && mcvSkewInfo.mcvs.isPresent()) {
+            List<Pair<String, Long>> topK = mcvSkewInfo.mcvs.get();
+            // Filter candidates by per-value threshold if needed.
+            if (singleMcvThreshold > 0) {
+                topK = topK.stream()
+                        .filter(p -> (p.second / rowCount) >= singleMcvThreshold)
+                        .toList();
+            }
+            mcvCandidates = topK;
+
+            maxMcvRatio = mcvCandidates.stream()
+                    .mapToDouble(p -> p.second / rowCount)
+                    .max()
+                    .stream()
+                    .boxed()
+                    .findFirst();
+        }
+
+        return new SkewCandidates(includeNull, mcvCandidates,
+                nullSkewInfo.nullSkewFactor, mcvSkewInfo.mcvSkewFactor, maxMcvRatio);
+    }
+
+>>>>>>> 59efaacb19 ([Enhancement] Allow data skew detection when table row count may be inaccurate (#73998))
     /**
      * Utility method to check if a certain column is skewed based on statistics.
      */

@@ -17,11 +17,17 @@ package com.starrocks.sql.optimizer.skew;
 import com.google.crypto.tink.subtle.Random;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.AfterEach;
+>>>>>>> 59efaacb19 ([Enhancement] Allow data skew detection when table row count may be inaccurate (#73998))
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,6 +39,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DataSkewTest {
+
+    @AfterEach
+    void tearDown() {
+        ConnectContext.remove();
+    }
 
     private static ColumnRefOperator createNewTestColumn() {
         return new ColumnRefOperator(Random.randInt(), Type.INT, UUID.randomUUID().toString(), true);
@@ -169,6 +180,171 @@ public class DataSkewTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    void itShouldReturnSkewCandidatesIncludingNullAndMcvs() {
+        // GIVEN
+        final var histogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.3) // NULL skewed with default threshold 0.2
+                .setHistogram(histogram) //
+                .build();
+
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertTrue(candidates.includeNull());
+        assertFalse(candidates.mcvs().isEmpty());
+    }
+
+    @Test
+    void itShouldFilterMcvCandidatesBySingleThreshold() {
+        // GIVEN
+        final var buckets = List.of(new Bucket(0, 1, 1L, 1L));
+        // One strong MCV and one weak MCV.
+        final var mcv = Map.of(
+                "1", 20_000L,  // 20%
+                "2", 1_000L    // 1%
+        );
+        final var histogram = new Histogram(buckets, mcv);
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.0)
+                .setHistogram(histogram)
+                .build();
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertEquals(List.of(Pair.create("1", 20_000L)), candidates.mcvs());
+    }
+
+    @Test
+    void itShouldReturnSkewCandidatesForNullOnly() {
+        // GIVEN: NULL skew only (no MCVs)
+        final var buckets = List.of(new Bucket(0, 1, 1L, 1L));
+        final var histogram = new Histogram(buckets, Map.of());
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.3) // >= default threshold 0.2
+                .setHistogram(histogram)
+                .build();
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertTrue(candidates.includeNull());
+        assertTrue(candidates.mcvs().isEmpty());
+    }
+
+    @Test
+    void itShouldReturnSkewCandidatesForMcvOnly() {
+        // GIVEN: MCV skew only (no NULL skew)
+        final var buckets = List.of(new Bucket(0, 1, 1L, 1L));
+        final var mcv = Map.of(
+                "1", 60_000L, // 60%
+                "2", 10_000L  // 10%
+        );
+        final var histogram = new Histogram(buckets, mcv);
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.0)
+                .setHistogram(histogram)
+                .build();
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertFalse(candidates.includeNull());
+        assertFalse(candidates.mcvs().isEmpty());
+    }
+
+    @Test
+    void itShouldDetectSkewWhenInaccurateStatsAndSessionVariableEnabled() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        ctx.getSessionVariable().setEnableSkewDetectWithInaccurateStats(true);
+
+        final var skewedHistogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.01)
+                .setHistogram(skewedHistogram)
+                .build();
+
+        final var stats = Statistics.buildFrom(
+                new Statistics.Builder()
+                        .setOutputRowCount(100_000)
+                        .addColumnStatistic(col, colStats)
+                        .build())
+                .setTableRowCountMayInaccurate(true)
+                .build();
+
+        assertTrue(DataSkew.isColumnSkewed(stats, colStats));
+
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
+        assertEquals(DataSkew.SkewType.SKEWED_MCV, skewInfo.type());
+    }
+
+    @Test
+    void itShouldNotDetectSkewWhenInaccurateStatsAndSessionVariableDisabled() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+
+        final var skewedHistogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.01)
+                .setHistogram(skewedHistogram)
+                .build();
+
+        final var stats = Statistics.buildFrom(
+                new Statistics.Builder()
+                        .setOutputRowCount(100_000)
+                        .addColumnStatistic(col, colStats)
+                        .build())
+                .setTableRowCountMayInaccurate(true)
+                .build();
+
+        assertFalse(DataSkew.isColumnSkewed(stats, colStats));
+
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
+        assertEquals(DataSkew.SkewType.NOT_SKEWED, skewInfo.type());
+        assertEquals(DataSkew.AdditionalInfo.INACCURATE_ROW_COUNT, skewInfo.additionalInfo());
+    }
+
+>>>>>>> 59efaacb19 ([Enhancement] Allow data skew detection when table row count may be inaccurate (#73998))
     private static Histogram getSkewedHistogram() {
         List<Bucket> skewedBuckets = List.of(
                 new Bucket(6, 20, 1000L, 50L), // skew

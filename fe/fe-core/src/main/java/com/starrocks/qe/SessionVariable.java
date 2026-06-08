@@ -444,6 +444,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
     public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
     public static final String SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT = "skew_join_max_other_side_overlap_row_count";
+<<<<<<< HEAD
+=======
+    public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
+    public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
+    public static final String ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS = "enable_skew_detect_with_inaccurate_stats";
+>>>>>>> 59efaacb19 ([Enhancement] Allow data skew detection when table row count may be inaccurate (#73998))
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
@@ -2691,6 +2697,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT, flag = VariableMgr.INVISIBLE)
     private long skewJoinMaxOtherSideOverlapRowCount = 1_000_000;
 
+<<<<<<< HEAD
+=======
+    // A single MCV value must exceed this total-domain ratio to be considered as a skew value candidate.
+    @VarAttr(name = SKEW_JOIN_MCV_SINGLE_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double skewJoinMcvSingleThreshold = 0.1;
+
+    // Minimal input rows (estimated) to enable MCV-based skew join elimination rewrite.
+    @VarAttr(name = SKEW_JOIN_MCV_MIN_INPUT_ROWS, flag = VariableMgr.INVISIBLE)
+    private long skewJoinMcvMinInputRows = 10000000;
+
+    // When enabled, skew detection proceeds even when table row count is marked as potentially inaccurate (isTableRowCountMayInaccurate).
+    // This allows rules consuming skew info (joins, aggregations, window functions) to fire based on
+    // histogram/MCV data regardless of row count reliability.
+    @VarAttr(name = ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS, flag = VariableMgr.INVISIBLE)
+    private boolean enableSkewDetectWithInaccurateStats = false;
+
+>>>>>>> 59efaacb19 ([Enhancement] Allow data skew detection when table row count may be inaccurate (#73998))
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
@@ -5069,6 +5092,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableStatsToOptimizeSkewJoin(boolean enableStatsToOptimizeSkewJoin) {
         this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
+    }
+
+    public boolean isEnableSkewDetectWithInaccurateStats() {
+        return enableSkewDetectWithInaccurateStats;
+    }
+
+    public void setEnableSkewDetectWithInaccurateStats(boolean enableSkewDetectWithInaccurateStats) {
+        this.enableSkewDetectWithInaccurateStats = enableSkewDetectWithInaccurateStats;
     }
 
     public int getSkewJoinOptimizeUseMCVCount() {
