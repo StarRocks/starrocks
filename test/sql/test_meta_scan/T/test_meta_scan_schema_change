@@ -1,0 +1,58 @@
+-- name: test_meta_scan_fast_schema_change_uncompacted_segment @native
+CREATE DATABASE test_meta_scan_schema_change_${uuid0};
+USE test_meta_scan_schema_change_${uuid0};
+
+CREATE TABLE meta_schema_change (
+    k1 INT,
+    c0 INT,
+    c_drop INT,
+    c_move INT,
+    v1 VARCHAR(20)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true",
+    "base_compaction_forbidden_time_ranges" = "* * * * *"
+);
+
+INSERT INTO meta_schema_change VALUES
+(1, 10, 100, 1000, 'alpha'),
+(2, 20, 200, 2000, 'beta'),
+(3, 30, NULL, 3000, 'gamma');
+
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+[UC]segment_before=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+SELECT ${rowset_before} >= 1 AS has_rowset_before, ${segment_before} >= 1 AS has_segment_before;
+
+ALTER TABLE meta_schema_change RENAME COLUMN c_move TO c_renamed;
+
+ALTER TABLE meta_schema_change DROP COLUMN c_drop;
+function: wait_alter_table_finish()
+
+ALTER TABLE meta_schema_change ADD COLUMN added_null INT NULL AFTER c0;
+function: wait_alter_table_finish()
+
+ALTER TABLE meta_schema_change ADD COLUMN added_default INT DEFAULT '7' AFTER added_null;
+function: wait_alter_table_finish()
+
+ALTER TABLE meta_schema_change MODIFY COLUMN c_renamed INT AFTER added_default;
+function: wait_alter_table_finish()
+
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+SELECT ${rowset_after} = ${rowset_before} AND ${segment_after} = ${segment_before} AND ${segment_after} > 0 AS old_segment_uncompacted;
+
+SELECT min(c_renamed), max(c_renamed), count(c_renamed),
+       min(added_null) IS NULL, max(added_null) IS NULL, count(added_null),
+       min(added_default), max(added_default), count(added_default)
+FROM meta_schema_change [_META_];
+
+SELECT column_size(added_null), column_compressed_size(added_null),
+       column_size(added_default), column_compressed_size(added_default)
+FROM meta_schema_change [_META_];
+
+SELECT k1, c0, added_null, added_default, c_renamed, v1 FROM meta_schema_change ORDER BY k1;
+
+DROP DATABASE test_meta_scan_schema_change_${uuid0} FORCE;
