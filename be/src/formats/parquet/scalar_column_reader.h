@@ -215,6 +215,10 @@ private:
 
     Status _dict_decode(ColumnPtr& dst, ColumnPtr& src);
 
+    bool _is_dict_code_column(const ColumnPtr& column) const;
+    bool _is_intermediate_column(const ColumnPtr& column) const;
+    Status _restore_tmp_column(ColumnPtr& column);
+
     std::unique_ptr<ColumnConverter> _converter;
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
@@ -225,7 +229,6 @@ private:
     bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
-    bool _need_lazy_decode = false;
     // dict code
     ColumnPtr _tmp_code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
@@ -282,6 +285,8 @@ public:
 
 private:
     Status _check_current_dict();
+    bool _is_dict_code_column(const ColumnPtr& column) const;
+    Status _restore_tmp_column(ColumnPtr& column);
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
 
@@ -321,6 +326,9 @@ public:
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
+    bool _is_tmp_column(const ColumnPtr& column) const;
+    Status _restore_tmp_column(ColumnPtr& column);
+
     const GlobalDictMap* _dict = nullptr;
     const SlotId _slot_id;
 

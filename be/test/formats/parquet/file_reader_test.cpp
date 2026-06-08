@@ -16,11 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <random>
 #include <set>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
@@ -32,6 +34,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -63,6 +66,18 @@ namespace starrocks::parquet {
 
 static HdfsScanStats g_hdfs_scan_stats;
 using starrocks::HdfsScannerContext;
+
+static const ColumnPtr& get_struct_field_column(const ColumnPtr& column, const std::string& field_name) {
+    const auto* struct_column = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column.get()));
+    auto field_column = struct_column->field_column(field_name);
+    CHECK(field_column.ok()) << field_column.status();
+    return field_column.value();
+}
+
+static void expect_string_data_column(const ColumnPtr& column) {
+    const Column* data_column = ColumnHelper::get_data_column(column.get());
+    EXPECT_TRUE(data_column->is_binary() || data_column->is_binary_view());
+}
 
 class FileReaderTest : public testing::Test {
 public:
@@ -2759,7 +2774,10 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     std::vector<std::string> subfield_path({"c_struct", "c0"});
     _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
                                                     &ctx->conjunct_ctxs_by_slot[3]);
-    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+    // Use a small chunk size so that the scan takes multiple rounds and some ranges are fully
+    // filtered out by the dict filter (hit_count == 0), exercising the temporary dict-code
+    // column restore path in ScalarColumnReader.
+    auto file_reader = _create_file_reader(struct_in_struct_file_path, 13);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
@@ -2785,9 +2803,67 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
         total_row_nums += chunk->num_rows();
         if (chunk->num_rows() != 0) {
             ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+            const auto& c_struct_struct = chunk->get_column_by_slot_id(3);
+            expect_string_data_column(get_struct_field_column(c_struct_struct, "c0"));
+            const auto& c_struct = get_struct_field_column(c_struct_struct, "c_struct");
+            expect_string_data_column(get_struct_field_column(c_struct, "c0"));
+            expect_string_data_column(get_struct_field_column(c_struct, "c1"));
         }
     }
     EXPECT_EQ(100, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestDisableNestedDictCodeOptimization) {
+    const auto old_config = config::parquet_nested_dict_code_optimization_enable;
+    config::parquet_nested_dict_code_optimization_enable = false;
+    DeferOp defer([&]() { config::parquet_nested_dict_code_optimization_enable = old_config; });
+
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    std::vector<std::string> subfield_path({"c_struct", "c0"});
+    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
+                                                    &ctx->conjunct_ctxs_by_slot[3]);
+    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(file_reader->_row_group_readers[0]->_column_materializer->_dict_column_indices.empty());
+    ASSERT_TRUE(file_reader->_row_group_readers[0]->_column_materializer->_dict_column_sub_field_paths.empty());
+}
+
+TEST_F(FileReaderTest, TestDisableNestedDictCodeOptimizationKeepsComplexColumnLazy) {
+    const auto old_nested_config = config::parquet_nested_dict_code_optimization_enable;
+    const auto old_late_materialization_config = config::parquet_late_materialization_enable;
+    config::parquet_nested_dict_code_optimization_enable = false;
+    config::parquet_late_materialization_enable = true;
+    DeferOp defer([&]() {
+        config::parquet_nested_dict_code_optimization_enable = old_nested_config;
+        config::parquet_late_materialization_enable = old_late_materialization_config;
+    });
+
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    // Put a predicate on another slot so that the struct columns stay lazy.
+    _create_int_conjunct_ctxs(TExprOpcode::EQ, 0, 55, &ctx->conjunct_ctxs_by_slot[0]);
+    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+
+    ASSERT_OK(file_reader->init(ctx));
+    const auto& lazy_column_indices = file_reader->_row_group_readers[0]->_column_materializer->_lazy_column_indices;
+    ASSERT_TRUE(std::find(lazy_column_indices.begin(), lazy_column_indices.end(), 3) != lazy_column_indices.end());
 }
 
 TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
