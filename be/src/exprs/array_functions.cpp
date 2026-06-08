@@ -1140,7 +1140,11 @@ Status ArrayFunctions::array_contains_generic_prepare(FunctionContext* context,
     const GlobalDictMaps& dicts = dict_state->query_global_dicts();
     auto it = dicts.find(static_cast<uint32_t>(dict_slots[0]));
     if (it == dicts.end()) {
-        return Status::OK(); // dict not available -> generic path
+        // The FE marked arg0 as dict-encoded, so it arrives as integer codes; without the
+        // dictionary we cannot resolve the constant's code and the generic (decoded) path would
+        // mis-evaluate the encoded array. A missing dict here is an inconsistent plan.
+        return Status::InternalError("array_contains: global dictionary not found for dict-encoded array slot " +
+                                     std::to_string(dict_slots[0]));
     }
     const GlobalDictMap& forward = it->second.first; // element string -> code
 
