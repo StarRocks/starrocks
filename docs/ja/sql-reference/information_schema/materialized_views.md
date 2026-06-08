@@ -44,3 +44,4 @@ description: "materialized_viewsはすべてのマテリアライズドビュー
 | REFRESH_TRIGGER                      | リフレッシュがトリガーされる方法。有効な値: `NONE` (同期マテリアライズドビュー)、`MANUAL` (REFRESH MATERIALIZED VIEW 経由のみ)、`SCHEDULED` (EVERY 間隔による定期実行)、`ON_BASE_TABLE_CHANGE` (ベーステーブルのロードまたは変更時に自動実行)。 |
 | REFRESH_POLICY                       | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
 | RESOURCE_GROUP                       | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |
+| QUERY_REWRITE_STATUS_REASON          | `QUERY_REWRITE_STATUS` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |

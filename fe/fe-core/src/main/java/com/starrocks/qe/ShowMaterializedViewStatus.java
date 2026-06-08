@@ -29,6 +29,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -83,6 +84,7 @@ public class ShowMaterializedViewStatus {
     private String refreshTrigger;
     private String refreshPolicy;
     private String resourceGroup;
+    private String queryRewriteStatusReason;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -354,8 +356,9 @@ public class ShowMaterializedViewStatus {
         status.setRows(mv.getRowCount());
         // materialized view ddl
         status.setText(mv.getMaterializedViewDdlStmt(true));
-        // rewrite status
-        status.setQueryRewriteStatus(mv.getQueryRewriteStatus());
+        // Compute once: the status/reason getters each re-run the heavy validation and can diverge.
+        MVPlanValidationResult rewriteResult = mv.getMvPlanValidationResult();
+        status.setQueryRewriteStatus(rewriteResult.getStatus().name());
         // task_name
         final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
@@ -373,6 +376,7 @@ public class ShowMaterializedViewStatus {
         status.setRefreshTrigger(mv.getRefreshTriggerString());
         status.setRefreshPolicy(mv.getRefreshPolicyString());
         status.setResourceGroup(mv.getResourceGroupString());
+        status.setQueryRewriteStatusReason(rewriteResult.getReasonCode().name());
         status.setLastJobTaskRunStatus(taskTaskStatusJob);
         return status;
     }
@@ -554,6 +558,14 @@ public class ShowMaterializedViewStatus {
 
     public void setResourceGroup(String resourceGroup) {
         this.resourceGroup = resourceGroup;
+    }
+
+    public String getQueryRewriteStatusReason() {
+        return queryRewriteStatusReason;
+    }
+
+    public void setQueryRewriteStatusReason(String queryRewriteStatusReason) {
+        this.queryRewriteStatusReason = queryRewriteStatusReason;
     }
 
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
@@ -740,6 +752,7 @@ public class ShowMaterializedViewStatus {
         status.setRefresh_trigger(Strings.nullToEmpty(this.refreshTrigger));
         status.setRefresh_policy(Strings.nullToEmpty(this.refreshPolicy));
         status.setResource_group(Strings.nullToEmpty(this.resourceGroup));
+        status.setQuery_rewrite_status_reason(Strings.nullToEmpty(this.queryRewriteStatusReason));
 
         return status;
     }
@@ -820,6 +833,7 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, Strings.nullToEmpty(refreshTrigger));
         addField(resultRow, Strings.nullToEmpty(refreshPolicy));
         addField(resultRow, Strings.nullToEmpty(resourceGroup));
+        addField(resultRow, Strings.nullToEmpty(queryRewriteStatusReason));
 
         return resultRow;
     }
