@@ -38,6 +38,7 @@ set(COLUMN_TEST_FILES
     datum_convert_core_test.cpp
     column_helper_time_core_test.cpp
     json_converter_core_test.cpp
+    adaptive_offsets_test.cpp
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
