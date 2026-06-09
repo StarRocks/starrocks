@@ -779,6 +779,13 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
                         modColumn.getName());
             }
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null && baseColumn.isKey()) {
+                // backward compatibility, same as the PRIMARY KEY branch: the key set of a unique table is
+                // fixed at creation time and cannot be changed by MODIFY COLUMN, so keep an existing key
+                // column as a key column when the KEY keyword is omitted in the modify column clause.
+                modColumn.setIsKey(true);
+            }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
             }
@@ -786,6 +793,13 @@ public class SchemaChangeHandler extends AlterHandler {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
                         modColumn.getName());
+            }
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null && baseColumn.isKey()) {
+                // backward compatibility, same as the PRIMARY KEY branch: the key set of a duplicate table is
+                // fixed at creation time and cannot be changed by MODIFY COLUMN, so keep an existing key
+                // column as a key column when the KEY keyword is omitted in the modify column clause.
+                modColumn.setIsKey(true);
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
