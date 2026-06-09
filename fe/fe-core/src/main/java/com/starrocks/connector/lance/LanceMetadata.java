@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+
 public class LanceMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final Map<String, String> properties;
@@ -48,7 +50,7 @@ public class LanceMetadata implements ConnectorMetadata {
         // "table.vectors.uri" -> "s3://bucket/vectors"
         // "table.vectors.schema" -> "id:int64,embedding:fixed_size_list<float32, 128>"
         String dbName = properties.getOrDefault("database", "default");
-        Database db = new Database(10001, dbName);
+        Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName);
         addDatabase(db);
 
         for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -68,7 +70,7 @@ public class LanceMetadata implements ConnectorMetadata {
                         }
                     }
                 }
-                LanceTable table = new LanceTable(20001, tblName, columns, uri);
+                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, columns, uri);
                 addTable(dbName, table);
             }
         }

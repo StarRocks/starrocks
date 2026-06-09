@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static com.starrocks.type.BooleanType.BOOLEAN;
+import static com.starrocks.type.DateType.DATETIME;
 import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.IntegerType.BIGINT;
@@ -45,6 +46,8 @@ public class LanceMetadataTest {
         Assertions.assertEquals(FLOAT, LanceApiConverter.parseType("float32"));
         Assertions.assertEquals(DOUBLE, LanceApiConverter.parseType("float64"));
         Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("string"));
+        Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us]"));
+        Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us, tz=UTC]"));
 
         // Nested types
         Type arrayType = LanceApiConverter.parseType("list<float32>");
@@ -83,24 +86,38 @@ public class LanceMetadataTest {
         properties.put("database", "vectors_db");
         properties.put("table.users.uri", "s3://bucket/users");
         properties.put("table.users.schema",
-                "UserID:int64,embedding:fixed_size_list<float32, 128>,lance_embedding:fixed_size_list:float:128");
+                "UserID:int64,event_time:timestamp[us, tz=UTC],embedding:fixed_size_list<float32, 128>,"
+                        + "lance_embedding:fixed_size_list:float:128");
+        properties.put("table.events.uri", "s3://bucket/events");
+        properties.put("table.events.schema", "event_time:timestamp[us]");
 
         LanceMetadata metadata = new LanceMetadata("lance_catalog", properties);
         Assertions.assertTrue(metadata.listDbNames(null).contains("vectors_db"));
         Assertions.assertTrue(metadata.listTableNames(null, "vectors_db").contains("users"));
+        Assertions.assertTrue(metadata.listTableNames(null, "vectors_db").contains("events"));
 
         Table discovered = metadata.getTable(null, "vectors_db", "users");
         Assertions.assertNotNull(discovered);
         Assertions.assertTrue(discovered.isLanceTable());
         LanceTable lanceDiscovered = (LanceTable) discovered;
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getUri());
+        Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
         Assertions.assertFalse(lanceDiscovered.isSupported()); // verified unsupported in planning
+
+        Table events = metadata.getTable(null, "vectors_db", "events");
+        Assertions.assertNotNull(events);
+        Assertions.assertNotEquals(lanceDiscovered.getId(), events.getId());
+        Assertions.assertEquals("s3://bucket/events", events.getTableLocation());
 
         com.starrocks.catalog.Column userIdCol = lanceDiscovered.getColumn("UserID");
         Assertions.assertNotNull(userIdCol);
         Assertions.assertEquals(BIGINT, userIdCol.getType());
 
-        Assertions.assertEquals(3, lanceDiscovered.getColumns().size());
+        Column eventTimeCol = lanceDiscovered.getColumn("event_time");
+        Assertions.assertNotNull(eventTimeCol);
+        Assertions.assertEquals(DATETIME, eventTimeCol.getType());
+
+        Assertions.assertEquals(4, lanceDiscovered.getColumns().size());
         Column embeddingCol = lanceDiscovered.getColumn("embedding");
         Assertions.assertNotNull(embeddingCol);
         Assertions.assertTrue(embeddingCol.getType().isArrayType());

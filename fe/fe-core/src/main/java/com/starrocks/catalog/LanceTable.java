@@ -33,6 +33,11 @@ public class LanceTable extends Table {
     }
 
     @Override
+    public String getTableLocation() {
+        return uri;
+    }
+
+    @Override
     public boolean isSupported() {
         return false;
     }

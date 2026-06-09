@@ -64,7 +64,7 @@ public class LanceApiConverter {
             return VARBINARY;
         } else if (lower.equals("date") || lower.equals("date32")) {
             return DATE;
-        } else if (lower.equals("timestamp") || lower.equals("datetime")) {
+        } else if (lower.equals("timestamp") || lower.startsWith("timestamp[") || lower.equals("datetime")) {
             return DATETIME;
         }
 
@@ -107,17 +107,24 @@ public class LanceApiConverter {
 
     static List<String> splitTopLevel(String value, char delimiter) {
         ArrayList<String> parts = new ArrayList<>();
-        int bracketDepth = 0;
+        int angleBracketDepth = 0;
+        int squareBracketDepth = 0;
         StringBuilder partBuilder = new StringBuilder();
         for (int i = 0; i < value.length(); i++) {
             char ch = value.charAt(i);
             if (ch == '<') {
-                bracketDepth++;
+                angleBracketDepth++;
             }
             if (ch == '>') {
-                bracketDepth--;
+                angleBracketDepth--;
             }
-            if (ch == delimiter && bracketDepth == 0) {
+            if (ch == '[') {
+                squareBracketDepth++;
+            }
+            if (ch == ']') {
+                squareBracketDepth--;
+            }
+            if (ch == delimiter && angleBracketDepth == 0 && squareBracketDepth == 0) {
                 addPart(parts, partBuilder);
             } else {
                 partBuilder.append(ch);
@@ -144,16 +151,23 @@ public class LanceApiConverter {
     }
 
     private static int topLevelDelimiterIndex(String value, char delimiter) {
-        int bracketDepth = 0;
+        int angleBracketDepth = 0;
+        int squareBracketDepth = 0;
         for (int i = 0; i < value.length(); i++) {
             char ch = value.charAt(i);
             if (ch == '<') {
-                bracketDepth++;
+                angleBracketDepth++;
             }
             if (ch == '>') {
-                bracketDepth--;
+                angleBracketDepth--;
             }
-            if (ch == delimiter && bracketDepth == 0) {
+            if (ch == '[') {
+                squareBracketDepth++;
+            }
+            if (ch == ']') {
+                squareBracketDepth--;
+            }
+            if (ch == delimiter && angleBracketDepth == 0 && squareBracketDepth == 0) {
                 return i;
             }
         }
