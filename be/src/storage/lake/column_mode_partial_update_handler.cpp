@@ -502,16 +502,24 @@ StatusOr<std::vector<int32_t>> ColumnModePartialUpdateHandler::_read_cset_column
     std::vector<TabletColumn> cset_cols;
     cset_cols.emplace_back(std::move(cset_col));
     auto cset_tschema = TabletSchema::copy(*_rowset_ptr->tablet_schema(), cset_cols);
+    // TabletSchema::copy inherits the base schema's num_short_key_columns (e.g. 1 for the PK) but
+    // _clear_columns leaves only the single non-key "__cset__" column (num_key_columns becomes 0).
+    // Opening a Segment with that inconsistency (1 short key over 0 key columns) is unsafe, so pin
+    // it to 0 -- mirroring Segment::new_sparse_dcg_segment, which builds its reserved-uid read
+    // schema with num_short_key_columns(0).
+    cset_tschema->set_num_short_key_columns(0);
     Schema cset_schema = ChunkHelper::convert_schema(cset_tschema);
 
     OlapReaderStatistics stats;
-    // Pass cset_tschema as the read-schema override: "__cset__" is NOT in the rowset's base schema,
-    // so the segment iterator must resolve the (single) output column against this 1-column schema
-    // (cid 0 -> __cset__ SMALLINT, uid kCsetReservedColumnUid). Without it the iterator resolves cid 0
-    // against the base schema (the BIGINT key column) and a wrong-width decoder corrupts the SMALLINT
-    // destination chunk -> deterministic CN crash at apply (and crash-loop on republish).
+    // Read "__cset__" via a cache-bypassing open bound to cset_tschema. "__cset__" is NOT in the
+    // rowset's base schema, so (a) the iterator must resolve the single output column against this
+    // 1-column schema (cid 0 -> __cset__ SMALLINT, uid kCsetReservedColumnUid), and (b) the segment
+    // must be OPENED with cset_tschema so Segment::_create_column_readers builds a reader for the
+    // reserved-uid footer column. The metacache already holds a base-schema Segment for this .upt
+    // path (loaded earlier in apply), which has no reader for "__cset__"; a plain
+    // get_each_segment_iterator would reuse it and fail with "nonexistent column(__cset__)".
     ASSIGN_OR_RETURN(auto segment_iters,
-                     _rowset_ptr->get_each_segment_iterator(cset_schema, true, &stats, cset_tschema));
+                     _rowset_ptr->get_each_segment_iterator_with_schema(cset_schema, cset_tschema, true, &stats));
     if (upt_id >= segment_iters.size()) {
         return Status::InternalError(
                 fmt::format("ColumnModePartialUpdateHandler: upt_id {} out of range ({} segments) reading `{}`", upt_id,

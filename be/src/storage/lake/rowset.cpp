@@ -478,6 +478,56 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     return seg_iterators;
 }
 
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_schema(
+        const Schema& schema, const TabletSchemaCSPtr& segment_schema, bool file_data_cache,
+        OlapReaderStatistics* stats) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_with_schema_us");
+    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
+    LakeIOOptions lake_io_opts{.fill_data_cache = file_data_cache, .fill_metadata_cache = file_data_cache};
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    seg_options.stats = stats;
+    seg_options.lake_io_opts = lake_io_opts;
+    // The read |schema| carries the reserved-uid synthetic column at cid 0; resolve descriptors
+    // against |segment_schema| (the same schema each one-off Segment below is opened with).
+    seg_options.tablet_schema = segment_schema;
+
+    std::vector<ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(metadata().segment_metas_size());
+    size_t footer_size_hint = 16 * 1024;
+    for (int index = 0; index < metadata().segment_metas_size(); index++) {
+        const auto& segment_meta = metadata().segment_metas(index);
+        const auto& seg_name = segment_meta.filename();
+        std::string segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+        FileInfo segment_info{.path = segment_path, .fs = seg_options.fs};
+        if (LIKELY(segment_meta.has_size())) {
+            segment_info.size = segment_meta.size();
+        }
+        if (segment_meta.has_bundle_file_offset()) {
+            segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
+        }
+        if (segment_meta.has_encryption_meta()) {
+            segment_info.encryption_meta = segment_meta.encryption_meta();
+        }
+        // Cache-bypassing one-off open bound to |segment_schema| so Segment::_create_column_readers
+        // builds a reader for the reserved-uid footer column. _tablet_mgr->load_segment() would
+        // instead return the metacache's base-schema Segment for this path (reader-less for it).
+        ASSIGN_OR_RETURN(auto seg_ptr,
+                         Segment::open(seg_options.fs, segment_info, get_segment_idx(metadata(), index), segment_schema,
+                                       &footer_size_hint, nullptr, lake_io_opts, _tablet_mgr));
+        seg_options.tablet_range = std::nullopt;
+        auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            continue;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+        seg_iterators.push_back(std::move(res).value());
+    }
+    return seg_iterators;
+}
+
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
