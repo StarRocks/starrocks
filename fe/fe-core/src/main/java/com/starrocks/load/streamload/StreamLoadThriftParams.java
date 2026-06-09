@@ -144,6 +144,16 @@ public class StreamLoadThriftParams implements StreamLoadParams {
     }
 
     @Override
+    public Optional<Boolean> isFlexiblePartialUpdate() {
+        // SDCG flexible partial update bit, carried on the thrift request by the BE stream-load
+        // handler (partial_update_mode=flexible header). Without this override the thrift path
+        // inherits the StreamLoadParams default (Optional.empty()) and FE silently degrades a
+        // flexible load to a homogeneous union partial update.
+        return request.isSetFlexible_partial_update() ? Optional.of(request.isFlexible_partial_update())
+                                                       : Optional.empty();
+    }
+
+    @Override
     public Optional<String> getPayloadCompressionType() {
         return request.isSetPayload_compression_type() ?
                 Optional.ofNullable(request.getPayload_compression_type()) : Optional.empty();
