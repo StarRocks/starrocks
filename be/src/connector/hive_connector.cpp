@@ -319,8 +319,8 @@ Status HiveDataSource::_init_partition_values() {
     // must live and close within the fragment scope — they cannot be shared from the
     // (query-scoped) HdfsPartitionDescriptor.
     const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
-    RETURN_IF_ERROR(
-            ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_filter.values, _runtime_state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_filter.values,
+                                                   _runtime_state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_partition_filter.values, _runtime_state));
     RETURN_IF_ERROR(ExprExecutor::open(_partition_filter.values, _runtime_state));
 
@@ -339,13 +339,13 @@ Status HiveDataSource::_init_partition_values() {
         std::vector<ExprContext*> ctxs;
         for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
             if (_conjuncts.by_slot.find(slotId) != _conjuncts.by_slot.end()) {
-                ctxs.insert(ctxs.end(), _conjuncts.by_slot.at(slotId).begin(),
-                            _conjuncts.by_slot.at(slotId).end());
+                ctxs.insert(ctxs.end(), _conjuncts.by_slot.at(slotId).begin(), _conjuncts.by_slot.at(slotId).end());
             }
         }
         RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, partition_chunk.get()));
     } else if (_partition_filter.has_conjuncts) {
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_partition_filter.conjunct_ctxs, partition_chunk.get()));
+        RETURN_IF_ERROR(
+                ChunkPredicateEvaluator::eval_conjuncts(_partition_filter.conjunct_ctxs, partition_chunk.get()));
     }
 
     if (!partition_chunk->has_rows()) {
@@ -895,11 +895,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        _options.parquet_page_index_enable =
-                config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
-                                                            ? state->query_options().enable_parquet_reader_page_index
-                                                            : true
-                                                  : false;
+        _options.parquet_page_index_enable = config::parquet_page_index_enable
+                                                     ? state->query_options().__isset.enable_parquet_reader_page_index
+                                                               ? state->query_options().enable_parquet_reader_page_index
+                                                               : true
+                                                     : false;
         _options.parquet_bloom_filter_enable =
                 config::parquet_reader_bloom_filter_enable
                         ? state->query_options().__isset.enable_parquet_reader_bloom_filter

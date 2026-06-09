@@ -402,7 +402,8 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
-                                          _scanner_ctx.options->case_sensitive, _scanner_ctx.options->orc_use_column_names);
+                                          _scanner_ctx.options->case_sensitive,
+                                          _scanner_ctx.options->orc_use_column_names);
     RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -587,8 +588,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     // row-level pass is still required for correctness.
     if (rows_read > 0 && !_scanner_params.conjuncts->scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(
-                ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts->scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts->scanner_ctxs, chunk->get()));
         rows_read = (*chunk)->num_rows();
     }
 

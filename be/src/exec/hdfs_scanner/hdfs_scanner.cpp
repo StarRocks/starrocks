@@ -302,8 +302,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         // cannot handle them internally (Text, Avro, JSON, JNI).  ORC and Parquet
         // evaluate them inside do_get_next() after all columns are materialised and
         // return true from scanner_handles_multi_slot_conjuncts_internally().
-        if (!scanner_handles_multi_slot_conjuncts_internally() &&
-            !_scanner_params.conjuncts->scanner_ctxs.empty()) {
+        if (!scanner_handles_multi_slot_conjuncts_internally() && !_scanner_params.conjuncts->scanner_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(
                     ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts->scanner_ctxs, (*chunk).get()));
