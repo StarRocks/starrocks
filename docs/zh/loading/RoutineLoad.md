@@ -369,6 +369,69 @@ FROM KAFKA
   >
   > 如果一条 Avro record 中字段的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 `COLUMNS` 。
 
+- 原生 Avro Reader（`STRUCT`/`MAP` 和逻辑类型）
+
+  默认情况下，Routine Load 使用旧版 Avro Reader，将 `record`/`map` 字段作为 JSON 字符串导入，并将 Avro 逻辑类型（`date`、`timestamp`、`decimal`）作为原始整数/字节读取。
+
+  在 `PROPERTIES` 中设置 `"avro.use_native_reader" = "true"` 可改用原生 Reader：
+
+  - `record` 导入为 `STRUCT` 列，`map` 导入为 `MAP` 列（不再是 JSON）。
+  - 解析 Avro 逻辑类型：`date` → `DATE`，`timestamp-millis`/`timestamp-micros` → `DATETIME`（按作业时区转换），`decimal(precision, scale)` → `DECIMAL(precision, scale)`。
+
+  该属性按作业设置。未指定时，由 FE 配置项 `enable_routine_load_native_avro_reader`（默认 `false`）决定使用哪个 Reader。Reader 的选择在作业创建时确定，之后修改该配置项仅影响新创建的作业，已有作业保持原有 Reader。
+
+  例如，以下 Avro schema 包含嵌套 `record` 字段 `event`、`map` 字段 `tags`、逻辑类型 `date` 字段 `d` 和逻辑类型 `decimal` 字段 `amount`：
+
+  ```JSON
+  {
+      "type": "record",
+      "name": "Event",
+      "fields": [
+          {"name": "id", "type": "long"},
+          {"name": "event", "type": {
+              "type": "record",
+              "name": "EventInfo",
+              "fields": [
+                  {"name": "name", "type": "string"},
+                  {"name": "code", "type": "int"}
+              ]
+          }},
+          {"name": "tags", "type": {"type": "map", "values": "long"}},
+          {"name": "d", "type": {"type": "int", "logicalType": "date"}},
+          {"name": "amount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 18, "scale": 4}}
+      ]
+  }
+  ```
+
+  创建对应的表，并使用原生 Reader 导入：
+
+  ```SQL
+  CREATE TABLE example_db.events (
+      id           BIGINT,
+      event        STRUCT<name VARCHAR(64), code INT>,
+      tags         MAP<VARCHAR(64), BIGINT>,
+      d            DATE,
+      amount       DECIMAL(18, 4)
+  )
+  ENGINE = OLAP
+  DUPLICATE KEY(id)
+  DISTRIBUTED BY HASH(id);
+
+  CREATE ROUTINE LOAD example_db.events_load_job ON events
+  PROPERTIES
+  (
+      "format" = "avro",
+      "avro.use_native_reader" = "true"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+      "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",
+      "kafka_topic" = "topic_events",
+      "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+  );
+  ```
+
 提交导入作业后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
 
 #### 数据类型映射
@@ -392,12 +455,22 @@ StarRocks 支持导入所有类型的 Avro 数据。导入 Avro 数据至 StarRo
 
 | Avro           |StarRocks                                        |
 | -------------- | ------------------------------------------------ |
-| record         | 将 RECORD 类型的字段或者其子字段中作为 JSON 导入 |
+| record         | 旧版 Reader：将 RECORD 类型的字段或者其子字段中作为 JSON 导入。原生 Reader（`avro.use_native_reader = true`）：`STRUCT`。 |
 | enums          | STRING                                           |
 | arrays         | ARRAY                                            |
-| maps           | JSON                                             |
+| maps           | 旧版 Reader：JSON。原生 Reader：`MAP`。          |
 | union(T, null) | NULLABE(T)                                       |
 | fixed          | STRING                                           |
+
+**逻辑类型**
+
+原生 Reader（`avro.use_native_reader = true`）还会解析 Avro 逻辑类型。旧版 Reader 将其作为底层原始类型（raw int/long/bytes）导入。
+
+| Avro 逻辑类型                | StarRocks（原生 Reader）  |
+| ---------------------------- | ------------------------- |
+| date                         | DATE                      |
+| timestamp-millis / -micros   | DATETIME                  |
+| decimal(precision, scale)    | DECIMAL(precision, scale) |
 
 #### 使用限制
 

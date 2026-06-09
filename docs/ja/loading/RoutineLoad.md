@@ -383,6 +383,69 @@ FROM KAFKA
   >
   > Avro レコードのフィールドの名前と数が StarRocks テーブルのカラムと完全に一致する場合、`COLUMNS` パラメータを指定する必要はありません。
 
+- ネイティブ Avro リーダー（`STRUCT`/`MAP` と論理型）
+
+  デフォルトでは、Routine Load は従来の Avro リーダーを使用し、`record`/`map` フィールドを JSON 文字列としてロードし、Avro の論理型（`date`、`timestamp`、`decimal`）を生の整数/バイトとして読み取ります。
+
+  `PROPERTIES` に `"avro.use_native_reader" = "true"` を設定すると、代わりにネイティブリーダーを使用します:
+
+  - `record` は `STRUCT` カラムに、`map` は `MAP` カラムにロードされます（JSON ではなく）。
+  - Avro の論理型が解釈されます: `date` → `DATE`、`timestamp-millis`/`timestamp-micros` → `DATETIME`（ジョブのタイムゾーンで変換）、`decimal(precision, scale)` → `DECIMAL(precision, scale)`。
+
+  このプロパティはジョブごとに設定します。指定しない場合、FE 設定項目 `enable_routine_load_native_avro_reader`（デフォルト `false`）がどちらのリーダーを使用するかを決定します。リーダーの選択はジョブ作成時に確定するため、後で設定項目を変更しても新規作成されるジョブにのみ影響し、既存のジョブは元のリーダーを使用し続けます。
+
+  例えば、ネストされた `record` フィールド `event`、`map` フィールド `tags`、論理型 `date` フィールド `d`、論理型 `decimal` フィールド `amount` を持つ次の Avro スキーマの場合:
+
+  ```JSON
+  {
+      "type": "record",
+      "name": "Event",
+      "fields": [
+          {"name": "id", "type": "long"},
+          {"name": "event", "type": {
+              "type": "record",
+              "name": "EventInfo",
+              "fields": [
+                  {"name": "name", "type": "string"},
+                  {"name": "code", "type": "int"}
+              ]
+          }},
+          {"name": "tags", "type": {"type": "map", "values": "long"}},
+          {"name": "d", "type": {"type": "int", "logicalType": "date"}},
+          {"name": "amount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 18, "scale": 4}}
+      ]
+  }
+  ```
+
+  対応するテーブルを作成し、ネイティブリーダーでロードします:
+
+  ```SQL
+  CREATE TABLE example_db.events (
+      id           BIGINT,
+      event        STRUCT<name VARCHAR(64), code INT>,
+      tags         MAP<VARCHAR(64), BIGINT>,
+      d            DATE,
+      amount       DECIMAL(18, 4)
+  )
+  ENGINE = OLAP
+  DUPLICATE KEY(id)
+  DISTRIBUTED BY HASH(id);
+
+  CREATE ROUTINE LOAD example_db.events_load_job ON events
+  PROPERTIES
+  (
+      "format" = "avro",
+      "avro.use_native_reader" = "true"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+      "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",
+      "kafka_topic" = "topic_events",
+      "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+  );
+  ```
+
 ロードジョブを送信した後、[SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) ステートメントを実行して、ロードジョブのステータスを確認できます。
 
 #### データ型のマッピング
@@ -406,12 +469,22 @@ FROM KAFKA
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | RECORD 全体またはそのサブフィールドを JSON として StarRocks にロードします。 |
+| record         | 従来のリーダー: RECORD 全体またはそのサブフィールドを JSON として StarRocks にロードします。ネイティブリーダー（`avro.use_native_reader = true`）: `STRUCT`。 |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | 従来のリーダー: JSON。ネイティブリーダー: `MAP`。            |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
+
+##### 論理型
+
+ネイティブリーダー（`avro.use_native_reader = true`）は Avro の論理型も解釈します。従来のリーダーはそれらを基になるプリミティブ型（生の int/long/bytes）としてロードします。
+
+| Avro 論理型                  | StarRocks（ネイティブリーダー） |
+| ---------------------------- | ------------------------- |
+| date                         | DATE                      |
+| timestamp-millis / -micros   | DATETIME                  |
+| decimal(precision, scale)    | DECIMAL(precision, scale) |
 
 #### 制限事項
 

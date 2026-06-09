@@ -889,6 +889,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ルーチンロード Kafka パーティションオフセットラグメトリックを収集するかどうか。この項目を `true` に設定すると、Kafka API が呼び出されてパーティションの最新オフセットが取得されることに注意してください。
 - 導入時期：-
 
+### `enable_routine_load_native_avro_reader`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`avro.use_native_reader` プロパティが設定されていない Routine Load ジョブが既定で使用する Avro リーダー。`true` の場合、該当するジョブはネイティブ（avrocpp）リーダーを使用し、Avro の `record`/`map` フィールドを `STRUCT`/`MAP` カラムとしてロードし、Avro の論理型（`date` → DATE、`timestamp` → DATETIME、`decimal` → DECIMAL）を解釈します。`false` の場合は従来のリーダーを使用します。リーダーの選択はジョブ作成時に確定するため、この項目を変更しても新規作成されるジョブにのみ影響し、既存のジョブには影響しません。
+- 導入時期：-
+
 ### `enable_sync_publish`
 
 - デフォルト：true

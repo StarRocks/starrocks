@@ -889,6 +889,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否收集 Routine Load Kafka 分区偏移量滞后指标。请注意，将此项设置为 `true` 将调用 Kafka API 以获取分区的最新偏移量。
 - 引入版本: -
 
+### `enable_routine_load_native_avro_reader`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 未设置 `avro.use_native_reader` 属性的 Routine Load 作业默认使用的 Avro Reader。设置为 `true` 时，此类作业使用原生（avrocpp）Reader，将 Avro `record`/`map` 字段导入为 `STRUCT`/`MAP` 列，并解析 Avro 逻辑类型（`date` → DATE，`timestamp` → DATETIME，`decimal` → DECIMAL）；设置为 `false` 时使用旧版 Reader。Reader 的选择在作业创建时确定，因此修改该配置项仅影响新创建的作业，不影响已有作业。
+- 引入版本: -
+
 ### `enable_sync_publish`
 
 - 默认值: true
