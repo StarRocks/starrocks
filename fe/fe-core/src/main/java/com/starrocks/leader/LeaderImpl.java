@@ -480,8 +480,11 @@ public class LeaderImpl {
             long backendId = task.getBackendId();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
+                // Only this single known table's indexMeta is touched, so take a table-scoped
+                // intensive READ lock instead of a full DB lock. This matches the send path
+                // (ReportHandler) and lets DDL/ALTER on unrelated tables in the same DB proceed.
                 Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
+                locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
@@ -492,7 +495,7 @@ public class LeaderImpl {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 }
             }
         } finally {
