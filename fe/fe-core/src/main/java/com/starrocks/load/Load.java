@@ -1165,6 +1165,8 @@ public class Load {
                 return TFileFormatType.FORMAT_JSON;
             } else if (fileFormat.toLowerCase().equals("avro")) {
                 return TFileFormatType.FORMAT_AVRO;
+            } else if (fileFormat.toLowerCase().equals("arrow")) {
+                return TFileFormatType.FORMAT_ARROW;
             }
             // Attention: The compression type of csv format is from the suffix of filename.
         }
@@ -1174,6 +1176,8 @@ public class Load {
             return TFileFormatType.FORMAT_PARQUET;
         } else if (lowerCasePath.endsWith(".orc")) {
             return TFileFormatType.FORMAT_ORC;
+        } else if (lowerCasePath.endsWith(".arrow") || lowerCasePath.endsWith(".ipc")) {
+            return TFileFormatType.FORMAT_ARROW;
         } else if (lowerCasePath.endsWith(".gz")) {
             return TFileFormatType.FORMAT_CSV_GZ;
         } else if (lowerCasePath.endsWith(".bz2")) {
