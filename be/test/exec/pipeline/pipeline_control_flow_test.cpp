@@ -717,7 +717,6 @@ struct SpillDriverTestHarness {
         fragment_ctx.set_fragment_instance_id(generate_uuid());
         auto runtime_state = std::make_shared<RuntimeState>(TQueryGlobals{});
         runtime_state->set_query_execution_services(&query_execution_services);
-        runtime_state->set_query_ctx(&query_ctx);
         runtime_state->set_query_runtime_state(&query_ctx.query_runtime_state());
         runtime_state->set_fragment_ctx(&fragment_ctx);
         runtime_state->init_mem_trackers(query_ctx.mem_tracker());
