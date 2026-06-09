@@ -2759,6 +2759,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 newProperties.putAll(properties);
                 newFlatJsonConfig.buildFromProperties(newProperties);
                 newFlatJsonConfig.setVersion(olapTable.getFlatJsonConfig().getVersion());
+                // Re-validate after rebasing onto the (possibly concurrently-modified) current
+                // config: a factor change must not be silently merged onto a now-disabled config,
+                // which would persist an invalid disabled-with-factor state (the factor is dropped
+                // by toProperties() while disabled, diverging in-memory vs replay/failover).
+                if (!newFlatJsonConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+                }
             }
             newFlatJsonConfig.incVersion();
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
