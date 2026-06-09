@@ -108,6 +108,22 @@ public class MergeIntoAnalyzerIcebergTest {
     }
 
     @Test
+    public void testMergeUpdateLastAssignmentWinsOverridesDefault() {
+        // last-assignment-wins (matches StarRocks native OLAP UPDATE and MySQL's
+        // left-to-right rule, documented on getMatchedColumnValue): "SET data =
+        // DEFAULT, data = s.data" is valid because the surviving final
+        // assignment is `s.data`. Iceberg V2's DEFAULT rejection must only fire
+        // on the surviving expr, not on overwritten earlier ones.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'x' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = DEFAULT, data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+        assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertNotNull(stmt.getQueryStatement());
+    }
+
+    @Test
     public void testMergeRejectsDefaultInUpdate() {
         // Iceberg V2 has no supported column defaults; ExpressionAnalyzer types
         // DefaultValueExpr as varchar so the placeholder otherwise rides into the

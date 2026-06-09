@@ -106,15 +106,6 @@ public class MergeIntoAnalyzer {
             if (clause instanceof MergeWhenMatchedUpdateClause updateClause) {
                 Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
                 for (ColumnAssignment assign : updateClause.getAssignments()) {
-                    // Iceberg V2 has no supported column defaults (initial-default /
-                    // write-default are V3 features); ExpressionAnalyzer types
-                    // DefaultValueExpr as varchar, which silently corrupts the cast
-                    // on commit. Mirror UpdateAnalyzer.analyzeIcebergTable and reject
-                    // up front.
-                    if (assign.getExpr() instanceof DefaultValueExpr) {
-                        throw new SemanticException(
-                                "DEFAULT value is not supported for Iceberg V2 tables");
-                    }
                     assignmentByColName.put(assign.getColumn().toLowerCase(), assign);
                 }
                 // Reject partition column updates
@@ -124,8 +115,14 @@ public class MergeIntoAnalyzer {
                                 "MERGE INTO does not support updating partition column: " + partitionCol.getName());
                     }
                 }
-                // Validate assignment columns exist and are writable
-                for (String colName : assignmentByColName.keySet()) {
+                // Validate the surviving (last-assignment-wins) per-column assignment:
+                // column must exist, must not be hidden, and Iceberg V2 has no
+                // supported defaults. Iterating the map (not updateClause's original
+                // list) is intentional — "SET col = DEFAULT, col = expr" must pass
+                // because only the final expr is written, matching the last-wins
+                // semantics documented on getMatchedColumnValue below.
+                for (Map.Entry<String, ColumnAssignment> entry : assignmentByColName.entrySet()) {
+                    String colName = entry.getKey();
                     Column col = icebergTable.getColumn(colName);
                     if (col == null) {
                         throw new SemanticException("table '%s' does not have column '%s'",
@@ -133,6 +130,10 @@ public class MergeIntoAnalyzer {
                     }
                     if (col.isHidden()) {
                         throw new SemanticException("Updating metadata column '%s' is not allowed", colName);
+                    }
+                    if (entry.getValue().getExpr() instanceof DefaultValueExpr) {
+                        throw new SemanticException(
+                                "DEFAULT value is not supported for Iceberg V2 tables");
                     }
                 }
             }
