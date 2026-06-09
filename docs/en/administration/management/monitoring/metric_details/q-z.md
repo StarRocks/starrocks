@@ -68,6 +68,21 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 ## `readable_blocks_total (Deprecated)`
 
+## `recycle_bin_database_num`
+
+- Unit: Count
+- Description: Number of databases currently held in the FE catalog recycle bin.
+
+## `recycle_bin_partition_num`
+
+- Unit: Count
+- Description: Number of partitions currently held in the FE catalog recycle bin.
+
+## `recycle_bin_table_num`
+
+- Unit: Count
+- Description: Number of tables currently held in the FE catalog recycle bin.
+
 ## `resource_group_bigquery_count`
 
 - Unit: Count
