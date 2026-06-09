@@ -30,6 +30,63 @@
 
 namespace starrocks {
 
+namespace {
+
+class StarRocksArrowInputStream : public arrow::io::InputStream {
+public:
+    StarRocksArrowInputStream(RuntimeState* state, std::shared_ptr<SequentialFile> file)
+            : _state(state), _file(std::move(file)), _pos(0), _closed(false) {}
+
+    ~StarRocksArrowInputStream() override = default;
+
+    arrow::Result<int64_t> Read(int64_t nbytes, void* out) override {
+        if (_closed) {
+            return arrow::Status::Invalid("stream is closed");
+        }
+        auto res = _file->read(out, nbytes);
+        if (!res.ok()) {
+            return arrow::Status::IOError(res.status().to_string());
+        }
+        int64_t bytes_read = res.value();
+        _pos += bytes_read;
+        if (_state != nullptr) {
+            _state->update_num_bytes_scan_from_source(bytes_read);
+        }
+        return bytes_read;
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+        ARROW_ASSIGN_OR_RAISE(auto buf, arrow::AllocateResizableBuffer(nbytes));
+        ARROW_ASSIGN_OR_RAISE(auto bytes_read, Read(nbytes, buf->mutable_data()));
+        if (bytes_read < nbytes) {
+            ARROW_RETURN_NOT_OK(buf->Resize(bytes_read));
+        }
+        return std::shared_ptr<arrow::Buffer>(std::move(buf));
+    }
+
+    arrow::Result<int64_t> Tell() const override {
+        if (_closed) {
+            return arrow::Status::Invalid("stream is closed");
+        }
+        return _pos;
+    }
+
+    arrow::Status Close() override {
+        _closed = true;
+        return arrow::Status::OK();
+    }
+
+    bool closed() const override { return _closed; }
+
+private:
+    RuntimeState* _state;
+    std::shared_ptr<SequentialFile> _file;
+    int64_t _pos;
+    bool _closed;
+};
+
+} // namespace
+
 ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                            ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only),
@@ -75,57 +132,16 @@ Status ArrowScanner::open_next_reader() {
         return Status::EndOfFile("no more files to read");
     }
     const auto& range_desc = _scan_range.ranges[_next_file++];
-    
+
     std::shared_ptr<SequentialFile> file;
     RETURN_IF_ERROR(create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file));
-    
-    class StarRocksArrowInputStream : public arrow::io::InputStream {
-    public:
-        StarRocksArrowInputStream(std::shared_ptr<SequentialFile> file) : _file(std::move(file)), _pos(0) {}
-        
-        ~StarRocksArrowInputStream() override = default;
-        
-        arrow::Result<int64_t> Read(int64_t nbytes, void* out) override {
-            auto res = _file->read(out, nbytes);
-            if (!res.ok()) {
-                return arrow::Status::IOError(res.status().to_string());
-            }
-            _pos += res.value();
-            return res.value();
-        }
-        
-        arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
-            ARROW_ASSIGN_OR_RAISE(auto buf, arrow::AllocateResizableBuffer(nbytes));
-            ARROW_ASSIGN_OR_RAISE(auto bytes_read, Read(nbytes, buf->mutable_data()));
-            if (bytes_read < nbytes) {
-                ARROW_RETURN_NOT_OK(buf->Resize(bytes_read));
-            }
-            return std::shared_ptr<arrow::Buffer>(std::move(buf));
-        }
-        
-        arrow::Result<int64_t> Tell() const override {
-            return _pos;
-        }
-        
-        arrow::Status Close() override {
-            return arrow::Status::OK();
-        }
-        
-        bool closed() const override {
-            return false;
-        }
-        
-    private:
-        std::shared_ptr<SequentialFile> _file;
-        int64_t _pos;
-    };
-    
-    auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(std::move(file));
+
+    auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(_state, std::move(file));
     auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(arrow_stream);
     if (!reader_res.ok()) {
         return Status::InternalError("open RecordBatchStreamReader failed, reason: " + reader_res.status().ToString());
     }
-    
+
     _curr_file_reader = reader_res.ValueOrDie();
     _conv_ctx.current_file = range_desc.path;
     return Status::OK();
