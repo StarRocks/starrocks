@@ -21,6 +21,10 @@
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
+#include "common/config_primary_key_fwd.h"
+#include "fs/fs.h"
+#include "runtime/descriptors.h"
+#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
@@ -197,6 +201,51 @@ protected:
         for (auto& k : keys) {
             out_keys->emplace_back(std::move(k));
         }
+    }
+
+    // --- Helpers for load_dels tests. ---
+    // A single-VARCHAR-key PK schema is used so the keys round-trip through a BinaryColumn and
+    // extract_keys() takes the binary branch (no _key_size init, which only load_from_lake_tablet does).
+
+    std::shared_ptr<TabletSchema> make_varchar_pk_schema() {
+        TabletSchemaPB pb;
+        pb.set_keys_type(PRIMARY_KEYS);
+        pb.set_num_short_key_columns(1);
+        pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        auto* c0 = pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("pk");
+        c0->set_type("VARCHAR");
+        c0->set_length(128);
+        c0->set_index_length(128);
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        auto* c1 = pb.add_column();
+        c1->set_unique_id(1);
+        c1->set_name("v");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        return std::make_shared<TabletSchema>(pb);
+    }
+
+    // Serialize `keys` as a BinaryColumn and write it as a del file at del_location(tablet_id, name),
+    // matching what load_dels' read_one() expects to deserialize.
+    void write_binary_del_file(int64_t tablet_id, const std::string& name, const std::vector<std::string>& keys) {
+        auto col = BinaryColumn::create();
+        for (const auto& k : keys) {
+            col->append(Slice(k));
+        }
+        const int64_t max_size = serde::ColumnArraySerde::max_serialized_size(*col);
+        std::vector<uint8_t> buffer(max_size);
+        ASSIGN_OR_ABORT(auto* end, serde::ColumnArraySerde::serialize(*col, buffer.data()));
+        const size_t used = end - buffer.data();
+        auto path = _tablet_mgr->del_location(tablet_id, name);
+        WritableFileOptions opts;
+        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE; // tests rewrite the same del path across runs
+        ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(opts, path));
+        ASSERT_OK(wf->append(Slice(reinterpret_cast<const char*>(buffer.data()), used)));
+        ASSERT_OK(wf->close());
     }
 };
 
@@ -1381,6 +1430,142 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_seri
                 << "key " << keys[i] << " missing after parallel rebuild";
         EXPECT_EQ(serial_values[i].get_value(), parallel_values[i].get_value())
                 << "parallel vs serial mismatch for key " << keys[i];
+    }
+}
+
+// A del file that did NOT originate from the rebuilt rowset must run get()+filter and drop deletes
+// that are too old for the current index entry. too_old = origin_rowset_id + op_offset: keys whose
+// current rssid (value >> 32) is <= too_old get erased; keys with a newer rssid keep their value.
+TEST_F(LakePersistentIndexTest, test_load_dels_non_origin_filters_stale_deletes) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    std::vector<std::string> keys = {"k0", "k1", "k2", "k3"};
+    std::vector<uint32_t> rssids = {5, 5, 50, 50};
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        key_slices.emplace_back(keys[i]);
+        values.emplace_back(((uint64_t)rssids[i] << 32) | i);
+    }
+    ASSERT_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+
+    write_binary_del_file(tablet_id, "del_nonorigin", keys);
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(999);
+    auto* d = rowset_meta.add_del_files();
+    d->set_name("del_nonorigin");
+    d->set_origin_rowset_id(20); // != rowset id -> non-origin; too_old = 20 + 0
+    d->set_op_offset(0);
+
+    auto tablet_schema = make_varchar_pk_schema();
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+    std::vector<ColumnId> pk_columns = {0};
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    ASSERT_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+
+    std::vector<IndexValue> got(keys.size());
+    ASSERT_OK(index->get(keys.size(), key_slices.data(), got.data()));
+    EXPECT_EQ(IndexValue(NullIndexValue), got[0]); // rssid 5  <= 20 -> erased
+    EXPECT_EQ(IndexValue(NullIndexValue), got[1]); // rssid 5  <= 20 -> erased
+    EXPECT_EQ(values[2], got[2]);                  // rssid 50 >  20 -> stale delete skipped
+    EXPECT_EQ(values[3], got[3]);                  // rssid 50 >  20 -> stale delete skipped
+}
+
+// Origin-skip: a del file whose origin_rowset_id == the rebuilt rowset id skips get() entirely and
+// erases every key regardless of its current rssid. Same keys/rssids as the non-origin test above,
+// but here even the rssid-50 keys (which the non-origin path keeps) are erased.
+TEST_F(LakePersistentIndexTest, test_load_dels_origin_erases_all_keys) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    std::vector<std::string> keys = {"k0", "k1", "k2", "k3"};
+    std::vector<uint32_t> rssids = {5, 5, 50, 50};
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        key_slices.emplace_back(keys[i]);
+        values.emplace_back(((uint64_t)rssids[i] << 32) | i);
+    }
+    ASSERT_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+
+    write_binary_del_file(tablet_id, "del_origin", keys);
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(777);
+    auto* d = rowset_meta.add_del_files();
+    d->set_name("del_origin");
+    d->set_origin_rowset_id(777); // == rowset id -> origin del file
+    d->set_op_offset(0);
+
+    auto tablet_schema = make_varchar_pk_schema();
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+    std::vector<ColumnId> pk_columns = {0};
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    ASSERT_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+
+    std::vector<IndexValue> got(keys.size());
+    ASSERT_OK(index->get(keys.size(), key_slices.data(), got.data()));
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_EQ(IndexValue(NullIndexValue), got[i]) << "key " << keys[i] << " should be erased by origin del";
+    }
+}
+
+// The two-phase parallel path (num_del_files > 1, parallel execution on) must produce the same index
+// as the single-pass path, including when del files share keys. Files are an origin + a non-origin del
+// that overlap on keys, exercising the idempotent-erase / shared-key reasoning in load_dels.
+TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
+    auto tablet_schema = make_varchar_pk_schema();
+    std::vector<ColumnId> pk_columns = {0};
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4", "k5"};
+    std::vector<uint32_t> rssids = {5, 50, 5, 50, 5, 50};
+
+    auto run = [&](bool parallel) {
+        ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, parallel);
+        auto tablet_id = _tablet_metadata->id();
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+        CHECK_OK(index->init(_tablet_metadata));
+
+        std::vector<Slice> key_slices;
+        std::vector<IndexValue> values;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            key_slices.emplace_back(keys[i]);
+            values.emplace_back(((uint64_t)rssids[i] << 32) | i);
+        }
+        CHECK_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+
+        // Two del files that share keys: one non-origin (filters stale deletes), one origin (erase all).
+        write_binary_del_file(tablet_id, "del_a", {"k0", "k1", "k2"});
+        write_binary_del_file(tablet_id, "del_b", {"k2", "k3", "k4", "k5"});
+        RowsetMetadataPB rowset_meta;
+        rowset_meta.set_id(888);
+        auto* da = rowset_meta.add_del_files();
+        da->set_name("del_a");
+        da->set_origin_rowset_id(20); // non-origin, too_old = 20
+        da->set_op_offset(0);
+        auto* db = rowset_meta.add_del_files();
+        db->set_name("del_b");
+        db->set_origin_rowset_id(888); // origin -> erase all of k2..k5
+        db->set_op_offset(0);
+
+        auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+        CHECK_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+
+        std::vector<IndexValue> got(keys.size());
+        CHECK_OK(index->get(keys.size(), key_slices.data(), got.data()));
+        return got;
+    };
+
+    auto serial = run(false);
+    auto parallel = run(true);
+    ASSERT_EQ(serial.size(), parallel.size());
+    for (size_t i = 0; i < serial.size(); ++i) {
+        EXPECT_EQ(serial[i], parallel[i]) << "mismatch at key " << keys[i];
     }
 }
 
