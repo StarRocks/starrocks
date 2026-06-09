@@ -46,6 +46,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"

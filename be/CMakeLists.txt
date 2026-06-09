@@ -554,6 +554,7 @@ set(STARROCKS_LINK_LIBS
     Script
     orc
     ${WL_END_GROUP}
+    ExecRuntime
     ComputeEnv
     ExecPrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
