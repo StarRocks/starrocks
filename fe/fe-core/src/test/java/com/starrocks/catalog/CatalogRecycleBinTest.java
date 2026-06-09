@@ -151,6 +151,30 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
+    public void testSizeAccessorsEmpty() {
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        Assertions.assertEquals(0, bin.getRecyclePartitionNum());
+        Assertions.assertEquals(0, bin.getRecycleTableNum());
+        Assertions.assertEquals(0, bin.getRecycleDatabaseNum());
+    }
+
+    @Test
+    public void testSizeAccessorsPopulated() throws Exception {
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        Range<PartitionKey> range =
+                Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
+                        BoundType.CLOSED,
+                        PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
+                        BoundType.CLOSED);
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
+
+        Assertions.assertEquals(1, bin.getRecyclePartitionNum());
+    }
+
+    @Test
     public void testGetPartition() throws Exception {
         FakeEditLog fakeEditLog = new FakeEditLog();
 
