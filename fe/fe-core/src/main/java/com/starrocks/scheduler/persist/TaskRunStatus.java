@@ -103,8 +103,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
+    // Runs persisted before this field existed have no recorded source and default to UNKNOWN (not a misleading CTAS).
     @SerializedName("source")
-    private Constants.TaskSource source = Constants.TaskSource.CTAS;
+    private Constants.TaskSource source = Constants.TaskSource.UNKNOWN;
 
     //////////// Variables should be volatile which can be visited by multi threads ///////////
 
