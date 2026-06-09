@@ -15,7 +15,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <starrocks.thirdparty.home>${env.STARROCKS_THIRDPARTY}</starrocks.thirdparty.home>
-        <arrow.version>24.0.0</arrow.version>
+        <arrow.version>18.0.0</arrow.version>
     </properties>
 
     <dependencies>
