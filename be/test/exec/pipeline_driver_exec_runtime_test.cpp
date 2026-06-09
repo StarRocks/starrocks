@@ -136,8 +136,8 @@ struct DriverPrepareHarness {
         runtime_state.set_fragment_runtime_state(&fragment_runtime_state);
         operators.emplace_back(source);
         operators.emplace_back(sink_factory.create(1, 0));
-        driver = std::make_unique<PipelineDriver>(operators, nullptr, &query_runtime_state, &fragment_runtime_state,
-                                                  nullptr, pipeline_event.get(), nullptr, nullptr, -1);
+        driver = std::make_unique<PipelineDriver>(operators, &query_runtime_state, &fragment_runtime_state,
+                                                  pipeline_event.get(), nullptr, nullptr, -1);
     }
 };
 

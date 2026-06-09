@@ -120,9 +120,12 @@ void GlobalDriverExecutor::_worker_thread() {
             continue;
         }
 
-        auto* fragment_ctx = driver->fragment_ctx();
-        auto* runtime_state = fragment_ctx->runtime_state();
-        auto* query_ctx = driver->query_ctx();
+        auto* runtime_state = driver->runtime_state();
+        DCHECK(runtime_state != nullptr);
+        auto* fragment_ctx = runtime_state->fragment_ctx();
+        DCHECK(fragment_ctx != nullptr);
+        auto* query_ctx = runtime_state->query_ctx();
+        DCHECK(query_ctx != nullptr);
         auto* query_runtime_state = driver->query_runtime_state();
 
         DCHECK(!driver->is_in_ready());
@@ -210,8 +213,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 status = status.clone_and_append(fmt::format("BE:{}", be_id));
                 LOG_IF(WARNING, !status.is_suppressed())
                         << "[Driver] Process error, query_id=" << print_id(query_runtime_state->query_id())
-                        << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                        << ", status=" << status;
+                        << ", instance_id=" << print_id(fragment_ctx->fragment_instance_id()) << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
                 query_ctx->cancel(status, false);
                 runtime_state->set_is_cancelled(true);
@@ -291,8 +293,12 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
     driver->start_timers();
-    if (driver->fragment_ctx()->enable_event_scheduler()) {
-        driver->fragment_ctx()->event_scheduler()->attach_queue(_driver_queue.get());
+    auto* runtime_state = driver->runtime_state();
+    DCHECK(runtime_state != nullptr);
+    auto* fragment_ctx = runtime_state->fragment_ctx();
+    DCHECK(fragment_ctx != nullptr);
+    if (fragment_ctx->enable_event_scheduler()) {
+        fragment_ctx->event_scheduler()->attach_queue(_driver_queue.get());
     }
 
     if (driver->is_precondition_block()) {

@@ -197,8 +197,8 @@ struct SimpleTestContext {
         auto operators = pipeline.create_operators(1, 0);
         auto* query_runtime_state = query_ctx == nullptr ? nullptr : &query_ctx->query_runtime_state();
         auto* fragment_runtime_state = fragment_ctx == nullptr ? nullptr : &fragment_ctx->fragment_runtime_state();
-        driver = std::make_unique<PipelineDriver>(operators, query_ctx, query_runtime_state, fragment_runtime_state,
-                                                  fragment_ctx, pipeline.pipeline_event(), &pipeline, nullptr, 1);
+        driver = std::make_unique<PipelineDriver>(operators, query_runtime_state, fragment_runtime_state,
+                                                  pipeline.pipeline_event(), &pipeline, nullptr, 1);
         driver_queue = std::make_unique<QuerySharedDriverQueue>(metrics.get_driver_queue_metrics());
         fragment_ctx->init_event_scheduler();
         fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());

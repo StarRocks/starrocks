@@ -81,7 +81,7 @@ TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
         ops_with_sink.emplace_back(factories[0]->create(100, i));
         ops_with_sink.emplace_back(factories[1]->create(100, i));
         pipeline.drivers().emplace_back(std::make_shared<PipelineDriver>(
-                ops_with_sink, nullptr, nullptr, nullptr, nullptr, pipeline.pipeline_event(), &pipeline, nullptr, -1));
+                ops_with_sink, nullptr, nullptr, pipeline.pipeline_event(), &pipeline, nullptr, -1));
     }
 
     group.add_pipeline(&pipeline);
