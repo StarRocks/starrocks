@@ -1479,52 +1479,25 @@ Status SegmentDump::dump_column_size() {
             return Status::OK();
         };
 
-        if (tablet_column.subcolumn_count() == 0) {
-            // regular column
-            read_the_segment().ok();
+        // Scan the whole column once and report a single total. For complex types
+        // (ARRAY/MAP/STRUCT) this reads every underlying stream (elements, keys/values,
+        // null flags, offsets, dictionary pages) exactly once, so the reported size is
+        // correct and free of double-counting. Previously each sub-column was scanned
+        // separately and the per-sub-column sizes summed, which over-counted the
+        // structural streams (null/offset) shared across sub-columns. The full column
+        // structure is still printed via the recursive ColumnMetaPB DebugString below.
+        read_the_segment().ok();
 
-            auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
-            auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+        auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
+        auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
 
-            fmt::print(
-                    "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
-                    "bytes: {}, rows: {}, pages: {}]\n",
-                    id, column_name, compession_desc->name(), encoding_desc->name(),
-                    stats.compressed_bytes_read_request, column_meta.total_mem_footprint(), column_meta.num_rows(),
-                    stats.io_count_request);
-            fmt::print("{}\n", column_meta.DebugString());
-
-        } else {
-            // sub columns
-            for (size_t sub_id = 0; sub_id < tablet_column.subcolumn_count(); sub_id++) {
-                auto& sub_column = tablet_column.subcolumn(sub_id);
-                std::string sub_column_name = std::string(sub_column.name());
-
-                // reset the stats
-                OlapReaderStatistics stats;
-                seg_opts.stats = &stats;
-
-                // access path
-                std::vector<ColumnAccessPathPtr> access_paths;
-                seg_opts.column_access_paths = &access_paths;
-                auto maybe_path = ColumnAccessPath::create(TAccessPathType::FIELD, "", id);
-                RETURN_IF_ERROR(maybe_path);
-                ColumnAccessPath::insert_json_path(maybe_path.value().get(), sub_column.type(), sub_column_name);
-                access_paths.emplace_back(std::move(maybe_path.value()));
-
-                // read it
-                read_the_segment().ok();
-
-                const ColumnMetaPB& sub_column_meta = column_meta.children_columns(sub_id);
-
-                fmt::print(">>>>>>>>>>>>> sub column start >>>>>>>>>>>>>>>\n");
-                fmt::print("[ column id: {} subcolumn {} {} compressed bytes: {} pages: {}]\n", id, sub_id,
-                           sub_column_name, stats.compressed_bytes_read_request, stats.io_count_request);
-                std::string meta_string = sub_column_meta.DebugString();
-                fmt::print("{}\n", meta_string);
-                fmt::print(">>>>>>>>>>>>> sub column end >>>>>>>>>>>>>>>\n");
-            }
-        }
+        fmt::print(
+                "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
+                "bytes: {}, rows: {}, pages: {}]\n",
+                id, column_name, compession_desc->name(), encoding_desc->name(),
+                stats.compressed_bytes_read_request, column_meta.total_mem_footprint(), column_meta.num_rows(),
+                stats.io_count_request);
+        fmt::print("{}\n", column_meta.DebugString());
     }
 
     return Status::OK();
