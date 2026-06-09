@@ -17,8 +17,7 @@
 #include <filesystem>
 #include <memory>
 
-#include "common/config_compaction_fwd.h"
-#include "common/config_storage_fwd.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "http/action/compaction_action.h"
