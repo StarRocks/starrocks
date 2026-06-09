@@ -14,7 +14,10 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -22,7 +25,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -82,6 +88,52 @@ public class ModifyKeyColumnKeepKeyTest {
     }
 
     /**
+     * Restoring the omitted KEY attribute must also restore the key-only constraints that
+     * {@code ColumnDefAnalyzer} would have enforced. Otherwise, because the clause is analyzed with
+     * isKey=false and {@code Column#checkSchemaChangeAllowed} only rejects nullable -> non-nullable,
+     * omitting NOT NULL on a non-nullable key column would silently relax it to nullable.
+     */
+    @Test
+    public void testModifyKeyColumnOmittingNotNullKeepsNotNull() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_keep_notnull (id int not null, name varchar(12) not null, v int not null)\n" +
+                "DUPLICATE KEY(id, name)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "properties('replication_num' = '1');");
+
+        // Omit both KEY and NOT NULL on the existing NOT NULL key column `name`.
+        starRocksAssert.alterTable(
+                "alter table t_keep_notnull modify column name varchar(20) comment 'full name'");
+        waitForSchemaChangeDone();
+
+        Column name = getColumn("t_keep_notnull", "name");
+        assertTrue(name.isKey(), "key column `name` must remain a key column");
+        assertFalse(name.isAllowNull(), "NOT NULL key column `name` must not be silently relaxed to nullable");
+    }
+
+    /**
+     * Restoring the omitted KEY attribute must re-apply the key-column type check skipped during
+     * analysis. Changing a key column to a floating-point type (a valid scalar schema change, but an
+     * invalid key type) must be rejected instead of producing a floating-point key column.
+     */
+    @Test
+    public void testModifyKeyColumnToFloatingPointTypeRejected() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_float_key (k1 int not null, k2 int not null, v int not null)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "properties('replication_num' = '1');");
+
+        Throwable exception = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable("alter table t_float_key modify column k2 double not null"));
+        String message = exception.getMessage().toLowerCase(Locale.ROOT);
+        assertTrue(message.contains("invalid data type of key column"),
+                "Expected key-type rejection in: " + exception.getMessage());
+        assertTrue(message.contains("k2"),
+                "Expected offending column name in: " + exception.getMessage());
+    }
+
+    /**
      * Even with the key-attribute restoration, a genuine aggregation-type change on
      * an AGGREGATE table value column still legitimately fails. The error message must
      * now carry context (column name + from->to) instead of the context-free original.
@@ -109,5 +161,26 @@ public class ModifyKeyColumnKeepKeyTest {
                 "Expected offending column name in: " + exception.getMessage());
         assertTrue(message.contains("sum") && message.contains("max"),
                 "Expected from->to (sum->max) in: " + exception.getMessage());
+    }
+
+    private static void waitForSchemaChangeDone() throws InterruptedException {
+        Map<Long, AlterJobV2> alterJobs =
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        for (AlterJobV2 alterJob : alterJobs.values()) {
+            int retry = 0;
+            while (!alterJob.getJobState().isFinalState() && retry++ < 120) {
+                Thread.sleep(1000);
+            }
+            assertTrue(alterJob.getJobState() == AlterJobV2.JobState.FINISHED,
+                    "schema change job did not finish: " + alterJob.getJobState());
+        }
+    }
+
+    private static Column getColumn(String tableName, String columnName) {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", tableName);
+        Column column = table.getColumn(columnName);
+        assertNotNull(column, "column `" + columnName + "` not found on table `" + tableName + "`");
+        return column;
     }
 }
