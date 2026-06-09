@@ -196,6 +196,20 @@ This topic introduces the following types of BE configurations:
 - Description: The BE HTTP server port.
 - Introduced in: -
 
+### enable_http_auth
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Introduced in: -
+- Description: When true, most external BE HTTP endpoints require HTTP Basic Auth. Credentials are verified by RPC to the FE leader using the `checkAuth` Thrift method, so the user/password store on the FE side (including LDAP / security-integration) is the source of truth. The following are exempt:
+  - Public probes / observability: `/api/health`, `/metrics`, `/metrics/memory`.
+  - Token-gated internal transport (used by FE/BE for tablet clone and load-error file fetch): `/api/_tablet/_download`, `/api/_download_load`. These remain protected by their own token check; setting `enable_http_auth=true` does **not** compensate for `enable_token_check=false`.
+  - Stream Load and transaction endpoints that authenticate inside the handler using the load label + table grants: `/api/{db}/{table}/_stream_load`, `/api/transaction/{txn_op}`, `/api/transaction/load`.
+
+  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the session — use `SET DEFAULT ROLE <roles> TO <user>;` or set `activate_all_roles_on_login=true` if the role is granted but not default. LDAP / security-integration group → role mappings activate automatically.
+
 ### be_port
 
 - Default: 9060

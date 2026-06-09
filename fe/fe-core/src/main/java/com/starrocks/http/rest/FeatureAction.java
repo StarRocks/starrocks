@@ -32,8 +32,14 @@ public class FeatureAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/v2/feature", new FeatureAction(controller));
     }
 
+    // Public endpoint: returns server version + feature flag list, no sensitive data.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         response.setContentType("application/json");
 
         RestResult result = new RestResult();

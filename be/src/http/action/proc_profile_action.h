@@ -33,6 +33,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     void _handle_list(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);

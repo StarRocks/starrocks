@@ -59,6 +59,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     Status _handle_show_compaction(HttpRequest* req, std::string* json_result);
     Status _handle_compaction(HttpRequest* req, std::string* json_result);

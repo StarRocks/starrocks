@@ -39,6 +39,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     bool _check_request(HttpRequest* req);
     void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);

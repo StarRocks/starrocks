@@ -27,10 +27,12 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "http/download_action.h"
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
@@ -111,6 +113,10 @@ protected:
     MetricRegistry _metrics{"transaction_stream_load_action_test"};
     bool _owns_platform_env = false;
 };
+
+// `need_auth() == false` for both handlers is pinned in handler_required_privilege_test.cpp
+// (BeHandlerNeedAuthTest.transaction_endpoints_skip_framework_auth). This file focuses on
+// the txn dispatch semantics under various auth/label combinations below.
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {
     TransactionManagerAction txn_action(&_env);

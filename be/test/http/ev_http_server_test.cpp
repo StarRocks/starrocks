@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -190,6 +191,150 @@ TEST_F(EvHttpServerTest, concurrent_connections_multi_worker) {
     for (auto& th : clients) th.join();
     EXPECT_EQ(N_THREADS * REQS_PER_THREAD, ok_count.load());
     EXPECT_EQ(N_THREADS * REQS_PER_THREAD, _handler->served_count.load());
+
+    server->stop();
+    server->join();
+}
+
+// --------- AuthVerifier wiring (added with the HTTP-auth framework) ---------
+//
+// The auth tests use a dedicated handler that records invocations and a
+// configurable need_auth() so we can exercise the four interesting paths:
+//   1) verifier returns nullopt          -> handler is invoked
+//   2) verifier returns AuthVerifyFailure -> handler is NOT invoked, response
+//      carries the verifier-supplied status/headers/body verbatim
+//   3) handler->need_auth() == false      -> verifier is bypassed entirely
+//   4) no verifier wired                  -> handler runs unconditionally
+class AuthProbeHandler : public HttpHandler {
+public:
+    explicit AuthProbeHandler(bool need_auth) : _need_auth(need_auth) {}
+    void handle(HttpRequest* req) override {
+        ++invocations;
+        HttpChannel::send_reply(req, "handler-ok");
+    }
+    bool need_auth() const override { return _need_auth; }
+
+    std::atomic<int> invocations{0};
+
+private:
+    bool _need_auth;
+};
+
+TEST(EvHttpServerAuthTest, verifier_returns_nullopt_dispatches_handler) {
+    auto handler = std::make_unique<AuthProbeHandler>(true);
+    auto server = std::make_unique<EvHttpServer>(0, 1);
+    server->register_handler(GET, "/probe", handler.get());
+
+    std::atomic<int> verifier_calls{0};
+    server->set_auth_verifier(
+            [&](HttpRequest*, HttpHandler::RequiredPrivilege) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+                ++verifier_calls;
+                return std::nullopt;
+            });
+
+    ASSERT_OK(server->start());
+    int port = server->get_real_port();
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/probe";
+
+    HttpClient client;
+    ASSERT_OK(client.init(url));
+    client.set_method(GET);
+    std::string resp;
+    ASSERT_OK(client.execute(&resp));
+    EXPECT_EQ("handler-ok", resp);
+    EXPECT_EQ(1, verifier_calls.load());
+    EXPECT_EQ(1, handler->invocations.load());
+
+    server->stop();
+    server->join();
+}
+
+TEST(EvHttpServerAuthTest, verifier_returns_failure_short_circuits_handler) {
+    auto handler = std::make_unique<AuthProbeHandler>(true);
+    auto server = std::make_unique<EvHttpServer>(0, 1);
+    server->register_handler(GET, "/probe", handler.get());
+
+    std::atomic<int> verifier_calls{0};
+    server->set_auth_verifier(
+            [&](HttpRequest*, HttpHandler::RequiredPrivilege) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+                ++verifier_calls;
+                EvHttpServer::AuthVerifyFailure f;
+                f.http_status = HttpStatus::UNAUTHORIZED;
+                f.www_authenticate = "Basic realm=\"\"";
+                f.body = "{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"denied\"}";
+                return f;
+            });
+
+    ASSERT_OK(server->start());
+    int port = server->get_real_port();
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/probe";
+
+    HttpClient client;
+    ASSERT_OK(client.init(url));
+    client.set_method(GET);
+    client.set_fail_on_error(false);
+    std::string resp;
+    ASSERT_OK(client.execute(&resp));
+    EXPECT_EQ("{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"denied\"}", resp);
+    EXPECT_EQ("application/json", client.get_response_content_type());
+    EXPECT_EQ(1, verifier_calls.load());
+    EXPECT_EQ(0, handler->invocations.load());
+
+    server->stop();
+    server->join();
+}
+
+TEST(EvHttpServerAuthTest, handler_need_auth_false_bypasses_verifier) {
+    auto handler = std::make_unique<AuthProbeHandler>(false);
+    auto server = std::make_unique<EvHttpServer>(0, 1);
+    server->register_handler(GET, "/probe", handler.get());
+
+    std::atomic<int> verifier_calls{0};
+    server->set_auth_verifier(
+            [&](HttpRequest*, HttpHandler::RequiredPrivilege) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+                ++verifier_calls;
+                // Verifier would reject if it ran, so seeing the handler run
+                // is a strong signal that the verifier was bypassed.
+                EvHttpServer::AuthVerifyFailure f;
+                f.http_status = HttpStatus::UNAUTHORIZED;
+                f.body = "should not be sent";
+                return f;
+            });
+
+    ASSERT_OK(server->start());
+    int port = server->get_real_port();
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/probe";
+
+    HttpClient client;
+    ASSERT_OK(client.init(url));
+    client.set_method(GET);
+    std::string resp;
+    ASSERT_OK(client.execute(&resp));
+    EXPECT_EQ("handler-ok", resp);
+    EXPECT_EQ(0, verifier_calls.load());
+    EXPECT_EQ(1, handler->invocations.load());
+
+    server->stop();
+    server->join();
+}
+
+TEST(EvHttpServerAuthTest, no_verifier_wired_runs_handler) {
+    auto handler = std::make_unique<AuthProbeHandler>(true);
+    auto server = std::make_unique<EvHttpServer>(0, 1);
+    server->register_handler(GET, "/probe", handler.get());
+    // intentionally no set_auth_verifier()
+
+    ASSERT_OK(server->start());
+    int port = server->get_real_port();
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/probe";
+
+    HttpClient client;
+    ASSERT_OK(client.init(url));
+    client.set_method(GET);
+    std::string resp;
+    ASSERT_OK(client.execute(&resp));
+    EXPECT_EQ("handler-ok", resp);
+    EXPECT_EQ(1, handler->invocations.load());
 
     server->stop();
     server->join();

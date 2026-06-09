@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
@@ -58,7 +59,7 @@ public class GetStreamLoadState extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-            throws DdlException {
+            throws DdlException, AccessDeniedException {
 
         if (redirectToLeader(request, response)) {
             return;
@@ -74,8 +75,7 @@ public class GetStreamLoadState extends RestBaseAction {
             throw new DdlException("No label selected.");
         }
 
-        // FIXME(cmy)
-        // checkReadPriv(authInfo.fullUserName, fullDbName);
+        requireDbInsertIfHttpAuthEnabled(dbName);
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {

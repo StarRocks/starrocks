@@ -54,6 +54,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    bool need_auth() const override { return false; }
+
 private:
     const GlobalEnv& _global_env;
 

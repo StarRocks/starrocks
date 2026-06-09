@@ -58,8 +58,15 @@ public class GetSmallFileAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/get_small_file", new GetSmallFileAction(controller));
     }
 
+    // Internal BE-to-FE small-file download; gated by the cluster-shared token check below.
+    // Callers (BEs) don't carry user credentials, so we must not require Basic Auth here.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String token = request.getSingleParameter("token");
         String fileIdStr = request.getSingleParameter("file_id");
 
