@@ -29,7 +29,7 @@ description: "StarRocks 3.5 release notes: Iceberg view creation, OAuth 2.0 and 
 
 ## 3.5.18
 
-Release date: May 21, 2026
+Release date: June 5, 2026
 
 ### Behavior Changes
 
