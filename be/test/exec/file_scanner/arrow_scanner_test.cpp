@@ -26,8 +26,6 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
-#include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -35,6 +33,8 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
+#include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_helper.h"
@@ -42,9 +42,9 @@
 
 namespace starrocks {
 
-#define ASSERT_ARROW_OK(status)                                                    \
-    do {                                                                           \
-        auto&& _status = (status);                                                 \
+#define ASSERT_ARROW_OK(status)                                                   \
+    do {                                                                          \
+        auto&& _status = (status);                                                \
         ASSERT_TRUE(_status.ok()) << "Arrow call failed: " << _status.ToString(); \
     } while (0)
 
@@ -111,8 +111,7 @@ protected:
     std::unique_ptr<ArrowScanner> create_arrow_scanner(
             const std::string& timezone, DescriptorTbl* desc_tbl,
             const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-            const std::vector<TBrokerRangeDesc>& ranges,
-            int32_t batch_size = 0) {
+            const std::vector<TBrokerRangeDesc>& ranges, int32_t batch_size = 0) {
         TQueryOptions query_options;
         if (batch_size > 0) {
             query_options.__set_batch_size(batch_size);
@@ -180,11 +179,8 @@ protected:
         ASSERT_ARROW_OK(str_builder.Finish(&str_array));
         ASSERT_ARROW_OK(double_builder.Finish(&double_array));
 
-        auto schema = arrow::schema({
-            arrow::field("c0_int", arrow::int32()),
-            arrow::field("c1_str", arrow::utf8()),
-            arrow::field("c2_double", arrow::float64())
-        });
+        auto schema = arrow::schema({arrow::field("c0_int", arrow::int32()), arrow::field("c1_str", arrow::utf8()),
+                                     arrow::field("c2_double", arrow::float64())});
 
         auto batch = arrow::RecordBatch::Make(schema, 5, {int_array, str_array, double_array});
 
@@ -270,11 +266,8 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMismatchAndCast) {
     ASSERT_ARROW_OK(extra_int_builder.Finish(&extra_array));
 
     // File schema contains extra column c3_extra, and cols are in different order
-    auto schema = arrow::schema({
-        arrow::field("c3_extra", arrow::int32()),
-        arrow::field("c1_str", arrow::utf8()),
-        arrow::field("c0_bigint", arrow::int32())
-    });
+    auto schema = arrow::schema({arrow::field("c3_extra", arrow::int32()), arrow::field("c1_str", arrow::utf8()),
+                                 arrow::field("c0_bigint", arrow::int32())});
 
     auto batch = arrow::RecordBatch::Make(schema, 5, {extra_array, str_array, int_array});
 
@@ -348,10 +341,7 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamNullColumnChunkBoundary) {
     ASSERT_ARROW_OK(int_builder.Finish(&int_array));
     ASSERT_ARROW_OK(str_builder.Finish(&str_array));
 
-    auto schema = arrow::schema({
-        arrow::field("c1_str", arrow::utf8()),
-        arrow::field("c0_bigint", arrow::int32())
-    });
+    auto schema = arrow::schema({arrow::field("c1_str", arrow::utf8()), arrow::field("c0_bigint", arrow::int32())});
 
     auto batch = arrow::RecordBatch::Make(schema, 5, {str_array, int_array});
 
@@ -502,8 +492,8 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamStrictModeQualityError) {
     ASSERT_NE(nullptr, exec_env);
     ASSERT_NE(nullptr, exec_env->load_path_mgr());
 
-    RuntimeState* state = _obj_pool.add(
-            new RuntimeState(TUniqueId(), query_options, query_globals, &exec_env->query_execution_services(), exec_env));
+    RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), query_options, query_globals,
+                                                         &exec_env->query_execution_services(), exec_env));
 
     DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
     state->set_desc_tbl(desc_tbl);

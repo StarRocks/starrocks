@@ -29,10 +29,10 @@
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
 #endif
-#include "exec/file_scanner/arrow_scanner.h"
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
+#include "exec/file_scanner/arrow_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"

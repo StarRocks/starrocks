@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include <arrow/api.h>
+#include <arrow/ipc/api.h>
+
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <arrow/api.h>
-#include <arrow/ipc/api.h>
 
 #include "base/string/slice.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"

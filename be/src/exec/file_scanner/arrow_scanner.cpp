@@ -216,20 +216,20 @@ Status ArrowScanner::next_batch() {
             return status;
         }
     }
-    
+
     arrow::Status status = _curr_file_reader->ReadNext(&_batch);
     if (!status.ok()) {
         return Status::InternalError("ReadNext batch failed, reason: " + status.ToString());
     }
-    
+
     if (_batch == nullptr) {
         _curr_file_reader.reset();
         return Status::EndOfFile("reach end of current file");
     }
-    
+
     _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
     _last_file_scan_rows += _batch->num_rows();
-    
+
     return Status::OK();
 }
 
