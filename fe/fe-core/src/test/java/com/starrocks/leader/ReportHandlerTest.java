@@ -699,64 +699,58 @@ public class ReportHandlerTest {
         Assertions.assertTrue(submitted.isEmpty());
     }
 
-    // Empirical reproduction of codex P2 "Revalidate rebased flat JSON properties" through the
-    // REAL updateFlatJsonConfigMeta rebase branch. We deterministically force the race interleaving:
-    //   session-2: ALTER ... SET ('flat_json.null.factor' = '0.6')   (validated while still enabled)
-    //   session-1: ALTER ... SET ('flat_json.enable' = 'false')      (commits in between)
-    // by injecting session-1's disable+version-bump exactly when session-2 takes the WRITE lock.
+    // Concurrent ALTER race: session-2 changes a factor (validated while enabled) while session-1
+    // disables flat_json. Under the write lock the change is rebased onto the now-disabled config,
+    // and the re-validation there must reject it so no disabled-with-factor state is persisted.
     @Test
     public void testConcurrentDisableRacesFactorChangeViaRebase() {
         SchemaChangeHandler sch = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = getFlatJsonTable();
 
-        // Start enabled; pick a racing factor distinct from the default so loss is detectable.
-        table.getFlatJsonConfig().setFlatJsonEnable(true);
-        double racingFactor = 0.6;
-        double defaultNullFactor = new FlatJsonConfig().getFlatJsonNullFactor();
-        Assertions.assertNotEquals(racingFactor, defaultNullFactor,
-                "racing factor must differ from default to detect loss on persist");
+        // Restore the shared fixture's config afterwards.
+        long origVersion = table.getFlatJsonConfig().getVersion();
+        boolean origEnable = table.getFlatJsonConfig().getFlatJsonEnable();
+        try {
+            table.getFlatJsonConfig().setFlatJsonEnable(true);
+            double racingFactor = 0.6;
+            double defaultNullFactor = new FlatJsonConfig().getFlatJsonNullFactor();
+            Assertions.assertNotEquals(racingFactor, defaultNullFactor);
 
-        mockSubmitCapture();
+            mockSubmitCapture();
 
-        // Inject the concurrent disable exactly at session-2's WRITE-lock acquisition.
-        final boolean[] injected = {false};
-        new MockUp<Locker>() {
-            @Mock
-            public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
-                if (lockType == LockType.WRITE && !injected[0]) {
-                    injected[0] = true;
-                    FlatJsonConfig live = table.getFlatJsonConfig();
-                    live.setFlatJsonEnable(false); // session-1 disables flat_json
-                    live.incVersion();             // ... and bumps the config version
+            // session-1 disables flat_json (and bumps the version) when session-2 takes the write lock.
+            final boolean[] injected = {false};
+            new MockUp<Locker>() {
+                @Mock
+                public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
+                    if (lockType == LockType.WRITE && !injected[0]) {
+                        injected[0] = true;
+                        FlatJsonConfig live = table.getFlatJsonConfig();
+                        live.setFlatJsonEnable(false);
+                        live.incVersion();
+                    }
                 }
-            }
 
-            @Mock
-            public void unLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
-            }
-        };
+                @Mock
+                public void unLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
+                }
+            };
 
-        // session-2: change null.factor; its pre-lock validation passed while flat_json was enabled.
-        Map<String, String> props = new HashMap<>();
-        props.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(racingFactor));
-        boolean ok = sch.updateFlatJsonConfigMeta(db, table.getId(), props, TTabletMetaType.FLAT_JSON_CONFIG);
+            // session-2 changes null.factor, validated while flat_json was still enabled.
+            Map<String, String> props = new HashMap<>();
+            props.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(racingFactor));
+            boolean ok = sch.updateFlatJsonConfigMeta(db, table.getId(), props, TTabletMetaType.FLAT_JSON_CONFIG);
 
-        Assertions.assertTrue(injected[0], "the concurrent disable must have been injected at the WRITE lock");
-
-        FlatJsonConfig result = table.getFlatJsonConfig();
-        // FIXED behavior (post-fix): the re-validation after the rebase rejects a factor change that
-        // would land on a now-disabled config, so the racing change is NOT applied and no invalid
-        // disabled-with-factor state is persisted.
-        //   - WITHOUT the fix: ok == true and result.nullFactor == 0.6  (these assertions fail = bug present)
-        //   - WITH the fix:    ok == false and result.nullFactor != 0.6 (rejected, no divergence)
-        Assertions.assertFalse(ok, "racing factor change onto a concurrently-disabled config must be rejected");
-        Assertions.assertFalse(result.getFlatJsonEnable(), "table stays disabled (session-1's change stands)");
-        Assertions.assertNotEquals(racingFactor, result.getFlatJsonNullFactor(),
-                "the racing factor must NOT be silently merged onto the disabled config");
-
-        // restore enabled state for any later test
-        table.getFlatJsonConfig().setFlatJsonEnable(true);
+            Assertions.assertTrue(injected[0]);
+            FlatJsonConfig result = table.getFlatJsonConfig();
+            Assertions.assertFalse(ok, "factor change rebased onto a disabled config must be rejected");
+            Assertions.assertFalse(result.getFlatJsonEnable());
+            Assertions.assertNotEquals(racingFactor, result.getFlatJsonNullFactor());
+        } finally {
+            table.getFlatJsonConfig().setFlatJsonEnable(origEnable);
+            table.getFlatJsonConfig().setVersion(origVersion);
+        }
     }
 
     private static final long VERSION_MISS_VISIBLE = 100L;
