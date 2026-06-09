@@ -380,6 +380,18 @@ public class StreamLoadScanNode extends LoadScanNode {
             paramCreateContext.params.setDb_name(dbName);
             paramCreateContext.params.setTable_name(dstTable.getName());
             paramCreateContext.params.setLabel(label);
+        } else if (streamLoadInfo.isFlexiblePartialUpdate()) {
+            // SDCG flexible: the BE json scanner interns each row's present-column set into
+            // FlexiblePartialUpdateRegistry keyed by the scan-range txn_id, and the lake delta
+            // writer folds that dictionary into txn_meta.distinct_column_sets under its own
+            // (real load) txn_id. On the normal (non-batch-write) stream-load path the scan-range
+            // txn_id was left unset (0) -- so the scanner interned under 0 while the writer folded
+            // under the real txn_id, the dict was never found, flexible_partial_update was never
+            // set, and the apply degraded to a homogeneous UNION partial update that NULLs every
+            // column a row did not declare. Carry the real load txn_id (the node's own txnId field
+            // is 0 on the thrift streamLoadPut path; streamLoadInfo.getTxnId() is authoritative and
+            // matches the OlapTableSink txn used by the BE delta writer).
+            paramCreateContext.params.setTxn_id(streamLoadInfo.getTxnId());
         }
 
         paramCreateContext.tupleDescriptor.computeMemLayout();
