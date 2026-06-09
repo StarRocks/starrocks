@@ -21,9 +21,14 @@
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/common.h"
+#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/schedule/utils.h"
 
 namespace starrocks::pipeline {
+
+std::unique_ptr<PipelineObserver> EventScheduler::create_driver_observer(DriverRawPtr driver) const {
+    return std::make_unique<PipelineDriverObserver>(driver);
+}
 
 void EventScheduler::add_blocked_driver(const DriverRawPtr driver) {
     // Capture query-context is needed before calling reschedule to avoid UAF

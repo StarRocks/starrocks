@@ -38,6 +38,7 @@
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/primitives/fragment_runtime_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
@@ -64,8 +65,7 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
                                QueryRuntimeState* query_runtime_state, FragmentRuntimeState* fragment_runtime_state,
                                FragmentContext* fragment_ctx, Event* pipeline_event, DriverObserver* driver_observer,
                                PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id)
-        : _observer(this),
-          _operator_mem_resource_managers(operators.size()),
+        : _operator_mem_resource_managers(operators.size()),
           _operators(operators),
           _query_ctx(query_ctx),
           _query_runtime_state(query_runtime_state),
@@ -90,8 +90,7 @@ PipelineDriver::PipelineDriver(const PipelineDriver& driver)
                          driver._driver_observer, driver._pipeline_timer_context, driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
-        : _observer(this),
-          _operator_mem_resource_managers(),
+        : _operator_mem_resource_managers(),
           _operators(),
           _query_ctx(nullptr),
           _query_runtime_state(nullptr),
@@ -168,6 +167,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (_pipeline_event == nullptr) {
         return Status::InternalError("PipelineDriver requires a pipeline event");
     }
+    if (runtime_state->enable_event_scheduler() && observer() == nullptr) {
+        return Status::InternalError("PipelineDriver requires an observer when event scheduler is enabled");
+    }
 
     DeferOp defer([&]() {
         if (this->_state != DriverState::READY) {
@@ -231,7 +233,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 #ifdef FIU_ENABLE
                     FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
 #endif
-                    desc->add_observer(_runtime_state, [observer = &_observer]() { observer->source_trigger(); });
+                    auto* observer = this->observer();
+                    DCHECK(observer != nullptr || !runtime_state->enable_event_scheduler());
+                    desc->add_observer(_runtime_state, [observer]() { observer->source_trigger(); });
                 }
             }
 
@@ -252,7 +256,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _local_rf_holders =
             _fragment_runtime_state->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
     for (auto rf_holder : _local_rf_holders) {
-        rf_holder->add_observer(_runtime_state, &_observer);
+        rf_holder->add_observer(_runtime_state, observer());
     }
     if (use_cache) {
         ssize_t cache_op_idx = -1;
@@ -892,7 +896,7 @@ void PipelineDriver::_update_global_rf_timer() {
         return;
     }
     auto timer = std::make_shared<RFScanWaitTimeout>(true);
-    timer->add_observer(_runtime_state, &_observer);
+    timer->add_observer(_runtime_state, observer());
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_pipeline_timer_context->schedule(_global_rf_timer.get(), abstime), "schedule:");
@@ -1089,9 +1093,14 @@ void PipelineDriver::increment_schedule_times() {
     driver_acct().increment_schedule_times();
 }
 
+void PipelineDriver::set_observer(std::unique_ptr<PipelineObserver> observer) {
+    _observer = std::move(observer);
+}
+
 void PipelineDriver::assign_observer() {
+    DCHECK(_observer != nullptr);
     for (const auto& op : _operators) {
-        op->set_observer(&_observer);
+        op->set_observer(_observer.get());
     }
 }
 
