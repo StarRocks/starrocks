@@ -34,6 +34,23 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+
+bool can_generate_split_tasks(ScanMorsel* morsel, MorselQueue* morsel_queue) {
+    if (morsel == nullptr || morsel_queue == nullptr || !morsel_queue->has_more_from_split()) {
+        return false;
+    }
+    ScanSplitContext* split_context = morsel->get_split_context();
+    if (split_context == nullptr) {
+        return true;
+    }
+    auto* lake_split_context = dynamic_cast<const LakeSplitContext*>(split_context);
+    return lake_split_context != nullptr && lake_split_context->is_prepared_physical_split() &&
+           lake_split_context->rowid_range_source == LakeSplitContext::RowidRangeSource::INITIAL_COARSE;
+}
+
+} // namespace
+
 // ==================== ConnectorScanOperatorFactory ====================
 class ConnectorScanOperatorIOTasksMemLimiter {
 private:
@@ -671,6 +688,14 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     }
 
     auto* morsel_queue_factory = _source_factory()->morsel_queue_factory();
+    if (morsel_queue_factory != nullptr && morsel_queue_factory->enable_random_append_split_morsel()) {
+        int64_t split_source_count = 0;
+        for (const auto& morsel : morsels) {
+            split_source_count +=
+                    can_generate_split_tasks(down_cast<ScanMorsel*>(morsel.get()), _morsel_queue) ? 1 : 0;
+        }
+        morsel_queue_factory->add_split_source_morsels(split_source_count);
+    }
     if (morsel_queue_factory != nullptr && morsel_queue_factory->size() > 1 &&
         morsel_queue_factory->enable_random_append_split_morsel()) {
         auto notify = defer_notify([&]() { return true; });
@@ -729,10 +754,9 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     TScanRange* scan_range = scan_morsel->get_scan_range();
     ScanSplitContext* split_context = scan_morsel->get_split_context();
     // A split source morsel means this morsel can potentially produce split tasks.
-    // `split_context == nullptr` identifies root morsels, and `has_more_from_split()`
-    // indicates split mode is enabled for this scan node.
-    _is_split_source_morsel =
-            (split_context == nullptr) && (op->morsel_queue() != nullptr) && op->morsel_queue()->has_more_from_split();
+    // Root morsels produce first-level split tasks; Lake prepared initial coarse
+    // morsels can produce refined child tasks.
+    _is_split_source_morsel = can_generate_split_tasks(scan_morsel, op->morsel_queue());
 
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());

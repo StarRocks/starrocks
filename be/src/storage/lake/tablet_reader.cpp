@@ -757,6 +757,7 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(
     if (local_rowid_range == nullptr) {
         return Status::InvalidArgument("local rowid range is null");
     }
+    auto seed_rowid_range_option = params.rowid_range_option;
     *local_rowid_range = nullptr;
     if (params.prepared_tablet_read_state == nullptr || params.prepared_segment_read_state == nullptr ||
         params.prepared_rowset_index >= params.prepared_tablet_read_state->rowsets.size() ||
@@ -782,9 +783,14 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(
         return Status::OK();
     }
 
+    TabletReaderParams prepare_params = params;
+    // The seed morsel carries only one coarse split. Segment prepare must compute the
+    // final pruned range for the whole segment so refined children can cover the rest.
+    prepare_params.rowid_range_option = nullptr;
+
     RowsetReadOptions rowset_read_options;
     LakeIOOptions lake_io_opts;
-    RETURN_IF_ERROR(init_rowset_read_options_for_split(params, &rowset_read_options, &lake_io_opts));
+    RETURN_IF_ERROR(init_rowset_read_options_for_split(prepare_params, &rowset_read_options, &lake_io_opts));
 
     OlapReaderStatistics prepare_stats;
     ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
@@ -810,8 +816,8 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(
         return Status::OK();
     }
 
-    if (params.rowid_range_option != nullptr) {
-        auto seed_split = params.rowid_range_option->get_segment_rowid_range(rowset.get(), segment.get());
+    if (seed_rowid_range_option != nullptr) {
+        auto seed_split = seed_rowid_range_option->get_segment_rowid_range(rowset.get(), segment.get());
         if (seed_split.row_id_range != nullptr) {
             SparseRange<> seed_scan_range = *seed_split.row_id_range;
             seed_scan_range &= pruned_scan_range;
