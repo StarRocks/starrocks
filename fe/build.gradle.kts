@@ -25,7 +25,7 @@ allprojects {
         mavenCentral()
         maven { url = uri("https://repository.cloudera.com/repository/public/") }
         maven { url = uri("https://repository.cloudera.com/repository/cloudera-repos/") }
-        maven { url = uri("https://mirror.iscas.ac.cn/kunpeng/maven/") }
+
     }
 }
 
