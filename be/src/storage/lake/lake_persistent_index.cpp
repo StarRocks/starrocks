@@ -945,59 +945,68 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         return pkc;
     };
 
-    // Apply one decoded del column to the index. Order-dependent: replay_erase mutates state
-    // observed by later files' get(), so callers must invoke this sequentially in del_idx order.
-    auto apply_one = [&](int del_idx, MutableColumnPtr& pkc) -> Status {
-        const auto& del = rowset->metadata().del_files(del_idx);
-        // We can't insert delete operation to index directly, because some delete operation is
-        // older than current item, and we need to igore these delete operations.
-        std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
-        std::vector<bool> filter(pkc->size(), false);
-        auto generate_filter_fn = [&]() {
-            if (rowset->id() != del.origin_rowset_id()) {
-                // del file in origin rowset doesn't need to skip.
-                for (int i = 0; i < pkc->size(); i++) {
-                    if (found_values[i] != IndexValue(NullIndexValue) &&
-                        found_values[i].get_rssid() > del.origin_rowset_id() + del.op_offset()) {
-                        // Use `rowset_id + op_offset` as delete file's rssid.
-                        // delete operation is too old for this key.
-                        filter[i] = true;
-                    }
-                }
-            }
-        };
-        // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
-        // so we use max segment id as `op_offset`.
-        // TODO : support real order of mix upsert and delete in one transaction.
-        const uint32_t del_rebuild_rssid = rowset->id() + get_max_segment_idx(rowset->metadata());
-        // TODO: Refactor the code to remove tmp slice array.
-        Buffer<Slice> keys;
-        keys.reserve(pkc->size());
+    // A decoded del file ready to replay: key Slices (borrowing from the owned pk column) + per-key
+    // skip filter.
+    struct DecodedDel {
+        MutableColumnPtr pkc;     // owns the key bytes; keys/filter borrow from it
+        Buffer<Slice> keys;       // Slices into pkc
+        std::vector<bool> filter; // true = skip this delete (too old)
+    };
+
+    // Extract key Slices from a decoded pk column (binary: contiguous Slices; fixed: _key_size stride).
+    // The Slices borrow from pkc, so pkc must outlive them.
+    auto extract_keys = [&](const MutableColumnPtr& pkc, Buffer<Slice>* keys) -> Status {
+        keys->reserve(pkc->size());
         if (pkc->is_binary() || pkc->is_large_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
-            ColumnHelper::build_slices(pkc, keys);
-            // 1. Get from pk index, to find out if this delete operation is too old.
-            RETURN_IF_ERROR(get(pkc->size(), keys.data(), found_values.data()));
-            generate_filter_fn();
-            // 2. insert delete operations to pk index.
-            RETURN_IF_ERROR(replay_erase(pkc->size(), keys.data(), filter, rowset_version, del_rebuild_rssid));
+            ColumnHelper::build_slices(pkc, *keys);
         } else {
             RawBytesVisitor visitor;
             RETURN_IF_ERROR(pkc->accept(&visitor));
             const auto* fkeys = visitor.result();
             for (size_t i = 0; i < pkc->size(); ++i) {
-                keys.emplace_back(fkeys, _key_size);
+                keys->emplace_back(fkeys, _key_size);
                 fkeys += _key_size;
             }
-            // 1. Get from pk index, to find out if this delete operation is too old.
-            RETURN_IF_ERROR(get(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), found_values.data()));
-            generate_filter_fn();
-            // 2. insert delete operations to pk index.
-            RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), filter,
-                                         rowset_version, del_rebuild_rssid));
         }
         return Status::OK();
+    };
+
+    // Phase-1 work (parallel-safe): read + decode the del file, extract keys, and build the skip
+    // filter. The index get() -- the ONLY SST-reading step here -- is needed *only* for del files that
+    // did NOT originate from this rowset; for origin del files the filter is a no-op (all false ->
+    // every key erased), so we skip the get() entirely and avoid its cold-start SST reads. This is the
+    // dominant cold-rebuild win. replay_erase (Phase 2) is a pure memtable write.
+    auto load_one = [&](int del_idx, DecodedDel* out) -> Status {
+        ASSIGN_OR_RETURN(out->pkc, read_one(del_idx));
+        RETURN_IF_ERROR(extract_keys(out->pkc, &out->keys));
+        out->filter.assign(out->keys.size(), false);
+        const auto& del = rowset->metadata().del_files(del_idx);
+        if (rowset->id() != del.origin_rowset_id()) {
+            // Non-origin del file: drop deletes that are too old for the current index entry.
+            // We can't insert delete operation to index directly, because some delete operation is
+            // older than current item, and we need to igore these delete operations.
+            std::vector<IndexValue> found_values(out->keys.size(), IndexValue(NullIndexValue));
+            RETURN_IF_ERROR(get(out->keys.size(), out->keys.data(), found_values.data()));
+            // Use `rowset_id + op_offset` as delete file's rssid; deletes older than that are stale.
+            const uint32_t too_old = del.origin_rowset_id() + del.op_offset();
+            for (size_t i = 0; i < out->keys.size(); i++) {
+                if (found_values[i] != IndexValue(NullIndexValue) && found_values[i].get_rssid() > too_old) {
+                    out->filter[i] = true;
+                }
+            }
+        }
+        return Status::OK();
+    };
+
+    // Phase-2 work. Order-dependent memtable mutation; callers invoke sequentially in del_idx order.
+    // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
+    // so we use max segment id as `op_offset`.
+    // TODO : support real order of mix upsert and delete in one transaction.
+    auto erase_one = [&](const DecodedDel& d) -> Status {
+        const uint32_t del_rebuild_rssid = rowset->id() + get_max_segment_idx(rowset->metadata());
+        return replay_erase(d.keys.size(), d.keys.data(), d.filter, rowset_version, del_rebuild_rssid);
     };
 
     // Gate the two-phase parallel path on update-memtracker pressure (see
@@ -1006,34 +1015,43 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     const bool use_two_phase = should_parallel_rebuild_prefetch(num_del_files);
 
     if (!use_two_phase) {
-        // Legacy single-pass loop: read+decode+apply per file, only one decoded column held at a time.
+        // Single-pass loop: load (read+decode+keys+maybe-get) then erase per file, in del_idx order.
+        // Only one decoded column held at a time.
         for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
             TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
-            ASSIGN_OR_RETURN(auto pkc, read_one(del_idx));
-            RETURN_IF_ERROR(apply_one(del_idx, pkc));
+            DecodedDel d;
+            RETURN_IF_ERROR(load_one(del_idx, &d));
+            RETURN_IF_ERROR(erase_one(d));
         }
         return Status::OK();
     }
 
-    // Phase 1 (parallel): read each delete file's bytes from object storage and deserialize
-    // them into a per-file pk column. Reads dominate cold-start cost (8 files × ~OSS_RTT each
-    // = seconds); parallelising them collapses that wall-clock without changing on-disk semantics.
-    // Memory tradeoff: this path holds all `num_del_files` decoded columns concurrently until
-    // Phase 2 consumes them — guarded above by the update-memtracker pressure check.
-    std::vector<MutableColumnPtr> pkcs(num_del_files);
+    // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for non-origin
+    // files only) run the index get() + build the skip filter. Both the OSS byte reads and the
+    // non-origin SST get()s — the cold-start cost — overlap here. Reuses pk_index_execution_thread_pool:
+    // get() runs its SST lookups synchronously without submitting back to this pool, so there is no
+    // pool-in-pool nesting. Memory tradeoff: holds all `num_del_files` decoded columns concurrently
+    // until Phase 2 consumes them — guarded above by the update-memtracker pressure check.
+    //
+    // Correct even when del files share keys: replay_erase writes (rowset_version, NULL) and every del
+    // file of a rowset uses the same rowset_version, so the erase is idempotent. For a shared key K in
+    // files A (earlier) < B (later): if A erases K it is NULL regardless of B; if A skips K it leaves
+    // K untouched so B sees the same value the serial path would. Either way the final index equals
+    // serial, so running every non-origin get() up-front against the same pre-erase snapshot is safe.
+    std::vector<DecodedDel> decoded(num_del_files);
     std::mutex shared_mutex;
     Status shared_status;
     auto record_err = [&](const Status& s) {
         std::lock_guard<std::mutex> l(shared_mutex);
         shared_status.update(s);
     };
+    Trace* trace = Trace::CurrentTrace();
     auto run_one = [&](int del_idx) {
-        auto res = read_one(del_idx);
-        if (!res.ok()) {
-            record_err(res.status());
-            return;
+        ADOPT_TRACE(trace);
+        auto st = load_one(del_idx, &decoded[del_idx]);
+        if (!st.ok()) {
+            record_err(st);
         }
-        pkcs[del_idx] = std::move(res).value();
     };
 
     auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
@@ -1051,9 +1069,9 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     token->wait();
     RETURN_IF_ERROR(shared_status);
 
-    // Phase 2 (sequential): order-dependent index mutations.
+    // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
-        RETURN_IF_ERROR(apply_one(del_idx, pkcs[del_idx]));
+        RETURN_IF_ERROR(erase_one(decoded[del_idx]));
     }
     return Status::OK();
 }
