@@ -90,7 +90,6 @@ public class MaterializedIndexMetaTest {
         Assertions.assertNotNull(column.getDefineExpr());
     }
 
-<<<<<<< HEAD
     @Test
     public void testSerializeMaterializedIndexMeta(@Mocked CreateMaterializedViewStmt stmt)
             throws IOException, AnalysisException {
@@ -155,7 +154,9 @@ public class MaterializedIndexMetaTest {
             } else {
                 Assertions.assertEquals(null, column.getDefineExpr());
             }
-=======
+        }
+    }
+
     /**
      * Regression test for the data race on updateSchemaBackendId. The send path (reserve) and the
      * task-finish path (remove) both run under a shared READ lock, so they mutate the set
@@ -211,7 +212,6 @@ public class MaterializedIndexMetaTest {
         for (long backendId = 0; backendId < backendCount; backendId++) {
             Assertions.assertTrue(meta.addUpdateSchemaBackendIfAbsent(backendId),
                     "backend " + backendId + " was still reserved; an entry leaked");
->>>>>>> c29631812d ([BugFix] fix data race on MaterializedIndexMeta updateSchemaBackendId (#74412))
         }
     }
 }
