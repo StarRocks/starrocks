@@ -370,6 +370,13 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+// When true, BinaryPlainPage stores its offset trailer as per-value deltas (string lengths)
+// instead of absolute offsets. Deltas are near-constant for fixed-ish strings and compress
+// far better than monotonically increasing absolute offsets. The on-disk trailer keeps the
+// same size; only its compressibility improves. Pages written in delta form are self-identified
+// via a flag bit in the trailer, so legacy absolute-offset pages keep the zero-copy read path.
+CONF_mBool(enable_binary_plain_delta_offset, "false");
+
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
 // Page cache is the cache for the decompressed or decoded page of data file.

@@ -58,10 +58,28 @@ Status BinaryPlainPageDecoder<Type>::init() {
         return Status::Corruption(ss.str());
     }
 
-    // Decode trailer
-    _num_elems = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
+    // Decode trailer. The element-count field carries a flag bit indicating whether the
+    // offset array is delta-encoded (string lengths) or absolute offsets.
+    const uint32_t raw_count = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
+    const bool delta_encoded = (raw_count & kBinaryPlainDeltaOffsetFlag) != 0;
+    _num_elems = raw_count & ~kBinaryPlainDeltaOffsetFlag;
     _offsets_pos = static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
-    _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
+    if (!delta_encoded) {
+        // Legacy absolute offsets: alias directly into the page (zero-copy).
+        _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
+    } else {
+        // Delta-encoded: prefix-sum the on-disk deltas into an owned absolute-offset array so
+        // that every other decoder method (which expects absolute offsets) is unchanged.
+        const auto* const deltas = reinterpret_cast<const uint8_t*>(_data.data + _offsets_pos);
+        _abs_offsets.resize(_num_elems);
+        uint32_t acc = 0;
+        for (uint32_t i = 0; i < _num_elems; i++) {
+            acc += decode_fixed32_le(deltas + i * sizeof(uint32_t));
+            _abs_offsets[i] = acc;
+        }
+        _offsets_ptr = _abs_offsets.data();
+        _offsets_materialized = true;
+    }
     // TODO: align offset
 
     if (_data.size < config::small_dictionary_page_size) {

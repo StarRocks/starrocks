@@ -50,6 +50,7 @@
 
 #include "base/coding.h"
 #include "base/string/faststring.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
@@ -61,6 +62,14 @@
 
 namespace starrocks {
 class Column;
+} // namespace starrocks
+
+namespace starrocks {
+// High bit of the BinaryPlainPage trailer's element-count field. When set, the page's offset
+// trailer holds per-value deltas (string lengths) rather than absolute offsets. Legacy pages
+// have this bit clear and keep the zero-copy absolute-offset read path. The real element count
+// is at most a few tens of thousands per page, so the top bit is always free to use as a flag.
+inline constexpr uint32_t kBinaryPlainDeltaOffsetFlag = 0x80000000u;
 } // namespace starrocks
 
 namespace starrocks {
@@ -109,11 +118,23 @@ public:
         DCHECK(!_finished);
         DCHECK_EQ(_next_offset + _reserved_head_size, _buffer.size());
         _buffer.reserve(_size_estimate);
-        // Set up trailer
-        for (uint32_t _offset : _offsets) {
-            put_fixed32_le(&_buffer, _offset);
+        // Set up trailer. With delta encoding we store each value's delta from the previous
+        // offset (i.e. its length; the first entry is offsets[0] == 0). The trailer keeps the
+        // same size (one uint32 per value), but the values are near-constant for fixed-ish
+        // strings and compress far better than monotonically increasing absolute offsets.
+        if (config::enable_binary_plain_delta_offset) {
+            uint32_t prev = 0;
+            for (uint32_t off : _offsets) {
+                put_fixed32_le(&_buffer, off - prev);
+                prev = off;
+            }
+            put_fixed32_le(&_buffer, static_cast<uint32_t>(_offsets.size()) | kBinaryPlainDeltaOffsetFlag);
+        } else {
+            for (uint32_t _offset : _offsets) {
+                put_fixed32_le(&_buffer, _offset);
+            }
+            put_fixed32_le(&_buffer, _offsets.size());
         }
-        put_fixed32_le(&_buffer, _offsets.size());
         if (!_offsets.empty()) {
             _copy_value_at(0, &_first_value);
             _copy_value_at(_offsets.size() - 1, &_last_value);
@@ -304,8 +325,15 @@ private:
 
     uint32_t offset_uncheck(int idx) const {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
+        // On little-endian, _offsets_ptr always points at native-order absolute offsets:
+        // either aliased into the page (legacy) or the reconstructed buffer (delta).
         return _offsets_ptr[idx];
 #else
+        // On big-endian, delta pages were reconstructed into a native-order owned buffer in
+        // init(); read it directly. Legacy pages still decode the little-endian page bytes.
+        if (_offsets_materialized) {
+            return _offsets_ptr[idx];
+        }
         const uint32_t pos = _offsets_pos + idx * static_cast<uint32_t>(sizeof(uint32_t));
         const auto* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
         return decode_fixed32_le(p);
@@ -337,7 +365,14 @@ private:
 
     uint32_t _num_elems{0};
     uint32_t _offsets_pos{0};
+    // Points at the absolute-offset array. For legacy pages this aliases into `_data`
+    // (zero-copy). For delta-encoded pages it points at `_abs_offsets`, reconstructed in init().
     uint32_t* _offsets_ptr = nullptr;
+    // Owns the absolute offsets reconstructed from on-disk deltas; empty for legacy pages.
+    std::vector<uint32_t> _abs_offsets;
+    // True when `_offsets_ptr` points at the native-order `_abs_offsets` buffer (delta pages)
+    // rather than aliasing the little-endian page bytes. Used by the big-endian read path.
+    bool _offsets_materialized = false;
 
     // Index of the currently seeked element in the page.
     uint32_t _cur_idx{0};
