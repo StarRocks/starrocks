@@ -2047,31 +2047,50 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                // already has one update scheam task, ignore to prevent send too many task
-                if (indexMeta.hasUpdateSchemaTask(backendId)) {
+                // Atomically reserve the slot for this backend to prevent sending too many tasks.
+                // The check-then-reserve is a single atomic operation, so two senders running
+                // concurrently under the shared READ lock cannot both observe "no task" and both
+                // enqueue a duplicate task. If a task is already in flight, skip this backend.
+                if (!indexMeta.addUpdateSchemaBackendIfAbsent(backendId)) {
                     continue;
                 }
 
-                List<TColumn> columnsDesc = Lists.newArrayList();
-                List<Integer> columnSortKeyUids = Lists.newArrayList();
+                try {
+                    List<TColumn> columnsDesc = Lists.newArrayList();
+                    List<Integer> columnSortKeyUids = Lists.newArrayList();
 
-                for (Column column : indexMeta.getSchema()) {
-                    TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(column.getColumnId().getId());
-                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
-                    columnsDesc.add(tColumn);
-                }
-                if (indexMeta.getSortKeyUniqueIds() != null) {
-                    columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
-                }
-                TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
-                        indexMeta.getShortKeyColumnCount());
+                    for (Column column : indexMeta.getSchema()) {
+                        TColumn tColumn = column.toThrift();
+                        tColumn.setColumn_name(column.getColumnId().getId());
+                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
+                        columnsDesc.add(tColumn);
+                    }
+                    if (indexMeta.getSortKeyUniqueIds() != null) {
+                        columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+                    }
+                    TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
+                            indexMeta.getShortKeyColumnCount());
 
+<<<<<<< HEAD
                 UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
                         indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
                         columnParam);
                 updateSchemaBatchTask.addTask(task);
                 indexMeta.addUpdateSchemaBackend(backendId);
+=======
+                    UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
+                            indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            columnParam);
+                    updateSchemaBatchTask.addTask(task);
+                } catch (RuntimeException e) {
+                    // Reservation happened before the task was built/enqueued, so release it on
+                    // failure. Otherwise this backend would stay marked forever (the finish RPC
+                    // only clears it after a task actually completes) and no future UPDATE_SCHEMA
+                    // task would ever be sent for it.
+                    indexMeta.removeUpdateSchemaBackend(backendId);
+                    throw e;
+                }
+>>>>>>> c29631812d ([BugFix] fix data race on MaterializedIndexMeta updateSchemaBackendId (#74412))
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
