@@ -406,6 +406,20 @@ This document outlines the features of various data loading and unloading method
     <tr>
         <td>ORC</td>
     </tr>
+    <tr>
+        <td>Arrow</td>
+        <td>
+            <ul>
+                <li>lz4</li>
+                <li>zstd</li>
+            </ul>
+        </td>
+        <td>Yes [4]</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+    </tr>
 </table>
 
 :::note
