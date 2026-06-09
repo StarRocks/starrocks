@@ -505,7 +505,13 @@ StatusOr<std::vector<int32_t>> ColumnModePartialUpdateHandler::_read_cset_column
     Schema cset_schema = ChunkHelper::convert_schema(cset_tschema);
 
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(cset_schema, true, &stats));
+    // Pass cset_tschema as the read-schema override: "__cset__" is NOT in the rowset's base schema,
+    // so the segment iterator must resolve the (single) output column against this 1-column schema
+    // (cid 0 -> __cset__ SMALLINT, uid kCsetReservedColumnUid). Without it the iterator resolves cid 0
+    // against the base schema (the BIGINT key column) and a wrong-width decoder corrupts the SMALLINT
+    // destination chunk -> deterministic CN crash at apply (and crash-loop on republish).
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset_ptr->get_each_segment_iterator(cset_schema, true, &stats, cset_tschema));
     if (upt_id >= segment_iters.size()) {
         return Status::InternalError(
                 fmt::format("ColumnModePartialUpdateHandler: upt_id {} out of range ({} segments) reading `{}`", upt_id,

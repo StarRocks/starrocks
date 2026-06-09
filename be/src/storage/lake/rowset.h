@@ -80,8 +80,14 @@ public:
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
+    // |tablet_schema|: optional read schema override. When non-null it is set on the per-segment
+    // SegmentReadOptions so the segment iterator resolves output columns (by positional cid) against
+    // it instead of the segment's base schema. Required when |schema| carries a synthetic column not
+    // present in the base tablet schema (e.g. the SDCG "__cset__" reserved-uid column); otherwise the
+    // iterator resolves cid against the base schema and reads the wrong physical column (type mismatch).
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      const TabletSchemaCSPtr& tablet_schema = nullptr);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
