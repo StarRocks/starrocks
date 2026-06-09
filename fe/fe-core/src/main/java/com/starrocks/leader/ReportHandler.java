@@ -2071,15 +2071,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
                             indexMeta.getShortKeyColumnCount());
 
-<<<<<<< HEAD
-                UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                        indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
-                        columnParam);
-                updateSchemaBatchTask.addTask(task);
-                indexMeta.addUpdateSchemaBackend(backendId);
-=======
                     UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                            indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
                             columnParam);
                     updateSchemaBatchTask.addTask(task);
                 } catch (RuntimeException e) {
@@ -2090,7 +2083,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     indexMeta.removeUpdateSchemaBackend(backendId);
                     throw e;
                 }
->>>>>>> c29631812d ([BugFix] fix data race on MaterializedIndexMeta updateSchemaBackendId (#74412))
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
