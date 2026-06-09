@@ -17,10 +17,10 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
+#include "exec/pipeline/primitives/pipeline_group_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
@@ -28,11 +28,11 @@
 
 namespace starrocks::pipeline {
 
-Pipeline::Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group)
+Pipeline::Pipeline(uint32_t id, OpFactories op_factories, PipelineGroupContext* group_context)
         : _id(id),
           _op_factories(std::move(op_factories)),
           _pipeline_event(Event::create_event()),
-          _execution_group(execution_group) {
+          _group_context(group_context) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
 }
 
@@ -46,7 +46,9 @@ void Pipeline::on_driver_finished(RuntimeState* state) {
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
         _pipeline_event->finish(state);
-        _execution_group->count_down_pipeline(state);
+        if (_group_context != nullptr) {
+            _group_context->on_pipeline_finished(state);
+        }
     }
 }
 
@@ -123,8 +125,8 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
 void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
     runtime_state->runtime_profile()->add_child(runtime_profile(), true, nullptr);
     // Set pipeline-level counters once here rather than redundantly in every setup_drivers_profile call.
-    runtime_profile()->add_info_string("IsGroupExecution",
-                                       _execution_group->is_colocate_exec_group() ? "true" : "false");
+    const bool is_group_execution = _group_context != nullptr && _group_context->is_colocate_exec_group();
+    runtime_profile()->add_info_string("IsGroupExecution", is_group_execution ? "true" : "false");
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));

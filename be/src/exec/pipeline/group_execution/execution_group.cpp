@@ -41,7 +41,7 @@ void ExecutionGroup::clear_all_drivers(Pipelines& pipelines) {
     }
 }
 
-void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
+void ExecutionGroup::on_pipeline_finished(RuntimeState* state) {
     // Cache the member before performing the atomic increment.
     // This ensures we won't dereference `this` after another thread may
     // have deleted the object.

@@ -56,6 +56,7 @@ using Operators = std::vector<OperatorPtr>;
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 class PipelineObserver;
+class PipelineGroupContext;
 class Event;
 using EventPtr = std::shared_ptr<Event>;
 class EventScheduler;

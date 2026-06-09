@@ -26,6 +26,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/pipeline_group_context.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -59,6 +60,36 @@ private:
     ThreadPool* _tp;
     ColocateExecutionGroup* _group;
 };
+
+class MockPipelineGroupContext final : public PipelineGroupContext {
+public:
+    void on_pipeline_finished(RuntimeState* state) override {
+        ++finished_count;
+        last_state = state;
+    }
+
+    bool is_colocate_exec_group() const override { return is_colocate; }
+
+    bool is_colocate = false;
+    int finished_count = 0;
+    RuntimeState* last_state = nullptr;
+};
+
+TEST(PipelineTest, NotifyGroupContextAfterAllDriversFinish) {
+    RuntimeState dummy;
+    MockPipelineGroupContext context;
+    Pipeline pipeline(0, {}, &context);
+
+    pipeline.drivers().emplace_back();
+    pipeline.drivers().emplace_back();
+
+    pipeline.on_driver_finished(&dummy);
+    EXPECT_EQ(0, context.finished_count);
+
+    pipeline.on_driver_finished(&dummy);
+    EXPECT_EQ(1, context.finished_count);
+    EXPECT_EQ(&dummy, context.last_state);
+}
 
 TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
     std::unique_ptr<ThreadPool> tp;
