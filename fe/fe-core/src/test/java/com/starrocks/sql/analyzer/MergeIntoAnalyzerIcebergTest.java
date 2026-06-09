@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -103,6 +105,93 @@ public class MergeIntoAnalyzerIcebergTest {
                 () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
         assertTrue(exception.getMessage().contains("metadata column") || exception.getMessage().contains("_file"),
                 "Error should mention metadata column or _file: " + exception.getMessage());
+    }
+
+    @Test
+    public void testMergeRejectsDefaultInUpdate() {
+        // Iceberg V2 has no supported column defaults; ExpressionAnalyzer types
+        // DefaultValueExpr as varchar so the placeholder otherwise rides into the
+        // sink as a wrongly-typed value. Reject up front, matching UpdateAnalyzer.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'x' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = DEFAULT";
+        MergeIntoStmt stmt = parseMerge(sql);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertTrue(ex.getMessage().contains("DEFAULT"),
+                "Error should mention DEFAULT: " + ex.getMessage());
+    }
+
+    @Test
+    public void testSingleConditionalMatchedGatesValueWithCase() {
+        // For a single conditional MATCHED clause, the data SELECT must gate the
+        // update value on the clause condition (so rows that fail the AND
+        // predicate do not evaluate the update expression even though they reach
+        // the join). The same wrapping also surfaces source columns referenced
+        // in the condition to ColumnPrivilege via the rewritten queryStatement.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date, 1 AS flag) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED AND s.flag = 1 THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+        MergeIntoAnalyzer.analyze(stmt, connectContext);
+
+        // Without the fix, `s.flag` lives only in routingExpr; the data SELECT
+        // emits `s.data` unconditionally. With the fix, `s.flag` shows up in the
+        // data column's SELECT expression because the value is wrapped in a CASE.
+        boolean flagInSelectList = stmt.getQueryStatement().getQueryRelation()
+                .getOutputExpression().stream()
+                .anyMatch(e -> exprReferencesColumn(e, "flag"));
+        assertTrue(flagInSelectList,
+                "Single conditional MATCHED must gate the update value with a CASE on the condition");
+    }
+
+    private static boolean exprReferencesColumn(Expr expr, String columnName) {
+        if (expr instanceof SlotRef slot && columnName.equalsIgnoreCase(slot.getColumnName())) {
+            return true;
+        }
+        for (Expr child : expr.getChildren()) {
+            if (exprReferencesColumn(child, columnName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void testSingleConditionalNotMatchedGatesValueWithCase() {
+        // Symmetric to the matched-side check above: a single conditional NOT
+        // MATCHED clause must gate the insert value on the clause condition so
+        // it does not evaluate on rows routed to NO_OP, and the condition column
+        // must enter the data SELECT for ColumnPrivilege.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 2 AS id, 'new' AS data, '2024-01-01' AS date, 1 AS flag) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED AND s.flag = 1 THEN INSERT (id, data, date) VALUES (s.id, s.data, s.date)";
+        MergeIntoStmt stmt = parseMerge(sql);
+        MergeIntoAnalyzer.analyze(stmt, connectContext);
+
+        boolean flagInSelectList = stmt.getQueryStatement().getQueryRelation()
+                .getOutputExpression().stream()
+                .anyMatch(e -> exprReferencesColumn(e, "flag"));
+        assertTrue(flagInSelectList,
+                "Single conditional NOT MATCHED must gate the insert value with a CASE on the condition");
+    }
+
+    @Test
+    public void testMergeIntoNoTargetAliasAnalyzes() {
+        // Target without an alias must use a fully-qualified TableName for its
+        // generated SlotRefs so the analyzer does not bind them to a same-named
+        // source table living in a different db/catalog. Happy-path: ensure the
+        // unaliased form still analyzes cleanly.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 " +
+                "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                "ON iceberg0.unpartitioned_db.t0_v2.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+        assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertNotNull(stmt.getQueryStatement());
     }
 
     @Test

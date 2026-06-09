@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
@@ -105,6 +106,15 @@ public class MergeIntoAnalyzer {
             if (clause instanceof MergeWhenMatchedUpdateClause updateClause) {
                 Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
                 for (ColumnAssignment assign : updateClause.getAssignments()) {
+                    // Iceberg V2 has no supported column defaults (initial-default /
+                    // write-default are V3 features); ExpressionAnalyzer types
+                    // DefaultValueExpr as varchar, which silently corrupts the cast
+                    // on commit. Mirror UpdateAnalyzer.analyzeIcebergTable and reject
+                    // up front.
+                    if (assign.getExpr() instanceof DefaultValueExpr) {
+                        throw new SemanticException(
+                                "DEFAULT value is not supported for Iceberg V2 tables");
+                    }
                     assignmentByColName.put(assign.getColumn().toLowerCase(), assign);
                 }
                 // Reject partition column updates
@@ -178,10 +188,13 @@ public class MergeIntoAnalyzer {
         SelectList selectList = new SelectList();
 
         // Determine target qualifier for SlotRefs.
-        // If target has an alias, use it; otherwise use table name.
-        String targetQualifier = stmt.getTargetAlias() != null
-                ? stmt.getTargetAlias() : tableName.getTbl();
-        TableName targetSlotTableName = new TableName(null, null, targetQualifier);
+        // - With an alias, the alias alone is unambiguous in the join scope.
+        // - Without an alias, fully qualify with catalog.db.tbl so the analyzer
+        //   does not bind target SlotRefs to a same-named source table living
+        //   in a different db/catalog.
+        TableName targetSlotTableName = stmt.getTargetAlias() != null
+                ? new TableName(null, null, stmt.getTargetAlias())
+                : new TableName(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
 
         // _file
         selectList.addItem(new SelectListItem(
@@ -336,7 +349,22 @@ public class MergeIntoAnalyzer {
 
         if (matchedClauses.size() == 1) {
             MergeWhenClause clause = matchedClauses.get(0);
-            return getMatchedColumnValue(clause, col, targetSlotTableName);
+            Expr value = getMatchedColumnValue(clause, col, targetSlotTableName);
+            Expr condition = clause.getOptionalCondition();
+            if (condition != null) {
+                // Wrap in CASE so the update value is only evaluated when the
+                // clause condition holds. Rows that fail the condition are routed
+                // as NO_OP via op_code, but the data SELECT still runs against
+                // every joined row — without this wrapping, `value` would be
+                // evaluated (and could fail or distort types) on rows the action
+                // should skip. The condition also enters the data SELECT here,
+                // exposing source columns referenced in it to ColumnPrivilege.
+                List<CaseWhenClause> whenClauses = new ArrayList<>();
+                whenClauses.add(new CaseWhenClause(condition, value));
+                return new CaseExpr(null, whenClauses,
+                        new SlotRef(targetSlotTableName, col.getName()));
+            }
+            return value;
         }
 
         // Multiple matched clauses — build CASE WHEN cond1 THEN val1 WHEN cond2 THEN val2 ... ELSE target.col END
@@ -403,8 +431,19 @@ public class MergeIntoAnalyzer {
         }
 
         if (notMatchedClauses.size() == 1) {
-            return getNotMatchedColumnValue(
-                    (MergeWhenNotMatchedInsertClause) notMatchedClauses.get(0), col, stmt, icebergTable);
+            MergeWhenClause clause = notMatchedClauses.get(0);
+            Expr value = getNotMatchedColumnValue(
+                    (MergeWhenNotMatchedInsertClause) clause, col, stmt, icebergTable);
+            Expr condition = clause.getOptionalCondition();
+            if (condition != null) {
+                // Mirror the matched-side rationale above: gate the insert value on
+                // the clause condition so it does not evaluate on NO_OP rows, and
+                // surface condition columns to ColumnPrivilege through the SELECT.
+                List<CaseWhenClause> whenClauses = new ArrayList<>();
+                whenClauses.add(new CaseWhenClause(condition, value));
+                return new CaseExpr(null, whenClauses, new NullLiteral());
+            }
+            return value;
         }
 
         // Multiple NOT MATCHED clauses — build CASE
