@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -37,10 +37,10 @@ public class IcebergEqualityDeleteRewriteRuleTest {
     // the row alive. The $data_sequence_number bound must stay a strict LT.
     @Test
     public void testBuildOnPredicateUsesNullSafeEqualsForIdentityColumns() {
-        ColumnRefOperator leftId = new ColumnRefOperator(1, IntegerType.INT, "id", true);
-        ColumnRefOperator leftSeq = new ColumnRefOperator(2, IntegerType.BIGINT, DATA_SEQUENCE_NUMBER, true);
-        ColumnRefOperator rightId = new ColumnRefOperator(3, IntegerType.INT, "id", true);
-        ColumnRefOperator rightSeq = new ColumnRefOperator(4, IntegerType.BIGINT, DATA_SEQUENCE_NUMBER, true);
+        ColumnRefOperator leftId = new ColumnRefOperator(1, Type.INT, "id", true);
+        ColumnRefOperator leftSeq = new ColumnRefOperator(2, Type.BIGINT, DATA_SEQUENCE_NUMBER, true);
+        ColumnRefOperator rightId = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator rightSeq = new ColumnRefOperator(4, Type.BIGINT, DATA_SEQUENCE_NUMBER, true);
 
         Map<String, ColumnRefOperator> leftCols = new HashMap<>();
         leftCols.put("id", leftId);
