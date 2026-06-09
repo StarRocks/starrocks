@@ -1494,9 +1494,8 @@ Status SegmentDump::dump_column_size() {
         fmt::print(
                 "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
                 "bytes: {}, rows: {}, pages: {}]\n",
-                id, column_name, compession_desc->name(), encoding_desc->name(),
-                stats.compressed_bytes_read_request, column_meta.total_mem_footprint(), column_meta.num_rows(),
-                stats.io_count_request);
+                id, column_name, compession_desc->name(), encoding_desc->name(), stats.compressed_bytes_read_request,
+                column_meta.total_mem_footprint(), column_meta.num_rows(), stats.io_count_request);
         fmt::print("{}\n", column_meta.DebugString());
     }
 
