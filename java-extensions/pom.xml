@@ -48,7 +48,7 @@
         <commons-io.version>2.14.0</commons-io.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <arrow.version>17.0.0</arrow.version>
+        <arrow.version>24.0.0</arrow.version>
         <jackson.version>2.21.1</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.1 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
