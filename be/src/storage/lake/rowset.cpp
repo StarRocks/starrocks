@@ -492,6 +492,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_s
     // against |segment_schema| (the same schema each one-off Segment below is opened with).
     seg_options.tablet_schema = segment_schema;
 
+    // Shared (range-distributed / resharded) segments expose only the rows in
+    // [range_start, range_end) to this child tablet. get_each_segment_iterator() applies this
+    // tablet_range; this overload MUST apply the SAME range so the rows it emits line up 1:1 (by
+    // logical position) with the value-column read. The SDCG flexible apply indexes the per-row
+    // "__cset__" set-ids read here by the LOGICAL upt_rowid (0-based within the range, see
+    // ColumnPartialUpdateState::build_rss_rowid_to_update_rowid); without the range, set_ids would
+    // be in full-segment physical space and shift by range_start, mis-assigning column-sets to a
+    // suffix of rows and corrupting per-column presence for a subset of base rows.
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
+
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(metadata().segment_metas_size());
     size_t footer_size_hint = 16 * 1024;
@@ -516,6 +526,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_s
                          Segment::open(seg_options.fs, segment_info, get_segment_idx(metadata(), index), segment_schema,
                                        &footer_size_hint, nullptr, lake_io_opts, _tablet_mgr));
         seg_options.tablet_range = std::nullopt;
+        if (index < _metadata->segment_metas_size() && _metadata->segment_metas(index).shared() &&
+            shared_segment_range.has_value()) {
+            seg_options.tablet_range = *shared_segment_range;
+        }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
