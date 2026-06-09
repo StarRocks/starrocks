@@ -252,26 +252,19 @@ Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_rea
 Status FileReader::_init_group_readers() {
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
-    // _group_reader_param is used by all group readers
+    // _group_reader_param is used by all group readers.
+    // scanner_ctx replaces 11 individual field copies; GroupReader accesses
+    // context-derived data (timezone, options, partitions, slots, dicts, etc.)
+    // through the pointer.  File-infrastructure fields (sb_stream, file, etc.)
+    // and hot fields (stats, lazy_column_coalesce_counter) remain direct copies.
+    _group_reader_param.scanner_ctx = _scanner_ctx;
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
-    _group_reader_param.timezone = fd_scanner_ctx.timezone;
     _group_reader_param.stats = fd_scanner_ctx.stats;
     _group_reader_param.sb_stream = _sb_stream;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
-    _group_reader_param.case_sensitive = fd_scanner_ctx.params->options->case_sensitive;
-    _group_reader_param.use_file_pagecache = fd_scanner_ctx.params->options->use_file_pagecache;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.params->lazy_column_coalesce_counter;
-    _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
-    _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
-    _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
-    _group_reader_param.reserved_field_slots = &fd_scanner_ctx.reserved_field_slots;
-    // for pageIndex — access via the shared conjuncts pointer
-    _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.params->conjuncts->min_max_ctxs;
-    _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
-    _group_reader_param.global_dictmaps = fd_scanner_ctx.params->global_dictmaps;
-    _group_reader_param.column_access_paths = fd_scanner_ctx.params->column_access_paths;
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;

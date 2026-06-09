@@ -757,6 +757,14 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c6 =
             _create_group_reader_param_of_column(&_pool, 5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
+    // Minimal scanner context so GroupReader::_create_column_readers() can
+    // dereference scanner_ctx->params->options without crashing.
+    auto* opts = _pool.add(new HdfsScannerOptions());
+    auto* hdfs_params = _pool.add(new HdfsScannerParams());
+    hdfs_params->options = opts;
+    auto* scanner_ctx = _pool.add(new HdfsScannerContext());
+    scanner_ctx->params = hdfs_params;
+
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);
     param->read_cols.emplace_back(c2);
@@ -765,6 +773,7 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     param->read_cols.emplace_back(c5);
     param->read_cols.emplace_back(c6);
     param->stats = &g_hdfs_scan_stats;
+    param->scanner_ctx = scanner_ctx;
     return param;
 }
 

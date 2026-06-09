@@ -578,11 +578,14 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
     }
 
-    // Evaluate multi-slot predicates (e.g. "a + b > 5") here, after all data
-    // columns — including lazy-loaded ones — are present in the chunk.
-    // Must happen before partition/extended columns are appended, as scanner_ctxs
-    // only reference data file columns.
-    // Note: ORC already folded these into search arguments during do_open() for
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+
+    // Evaluate multi-slot predicates (e.g. "a + b > 5") after all columns —
+    // including partition and extended columns — are present in the chunk.
+    // ORC already folded these into search arguments during do_open() for
     // stripe-level skipping, but that is an approximate optimisation only; this
     // row-level pass is still required for correctness.
     if (rows_read > 0 && !_scanner_params.conjuncts->scanner_ctxs.empty()) {
@@ -590,12 +593,6 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts->scanner_ctxs, chunk->get()));
         rows_read = (*chunk)->num_rows();
     }
-
-    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
-    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
-
-    // check after partition/extended column added
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     return Status::OK();
 }

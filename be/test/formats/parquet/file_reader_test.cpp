@@ -336,6 +336,9 @@ protected:
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
 
+    HdfsScannerOptions _scanner_options;
+    HdfsScannerConjuncts _scanner_conjuncts;
+    HdfsScannerParams _scanner_params;
     const size_t _chunk_size = 4096;
 
     std::string _filter_page_index_with_rf_has_null =
@@ -407,10 +410,13 @@ DataCacheOptions FileReaderTest::_mock_datacache_options() {
 HdfsScannerContext* FileReaderTest::_create_scan_context() {
     auto* ctx = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    _scanner_params.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    _scanner_params.runtime_filter_collector = _rf_probe_collector;
+    _scanner_params.options = &_scanner_options;
+    _scanner_params.conjuncts = &_scanner_conjuncts;
+    ctx->params = &_scanner_params;
     ctx->timezone = "Asia/Shanghai";
     ctx->stats = &g_hdfs_scan_stats;
-    ctx->runtime_filter_collector = _rf_probe_collector;
     return ctx;
 }
 
@@ -425,17 +431,20 @@ HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_d
                                                          int64_t scan_length) {
     auto* ctx = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    _scanner_params.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     ctx->timezone = "Asia/Shanghai";
     ctx->stats = &g_hdfs_scan_stats;
-    ctx->runtime_filter_collector = _rf_probe_collector;
+    _scanner_params.runtime_filter_collector = _rf_probe_collector;
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-    ctx->scan_range = _create_scan_range(file_path, scan_length);
-    ctx->parquet_bloom_filter_enable = true;
-    ctx->parquet_page_index_enable = true;
+    _scanner_params.scan_range = _create_scan_range(file_path, scan_length);
+    _scanner_options.parquet_bloom_filter_enable = true;
+    _scanner_options.parquet_page_index_enable = true;
+    _scanner_params.options = &_scanner_options;
+    _scanner_params.conjuncts = &_scanner_conjuncts;
+    ctx->params = &_scanner_params;
     return ctx;
 }
 
@@ -443,7 +452,7 @@ HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_d
                                                          Utils::SlotDesc* min_max_slot_descs,
                                                          const std::string& file_path, int64_t scan_length) {
     auto* ctx = _create_scan_context(slot_descs, file_path, scan_length);
-    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slot_descs);
+    _scanner_params.min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slot_descs);
     return ctx;
 }
 
@@ -507,7 +516,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_min_max() {
 
     // create min max conjuncts
     // c1 >= 1
-    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 1, &ctx->min_max_conjunct_ctxs);
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 1, &_scanner_conjuncts.min_max_ctxs);
     return ctx;
 }
 
@@ -680,9 +689,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_min_max_all_nu
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _all_null_parquet_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -696,9 +705,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -712,9 +721,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -728,9 +737,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -744,9 +753,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -760,9 +769,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -776,9 +785,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -792,9 +801,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
-    scan_ctx->min_max_conjunct_ctxs.insert(scan_ctx->min_max_conjunct_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
+    _scanner_conjuncts.min_max_ctxs.insert(_scanner_conjuncts.min_max_ctxs.end(), expr_ctxs.begin(), expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(scan_ctx->min_max_conjunct_ctxs, nullptr, tuple_desc, _runtime_state,
+    ParquetUTBase::setup_conjuncts_manager(_scanner_conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
 
     return scan_ctx;
@@ -812,7 +821,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     rf_list->driver_sequence = 1;
     rf_list->unarrived_runtime_filters.emplace_back(rf_desc);
     rf_list->slot_descs.emplace_back(ctx->slot_descs[0]);
-    ctx->rf_scan_range_pruner = _pool.add(new RuntimeScanRangePruner(pred_parser, *rf_list));
+    ctx->runtime_filter_scan_range_pruner = _pool.add(new RuntimeScanRangePruner(pred_parser, *rf_list));
 
     return ctx;
 }
@@ -1754,7 +1763,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
 
     Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {"c2", c2}, {""}};
     auto ctx = _create_scan_context(slot_descs, _file4_path);
-    ctx->case_sensitive = true;
+    _scanner_options.case_sensitive = true;
     // --------------finish init context---------------
 
     ASSERT_OK(file_reader->init(ctx));
@@ -2557,13 +2566,13 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
             {""},
     };
     auto ctx = _create_scan_context(slot_descs, min_max_slots, filepath);
-    ctx->lake_schema = &schema;
+    _scanner_params.lake_schema = &schema;
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);
     ParquetUTBase::append_int_conjunct(TExprOpcode::LE, 2, 5, &t_conjuncts);
 
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -2946,7 +2955,7 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_not_hit) {
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_string_conjunct(TExprOpcode::EQ, 1, "2", &t_conjuncts);
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
 
     // attr_value = '2'
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -2973,7 +2982,7 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_string_conjunct(TExprOpcode::EQ, 1, "A", &t_conjuncts);
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
 
     // attr_value = '2'
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -3039,7 +3048,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop2) {
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::EQ, 1, 6, &t_conjuncts);
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     _create_int_conjunct_ctxs(TExprOpcode::EQ, 1, 6, &ctx->conjunct_ctxs_by_slot[1]);
@@ -3122,7 +3131,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop3) {
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::EQ, 1, 6, &t_conjuncts);
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     _create_int_conjunct_ctxs(TExprOpcode::EQ, 1, 6, &ctx->conjunct_ctxs_by_slot[1]);
@@ -3271,7 +3280,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop4) {
     ctx->conjunct_ctxs_by_slot.insert({3, expr_ctxs});
 
     // ParquetUTBase::append_int_conjunct(TExprOpcode::EQ, 2, 6, &t_conjuncts);
-    // ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    // ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     // _create_int_conjunct_ctxs(TExprOpcode::EQ, 2, 6, &ctx->conjunct_ctxs_by_slot[1]);
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], nullptr, tuple_desc, _runtime_state, ctx);
@@ -3467,7 +3476,7 @@ TEST_F(FileReaderTest, TestReadNoMinMaxStatistics) {
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_string_conjunct(TExprOpcode::GE, 0, "2", &t_conjuncts);
     ParquetUTBase::append_string_conjunct(TExprOpcode::LE, 0, "2", &t_conjuncts);
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_conjuncts.min_max_ctxs);
 
     // attr_value = '2'
     _create_string_conjunct_ctxs(TExprOpcode::EQ, 0, "2", &ctx->conjunct_ctxs_by_slot[0]);
@@ -3699,7 +3708,7 @@ TEST_F(FileReaderTest, update_rf_and_filter_row_group) {
     ASSERT_EQ(chunk->debug_row(2), "[3, 33]");
 
     auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 3, false);
-    ctx->runtime_filter_collector->descriptors().at(1)->set_runtime_filter(rf);
+    _scanner_params.runtime_filter_collector->descriptors().at(1)->set_runtime_filter(rf);
 
     chunk->reset();
     ASSERT_OK(file_reader->get_next(&chunk));
@@ -4508,7 +4517,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths) {
     profile->children().emplace_back(std::move(salary_or).value());
     root->children().emplace_back(std::move(profile));
     column_access_paths.emplace_back(std::move(root));
-    ctx->column_access_paths = &column_access_paths;
+    _scanner_params.column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -4569,7 +4578,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths_nulls) {
     profile->children().emplace_back(std::move(salary_or).value());
     root->children().emplace_back(std::move(profile));
     column_access_paths.emplace_back(std::move(root));
-    ctx->column_access_paths = &column_access_paths;
+    _scanner_params.column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -4623,7 +4632,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path) {
     ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
     root->children().emplace_back(std::move(profile_or).value());
     column_access_paths.emplace_back(std::move(root));
-    ctx->column_access_paths = &column_access_paths;
+    _scanner_params.column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -4670,7 +4679,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path_null_
     ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
     root->children().emplace_back(std::move(profile_or).value());
     column_access_paths.emplace_back(std::move(root));
-    ctx->column_access_paths = &column_access_paths;
+    _scanner_params.column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -4715,7 +4724,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_whole_column_access_path
     auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
     ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
     column_access_paths.emplace_back(std::move(root_or).value());
-    ctx->column_access_paths = &column_access_paths;
+    _scanner_params.column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
