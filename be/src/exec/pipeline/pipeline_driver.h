@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 
+#include "base/concurrency/race_detect.h"
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -29,11 +30,10 @@
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "fmt/printf.h"
+#include "gutil/logging.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -373,14 +373,14 @@ public:
 
     inline bool is_in_ready() const { return _in_ready.load(std::memory_order_acquire); }
     void set_in_ready(bool v) {
-        SCHEDULE_CHECK(!v || !is_in_ready());
+        DCHECK(!v || !is_in_ready());
         _in_ready.store(v, std::memory_order_release);
     }
 
     bool is_in_blocked() const { return _in_blocked.load(std::memory_order_acquire); }
     void set_in_blocked(bool v) {
-        SCHEDULE_CHECK(!v || !is_in_blocked());
-        SCHEDULE_CHECK(!is_in_ready());
+        DCHECK(!v || !is_in_blocked());
+        DCHECK(!is_in_ready());
         _in_blocked.store(v, std::memory_order_release);
     }
 
@@ -399,7 +399,8 @@ public:
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
 
-    PipelineObserver* observer() { return &_observer; }
+    PipelineObserver* observer() { return _observer.get(); }
+    void set_observer(std::unique_ptr<PipelineObserver> observer);
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
@@ -445,7 +446,7 @@ protected:
     std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
-    PipelineDriverObserver _observer;
+    std::unique_ptr<PipelineObserver> _observer;
     // Keep this before _operators so driver teardown destroys operators first, then their managers.
     std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;

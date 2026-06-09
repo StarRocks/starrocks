@@ -23,6 +23,7 @@
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -86,6 +87,9 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
                 pipeline_event(), this, pipeline_timer_context, fragment_ctx->next_driver_id());
 
         if (state->enable_event_scheduler()) {
+            auto* event_scheduler = fragment_ctx->event_scheduler();
+            DCHECK(event_scheduler != nullptr);
+            driver->set_observer(event_scheduler->create_driver_observer(driver.get()));
             driver->assign_observer();
         }
 
