@@ -111,8 +111,10 @@ TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
         Operators ops_with_sink;
         ops_with_sink.emplace_back(factories[0]->create(100, i));
         ops_with_sink.emplace_back(factories[1]->create(100, i));
-        pipeline.drivers().emplace_back(std::make_shared<PipelineDriver>(
-                ops_with_sink, nullptr, nullptr, nullptr, nullptr, pipeline.pipeline_event(), &pipeline, nullptr, -1));
+        PipelineDriverRuntimeContext runtime_context;
+        runtime_context.pipeline_event = pipeline.pipeline_event();
+        runtime_context.driver_observer = &pipeline;
+        pipeline.drivers().emplace_back(std::make_shared<PipelineDriver>(ops_with_sink, runtime_context, -1));
     }
 
     group.add_pipeline(&pipeline);

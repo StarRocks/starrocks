@@ -136,12 +136,25 @@ struct DriverPrepareHarness {
         runtime_state.set_fragment_runtime_state(&fragment_runtime_state);
         operators.emplace_back(source);
         operators.emplace_back(sink_factory.create(1, 0));
-        driver = std::make_unique<PipelineDriver>(operators, nullptr, &query_runtime_state, &fragment_runtime_state,
-                                                  nullptr, pipeline_event.get(), nullptr, nullptr, -1);
+        PipelineDriverRuntimeContext runtime_context;
+        runtime_context.query_runtime_state = &query_runtime_state;
+        runtime_context.fragment_runtime_state = &fragment_runtime_state;
+        runtime_context.runtime_state = &runtime_state;
+        runtime_context.pipeline_event = pipeline_event.get();
+        driver = std::make_unique<PipelineDriver>(operators, runtime_context, -1);
     }
 };
 
 } // namespace
+
+TEST(PipelineDriverExecRuntimeTest, RuntimeContextAccessorsExposeContextPointers) {
+    DriverPrepareHarness harness(false);
+
+    EXPECT_EQ(nullptr, harness.driver->query_ctx());
+    EXPECT_EQ(&harness.query_runtime_state, harness.driver->query_runtime_state());
+    EXPECT_EQ(nullptr, harness.driver->fragment_ctx());
+    EXPECT_EQ(&harness.fragment_runtime_state, harness.driver->fragment_runtime_state());
+}
 
 TEST(PipelineDriverExecRuntimeTest, DefaultTicketedQueueAttachesOnlyWhenCacheEnabled) {
     {
@@ -176,6 +189,17 @@ TEST(PipelineDriverExecRuntimeTest, TicketedQueuePolicyControlsAttachmentWithout
 
     ASSERT_NE(nullptr, harness.source->ticket_checker());
     EXPECT_EQ(harness.source->ticket_checker(), morsel_queue.attached_ticket_checker);
+}
+
+TEST(PipelineDriverExecRuntimeTest, PrepareRequiresObserverWhenEventSchedulerEnabled) {
+    DriverPrepareHarness harness(false);
+    harness.runtime_state.set_enable_event_scheduler(true);
+
+    auto status = harness.driver->prepare(&harness.runtime_state);
+
+    ASSERT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_internal_error());
+    EXPECT_NE(std::string::npos, std::string(status.message()).find("observer"));
 }
 
 } // namespace starrocks::pipeline

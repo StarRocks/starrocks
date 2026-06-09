@@ -126,9 +126,8 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     auto exec_group = ExecutionGroupBuilder::create_normal_exec_group();
     auto pipeline = std::make_shared<Pipeline>(0, OpFactories(), exec_group.get());
     MockDriverObserver observer;
-    auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, &_query_ctx->query_runtime_state(),
-                                                   &_fragment_ctx->fragment_runtime_state(), _fragment_ctx,
-                                                   pipeline->pipeline_event(), &observer, nullptr, 0);
+    auto runtime_context = _fragment_ctx->driver_runtime_context(pipeline->pipeline_event(), &observer);
+    auto driver = std::make_shared<PipelineDriver>(ops, runtime_context, 0);
 
     driver->prepare(_runtime_state);
     driver->prepare_local_state(_runtime_state);

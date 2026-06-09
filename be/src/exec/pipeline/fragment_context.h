@@ -34,6 +34,7 @@
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/fragment_runtime_state.h"
+#include "exec/pipeline/primitives/pipeline_driver_runtime_context.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "gen_cpp/FrontendService.h"
@@ -86,6 +87,7 @@ public:
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
     void attach_to_runtime_state(RuntimeState* state);
+    PipelineDriverRuntimeContext driver_runtime_context(Event* pipeline_event, DriverObserver* driver_observer);
     FragmentDictState* dict_state() const { return _fragment_dict_state.get(); }
     ExecNode*& plan() { return _plan; }
 

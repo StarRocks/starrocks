@@ -66,13 +66,7 @@ const Drivers& Pipeline::drivers() const {
 
 void Pipeline::instantiate_drivers(RuntimeState* state) {
     auto* query_ctx = state->query_ctx();
-    auto* query_runtime_state = state->query_runtime_state();
     auto* fragment_ctx = state->fragment_ctx();
-    auto* fragment_runtime_state = state->fragment_runtime_state();
-    if (fragment_runtime_state == nullptr && fragment_ctx != nullptr) {
-        fragment_runtime_state = &fragment_ctx->fragment_runtime_state();
-    }
-    auto pipeline_timer_context = fragment_ctx->pipeline_timer_context();
     auto workgroup = fragment_ctx->workgroup();
 
     size_t dop = degree_of_parallelism();
@@ -84,9 +78,9 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     _drivers.reserve(dop);
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
-        DriverPtr driver = std::make_shared<PipelineDriver>(
-                std::move(operators), query_ctx, query_runtime_state, fragment_runtime_state, fragment_ctx,
-                pipeline_event(), this, pipeline_timer_context, fragment_ctx->next_driver_id());
+        auto runtime_context = fragment_ctx->driver_runtime_context(pipeline_event(), this);
+        DriverPtr driver =
+                std::make_shared<PipelineDriver>(std::move(operators), runtime_context, fragment_ctx->next_driver_id());
 
         if (state->enable_event_scheduler()) {
             auto* event_scheduler = fragment_ctx->event_scheduler();

@@ -134,6 +134,22 @@ void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
     state->set_fragment_runtime_state(&fragment_runtime_state());
 }
 
+PipelineDriverRuntimeContext FragmentContext::driver_runtime_context(Event* pipeline_event,
+                                                                     DriverObserver* driver_observer) {
+    DCHECK(_runtime_state != nullptr);
+    PipelineDriverRuntimeContext context;
+    context.fragment_ctx = this;
+    context.fragment_runtime_state = &fragment_runtime_state();
+    context.runtime_state = _runtime_state.get();
+    context.query_ctx = _runtime_state->query_ctx();
+    context.query_runtime_state = _runtime_state->query_runtime_state();
+    context.query_ctx_lifetime = _runtime_state->query_ctx_lifetime();
+    context.pipeline_event = pipeline_event;
+    context.driver_observer = driver_observer;
+    context.pipeline_timer_context = _pipeline_timer_context;
+    return context;
+}
+
 void FragmentContext::count_down_execution_group(size_t val) {
     // Note that _pipelines may be destructed after fetch_add
     // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add

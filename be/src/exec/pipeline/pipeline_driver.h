@@ -28,6 +28,7 @@
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_state.h"
+#include "exec/pipeline/primitives/pipeline_driver_runtime_context.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
@@ -89,23 +90,21 @@ public:
     };
 
 public:
-    PipelineDriver(const Operators& operators, QueryContext* query_ctx, QueryRuntimeState* query_runtime_state,
-                   FragmentRuntimeState* fragment_runtime_state, FragmentContext* fragment_ctx, Event* pipeline_event,
-                   DriverObserver* driver_observer, PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id);
+    PipelineDriver(const Operators& operators, PipelineDriverRuntimeContext runtime_context, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
 
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
 
-    QueryContext* query_ctx() { return _query_ctx; }
-    const QueryContext* query_ctx() const { return _query_ctx; }
-    QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
-    const QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
-    FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
-    const FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
-    FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
+    QueryContext* query_ctx() { return _runtime_context.query_ctx; }
+    const QueryContext* query_ctx() const { return _runtime_context.query_ctx; }
+    QueryRuntimeState* query_runtime_state() { return _runtime_context.query_runtime_state; }
+    const QueryRuntimeState* query_runtime_state() const { return _runtime_context.query_runtime_state; }
+    FragmentRuntimeState* fragment_runtime_state() { return _runtime_context.fragment_runtime_state; }
+    const FragmentRuntimeState* fragment_runtime_state() const { return _runtime_context.fragment_runtime_state; }
+    FragmentContext* fragment_ctx() { return _runtime_context.fragment_ctx; }
+    const FragmentContext* fragment_ctx() const { return _runtime_context.fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
@@ -444,7 +443,7 @@ protected:
     // Helper function to build readable string with option to use raw operator names
     std::string _build_readable_string(bool use_raw_name) const;
 
-    RuntimeState* _runtime_state = nullptr;
+    PipelineDriverRuntimeContext _runtime_context;
     std::unique_ptr<PipelineObserver> _observer;
     // Keep this before _operators so driver teardown destroys operators first, then their managers.
     std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
@@ -462,13 +461,6 @@ protected:
     int64_t _global_rf_wait_timeout_ns = -1;
 
     size_t _first_unfinished{0};
-    QueryContext* _query_ctx;
-    QueryRuntimeState* _query_runtime_state;
-    FragmentRuntimeState* _fragment_runtime_state;
-    FragmentContext* _fragment_ctx;
-    Event* _pipeline_event;
-    DriverObserver* _driver_observer;
-    PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
