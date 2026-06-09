@@ -174,7 +174,13 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
                                             _scanner_ctx->params->options->parquet_page_index_enable,
                                             _scanner_ctx->params->options->parquet_bloom_filter_enable};
     auto sparse_range = _scanner_ctx->predicate_tree.visit(visitor);
-    _group_reader_param.stats->_optimzation_counter += visitor.counter;
+    _group_reader_param.stats->bloom_filter_tried_counter += visitor.counter.bloom_filter_tried_counter;
+    _group_reader_param.stats->bloom_filter_success_counter += visitor.counter.bloom_filter_success_counter;
+    _group_reader_param.stats->statistics_tried_counter += visitor.counter.statistics_tried_counter;
+    _group_reader_param.stats->statistics_success_counter += visitor.counter.statistics_success_counter;
+    _group_reader_param.stats->page_index_tried_counter += visitor.counter.page_index_tried_counter;
+    _group_reader_param.stats->page_index_filter_group_counter += visitor.counter.page_index_filter_group_counter;
+    _group_reader_param.stats->page_index_success_counter += visitor.counter.page_index_success_counter;
     if (!sparse_range.ok()) {
         LOG(WARNING) << "filter row group failed: " << sparse_range.status().message();
     } else if (sparse_range.value().has_value()) {
@@ -205,7 +211,20 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
                     if (res.ok() && res->has_value() && res->value().span_size() == 0) {
                         filter = true;
                     }
-                    this->_group_reader_param.stats->_optimzation_counter += visitor.counter;
+                    this->_group_reader_param.stats->bloom_filter_tried_counter +=
+                            visitor.counter.bloom_filter_tried_counter;
+                    this->_group_reader_param.stats->bloom_filter_success_counter +=
+                            visitor.counter.bloom_filter_success_counter;
+                    this->_group_reader_param.stats->statistics_tried_counter +=
+                            visitor.counter.statistics_tried_counter;
+                    this->_group_reader_param.stats->statistics_success_counter +=
+                            visitor.counter.statistics_success_counter;
+                    this->_group_reader_param.stats->page_index_tried_counter +=
+                            visitor.counter.page_index_tried_counter;
+                    this->_group_reader_param.stats->page_index_filter_group_counter +=
+                            visitor.counter.page_index_filter_group_counter;
+                    this->_group_reader_param.stats->page_index_success_counter +=
+                            visitor.counter.page_index_success_counter;
                     return Status::OK();
                 },
                 true, 0));
@@ -292,13 +311,13 @@ Status FileReader::_init_group_readers() {
                                                               row_group_first_row, row_group_first_row_id);
         RETURN_IF_ERROR(row_group_reader->init());
 
-        _group_reader_param.stats->parquet_total_row_groups += 1;
+        _group_reader_param.stats->total_row_groups += 1;
 
         RETURN_IF_ERROR(_collect_row_group_io(row_group_reader));
         // You should call row_group_reader->init() before _filter_group()
         if (_filter_group(row_group_reader)) {
             DLOG(INFO) << "row group " << i << " of file has been filtered";
-            _group_reader_param.stats->parquet_filtered_row_groups += 1;
+            _group_reader_param.stats->filtered_row_groups += 1;
             continue;
         }
 
@@ -357,12 +376,11 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                         auto ret = _update_rf_and_filter_group(cur_row_group);
                         if (ret.ok() && ret.value()) {
                             // row group is filtered by runtime filter
-                            _group_reader_param.stats->parquet_filtered_row_groups += 1;
+                            _group_reader_param.stats->filtered_row_groups += 1;
                             continue;
                         } else if (ret.status().is_end_of_file()) {
                             // If rf is always false, will return eof
-                            _group_reader_param.stats->parquet_filtered_row_groups +=
-                                    (_row_group_size - _cur_row_group_idx);
+                            _group_reader_param.stats->filtered_row_groups += (_row_group_size - _cur_row_group_idx);
                             _row_group_readers.assign(_row_group_readers.size(), nullptr);
                             _cur_row_group_idx = _row_group_size;
                             break;

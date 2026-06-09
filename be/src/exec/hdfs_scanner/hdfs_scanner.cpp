@@ -298,7 +298,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
-        LOG(ERROR) << "failed to read file: " << _scanner_params.path;
+        LOG(ERROR) << "failed to read file: " << _scanner_params.file_path;
     }
     _app_stats.rows_read += (*chunk)->num_rows();
     return status;
@@ -317,7 +317,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     RETURN_IF_ERROR(do_open(runtime_state));
-    VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
+    VLOG_FILE << "open file success: " << _scanner_params.file_path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], candidate node = " << _scanner_params.scan_range->candidate_node;
@@ -333,7 +333,7 @@ void HdfsScanner::close() noexcept {
     if (_scanner_ctx.can_use_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return;
     }
-    VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
+    VLOG_FILE << "close file success: " << _scanner_params.file_path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], rows = " << _app_stats.rows_read;
@@ -348,7 +348,7 @@ void HdfsScanner::close() noexcept {
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
-    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
+    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.file_path))
     int64_t file_size = options.file_size;
     if (file_size < 0) {
         ASSIGN_OR_RETURN(file_size, raw_file->stream()->get_size());
@@ -409,7 +409,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
 
 Status HdfsScanner::open_random_access_file() {
     OpenFileOptions options{.fs = _scanner_params.fs,
-                            .path = _scanner_params.path,
+                            .file_path = _scanner_params.file_path,
                             .file_size = _scanner_params.file_size,
                             .fs_stats = &_fs_stats,
                             .app_stats = &_app_stats,
@@ -512,7 +512,7 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
 void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 Status HdfsScanner::reinterpret_status(const Status& st) {
-    auto msg = fmt::format("file = {}", _scanner_params.path);
+    auto msg = fmt::format("file = {}", _scanner_params.file_path);
 
     Status ret = st;
     // After catching the AWS 404 file not found error and returning it to the FE,

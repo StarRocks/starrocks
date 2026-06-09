@@ -440,8 +440,8 @@ bool ApplicationVersion::IsAlwaysCompressed() const {
 
 StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     // return from split_context directly
-    if (_scanner_ctx->split_context != nullptr) {
-        auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->split_context);
+    if (_scanner_ctx->params->split_context != nullptr) {
+        auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->params->split_context);
         return split_ctx->file_metadata;
     }
 
@@ -527,7 +527,7 @@ Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int
 
         *file_metadata_ptr = std::make_shared<FileMetaData>();
         FileMetaData* file_metadata = file_metadata_ptr->get();
-        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->params->options->case_sensitive));
         *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
     }
 #if defined(BE_TEST) || defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)

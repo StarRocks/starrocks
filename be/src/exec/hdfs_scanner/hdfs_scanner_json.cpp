@@ -235,7 +235,7 @@ Status HdfsJsonScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify a compress type, we choose it by looking at the filename.
-        compression_type = get_compression_type_from_path(_scanner_params.path);
+        compression_type = get_compression_type_from_path(_scanner_params.file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;

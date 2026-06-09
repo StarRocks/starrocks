@@ -72,7 +72,7 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
 
     _avro_reader = std::make_unique<AvroReader>();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    return _avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
+    return _avro_reader->init(std::move(input_stream), _scanner_params.file_path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
                               /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
                               split_offset, split_length, _scanner_params.avro_schema_json,

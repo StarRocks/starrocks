@@ -101,8 +101,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
 
     // io coalesce
-    RuntimeProfile::Counter* group_active_lazy_coalesce_together = nullptr;
-    RuntimeProfile::Counter* group_active_lazy_coalesce_seperately = nullptr;
+    RuntimeProfile::Counter* active_lazy_coalesce_together = nullptr;
+    RuntimeProfile::Counter* active_lazy_coalesce_seperately = nullptr;
 
     // page statistics
     RuntimeProfile::Counter* has_page_statistics = nullptr;
@@ -159,10 +159,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
-    group_active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether",
-                                                            TUnit::UNIT, kParquetProfileSectionPrefix);
-    group_active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately",
-                                                              TUnit::UNIT, kParquetProfileSectionPrefix);
+    active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
+                                                      kParquetProfileSectionPrefix);
+    active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
+                                                        kParquetProfileSectionPrefix);
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
@@ -205,8 +205,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(group_chunk_read_timer, _app_stats.group_chunk_read_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _app_stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
-    COUNTER_UPDATE(group_active_lazy_coalesce_together, _app_stats.group_active_lazy_coalesce_together);
-    COUNTER_UPDATE(group_active_lazy_coalesce_seperately, _app_stats.group_active_lazy_coalesce_seperately);
+    COUNTER_UPDATE(active_lazy_coalesce_together, _app_stats.active_lazy_coalesce_together);
+    COUNTER_UPDATE(active_lazy_coalesce_seperately, _app_stats.active_lazy_coalesce_seperately);
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
@@ -214,16 +214,16 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     do_update_deletion_vector_filter_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
-    COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
-    COUNTER_UPDATE(filtered_row_groups, _app_stats.parquet_filtered_row_groups);
+    COUNTER_UPDATE(total_row_groups, _app_stats.total_row_groups);
+    COUNTER_UPDATE(filtered_row_groups, _app_stats.filtered_row_groups);
 
-    COUNTER_UPDATE(statistics_tried_counter, _app_stats._optimzation_counter.statistics_tried_counter);
-    COUNTER_UPDATE(statistics_success_counter, _app_stats._optimzation_counter.statistics_success_counter);
-    COUNTER_UPDATE(page_index_tried_counter, _app_stats._optimzation_counter.page_index_tried_counter);
-    COUNTER_UPDATE(page_index_success_counter, _app_stats._optimzation_counter.page_index_success_counter);
-    COUNTER_UPDATE(page_index_filter_group_counter, _app_stats._optimzation_counter.page_index_filter_group_counter);
-    COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats._optimzation_counter.bloom_filter_tried_counter);
-    COUNTER_UPDATE(bloom_filter_success_counter, _app_stats._optimzation_counter.bloom_filter_success_counter);
+    COUNTER_UPDATE(statistics_tried_counter, _app_stats.statistics_tried_counter);
+    COUNTER_UPDATE(statistics_success_counter, _app_stats.statistics_success_counter);
+    COUNTER_UPDATE(page_index_tried_counter, _app_stats.page_index_tried_counter);
+    COUNTER_UPDATE(page_index_success_counter, _app_stats.page_index_success_counter);
+    COUNTER_UPDATE(page_index_filter_group_counter, _app_stats.page_index_filter_group_counter);
+    COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
+    COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
     if (_scanner_ctx.conjuncts_manager != nullptr &&
         _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {

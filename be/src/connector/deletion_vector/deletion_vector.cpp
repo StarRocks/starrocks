@@ -82,7 +82,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_f
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _params.fs,
-                                  .path = file_path,
+                                  .file_path = file_path,
                                   .fs_stats = &fs_scan_stats,
                                   .app_stats = &app_scan_stats,
                                   .datacache_options = _params.datacache_options};

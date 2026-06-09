@@ -200,7 +200,7 @@ Status CacheSelectScanner::_fetch_parquet() {
 // Split text into multiply disk ranges, then fetch it
 Status CacheSelectScanner::_fetch_textfile() {
     // If it's compressed file, we only handle scan range whose offset == 0.
-    if (get_compression_type_from_path(_scanner_params.path) != UNKNOWN_COMPRESSION &&
+    if (get_compression_type_from_path(_scanner_params.file_path) != UNKNOWN_COMPRESSION &&
         _scanner_params.scan_range->offset != 0) {
         return Status::OK();
     }
@@ -232,7 +232,7 @@ Status CacheSelectScanner::_fetch_iceberg_delete_files() {
 Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
     OpenFileOptions options{};
     options.fs = _scanner_params.fs;
-    options.path = file_path;
+    options.file_path = file_path;
     options.file_size = file_size;
     options.datacache_options = _scanner_params.datacache_options;
     options.fs_stats = &_fs_stats;

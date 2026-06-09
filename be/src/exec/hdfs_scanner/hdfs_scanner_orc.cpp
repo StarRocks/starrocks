@@ -100,7 +100,8 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
 
-    const auto* scan_range = _scanner_ctx.params->scan_range size_t scan_start = scan_range->offset;
+    const auto* scan_range = _scanner_ctx.params->scan_range;
+    size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
     if (offset >= scan_start && offset < scan_end) {
@@ -112,8 +113,8 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
-    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.params->min_max_tuple_desc ChunkPtr min_chunk =
-            RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.params->min_max_tuple_desc;
+    ChunkPtr min_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     ChunkPtr max_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
@@ -356,7 +357,8 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     uint64_t stripe_number = reader->getNumberOfStripes();
     std::vector<DiskRange> stripe_disk_ranges{};
 
-    const auto* scan_range = _scanner_ctx.params->scan_range size_t scan_start = scan_range->offset;
+    const auto* scan_range = _scanner_ctx.params->scan_range;
+    size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
@@ -782,9 +784,8 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root_profile->add_child_counter(
             "StripeActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
-    COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
-    COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
-                   _app_stats.orc_stripe_active_lazy_coalesce_seperately);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.active_lazy_coalesce_together);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter, _app_stats.active_lazy_coalesce_seperately);
 
     if (_orc_reader != nullptr) {
         // _orc_reader is nullptr for split task

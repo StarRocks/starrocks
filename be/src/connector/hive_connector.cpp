@@ -254,7 +254,7 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
                     ctx->hdfs_scan_node = hdfs_scan_node;
                     return ctx;
                 }));
-        _scanner_params.scan_range_id = glm_ctx->assign_scanner_params.scan_range_id(_scan_range);
+        _scanner_params.scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
     }
 }
 
@@ -436,9 +436,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _scanner_params._partition_index_in_hdfs_partition_columns.push_back(index);
         } else if (int32_t extended_col_index = extended_column_index(slots[i]->id()); extended_col_index >= 0) {
             _scanner_params.extended_col_slots.push_back(slots[i]);
-            _scanner_params.extended_col_index_in_chunk.push_back(i);
             _scanner_params.index_in_extended_columns.push_back(extended_col_index);
-            !_scanner_params.extended_col_slots.empty() = true;
         } else {
             _scanner_params.materialize_slots.push_back(slots[i]);
             _scanner_params.materialize_index_in_chunk.push_back(i);
@@ -758,6 +756,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
+    bool disable_column_access_path_hints = false;
     HdfsScannerParams scanner_params;
     if (hdfs_scan_node.__isset.column_access_paths && !disable_column_access_path_hints &&
         _column_access_paths.empty()) {
@@ -782,7 +781,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.scan_range = &scan_range;
     scanner_params.scan_range_id = _scanner_params.scan_range_id;
     scanner_params.fs = _pool.add(fs.release());
-    scanner_params.path = native_file_path;
+    scanner_params.file_path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
     scanner_params.table_location = _hive_table->get_base_path();
     scanner_params.tuple_desc = _tuple_desc;
@@ -815,7 +814,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.lazy_column_coalesce_counter = &_provider->_lazy_column_coalesce_counter;
     scanner_params.split_context = down_cast<HdfsSplitContext*>(_split_context);
     if (state->query_options().__isset.connector_max_split_size) {
-        scanner_params.options->connector_max_split_size = state->query_options().connector_max_split_size;
+        _options.connector_max_split_size = state->query_options().connector_max_split_size;
     }
 
     for (const auto& delete_file : scan_range.delete_files) {
@@ -1044,7 +1043,7 @@ int64_t HiveDataSource::estimated_mem_usage() const {
     return _scanner->estimated_mem_usage();
 }
 
-void HiveDataSourceProvider::peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
+void HiveDataSourceProvider::prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (const auto& sc : scan_ranges) {
         const TScanRange& x = sc.scan_range;
         if (!x.__isset.hdfs_scan_range) continue;

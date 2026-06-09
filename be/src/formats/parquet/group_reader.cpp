@@ -151,9 +151,9 @@ Status GroupReader::prepare() {
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
         if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
-            _param.stats->group_active_lazy_coalesce_together += 1;
+            _param.stats->active_lazy_coalesce_together += 1;
         } else {
-            _param.stats->group_active_lazy_coalesce_seperately += 1;
+            _param.stats->active_lazy_coalesce_seperately += 1;
         }
         _set_end_offset(end_offset);
         RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
