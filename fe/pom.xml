@@ -162,7 +162,11 @@ under the License.
                     <id>cloudera</id>
                     <url>https://repository.cloudera.com/repository/cloudera-repos/</url>
                 </repository>
-
+                <!-- for leveldbjni-all-1.8.jar,commons-crypto-1.0.0.jar on aarch64-->
+                <repository>
+                    <id>kunpeng</id>
+                    <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
+                </repository>
 
             </repositories>
 
