@@ -14,13 +14,13 @@
 
 #pragma once
 
-#include <fs/fs.h>
-
 #include <map>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <vector>
+
+#include <arrow/api.h>
+#include <arrow/ipc/api.h>
 
 #include "base/string/slice.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
@@ -28,10 +28,8 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/file_scanner/file_scanner.h"
+#include "fs/fs.h"
 #include "runtime/mem_pool.h"
-
-#include <arrow/api.h>
-#include <arrow/ipc/api.h>
 
 namespace starrocks {
 
@@ -77,6 +75,7 @@ private:
     ObjectPool _pool;
     Filter _chunk_filter;
     ArrowConvertContext _conv_ctx;
+    int64_t _last_file_scan_rows{0};
 };
 
 } // namespace starrocks
