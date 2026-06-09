@@ -89,23 +89,21 @@ public:
     };
 
 public:
-    PipelineDriver(const Operators& operators, QueryContext* query_ctx, QueryRuntimeState* query_runtime_state,
-                   FragmentRuntimeState* fragment_runtime_state, FragmentContext* fragment_ctx, Event* pipeline_event,
-                   DriverObserver* driver_observer, PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id);
+    PipelineDriver(const Operators& operators, QueryRuntimeState* query_runtime_state,
+                   FragmentRuntimeState* fragment_runtime_state, Event* pipeline_event, DriverObserver* driver_observer,
+                   PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
 
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
 
-    QueryContext* query_ctx() { return _query_ctx; }
-    const QueryContext* query_ctx() const { return _query_ctx; }
+    RuntimeState* runtime_state() { return _runtime_state; }
+    const RuntimeState* runtime_state() const { return _runtime_state; }
     QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
     const QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
     FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
     const FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
-    FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
@@ -462,10 +460,8 @@ protected:
     int64_t _global_rf_wait_timeout_ns = -1;
 
     size_t _first_unfinished{0};
-    QueryContext* _query_ctx;
     QueryRuntimeState* _query_runtime_state;
     FragmentRuntimeState* _fragment_runtime_state;
-    FragmentContext* _fragment_ctx;
     Event* _pipeline_event;
     DriverObserver* _driver_observer;
     PipelineTimerContextPtr _pipeline_timer_context = nullptr;

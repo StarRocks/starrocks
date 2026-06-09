@@ -140,6 +140,7 @@ public:
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    const pipeline::QueryContext* query_ctx() const { return _query_ctx; }
     void set_query_runtime_state(pipeline::QueryRuntimeState* query_runtime_state) {
         _query_runtime_state = query_runtime_state;
     }
@@ -153,6 +154,7 @@ public:
     void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
     QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
+    const pipeline::FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
