@@ -2,12 +2,12 @@
 
 From v4.2 onwards, the system can push multi-table joins (both `INNER JOIN` and `CROSS JOIN`) down to the external database when all joined tables come from the same JDBC catalog. This lets the source database execute the join using its own indexes and optimizer, and returns only the joined result back to the system.
 
-### Enable join pushdown
+### Configure join pushdown
 
-Join pushdown is disabled by default. Set the session variable `enable_jdbc_join_push_down` to `true` to opt in:
+Join pushdown is enabled by default. Set the session variable `enable_jdbc_join_push_down` to `false` to disable it:
 
 ```SQL
-SET enable_jdbc_join_push_down = true;
+SET enable_jdbc_join_push_down = false;
 ```
 
 ### How it works
@@ -23,7 +23,7 @@ JOIN jdbc0.db.customers c ON o.customer_id = c.customer_id
 WHERE o.amount >= 20 AND c.region IN ('east', 'west');
 ```
 
-Without pushdown, the system issues two separate scans and joins the result locally. With `enable_jdbc_join_push_down = true`, the whole join subtree is pushed down to the remote database. The local plan contains only one JDBC scan node, and the pushed-down SQL looks similar to:
+When `enable_jdbc_join_push_down` is `false`, the system issues two separate scans and joins the result locally. When the variable is `true`, the whole join subtree is pushed down to the remote database. The local plan contains only one JDBC scan node, and the pushed-down SQL looks similar to:
 
 ```SQL
 SELECT `c1`, `c2`, `c3` FROM (

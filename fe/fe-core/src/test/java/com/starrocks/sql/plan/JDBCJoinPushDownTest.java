@@ -36,10 +36,8 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -52,16 +50,6 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
-    }
-
-    @BeforeEach
-    public void setUp() {
-        connectContext.getSessionVariable().setEnableJdbcJoinPushDown(true);
-    }
-
-    @AfterEach
-    public void tearDown() {
-        connectContext.getSessionVariable().setEnableJdbcJoinPushDown(false);
     }
 
     private static int countOccurrences(String text, String pattern) {
@@ -213,11 +201,16 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
 
     @Test
     public void testFeatureDisabledSessionVariable() throws Exception {
+        boolean oldValue = connectContext.getSessionVariable().isEnableJdbcJoinPushDown();
         connectContext.getSessionVariable().setEnableJdbcJoinPushDown(false);
-        String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
-                "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
-        String plan = getFragmentPlan(sql);
-        assertNotContains(plan, "sr_merged");
+        try {
+            String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
+                    "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "sr_merged");
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcJoinPushDown(oldValue);
+        }
     }
 
     @Test

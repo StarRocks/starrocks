@@ -2,12 +2,12 @@
 
 自 v4.2 起，当参与 Join 的表都来自同一个 JDBC Catalog 时，系统可以将多表 Join（`INNER JOIN` 与 `CROSS JOIN`）下推到外部数据库执行。下推后由源数据库利用自身的索引和优化器完成 Join，仅将 Join 结果返回给系统。
 
-### 启用 Join 下推
+### 配置 Join 下推
 
-Join 下推默认关闭。将 Session 变量 `enable_jdbc_join_push_down` 设置为 `true` 启用该特性：
+Join 下推默认开启。可将 Session 变量 `enable_jdbc_join_push_down` 设置为 `false` 禁用该特性：
 
 ```SQL
-SET enable_jdbc_join_push_down = true;
+SET enable_jdbc_join_push_down = false;
 ```
 
 ### 工作原理
@@ -23,7 +23,7 @@ JOIN jdbc0.db.customers c ON o.customer_id = c.customer_id
 WHERE o.amount >= 20 AND c.region IN ('east', 'west');
 ```
 
-未开启下推时，系统会分别扫描两张表后在本地完成 Join。开启 `enable_jdbc_join_push_down = true` 后，整个 Join 子树会被整体下推到远端数据库，本地执行计划中只剩一个 JDBC Scan 节点，下推的 SQL 类似：
+当 `enable_jdbc_join_push_down` 为 `false` 时，系统会分别扫描两张表后在本地完成 Join。当该变量为 `true` 时，整个 Join 子树会被整体下推到远端数据库，本地执行计划中只剩一个 JDBC Scan 节点，下推的 SQL 类似：
 
 ```SQL
 SELECT `c1`, `c2`, `c3` FROM (

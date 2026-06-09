@@ -76,9 +76,6 @@ properties("replication_num" = "1");
 insert into db_join_pushdown_internal_${uuid0}.vip_customers values (10, 'gold'), (30, 'silver'), (40, 'bronze');
 -- result:
 -- !result
-set enable_jdbc_join_push_down=true;
--- result:
--- !result
 explain select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
 join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
@@ -445,6 +442,9 @@ order by o.order_id;
 -- result:
 2	east	25
 3	west	30
+-- !result
+set enable_jdbc_join_push_down=true;
+-- result:
 -- !result
 drop catalog jdbc_join_pushdown_${uuid0};
 -- result:

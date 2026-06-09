@@ -42,8 +42,6 @@ distributed by hash(customer_id) buckets 1
 properties("replication_num" = "1");
 insert into db_join_pushdown_internal_${uuid0}.vip_customers values (10, 'gold'), (30, 'silver'), (40, 'bronze');
 
-set enable_jdbc_join_push_down=true;
-
 explain select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
 join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
@@ -225,6 +223,8 @@ join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
+
+set enable_jdbc_join_push_down=true;
 
 -- cleanup
 drop catalog jdbc_join_pushdown_${uuid0};

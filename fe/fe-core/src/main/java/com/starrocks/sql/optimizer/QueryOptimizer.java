@@ -702,7 +702,8 @@ public class QueryOptimizer extends Optimizer {
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
 
-        if (sessionVariable.isEnableJdbcJoinPushDown()) {
+        if (sessionVariable.isEnableJdbcJoinPushDown() && Utils.hasMultipleSameCatalogJDBCScans(tree)) {
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
             scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinToJDBCRule());
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);

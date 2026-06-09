@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
@@ -412,6 +414,31 @@ public class Utils {
                     joinType.isLeftOuterJoin() || joinType.isRightOuterJoin();
         }
         return expression.getInputs().stream().anyMatch(Utils::hasPrunableJoin);
+    }
+
+    // Whether the plan contains >= 2 JDBC scans under the same catalog -- the minimal precondition for
+    // PushDownJoinToJDBCRule to merge anything (it groups JDBC scans by catalog name and requires
+    // group.size() >= 2). Used as a short-circuit guard so the JDBC-join-pushdown rewrite block in
+    // QueryOptimizer stays a no-op for plans that can never be pushed down, leaving their plan untouched.
+    // Single O(node) walk, returns on first hit.
+    public static boolean hasMultipleSameCatalogJDBCScans(OptExpression root) {
+        return countSameCatalogJDBCScans(root, new HashMap<>());
+    }
+
+    private static boolean countSameCatalogJDBCScans(OptExpression expression, Map<String, Integer> catalogCount) {
+        if (expression.getOp() instanceof LogicalJDBCScanOperator) {
+            LogicalJDBCScanOperator scanOp = expression.getOp().cast();
+            String catalog = ((JDBCTable) scanOp.getTable()).getCatalogName();
+            if (catalogCount.merge(catalog, 1, Integer::sum) >= 2) {
+                return true;
+            }
+        }
+        for (OptExpression child : expression.getInputs()) {
+            if (countSameCatalogJDBCScans(child, catalogCount)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean hasUnknownColumnsStats(OptExpression root) {

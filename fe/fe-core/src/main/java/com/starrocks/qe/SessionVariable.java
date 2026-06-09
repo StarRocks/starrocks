@@ -3106,7 +3106,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableShowPredicateTreeInProfile = false;
 
     @VarAttr(name = ENABLE_JDBC_JOIN_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enableJdbcJoinPushDown = false;
+    private boolean enableJdbcJoinPushDown = true;
 
     @VarAttr(name = ENABLE_JDBC_AGG_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcAggPushDown = false;

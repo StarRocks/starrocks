@@ -2,12 +2,12 @@
 
 v4.2 以降、同一の JDBC カタログに属する複数テーブルに対する結合（INNER JOIN および CROSS JOIN）を、外部データベース側へプッシュダウンできるようになりました。これにより、ソースデータベースは自身のインデックスやオプティマイザを用いて結合処理を実行し、結合結果のみをシステムへ返します。
 
-### Join プッシュダウンの有効化
+### Join プッシュダウンの設定
 
-Join プッシュダウンはデフォルトで無効です。セッション変数 enable_jdbc_join_push_down を true に設定して有効化します。
+Join プッシュダウンはデフォルトで有効です。無効化するには、セッション変数 `enable_jdbc_join_push_down` を `false` に設定します。
 
 ```SQL
-SET enable_jdbc_join_push_down = true;
+SET enable_jdbc_join_push_down = false;
 ```
 
 ### 動作の仕組み
@@ -23,7 +23,7 @@ JOIN jdbc0.db.customers c ON o.customer_id = c.customer_id
 WHERE o.amount >= 20 AND c.region IN ('east', 'west');
 ```
 
-プッシュダウンを使用しない場合、システムは 2 回のスキャンを実行し、その結果をローカルで結合します。一方、enable_jdbc_join_push_down = true の場合、結合を含むサブツリー全体がリモートデータベースへプッシュダウンされます。ローカルの実行計画には 1 つの JDBC スキャンノードのみが残り、プッシュダウンされる SQL は次のようになります。
+`enable_jdbc_join_push_down` が `false` の場合、システムは 2 回のスキャンを実行し、その結果をローカルで結合します。一方、この変数が `true` の場合、結合を含むサブツリー全体がリモートデータベースへプッシュダウンされます。ローカルの実行計画には 1 つの JDBC スキャンノードのみが残り、プッシュダウンされる SQL は次のようになります。
 
 ```SQL
 SELECT `c1`, `c2`, `c3` FROM (
