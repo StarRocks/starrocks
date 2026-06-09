@@ -579,4 +579,212 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamStrictModeQualityError) {
     ASSERT_NE(error_log_content.find("too_long_string"), std::string::npos);
 }
 
+TEST_F(ArrowScannerTest, TestScanArrowStreamEmptyFile) {
+    std::string file_path = (_tmp_root_dir / "test_empty.arrow").string();
+
+    arrow::Int32Builder int_builder;
+    arrow::StringBuilder str_builder;
+
+    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
+    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
+    auto schema = arrow::schema({int_field, str_field});
+
+    std::shared_ptr<arrow::Array> int_array;
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    std::shared_ptr<arrow::Array> str_array;
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+    // Create record batch with 0 rows
+    auto batch = arrow::RecordBatch::Make(schema, 0, {int_array, str_array});
+
+    auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
+    ASSERT_ARROW_OK(out_file_res.status());
+    auto out_file = out_file_res.ValueOrDie();
+
+    auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
+    ASSERT_ARROW_OK(writer_res.status());
+    auto writer = writer_res.ValueOrDie();
+
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    ASSERT_ARROW_OK(out_file->Close());
+
+    std::vector<std::string> file_names{file_path};
+    std::vector<std::string> columns{"c0_int", "c1_str"};
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    auto ranges = generate_ranges(file_names, columns.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges);
+
+    ASSERT_OK(scanner->open());
+    auto res = scanner->get_next();
+    // Since there are no rows, the first get_next should return EOF (end of file)
+    ASSERT_TRUE(res.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamNullable) {
+    std::string file_path = (_tmp_root_dir / "test_nullable.arrow").string();
+
+    arrow::Int32Builder int_builder;
+    arrow::StringBuilder str_builder;
+
+    ASSERT_ARROW_OK(int_builder.Append(10));
+    ASSERT_ARROW_OK(int_builder.AppendNull());
+    ASSERT_ARROW_OK(int_builder.Append(30));
+
+    ASSERT_ARROW_OK(str_builder.AppendNull());
+    ASSERT_ARROW_OK(str_builder.Append("hello"));
+    ASSERT_ARROW_OK(str_builder.AppendNull());
+
+    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
+    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
+    auto schema = arrow::schema({int_field, str_field});
+
+    std::shared_ptr<arrow::Array> int_array;
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    std::shared_ptr<arrow::Array> str_array;
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+    auto batch = arrow::RecordBatch::Make(schema, 3, {int_array, str_array});
+
+    auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
+    ASSERT_ARROW_OK(out_file_res.status());
+    auto out_file = out_file_res.ValueOrDie();
+
+    auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
+    ASSERT_ARROW_OK(writer_res.status());
+    auto writer = writer_res.ValueOrDie();
+
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    ASSERT_ARROW_OK(out_file->Close());
+
+    std::vector<std::string> file_names{file_path};
+    std::vector<std::string> columns{"c0_int", "c1_str"};
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    auto ranges = generate_ranges(file_names, columns.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges);
+
+    ASSERT_OK(scanner->open());
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(3, chunk->num_rows());
+
+    auto c0 = chunk->columns()[0];
+    auto c1 = chunk->columns()[1];
+
+    ASSERT_FALSE(c0->is_null(0));
+    ASSERT_TRUE(c0->is_null(1));
+    ASSERT_FALSE(c0->is_null(2));
+
+    ASSERT_TRUE(c1->is_null(0));
+    ASSERT_FALSE(c1->is_null(1));
+    ASSERT_TRUE(c1->is_null(2));
+
+    ASSERT_EQ(10, c0->get(0).get_int32());
+    ASSERT_EQ(30, c0->get(2).get_int32());
+    ASSERT_EQ("hello", c1->get(1).get_slice());
+
+    auto res2 = scanner->get_next();
+    ASSERT_TRUE(res2.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamMultiBatch) {
+    std::string file_path = (_tmp_root_dir / "test_multi_batch.arrow").string();
+
+    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
+    auto schema = arrow::schema({int_field});
+
+    auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
+    ASSERT_ARROW_OK(out_file_res.status());
+    auto out_file = out_file_res.ValueOrDie();
+
+    auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
+    ASSERT_ARROW_OK(writer_res.status());
+    auto writer = writer_res.ValueOrDie();
+
+    // Write batch 1: [1, 2]
+    {
+        arrow::Int32Builder int_builder;
+        ASSERT_ARROW_OK(int_builder.AppendValues({1, 2}));
+        std::shared_ptr<arrow::Array> int_array;
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+        auto batch = arrow::RecordBatch::Make(schema, 2, {int_array});
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    }
+
+    // Write batch 2: [3, 4, 5]
+    {
+        arrow::Int32Builder int_builder;
+        ASSERT_ARROW_OK(int_builder.AppendValues({3, 4, 5}));
+        std::shared_ptr<arrow::Array> int_array;
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+        auto batch = arrow::RecordBatch::Make(schema, 3, {int_array});
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    }
+
+    ASSERT_ARROW_OK(writer->Close());
+    ASSERT_ARROW_OK(out_file->Close());
+
+    std::vector<std::string> file_names{file_path};
+    std::vector<std::string> columns{"c0_int"};
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    auto ranges = generate_ranges(file_names, columns.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges, 3);
+
+    ASSERT_OK(scanner->open());
+    {
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(3, chunk->num_rows());
+        auto c0 = chunk->columns()[0];
+        ASSERT_EQ(1, c0->get(0).get_int32());
+        ASSERT_EQ(2, c0->get(1).get_int32());
+        ASSERT_EQ(3, c0->get(2).get_int32());
+    }
+
+    {
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(2, chunk->num_rows());
+        auto c0 = chunk->columns()[0];
+        ASSERT_EQ(4, c0->get(0).get_int32());
+        ASSERT_EQ(5, c0->get(1).get_int32());
+    }
+
+    auto res2 = scanner->get_next();
+    ASSERT_TRUE(res2.status().is_end_of_file());
+
+    scanner->close();
+}
+
 } // namespace starrocks
