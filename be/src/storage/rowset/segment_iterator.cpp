@@ -297,7 +297,7 @@ private:
         std::map<std::string, std::string> query_params;
         double vector_range = -1.0;
         int result_order = 0;
-        bool use_ivfpq = false;
+        bool refine_distance = false;
 
         // Brute-force fallback fields (when .vi file is missing)
         bool use_brute_force = false;
@@ -313,7 +313,7 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const { return use_vector_index && !refine_distance; }
     };
 
     // Inverted index related context, only created when needed
@@ -812,10 +812,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _vector_index_ctx->vector_slot_id = _opts.vector_search_option->vector_slot_id;
         _vector_index_ctx->vector_range = _opts.vector_search_option->vector_range;
         _vector_index_ctx->result_order = _opts.vector_search_option->result_order;
-        _vector_index_ctx->use_ivfpq = _opts.vector_search_option->use_ivfpq;
+        _vector_index_ctx->refine_distance = _opts.vector_search_option->refine_distance;
         _vector_index_ctx->query_params = _opts.vector_search_option->query_params;
 
-        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->use_ivfpq) {
+        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->refine_distance) {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                                    _opts.vector_search_option->k_factor;
         } else {
@@ -1069,7 +1069,7 @@ void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
 // Handles the case where the segment footer explicitly marks no .vi file (skip_vector_index).
 // Adds the vector column to _schema so it's read in the same I/O pass as other columns.
 Status SegmentIterator::_prepare_vector_index() {
-    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index || _vector_index_ctx->use_ivfpq) {
+    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index || _vector_index_ctx->refine_distance) {
         return Status::OK();
     }
 
@@ -1137,10 +1137,10 @@ Status SegmentIterator::_init_ann_reader() {
     _vector_index_ctx->use_vector_index = false;
 #endif
 
-    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
-        // .vi file not found, empty reader, or no TenANN support.
-        // Set up brute-force fallback for non-IVFPQ only. IVFPQ computes distance
-        // in the expression layer, not via a BE-produced distance column.
+    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        // .vi file not found, empty reader, or no TenANN support. Set up the brute-force fallback only
+        // for the trust-distance path; the refine path recomputes the distance from the full-precision
+        // vectors in the expression layer above the scan, so it needs no BE-produced distance column.
         _setup_brute_force_fallback(*tablet_index_meta);
     }
 
@@ -2404,7 +2404,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk = _context->_adapt_global_dict_chunk.get();
     }
 
-    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
+    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
         DCHECK(rowid != nullptr);
         FloatColumn::MutablePtr distance_column = FloatColumn::create();
         vector<rowid_t> rowids;

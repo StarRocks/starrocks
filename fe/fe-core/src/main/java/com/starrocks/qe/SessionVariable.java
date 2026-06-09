@@ -1084,6 +1084,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String K_FACTOR = "k_factor";
 
+    public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
+
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -3166,6 +3168,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = K_FACTOR)
     private double kFactor = 1;
+
+    // When on, a quantized vector index (IVFPQ, or HNSW with a non-flat quantizer) refines its ANN
+    // result by recomputing the exact distance on the full-precision vectors. Off = trust the (lossy)
+    // index distance. No effect on a non-quantized index, whose distance is already exact.
+    @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
+    private boolean enableVectorIndexRefine = false;
+
+    public boolean isEnableVectorIndexRefine() {
+        return enableVectorIndexRefine;
+    }
+
+    public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
+        this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
 
     public int getPrepareMetadataPoolSize() {
         return prepareMetadataPoolSize;
