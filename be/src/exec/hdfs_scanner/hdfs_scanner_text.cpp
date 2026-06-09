@@ -20,7 +20,6 @@
 #include "base/compression/stream_decompressor.h"
 #include "base/string/utf8_check.h"
 #include "column/column_helper.h"
-#include "exprs/chunk_predicate_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 
@@ -313,14 +312,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
     _app_stats.raw_rows_read += ck->num_rows();
-    for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
-        // do evaluation.
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(it.second, ck.get()));
-        if (ck->num_rows() == 0) {
-            break;
-        }
-    }
+    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
     return Status::OK();
 }
 
@@ -473,7 +465,7 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
         return Status::OK();
     }
 
-    const bool case_sensitive = _scanner_ctx.case_sensitive;
+    const bool case_sensitive = _scanner_ctx.options->case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)
     std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;

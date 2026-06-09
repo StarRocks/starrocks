@@ -102,10 +102,9 @@ private:
     Status _init_conjunct_ctxs(RuntimeState* state);
     void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
-    Status _setup_all_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
-    void _init_rf_counters();
+    void _init_runtime_filter_counters();
     void _init_global_late_materialization_context(RuntimeState* state);
 
     Status _init_partition_values();
@@ -121,39 +120,29 @@ private:
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
     DataCacheOptions _datacache_options{};
-    bool _use_file_metacache = false;
-    bool _use_file_pagecache = false;
     bool _enable_dynamic_prune_scan_range = true;
     bool _enable_split_tasks = false;
 
     // ============ conjuncts =================
-    std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    // Single owner of all conjunct vectors; scanners receive a const pointer.
+    HdfsScannerConjuncts _conjuncts;
 
-    // contains whole conjuncts, used to generate PredicateTree
-    std::vector<ExprContext*> _all_conjunct_ctxs{};
-    // complex conjuncts, such as contains multi slot, are evaled in scanner.
-    std::vector<ExprContext*> _scanner_conjunct_ctxs;
-    // conjuncts that contains only one slot.
-    // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
-    // 2. conjuncts that column is materialized, are evaled in group reader.
-    std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _slots_in_conjunct;
-
-    // used for reader to decide decode or not
-    // if only used by filter(not output) and only used in conjunct_ctx_by_slot
-    // there is no need to decode.
-    std::unordered_set<SlotId> _slots_of_multi_field_conjunct;
-
-    // partition conjuncts of each partition slot.
-    std::vector<ExprContext*> _partition_conjunct_ctxs;
-    std::vector<ExprContext*> _partition_values;
-
-    bool _has_partition_conjuncts = false;
-    bool _filter_by_eval_partition_conjuncts = false;
+    // Partition-level predicate evaluation — not passed to scanners.
+    struct PartitionFilter {
+        std::vector<ExprContext*> conjunct_ctxs;
+        std::vector<ExprContext*> values;
+        bool has_conjuncts = false;
+        bool filter_by_eval = false;
+    };
+    PartitionFilter _partition_filter;
     bool _no_data = false;
 
     int _min_max_tuple_id = 0;
     const TupleDescriptor* _min_max_tuple_desc = nullptr;
+
+    // ============ scan options =================
+    // Immutable query options shared with HdfsScannerParams via non-owning pointer.
+    HdfsScannerOptions _options;
 
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
@@ -181,14 +170,6 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
-    bool _case_sensitive = false;
-    bool _use_min_max_opt = false;
-    // Mirrors THdfsScanNode.can_use_any_column: set when PruneHDFSScanColumnRule
-    // injected a placeholder materialized column because every queried column was
-    // a partition column.  Used together with _use_min_max_opt to avoid reading
-    // that placeholder column from the data file.
-    bool _can_use_any_column = false;
-    bool _use_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;

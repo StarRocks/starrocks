@@ -211,6 +211,64 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* fs_io_counter = nullptr;
 };
 
+// Immutable scan options derived from the query plan node.  Owned by
+// HiveDataSource; HdfsScannerParams and HdfsScannerContext hold a non-owning
+// pointer so every option is written exactly once and shared without copying.
+struct HdfsScannerOptions {
+    bool case_sensitive = false;
+    bool use_min_max_opt = false;
+    // Set by PruneHDFSScanColumnRule when all queried columns are partition columns
+    // and a placeholder materialized column was injected.  Combined with
+    // use_min_max_opt to skip reading the placeholder from the data file.
+    bool can_use_any_column = false;
+    bool use_count_opt = false;
+    bool orc_use_column_names = false;
+    bool parquet_page_index_enable = false;
+    bool parquet_bloom_filter_enable = false;
+    bool use_file_metacache = false;
+    bool use_file_pagecache = false;
+};
+
+// All conjunct contexts and slot metadata derived from the scan plan node.
+// Owned exclusively by HiveDataSource.  Both HdfsScannerParams and
+// HdfsScannerContext hold a non-owning pointer into this struct so the
+// vectors are allocated only once rather than being copied at each layer.
+//
+// The one exception is HdfsScannerContext::conjunct_ctxs_by_slot, which starts
+// as a shallow copy of by_slot because update_with_none_existed_slot() erases
+// entries from it when a column is absent from the data file.
+struct HdfsScannerConjuncts {
+    // Clone of (min_max_ctxs ∪ scan conjuncts), used to build the
+    // ScanConjunctsManager predicate tree (Parquet row-group statistics, etc.).
+    // Lifetime is managed by HiveDataSource's ObjectPool.
+    std::vector<ExprContext*> all_ctxs;
+
+    // Multi-slot predicates (e.g. "a + b > 5") that cannot be pushed into a
+    // single-column reader.  Evaluated in HdfsScanner::get_next() after every
+    // column is materialised.  ORC also folds them into search arguments for
+    // stripe-level skipping, but the post-read pass is still required for
+    // correctness.
+    std::vector<ExprContext*> scanner_ctxs;
+
+    // Single-slot predicates pushed into ORC stripe / Parquet row-group
+    // statistics filtering via min_max_tuple_desc.
+    std::vector<ExprContext*> min_max_ctxs;
+
+    // Single-slot predicates keyed by SlotId.  HdfsScannerContext copies this
+    // map because update_with_none_existed_slot() erases entries when a column
+    // is absent from the data file.
+    std::unordered_map<SlotId, std::vector<ExprContext*>> by_slot;
+
+    // All SlotIds appearing in any conjunct.  Used by
+    // is_lazy_materialization_slot() to decide which columns must be decoded
+    // eagerly.
+    std::unordered_set<SlotId> slots_in_conjunct;
+
+    // Slots appearing in multi-field conjuncts; those slots must be fully
+    // decoded even when they are not output columns.
+    std::unordered_set<SlotId> slots_of_multi_field;
+};
+
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
     const THdfsScanRange* scan_range = nullptr;
@@ -223,15 +281,13 @@ struct HdfsScannerParams {
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
-    std::vector<ExprContext*> all_conjunct_ctxs;
-    // all conjuncts except `conjunct_ctxs_by_slot`, like compound predicates
-    std::vector<ExprContext*> scanner_conjunct_ctxs;
-    std::unordered_set<SlotId> slots_in_conjunct;
-    // slot used by conjunct_ctxs
-    std::unordered_set<SlotId> slots_of_multi_field_conjunct;
+    // Non-owning pointer to the conjuncts owned by HiveDataSource.
+    // Never null after HiveDataSource::_init_scanner() completes.
+    const HdfsScannerConjuncts* conjuncts = nullptr;
 
-    // conjunct ctxs grouped by slot.
-    std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
+    // Non-owning pointer to scan options owned by HiveDataSource.
+    // Never null after HiveDataSource::_init_scanner() completes.
+    const HdfsScannerOptions* options = nullptr;
 
     // The FileSystem used to open the file to be scanned
     FileSystem* fs = nullptr;
@@ -265,16 +321,10 @@ struct HdfsScannerParams {
     std::vector<int> index_in_extended_columns;
     std::vector<ExprContext*> extended_col_values;
 
-    // min max conjunct for filter row group or page
-    // should clone in scanner
-    std::vector<ExprContext*> min_max_conjunct_ctxs;
-
     const TupleDescriptor* min_max_tuple_desc = nullptr;
 
     std::vector<std::string>* hive_column_names = nullptr;
     std::string avro_schema_json;
-
-    bool case_sensitive = false;
 
     HdfsScanProfile* profile = nullptr;
 
@@ -290,21 +340,7 @@ struct HdfsScannerParams {
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
 
     DataCacheOptions datacache_options{};
-    bool use_file_metacache = false;
-    bool use_file_pagecache = false;
-
     std::atomic<int32_t>* lazy_column_coalesce_counter;
-    bool use_min_max_opt = false;
-    // Mirrors THdfsScanNode.can_use_any_column.  When true, PruneHDFSScanColumnRule
-    // injected a placeholder materialized column because all queried columns were
-    // partition columns.  Used together with use_min_max_opt to skip reading the
-    // placeholder from the data file.
-    bool can_use_any_column = false;
-
-    bool use_count_opt = false;
-    bool orc_use_column_names = false;
-    bool parquet_page_index_enable = false;
-    bool parquet_bloom_filter_enable = false;
 
     int64_t connector_max_split_size = 0;
 
@@ -328,8 +364,8 @@ struct HdfsScannerContext {
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
-    std::string formatted_name(const std::string& name) {
-        return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    std::string formatted_name(const std::string& name) const {
+        return options->case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
     std::vector<SlotDescriptor*> slot_descs;
@@ -361,26 +397,20 @@ struct HdfsScannerContext {
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
 
-    // min max conjunct
-    std::vector<ExprContext*> min_max_conjunct_ctxs;
+    // Non-owning pointer shared with HdfsScannerParams.  Provides access to
+    // min_max_ctxs, scanner_ctxs, and all_ctxs without extra copies.
+    // conjunct_ctxs_by_slot below is a per-scanner mutable shallow copy of
+    // conjuncts->by_slot (see update_with_none_existed_slot()).
+    const HdfsScannerConjuncts* conjuncts = nullptr;
+
+    // Non-owning pointer to immutable scan options shared from HdfsScannerParams.
+    const HdfsScannerOptions* options = nullptr;
 
     // runtime filters.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
     std::vector<std::string>* hive_column_names = nullptr;
 
-    bool case_sensitive = false;
-
-    bool orc_use_column_names = false;
-
-    bool use_min_max_opt = false;
-    // Set when can_use_any_column is propagated from the scan node.  In combination
-    // with use_min_max_opt this tells update_min_max_columns() that any materialized
-    // column without a min/max entry is a placeholder and should be filled with a
-    // default value instead of being read from the data file.
-    bool can_use_any_column = false;
-
-    bool use_count_opt = false;
     bool is_first_split = false;
     bool can_use_file_record_count = false;
 
@@ -388,13 +418,6 @@ struct HdfsScannerContext {
     // get_next just returns chunk for once.
     // and it returns EOF the next time.
     bool no_more_chunks = false;
-
-    bool use_file_metacache = false;
-    bool use_file_pagecache = false;
-
-    bool parquet_page_index_enable = false;
-
-    bool parquet_bloom_filter_enable = false;
 
     std::string timezone;
 
@@ -506,6 +529,21 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual Status reinterpret_status(const Status& st);
+
+    // ORC and Parquet push conjunct_ctxs_by_slot into their own column-level
+    // readers (lazy materialisation, dict filter, etc.) and do NOT want the base
+    // class to apply them a second time.  All other formats return false so the
+    // base class handles by-slot evaluation uniformly in get_next().
+    virtual bool scanner_handles_predicate_by_slot_internally() const { return false; }
+
+    // True if the scanner evaluates multi-slot predicates (conjuncts->scanner_ctxs)
+    // internally inside do_get_next(), so the base class must not apply them again.
+    // Scanners that return true MUST guarantee row-level correctness — the ORC
+    // search-argument / Parquet statistics pass is only an approximate skip; the
+    // actual predicate must still be evaluated on every returned row.
+    // Future expression-driven Parquet lazy materialisation will also set this true
+    // once it can interleave predicate evaluation with column loading.
+    virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 

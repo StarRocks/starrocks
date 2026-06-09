@@ -21,7 +21,6 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config_scan_io_fwd.h"
-#include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -128,14 +127,7 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     _scanner_ctx.append_or_update_partition_column_to_chunk(&ck, row_count);
     _scanner_ctx.append_or_update_extended_column_to_chunk(&ck, row_count);
 
-    // Post-read row-level conjunct evaluation (Avro has no block statistics for pushdown).
-    for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(it.second, ck.get()));
-        if (ck->num_rows() == 0) {
-            break;
-        }
-    }
+    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
 
     // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
     // after do_get_next returns. Do NOT update it here to avoid double-counting.
