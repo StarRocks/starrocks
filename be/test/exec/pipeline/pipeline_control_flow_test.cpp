@@ -289,7 +289,7 @@ public:
             : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence, std::move(counter)) {}
     ~TestNormalOperator() override = default;
 
-    bool need_input() const override { return true; }
+    bool need_input() const override { return !_is_finished && _chunk == nullptr; }
     bool has_output() const override { return _chunk != nullptr; }
     bool is_finished() const override { return _is_finished && !has_output(); }
     Status set_finishing(RuntimeState* state) override {
@@ -445,6 +445,26 @@ public:
 };
 
 class TestPipelineControlFlow : public PipelineTestBase {};
+
+TEST_F(TestPipelineControlFlow, test_normal_operator_backpressure) {
+    CounterPtr normalCounter = std::make_shared<Counter>();
+    TestNormalOperatorFactory factory(next_operator_id(), next_plan_node_id(), normalCounter);
+    auto normal = std::static_pointer_cast<TestNormalOperator>(factory.create(1, 0));
+    auto chunk = _create_and_fill_chunk(1);
+
+    ASSERT_TRUE(normal->need_input());
+    ASSERT_OK(normal->push_chunk(nullptr, chunk));
+    ASSERT_FALSE(normal->need_input());
+    ASSERT_TRUE(normal->has_output());
+
+    ASSIGN_OR_ABORT(auto output_chunk, normal->pull_chunk(nullptr));
+    ASSERT_EQ(chunk, output_chunk);
+    ASSERT_TRUE(normal->need_input());
+
+    ASSERT_OK(normal->set_finishing(nullptr));
+    ASSERT_FALSE(normal->need_input());
+    ASSERT_TRUE(normal->is_finished());
+}
 
 class SpillLifecycleSourceOperator final : public SourceOperator {
 public:

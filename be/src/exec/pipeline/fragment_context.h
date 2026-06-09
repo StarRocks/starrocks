@@ -115,6 +115,8 @@ public:
 
     Status prepare_all_pipelines();
 
+    void instantiate_drivers(Pipeline* pipeline);
+
     void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
     void clear_all_drivers();
