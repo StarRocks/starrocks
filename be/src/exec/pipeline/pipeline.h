@@ -46,9 +46,8 @@ public:
         }
         return operators;
     }
-    void instantiate_drivers(RuntimeState* state);
-    Drivers& drivers();
     const Drivers& drivers() const;
+    Drivers& mutable_drivers();
     void on_driver_finished(RuntimeState* state) override;
     void clear_drivers();
 

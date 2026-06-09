@@ -60,10 +60,11 @@ DEFINE_FAIL_POINT(collect_stats_source_initialize_prepare_failed);
 
 void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     DeferOp defer_op([this, state] { finish(state); });
+    auto* fragment_ctx = state->fragment_ctx();
 
     for (auto* pipeline : _pipelines) {
         pipeline->source_operator_factory()->adjust_dop();
-        pipeline->instantiate_drivers(state);
+        fragment_ctx->instantiate_drivers(pipeline);
     }
 
     auto prepare_drivers = [state, &pipelines = _pipelines]() {

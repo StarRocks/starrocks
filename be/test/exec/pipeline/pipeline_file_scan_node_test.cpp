@@ -251,8 +251,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
         }
     });
 
-    _fragment_ctx->iterate_pipeline(
-            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
+    _fragment_ctx->iterate_pipeline([this](auto pipeline) { _fragment_ctx->instantiate_drivers(pipeline); });
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
