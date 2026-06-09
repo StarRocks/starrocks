@@ -816,14 +816,14 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
 
     // collect unready pipeline groups and instantiate ready drivers
     PipelineGroupMap unready_pipeline_groups;
-    _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, runtime_state](Pipeline* pipeline) {
+    _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, fragment_ctx = _fragment_ctx.get()](Pipeline* pipeline) {
         auto* source_op = pipeline->source_operator_factory();
         if (!source_op->is_adaptive_group_initial_active()) {
             auto* group_leader_source_op = source_op->group_leader();
             unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
             return;
         }
-        pipeline->instantiate_drivers(runtime_state);
+        fragment_ctx->instantiate_drivers(pipeline);
     });
 
     if (!unready_pipeline_groups.empty()) {

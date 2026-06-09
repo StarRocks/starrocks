@@ -124,7 +124,7 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
     _pipelines.clear();
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
-    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { pipeline->instantiate_drivers(_runtime_state); });
+    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { _fragment_ctx->instantiate_drivers(pipeline); });
 }
 
 void PipelineTestBase::_execute() {
