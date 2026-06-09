@@ -13,7 +13,9 @@
 // limitations under the License.
 
 #pragma once
+#include <limits>
 #include <string>
+#include <unordered_map>
 
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/inverted/inverted_reader.h"
@@ -38,6 +40,25 @@ public:
     virtual Status read_from_inverted_index(const std::string& column_name, const void* query_value,
                                             InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
 
+    // Scored variant: also fills `row_to_score` (segment-local row id -> BM25
+    // score) for a SQL score() column. Forwards to InvertedReader::query_scored.
+    virtual Status read_from_inverted_index_scored(const std::string& column_name, const void* query_value,
+                                                   InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                                                   std::unordered_map<uint32_t, float>* row_to_score);
+
+    // Top-k pushdown for the scored path: the SegmentIterator sets the SQL LIMIT
+    // here before applying the GIN predicate so the scored query only materializes
+    // the best `limit` rows (0 = score every hit). Mirrors the vector ANN top-k.
+    void set_bm25_topk_limit(int32_t limit) { _bm25_topk_limit = limit; }
+
+    // Min/max BM25 score gate for the scored path: a `WHERE score() > c`
+    // predicate is pushed here so the scored query only materializes hits whose
+    // score is in [min, max] (-/+INFINITY = unbounded), filtered inside tantivy.
+    void set_bm25_score_range(float min_score, float max_score) {
+        _bm25_score_min = min_score;
+        _bm25_score_max = max_score;
+    }
+
     virtual Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
 
     virtual InvertedIndexParserType get_inverted_index_analyser_type() const;
@@ -53,6 +74,9 @@ protected:
     OlapReaderStatistics* _stats;
     InvertedReader* _reader;
     InvertedIndexParserType _analyser_type;
+    int32_t _bm25_topk_limit = 0;
+    float _bm25_score_min = -std::numeric_limits<float>::infinity();
+    float _bm25_score_max = std::numeric_limits<float>::infinity();
 };
 
 } // namespace starrocks

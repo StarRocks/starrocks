@@ -286,7 +286,8 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     return Status::OK();
 }
 Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                roaring::Roaring* row_bitmap) const {
+                                                roaring::Roaring* row_bitmap,
+                                                std::unordered_map<uint32_t, float>* row_to_score) const {
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
@@ -365,6 +366,12 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         phrase_value.text = padded_value;
         phrase_value.slop = match_expr->slop();
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &phrase_value, query_type, &roaring));
+    } else if (row_to_score != nullptr && !with_not &&
+               (query_type == InvertedIndexQueryType::MATCH_ANY_QUERY ||
+                query_type == InvertedIndexQueryType::MATCH_ALL_QUERY)) {
+        // BM25 score() path: capture per-row scores alongside the match bitmap.
+        RETURN_IF_ERROR(iterator->read_from_inverted_index_scored(column_name, &padded_value, query_type, &roaring,
+                                                                  row_to_score));
     } else {
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     }

@@ -26,7 +26,7 @@ mod cjk_bigram;
 mod jieba;
 
 use tantivy::tokenizer::{
-    Language, LowerCaser, RawTokenizer, RemoveLongFilter, SimpleTokenizer, Stemmer,
+    Language, LowerCaser, RawTokenizer, RemoveLongFilter, SimpleTokenizer, StopWordFilter,
     TextAnalyzer,
 };
 
@@ -71,10 +71,12 @@ pub fn tokenize(tokenizer_name: &str, text: &str) -> Result<Vec<String>> {
 }
 
 fn english_analyzer() -> TextAnalyzer {
-    // Mirrors tantivy's built-in en_stem (Porter stemmer, no stopword removal).
     TextAnalyzer::builder(SimpleTokenizer::default())
         .filter(RemoveLongFilter::limit(40))
         .filter(LowerCaser)
-        .filter(Stemmer::new(Language::English))
+        .filter(
+            StopWordFilter::new(Language::English)
+                .expect("english stopwords are bundled in the tantivy crate"),
+        )
         .build()
 }

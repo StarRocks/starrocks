@@ -112,6 +112,46 @@ impl RustU32Array {
     }
 }
 
+/// Owned `Vec<f32>` flattened to a (ptr, len, cap) triple, kept PARALLEL to a
+/// `RustU32Array` of row ids: `scores[i]` is the BM25 relevance score of
+/// `row_ids[i]`. Must be released via `tantivy_free_f32_array`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct RustF32Array {
+    pub ptr: *mut f32,
+    pub len: usize,
+    pub cap: usize,
+}
+
+impl RustF32Array {
+    pub const EMPTY: RustF32Array = RustF32Array {
+        ptr: std::ptr::null_mut(),
+        len: 0,
+        cap: 0,
+    };
+
+    /// Leak a `Vec<f32>` into a C-friendly triple. Caller MUST release via
+    /// `tantivy_free_f32_array`.
+    pub fn from_vec(mut v: Vec<f32>) -> Self {
+        v.shrink_to_fit();
+        let ptr = v.as_mut_ptr();
+        let len = v.len();
+        let cap = v.capacity();
+        std::mem::forget(v);
+        Self { ptr, len, cap }
+    }
+
+    /// SAFETY: caller must guarantee this `RustF32Array` was produced by
+    /// `from_vec` and has not been freed.
+    pub unsafe fn into_vec(self) -> Vec<f32> {
+        if self.ptr.is_null() {
+            Vec::new()
+        } else {
+            Vec::from_raw_parts(self.ptr, self.len, self.cap)
+        }
+    }
+}
+
 /// Tagged value carried inside `RustResult`. Only `Ptr` (a `*mut c_void`
 /// handle) and `None` are used today; if a future FFI needs to return an
 /// owned array or scalar, add a new variant rather than reviving the older

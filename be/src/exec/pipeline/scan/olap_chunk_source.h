@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <utility>
 
 #include "exec/olap_common.h"
@@ -109,6 +110,15 @@ private:
     bool _use_ivfpq = false;
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id;
+
+    // BM25 score(): mirror of the vector slot, for the synthetic score column.
+    // _bm25_score_slot_id < 0 = gate-only (no score column materialized).
+    bool _use_bm25_score = false;
+    SlotId _bm25_score_slot_id = -1;
+    int32_t _bm25_score_limit = 0;
+    // Inclusive [min, max] score gate for `WHERE score() > c`; -/+INFINITY = unbounded.
+    float _bm25_score_min = -std::numeric_limits<float>::infinity();
+    float _bm25_score_max = std::numeric_limits<float>::infinity();
 
     std::shared_ptr<starrocks::TableMetrics> _table_metrics;
 

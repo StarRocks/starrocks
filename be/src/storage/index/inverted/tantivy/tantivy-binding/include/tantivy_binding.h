@@ -82,6 +82,17 @@ struct FFISlice {
 };
 
 /**
+ * Owned `Vec<f32>` flattened to a (ptr, len, cap) triple, kept PARALLEL to a
+ * `RustU32Array` of row ids: `scores[i]` is the BM25 relevance score of
+ * `row_ids[i]`. Must be released via `tantivy_free_f32_array`.
+ */
+struct RustF32Array {
+  float *ptr;
+  uintptr_t len;
+  uintptr_t cap;
+};
+
+/**
  * Owned array of NUL-terminated C strings. Must be released via
  * `tantivy_free_string_array`.
  */
@@ -158,6 +169,46 @@ RustResult tantivy_match_all_query(const void *reader,
                                    RustU32Array *out);
 
 /**
+ * MATCH_ANY query WITH BM25 scores. Fills two PARALLEL arrays:
+ * `out_ids[i]` is a matching row id and `out_scores[i]` its BM25 score.
+ * Caller MUST release `out_ids` via `tantivy_free_u32_array` and `out_scores`
+ * via `tantivy_free_f32_array`.
+ *
+ * `limit > 0` pushes the SQL LIMIT into tantivy so only the top-`limit` hits by
+ * score are returned (per segment); `limit == 0` returns every hit.
+ *
+ * `min_score`/`max_score` gate hits to the inclusive `[min, max]` BM25 range
+ * (backing a `WHERE score() > c` predicate); pass `-INFINITY`/`+INFINITY` for
+ * an unbounded end.
+ *
+ * SAFETY: `reader`, `out_ids`, `out_scores` non-NULL; `terms` is a `count`-
+ * array of FFISlice (or `count == 0`).
+ */
+RustResult tantivy_match_query_scored(const void *reader,
+                                      const FFISlice *terms,
+                                      uintptr_t count,
+                                      uint64_t limit,
+                                      float min_score,
+                                      float max_score,
+                                      RustU32Array *out_ids,
+                                      RustF32Array *out_scores);
+
+/**
+ * MATCH_ALL query WITH BM25 scores. Same parallel-array contract as
+ * `tantivy_match_query_scored`.
+ *
+ * SAFETY: same as `tantivy_match_query_scored`.
+ */
+RustResult tantivy_match_all_query_scored(const void *reader,
+                                          const FFISlice *terms,
+                                          uintptr_t count,
+                                          uint64_t limit,
+                                          float min_score,
+                                          float max_score,
+                                          RustU32Array *out_ids,
+                                          RustF32Array *out_scores);
+
+/**
  * MATCH_PHRASE query: returns rows where `terms` appear in order with at
  * most `slop` positional gaps.
  *
@@ -171,15 +222,7 @@ RustResult tantivy_phrase_match_query(const void *reader,
 
 /**
  * MATCH_WILDCARD query: returns rows whose indexed term matches the SQL
- * `LIKE` / `MATCH` pattern. `%` and `*` are equivalent multi-char
- * wildcards (matching the shared BE router in
- * `column_expr_predicate.cpp:has_wildcard`); `_` is treated as a literal.
- *
- * `pattern_ptr` / `pattern_len` is the raw user pattern as UTF-8 bytes;
- * the Rust side translates it into a regex (`like_pattern_to_regex`) and
- * dispatches to `tantivy::query::RegexQuery`. Null bitmap subtraction
- * (so empty-string placeholder docs for NULL rows aren't matched by `%`)
- * is the BE C++ caller's responsibility.
+ * `LIKE` / `MATCH` pattern. `%` and `*` are equivalent multi-char wildcards
  *
  * SAFETY: `reader` and `out` must be non-NULL; `pattern_ptr` may be NULL
  * only when `pattern_len == 0`.
@@ -257,6 +300,14 @@ void free_rust_result(RustResult result);
  * SAFETY: `array` must be a value previously produced by `RustU32Array::from_vec`.
  */
 void tantivy_free_u32_array(RustU32Array array);
+
+/**
+ * Release a `RustF32Array` produced by a scored query FFI. Safe on a
+ * NULL/empty array (treated as a no-op).
+ *
+ * SAFETY: `array` must be a value previously produced by `RustF32Array::from_vec`.
+ */
+void tantivy_free_f32_array(RustF32Array array);
 
 /**
  * Release a `RustStringArray` produced by `RustStringArray::from_strings`.

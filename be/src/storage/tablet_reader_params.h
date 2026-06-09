@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -104,6 +105,27 @@ struct TabletReaderParams {
     bool use_vector_index = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
+
+    // BM25 score(): when set, the GIN/tantivy MATCH predicate runs in scoring
+    // mode and the per-row score is materialized into the bm25_score_slot_id
+    // output column (synthetic column id = num_columns()). Mirrors the vector path.
+    bool use_bm25_score = false;
+    int32_t bm25_score_slot_id = 0;
+    // -1 = the score column is not in the scan output (e.g. count(*) / filter-only);
+    // the [min,max] gate still filters rows, but no score column is materialized.
+    int32_t bm25_score_column_id = -1;
+    // SQL LIMIT (+OFFSET) pushed into the scored GIN query for top-k pruning;
+    // 0 (or ORDER BY score() ASC) scores every matched row.
+    int32_t bm25_score_limit = 0;
+    // Inclusive [min, max] BM25 score gate for a `WHERE score() > c` predicate,
+    // pushed into the scored GIN query; -/+INFINITY = unbounded.
+    float bm25_score_min = -std::numeric_limits<float>::infinity();
+    float bm25_score_max = std::numeric_limits<float>::infinity();
+    // Name of the synthetic score column as assigned by the FE rewrite rule
+    // (e.g. "__bm25_score_<id>"). Threaded to the SegmentIterator so the
+    // appended chunk column carries the same name the output slot expects,
+    // mirroring vector_distance_column_name.
+    std::string bm25_score_column_name;
 
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;

@@ -288,6 +288,13 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.is_primary_keys = false;
     rs_opts.use_vector_index = _reader_params->use_vector_index;
     rs_opts.vector_search_option = _reader_params->vector_search_option;
+    rs_opts.use_bm25_score = _reader_params->use_bm25_score;
+    rs_opts.bm25_score_slot_id = _reader_params->bm25_score_slot_id;
+    rs_opts.bm25_score_column_id = _reader_params->bm25_score_column_id;
+    rs_opts.bm25_score_column_name = _reader_params->bm25_score_column_name;
+    rs_opts.bm25_score_limit = _reader_params->bm25_score_limit;
+    rs_opts.bm25_score_min = _reader_params->bm25_score_min;
+    rs_opts.bm25_score_max = _reader_params->bm25_score_max;
     rs_opts.enable_join_runtime_filter_pushdown = _reader_params->enable_join_runtime_filter_pushdown;
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
@@ -364,6 +371,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.column_access_paths = params.column_access_paths;
     rs_opts.use_vector_index = params.use_vector_index;
     rs_opts.vector_search_option = params.vector_search_option;
+    rs_opts.use_bm25_score = params.use_bm25_score;
+    rs_opts.bm25_score_slot_id = params.bm25_score_slot_id;
+    rs_opts.bm25_score_column_id = params.bm25_score_column_id;
+    rs_opts.bm25_score_column_name = params.bm25_score_column_name;
+    rs_opts.bm25_score_limit = params.bm25_score_limit;
+    rs_opts.bm25_score_min = params.bm25_score_min;
+    rs_opts.bm25_score_max = params.bm25_score_max;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     if (keys_type == KeysType::PRIMARY_KEYS) {

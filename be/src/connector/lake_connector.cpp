@@ -227,7 +227,17 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
                                             std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        int32_t index = _tablet_schema->field_index(slot->col_name());
+        int32_t index;
+        if (_use_bm25_score && _bm25_score_slot_id >= 0 && slot->id() == _bm25_score_slot_id) {
+            // BM25 score(): synthetic FLOAT column past the real columns; storage
+            // skips it on read, SegmentIterator fills it from the score map.
+            index = _tablet_schema->num_columns();
+            _params.bm25_score_column_id = index;
+            _params.bm25_score_slot_id = slot->id();
+            _params.bm25_score_column_name = slot->col_name();
+        } else {
+            index = _tablet_schema->field_index(slot->col_name());
+        }
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -304,6 +314,28 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
+    }
+    // BM25 score(): run the scored seek when a score slot (materialize score()) OR
+    // a min/max gate (WHERE score()>c, no score output) is present. slot_id < 0
+    // means gate-only: narrow the bitmap, do not materialize a score column.
+    bool bm25_has_gate = thrift_lake_scan_node.__isset.bm25_score_min || thrift_lake_scan_node.__isset.bm25_score_max;
+    _use_bm25_score = thrift_lake_scan_node.__isset.bm25_score_slot_id || bm25_has_gate;
+    if (_use_bm25_score) {
+        _bm25_score_slot_id =
+                thrift_lake_scan_node.__isset.bm25_score_slot_id ? thrift_lake_scan_node.bm25_score_slot_id : -1;
+        _bm25_score_limit =
+                thrift_lake_scan_node.__isset.bm25_score_limit ? thrift_lake_scan_node.bm25_score_limit : 0;
+        // [min, max] score gate for a `WHERE score() > c` predicate; absent = unbounded.
+        if (thrift_lake_scan_node.__isset.bm25_score_min) {
+            _bm25_score_min = static_cast<float>(thrift_lake_scan_node.bm25_score_min);
+        }
+        if (thrift_lake_scan_node.__isset.bm25_score_max) {
+            _bm25_score_max = static_cast<float>(thrift_lake_scan_node.bm25_score_max);
+        }
+        _params.use_bm25_score = true;
+        _params.bm25_score_limit = _bm25_score_limit;
+        _params.bm25_score_min = _bm25_score_min;
+        _params.bm25_score_max = _bm25_score_max;
     }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));

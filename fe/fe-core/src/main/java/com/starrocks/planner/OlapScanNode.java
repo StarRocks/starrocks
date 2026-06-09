@@ -195,6 +195,14 @@ public class OlapScanNode extends ScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    // BM25 score(): slot id of the synthetic FLOAT score column (-1 = disabled).
+    private long bm25ScoreSlotId = -1;
+    // BM25 score(): SQL LIMIT(+OFFSET) for top-k pushdown (0 = score every row).
+    private long bm25ScoreLimit = 0;
+    // BM25 score(): inclusive [min, max] gate for `WHERE score() > c`; +/-Inf = unbounded.
+    private double bm25ScoreMin = Double.NEGATIVE_INFINITY;
+    private double bm25ScoreMax = Double.POSITIVE_INFINITY;
+
     private boolean calcaulatedScanRange = false;
 
     private long totalScanRangeBytes = 0;
@@ -227,6 +235,22 @@ public class OlapScanNode extends ScanNode {
 
     public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
         this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public void setBm25ScoreSlotId(long bm25ScoreSlotId) {
+        this.bm25ScoreSlotId = bm25ScoreSlotId;
+    }
+
+    public void setBm25ScoreLimit(long bm25ScoreLimit) {
+        this.bm25ScoreLimit = bm25ScoreLimit;
+    }
+
+    public void setBm25ScoreMin(double bm25ScoreMin) {
+        this.bm25ScoreMin = bm25ScoreMin;
+    }
+
+    public void setBm25ScoreMax(double bm25ScoreMax) {
+        this.bm25ScoreMax = bm25ScoreMax;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -1060,6 +1084,23 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+
+            // BM25 score(): shared-data / cloud-native path uses the lake scan node.
+            // The slot id is sent only when score() is materialized; the [min,max]
+            // gate is sent independently so a filter-only `WHERE score()>c` (no
+            // score output, e.g. count(*)) still narrows the scan on the BE.
+            if (bm25ScoreSlotId >= 0) {
+                msg.lake_scan_node.setBm25_score_slot_id((int) bm25ScoreSlotId);
+                if (bm25ScoreLimit > 0) {
+                    msg.lake_scan_node.setBm25_score_limit((int) bm25ScoreLimit);
+                }
+            }
+            if (bm25ScoreMin != Double.NEGATIVE_INFINITY) {
+                msg.lake_scan_node.setBm25_score_min(bm25ScoreMin);
+            }
+            if (bm25ScoreMax != Double.POSITIVE_INFINITY) {
+                msg.lake_scan_node.setBm25_score_max(bm25ScoreMax);
+            }
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1114,6 +1155,20 @@ public class OlapScanNode extends ScanNode {
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+            // Slot id only when score() is materialized; [min,max] gate sent
+            // independently so filter-only `WHERE score()>c` (e.g. count(*)) narrows.
+            if (bm25ScoreSlotId >= 0) {
+                msg.olap_scan_node.setBm25_score_slot_id((int) bm25ScoreSlotId);
+                if (bm25ScoreLimit > 0) {
+                    msg.olap_scan_node.setBm25_score_limit((int) bm25ScoreLimit);
+                }
+            }
+            if (bm25ScoreMin != Double.NEGATIVE_INFINITY) {
+                msg.olap_scan_node.setBm25_score_min(bm25ScoreMin);
+            }
+            if (bm25ScoreMax != Double.POSITIVE_INFINITY) {
+                msg.olap_scan_node.setBm25_score_max(bm25ScoreMax);
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);

@@ -67,6 +67,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    // BM25 score(): slot id of the synthetic FLOAT score column (-1 = disabled).
+    private long bm25ScoreSlotId = -1;
+    // BM25 score(): SQL LIMIT(+OFFSET) for top-k pushdown (-1/0 = score every row).
+    private long bm25ScoreLimit = 0;
+    // BM25 score(): inclusive [min, max] gate for `WHERE score() > c`; +/-Inf = unbounded.
+    private double bm25ScoreMin = Double.NEGATIVE_INFINITY;
+    private double bm25ScoreMax = Double.POSITIVE_INFINITY;
+
     private long gtid = 0;
 
     private PhysicalOlapScanOperator() {
@@ -108,11 +116,31 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
         this.usePkIndex = scanOperator.isUsePkIndex();
         this.vectorSearchOptions = scanOperator.getVectorSearchOptions();
+        this.bm25ScoreSlotId = scanOperator.getBm25ScoreSlotId();
+        this.bm25ScoreLimit = scanOperator.getBm25ScoreLimit();
+        this.bm25ScoreMin = scanOperator.getBm25ScoreMin();
+        this.bm25ScoreMax = scanOperator.getBm25ScoreMax();
         this.sample = scanOperator.getSample();
     }
 
     public VectorSearchOptions getVectorSearchOptions() {
         return vectorSearchOptions;
+    }
+
+    public long getBm25ScoreSlotId() {
+        return bm25ScoreSlotId;
+    }
+
+    public long getBm25ScoreLimit() {
+        return bm25ScoreLimit;
+    }
+
+    public double getBm25ScoreMin() {
+        return bm25ScoreMin;
+    }
+
+    public double getBm25ScoreMax() {
+        return bm25ScoreMax;
     }
 
     public long getSelectedIndexId() {
@@ -320,6 +348,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.globalDicts = operator.globalDicts;
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
             builder.vectorSearchOptions = operator.vectorSearchOptions;
+            builder.bm25ScoreSlotId = operator.bm25ScoreSlotId;
+            builder.bm25ScoreLimit = operator.bm25ScoreLimit;
+            builder.bm25ScoreMin = operator.bm25ScoreMin;
+            builder.bm25ScoreMax = operator.bm25ScoreMax;
             builder.sample = operator.getSample();
             return this;
         }

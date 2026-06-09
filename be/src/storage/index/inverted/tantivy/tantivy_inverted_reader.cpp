@@ -170,6 +170,18 @@ Status TantivyInvertedReader::query(OlapReaderStatistics* /*stats*/, const std::
     return _query_impl(handle, query_value, query_type, bit_map);
 }
 
+Status TantivyInvertedReader::query_scored(OlapReaderStatistics* /*stats*/, const std::string& /*column_name*/,
+                                           const void* query_value, InvertedIndexQueryType query_type, int32_t limit,
+                                           float min_score, float max_score, roaring::Roaring* bit_map,
+                                           std::unordered_map<uint32_t, float>* row_to_score) {
+    void* handle = _is_compound ? _compound_reader.get() : _reader.get();
+    if (handle == nullptr) {
+        return Status::InternalError(_is_compound ? "tantivy compound reader not loaded"
+                                                  : "tantivy reader not loaded");
+    }
+    return _query_impl_scored(handle, query_value, query_type, limit, min_score, max_score, bit_map, row_to_score);
+}
+
 namespace {
 
 struct TokenizedTerms {
@@ -271,6 +283,47 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
     default:
         return Status::NotSupported("tantivy: unsupported query type " + std::to_string(static_cast<int>(query_type)));
     }
+}
+
+Status TantivyInvertedReader::_query_impl_scored(void* reader_handle, const void* query_value,
+                                                 InvertedIndexQueryType query_type, int32_t limit, float min_score,
+                                                 float max_score, roaring::Roaring* bit_map,
+                                                 std::unordered_map<uint32_t, float>* row_to_score) {
+    const auto* slice = reinterpret_cast<const Slice*>(query_value);
+    ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
+    if (terms.slices.empty()) return Status::OK();
+
+    // limit > 0 pushes the SQL LIMIT into tantivy's TopDocs (top-k pruning);
+    // 0 means score every hit (e.g. ORDER BY score() ASC). min/max_score gate the
+    // hits to the inclusive [min, max] BM25 range inside tantivy (WHERE score()>c).
+    const uint64_t topk = limit > 0 ? static_cast<uint64_t>(limit) : 0;
+    tb::RustU32Array ids{};
+    tb::RustF32Array scores{};
+    TantivyU32ArrayGuard id_guard(ids);
+    TantivyF32ArrayGuard score_guard(scores);
+    tb::RustResult r{};
+    switch (query_type) {
+    case InvertedIndexQueryType::MATCH_ANY_QUERY:
+        r = tb::tantivy_match_query_scored(reader_handle, terms.slices.data(), terms.slices.size(), topk, min_score,
+                                           max_score, &ids, &scores);
+        break;
+    case InvertedIndexQueryType::MATCH_ALL_QUERY:
+        r = tb::tantivy_match_all_query_scored(reader_handle, terms.slices.data(), terms.slices.size(), topk, min_score,
+                                               max_score, &ids, &scores);
+        break;
+    default:
+        return Status::NotSupported("tantivy: scored query only supports MATCH_ANY/MATCH_ALL, got " +
+                                    std::to_string(static_cast<int>(query_type)));
+    }
+    TantivyResultGuard rg(r);
+    RETURN_IF_ERROR(tantivy_status_from_error(r));
+    // Two parallel arrays: ids[i] matched with BM25 score scores[i].
+    bit_map->addMany(ids.len, ids.ptr);
+    row_to_score->reserve(row_to_score->size() + ids.len);
+    for (size_t i = 0; i < ids.len; ++i) {
+        (*row_to_score)[ids.ptr[i]] = scores.ptr[i];
+    }
+    return Status::OK();
 }
 
 Status TantivyInvertedReader::query_null(OlapReaderStatistics* /*stats*/, const std::string& /*column_name*/,

@@ -46,7 +46,7 @@ use tantivy::ReloadPolicy;
 use crate::error::Result;
 use crate::ffi::catch::catch_ffi;
 use crate::ffi::handle::{as_ref, create_binding, free_binding};
-use crate::ffi::result::{FFISlice, RustResult, RustU32Array, raw_to_str};
+use crate::ffi::result::{FFISlice, RustF32Array, RustResult, RustU32Array, raw_to_str};
 use crate::safe::pull_directory::PullDirectory;
 use crate::safe::IndexReaderWrapper;
 
@@ -115,6 +115,51 @@ where
     match query_fn(r, &refs) {
         Ok(ids) => {
             *out = RustU32Array::from_vec(ids);
+            RustResult::ok_none()
+        }
+        Err(e) => RustResult::err(e.to_string()),
+    }
+}
+
+/// Scored sibling of `with_query_terms`: runs a `(row_id, score)` query and
+/// writes two PARALLEL out-arrays (`out_ids[i]` ↔ `out_scores[i]`). Used by the
+/// BM25 `score()` path. Caller frees `out_ids` via `tantivy_free_u32_array` and
+/// `out_scores` via `tantivy_free_f32_array`.
+unsafe fn with_scored_query_terms<F>(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    out_ids: *mut RustU32Array,
+    out_scores: *mut RustF32Array,
+    query_fn: F,
+) -> RustResult
+where
+    F: FnOnce(&IndexReaderWrapper, &[&str]) -> Result<Vec<(u32, f32)>>,
+{
+    if out_ids.is_null() || out_scores.is_null() {
+        return RustResult::err("out_ids/out_scores pointer is NULL");
+    }
+    *out_ids = RustU32Array::EMPTY;
+    *out_scores = RustF32Array::EMPTY;
+    let r: &IndexReaderWrapper = match as_ref(reader) {
+        Some(r) => r,
+        None => return RustResult::err("reader is NULL"),
+    };
+    let owned = match read_terms(terms, count) {
+        Ok(v) => v,
+        Err(e) => return RustResult::err(e),
+    };
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    match query_fn(r, &refs) {
+        Ok(hits) => {
+            let mut ids = Vec::with_capacity(hits.len());
+            let mut scores = Vec::with_capacity(hits.len());
+            for (rid, score) in hits {
+                ids.push(rid);
+                scores.push(score);
+            }
+            *out_ids = RustU32Array::from_vec(ids);
+            *out_scores = RustF32Array::from_vec(scores);
             RustResult::ok_none()
         }
         Err(e) => RustResult::err(e.to_string()),
@@ -256,6 +301,60 @@ pub unsafe extern "C" fn tantivy_match_all_query(
     out: *mut RustU32Array,
 ) -> RustResult {
     catch_ffi(|| with_query_terms(reader, terms, count, out, |r, t| r.match_all_query(t)))
+}
+
+/// MATCH_ANY query WITH BM25 scores. Fills two PARALLEL arrays:
+/// `out_ids[i]` is a matching row id and `out_scores[i]` its BM25 score.
+/// Caller MUST release `out_ids` via `tantivy_free_u32_array` and `out_scores`
+/// via `tantivy_free_f32_array`.
+///
+/// `limit > 0` pushes the SQL LIMIT into tantivy so only the top-`limit` hits by
+/// score are returned (per segment); `limit == 0` returns every hit.
+///
+/// `min_score`/`max_score` gate hits to the inclusive `[min, max]` BM25 range
+/// (backing a `WHERE score() > c` predicate); pass `-INFINITY`/`+INFINITY` for
+/// an unbounded end.
+///
+/// SAFETY: `reader`, `out_ids`, `out_scores` non-NULL; `terms` is a `count`-
+/// array of FFISlice (or `count == 0`).
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_match_query_scored(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    limit: u64,
+    min_score: f32,
+    max_score: f32,
+    out_ids: *mut RustU32Array,
+    out_scores: *mut RustF32Array,
+) -> RustResult {
+    catch_ffi(|| {
+        with_scored_query_terms(reader, terms, count, out_ids, out_scores, |r, t| {
+            r.match_any_query_scored(t, limit as usize, min_score, max_score)
+        })
+    })
+}
+
+/// MATCH_ALL query WITH BM25 scores. Same parallel-array contract as
+/// `tantivy_match_query_scored`.
+///
+/// SAFETY: same as `tantivy_match_query_scored`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_match_all_query_scored(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    limit: u64,
+    min_score: f32,
+    max_score: f32,
+    out_ids: *mut RustU32Array,
+    out_scores: *mut RustF32Array,
+) -> RustResult {
+    catch_ffi(|| {
+        with_scored_query_terms(reader, terms, count, out_ids, out_scores, |r, t| {
+            r.match_all_query_scored(t, limit as usize, min_score, max_score)
+        })
+    })
 }
 
 /// MATCH_PHRASE query: returns rows where `terms` appear in order with at

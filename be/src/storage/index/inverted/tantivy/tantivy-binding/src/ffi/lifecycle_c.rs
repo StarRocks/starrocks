@@ -16,7 +16,7 @@
 
 use std::ffi::{c_char, CString};
 
-use crate::ffi::result::{RustResult, RustStringArray, RustU32Array};
+use crate::ffi::result::{RustF32Array, RustResult, RustStringArray, RustU32Array};
 
 /// Release a `RustResult` and any owned content it carries.
 ///
@@ -43,6 +43,17 @@ pub unsafe extern "C" fn free_rust_result(result: RustResult) {
 /// SAFETY: `array` must be a value previously produced by `RustU32Array::from_vec`.
 #[no_mangle]
 pub unsafe extern "C" fn tantivy_free_u32_array(array: RustU32Array) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        drop(array.into_vec());
+    }));
+}
+
+/// Release a `RustF32Array` produced by a scored query FFI. Safe on a
+/// NULL/empty array (treated as a no-op).
+///
+/// SAFETY: `array` must be a value previously produced by `RustF32Array::from_vec`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_free_f32_array(array: RustF32Array) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         drop(array.into_vec());
     }));

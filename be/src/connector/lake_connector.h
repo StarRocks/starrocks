@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <limits>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -108,6 +110,15 @@ private:
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
+
+    // BM25 score(): synthetic FLOAT score column, mirrors OlapChunkSource.
+    // _bm25_score_slot_id < 0 = gate-only (no score column materialized).
+    bool _use_bm25_score = false;
+    SlotId _bm25_score_slot_id = -1;
+    int32_t _bm25_score_limit = 0;
+    // Inclusive [min, max] score gate for `WHERE score() > c`; -/+INFINITY = unbounded.
+    float _bm25_score_min = -std::numeric_limits<float>::infinity();
+    float _bm25_score_max = std::numeric_limits<float>::infinity();
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 

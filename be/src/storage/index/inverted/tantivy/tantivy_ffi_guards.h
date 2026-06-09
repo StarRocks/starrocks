@@ -49,6 +49,15 @@ struct TantivyU32ArrayGuard {
     TantivyU32ArrayGuard& operator=(const TantivyU32ArrayGuard&) = delete;
 };
 
+// RAII for the parallel BM25 score array returned by scored query FFI.
+struct TantivyF32ArrayGuard {
+    tb::RustF32Array& arr;
+    explicit TantivyF32ArrayGuard(tb::RustF32Array& a) : arr(a) {}
+    ~TantivyF32ArrayGuard() { tb::tantivy_free_f32_array(arr); }
+    TantivyF32ArrayGuard(const TantivyF32ArrayGuard&) = delete;
+    TantivyF32ArrayGuard& operator=(const TantivyF32ArrayGuard&) = delete;
+};
+
 // Owning RAII handle for any FFI pointer that tantivy hands back through
 // `*mut c_void`. The free function is captured as a non-type template
 // parameter, so the dispatch is resolved at compile time and we don't pay
