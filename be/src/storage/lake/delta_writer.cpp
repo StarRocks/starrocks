@@ -719,8 +719,15 @@ Status DeltaWriterImpl::init_write_schema() {
     _flexible_partial_update =
             cset_slot_pos < _slots->size() && (*_slots)[cset_slot_pos]->col_name() == LOAD_CSET_COLUMN;
 
-    // maybe partial update, change to partial tablet schema
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && write_columns < _tablet_schema->num_columns()) {
+    // maybe partial update, change to partial tablet schema.
+    // SDCG flexible: when the flexible load lists the UNION of all base columns, write_columns
+    // (which counts "__cset__" but not "__op") is NOT < num_columns, so the legacy gate would skip
+    // this branch -- leaving "__cset__" un-appended to _write_schema. MemTable::convert_schema then
+    // assumes "__cset__" is already in _write_schema and builds a chunk with one fewer column than
+    // _slots, and MemTable::insert reads past the chunk's columns -> OOB crash at write time. Force
+    // the partial-schema branch whenever flexible so "__cset__" is always appended.
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+        (write_columns < _tablet_schema->num_columns() || _flexible_partial_update)) {
         _write_column_ids.reserve(write_columns);
         for (auto i = 0; i < write_columns; ++i) {
             const auto& slot_col_name = (*_slots)[i]->col_name();
@@ -771,7 +778,11 @@ Status DeltaWriterImpl::init_write_schema() {
 }
 
 bool DeltaWriterImpl::is_partial_update() const {
-    return _write_schema->num_columns() < _tablet_schema->num_columns();
+    // SDCG flexible: when the union of per-row column sets covers every base column, _write_schema
+    // (= base columns + appended synthetic "__cset__") has >= num_columns, so the column-count test
+    // alone would mis-classify the load as a full upsert. It is still a column-mode partial update
+    // (per-row presence decides which columns each row actually writes), so force partial here.
+    return _flexible_partial_update || _write_schema->num_columns() < _tablet_schema->num_columns();
 }
 
 Status DeltaWriterImpl::merge_blocks_to_segments() {
