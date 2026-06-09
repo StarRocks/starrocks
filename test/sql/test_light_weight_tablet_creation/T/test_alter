@@ -1,0 +1,68 @@
+-- name: test_light_weight_tablet_creation_alter
+-- ALTER paths for light_weight_tablet_creation: toggling the property,
+-- rejecting invalid values, true -> false backfill, schema change and
+-- ADD ROLLUP on a light-weight table.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- 1.A  ALTER false -> true (no backfill, property just flips)
+CREATE TABLE t_alter_basic (
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "false");
+
+ALTER TABLE t_alter_basic SET("light_weight_tablet_creation" = "true");
+SHOW CREATE TABLE t_alter_basic;
+INSERT INTO t_alter_basic VALUES (1, 'a'), (2, 'b');
+SELECT * FROM t_alter_basic ORDER BY c0;
+
+-- 1.B  ALTER with invalid value must error
+ALTER TABLE t_alter_basic SET("light_weight_tablet_creation" = "invalid");
+
+-- 1.A reverse  ALTER true -> false triggers backfill of v1 metadata
+-- for any partition that has never been published. The DML / SELECT
+-- here is what proves the table is still usable after the backfill.
+ALTER TABLE t_alter_basic SET("light_weight_tablet_creation" = "false");
+SHOW CREATE TABLE t_alter_basic;
+INSERT INTO t_alter_basic VALUES (3, 'c');
+SELECT * FROM t_alter_basic ORDER BY c0;
+DROP TABLE t_alter_basic;
+
+-- 3  Schema Change: MODIFY COLUMN type on a light-weight table.
+-- Creates shadow tablets; light_weight_tablet_creation = true must
+-- still let the rewrite finish.
+CREATE TABLE t_schema_change (
+    c0 INT,
+    c1 VARCHAR(10)
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_schema_change VALUES (1, 'a'), (2, 'b');
+ALTER TABLE t_schema_change MODIFY COLUMN c1 INT;
+function: wait_alter_table_finish()
+DESC t_schema_change;
+SELECT * FROM t_schema_change ORDER BY c0;
+INSERT INTO t_schema_change VALUES (3, 30), (4, 40);
+SELECT * FROM t_schema_change ORDER BY c0;
+DROP TABLE t_schema_change;
+
+-- 4  ADD ROLLUP on a light-weight table
+CREATE TABLE t_rollup (
+    c0 INT,
+    c1 STRING,
+    c2 BIGINT
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_rollup VALUES (1, 'a', 100), (2, 'b', 200);
+ALTER TABLE t_rollup ADD ROLLUP rollup_c0_c1 (c0, c1);
+function: wait_alter_table_finish("ROLLUP", 8)
+SELECT c0, c1 FROM t_rollup ORDER BY c0;
+INSERT INTO t_rollup VALUES (3, 'c', 300);
+SELECT * FROM t_rollup ORDER BY c0;
+DROP TABLE t_rollup;
+
+DROP DATABASE db_${uuid0};
