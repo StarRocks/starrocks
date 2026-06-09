@@ -454,8 +454,8 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
-    if (hdfs_scan_node.__isset.can_options.use_min_max_opt) {
-        _options.use_min_max_opt = hdfs_scan_node.can_options.use_min_max_opt;
+    if (hdfs_scan_node.__isset.can_use_min_max_opt) {
+        _options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -465,8 +465,8 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _options.can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
-    if (hdfs_scan_node.__isset.can_options.use_count_opt) {
-        _options.use_count_opt = hdfs_scan_node.can_options.use_count_opt;
+    if (hdfs_scan_node.__isset.can_use_count_opt) {
+        _options.use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
         _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;

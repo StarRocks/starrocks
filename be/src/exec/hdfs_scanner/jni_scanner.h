@@ -49,7 +49,7 @@ public:
 
 protected:
     StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
-    // _chunk_filter is inherited from HdfsScanner::_chunk_filter (base class).
+    // Predicate evaluation/filtering is handled by HdfsScanner::get_next(); no per-scanner chunk filter is needed.
 
 private:
     struct FillColumnArgs {
