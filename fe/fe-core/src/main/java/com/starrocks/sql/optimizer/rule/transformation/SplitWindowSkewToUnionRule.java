@@ -42,12 +42,7 @@ import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_SPLIT_WINDOW_SKEW;
 import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType.NOT;
@@ -115,8 +110,6 @@ import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOpera
 public class SplitWindowSkewToUnionRule extends TransformationRule {
     private static final SplitWindowSkewToUnionRule INSTANCE = new SplitWindowSkewToUnionRule();
 
-    private SessionVariable sessionVariable;
-
     private SplitWindowSkewToUnionRule() {
         super(RuleType.TF_SPLIT_WINDOW_SKEW, Pattern.create(OperatorType.LOGICAL_WINDOW));
     }
@@ -173,8 +166,8 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         LogicalWindowOperator window = (LogicalWindowOperator) input.getOp();
         OptExpression child = input.inputAt(0);
         Statistics statistics = child.getStatistics();
-        sessionVariable = context.getSessionVariable();
-        final int maxBranchCount = context.getSessionVariable().getSplitWindowSkewToUnionMaxSkewedBranchCount();
+        SessionVariable sessionVariable = context.getSessionVariable();
+        final int maxBranchCount = sessionVariable.getSplitWindowSkewToUnionMaxSkewedBranchCount();
 
         // Step 1: Identify Skew
         // First check for explicit skew hint from user (takes precedence over statistics)
@@ -183,7 +176,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // If no hint is provided by the user, fall back to statistics-based detection
         if (skewedInfos.isEmpty()) {
-            skewedInfos = findSkewedPartition(window.getPartitionExpressions(), statistics)
+            skewedInfos = findSkewedPartition(window.getPartitionExpressions(), statistics, sessionVariable)
                     .stream().distinct().limit(maxBranchCount).toList();
         }
 
@@ -193,7 +186,6 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // Step 2: Build Predicates for Branches
         boolean hasNullSkew = false;
-        boolean hasValueSkew = false;
         List<ScalarOperator> skewedPredicates = new ArrayList<>();
 
         for (SkewedInfo skew : skewedInfos) {
@@ -201,7 +193,6 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                 hasNullSkew = true;
                 skewedPredicates.add(new IsNullPredicateOperator(skew.column));
             } else {
-                hasValueSkew = true;
                 skewedPredicates.add(new BinaryPredicateOperator(BinaryType.EQ, skew.column, skew.value));
             }
         }
@@ -443,7 +434,13 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                 .toList();
     }
 
-    private List<SkewedInfo> findSkewedPartition(List<ScalarOperator> partitionExprs, Statistics statistics) {
+    /**
+     * Retrieve a list of skewed values for the partition column based on statistics.
+     * The values are sorted by their individual skew factor (most skewed values first).
+     * Null skew and MCV skew are both included in the result.
+     */
+    private List<SkewedInfo> findSkewedPartition(List<ScalarOperator> partitionExprs, Statistics statistics,
+                                                 SessionVariable sessionVariable) {
         if (statistics == null) {
             return Collections.emptyList();
         }
@@ -458,25 +455,32 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             DataSkew.Thresholds thresholds = new DataSkew.Thresholds(
                     sessionVariable.getSkewJoinOptimizeUseMCVCount(),
                     sessionVariable.getSkewJoinDataSkewThreshold());
+            double singleValueThreshold = sessionVariable.getSkewJoinMcvSingleThreshold();
+
             DataSkew.SkewCandidates candidates =
-                    DataSkew.getSkewCandidates(statistics, colStat, thresholds, sessionVariable.getSkewJoinMcvSingleThreshold());
+                    DataSkew.getSkewCandidates(statistics, colStat, thresholds, singleValueThreshold);
 
-            var skewedInfos = new ArrayList<SkewedInfo>();
+            record SkewedInfoWithFactor(SkewedInfo skewInfo, double skewFactor) {
+            }
+            var skewedInfos = new ArrayList<SkewedInfoWithFactor>();
 
-            if (candidates.includeNull()) {
-                skewedInfos.add(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
+            if (candidates.nullSkewFactor().isPresent()) {
+                var factor = candidates.nullSkewFactor().get();
+                var nullSkewInfo = new SkewedInfo(col, ConstantOperator.createNull(col.getType()));
+                skewedInfos.add(new SkewedInfoWithFactor(nullSkewInfo, factor));
             }
 
-            if (candidates.mcvs() != null && !candidates.mcvs().isEmpty()) {
-                skewedInfos.addAll(candidates.mcvs().stream()
-                        .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType()))
-                        .filter(Optional::isPresent)
-                        .map(value -> new SkewedInfo(col, value.get()))
-                        .toList());
+            for (var mcv : candidates.mcvs()) {
+                var value = ConstantOperator.createVarchar(mcv.first).castTo(col.getType());
+                if (value.isPresent()) {
+                    var factor = (double) mcv.second / Math.max(1.0, statistics.getOutputRowCount());
+                    var mcvSkewInfo = new SkewedInfo(col, value.get());
+                    skewedInfos.add(new SkewedInfoWithFactor(mcvSkewInfo, factor));
+                }
             }
 
-            return skewedInfos;
-
+            var descending = Comparator.comparing(SkewedInfoWithFactor::skewFactor).reversed();
+            return skewedInfos.stream().sorted(descending).map(e -> e.skewInfo).toList();
         }
         return Collections.emptyList();
     }
