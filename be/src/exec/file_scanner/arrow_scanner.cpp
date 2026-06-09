@@ -178,8 +178,16 @@ Status ArrowScanner::open_next_reader() {
     }
     const auto& range_desc = _scan_range.ranges[_next_file++];
 
+    if (range_desc.start_offset == 0) {
+        ++_counter->num_files_read;
+    }
+
     std::shared_ptr<SequentialFile> file;
-    RETURN_IF_ERROR(create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file));
+    TNetworkAddress address;
+    if (!_scan_range.broker_addresses.empty()) {
+        address = _scan_range.broker_addresses[0];
+    }
+    RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &file));
 
     auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(_state, std::move(file));
     auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(arrow_stream);
@@ -187,7 +195,7 @@ Status ArrowScanner::open_next_reader() {
         return Status::InternalError("open RecordBatchStreamReader failed, reason: " + reader_res.status().ToString());
     }
 
-    _curr_file_reader = reader_res.ValueOrDie();
+    _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
     _conv_ctx.current_file = range_desc.path;
     _conv_ctx.current_batch_first_row_in_file = -1;
     _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
