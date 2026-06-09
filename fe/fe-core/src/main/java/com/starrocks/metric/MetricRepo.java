@@ -585,6 +585,26 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
+        GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
+                "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
+                "epoch millis of the last finished automated cluster snapshot, 0 if none") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getLastSuccessTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotLastSuccessTime);
+
+        GaugeMetric<Long> snapshotConsecutiveFailures = new GaugeMetric<Long>(
+                "cluster_snapshot_consecutive_failures", MetricUnit.NOUNIT,
+                "consecutive failed automated cluster snapshot jobs since the last success") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getConsecutiveFailureCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotConsecutiveFailures);
+
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
             Metric<Long> gauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
