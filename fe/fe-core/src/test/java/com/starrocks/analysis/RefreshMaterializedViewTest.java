@@ -1584,4 +1584,80 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("mv_dim_data1");
         starRocksAssert.dropMaterializedView("mv_test1");
     }
+
+    @Test
+    public void testNestedMVRefreshWhenBaseMVTimelinessIsFull() throws Exception {
+        // Regression test for https://github.com/StarRocks/starrocks/issues/71975
+        // and https://github.com/StarRocks/starrocks/issues/73716
+        // When a nested MV's base MV has FULL/invalid timeliness (e.g. because a
+        // non-ref base table changed), getMvUpdateInfo should return full refresh
+        // instead of throwing an NPE.
+        starRocksAssert.withTable("CREATE TABLE test.t_nested_base (\n" +
+                "  dt date,\n" +
+                "  k int,\n" +
+                "  v int\n" +
+                ")\n" +
+                "duplicate key(dt, k)\n" +
+                "partition by range(dt) (\n" +
+                "  partition p1 values less than ('2024-01-02'),\n" +
+                "  partition p2 values less than ('2024-01-03'),\n" +
+                "  partition p3 values less than ('2024-01-04')\n" +
+                ")\n" +
+                "distributed by hash(k) buckets 1\n" +
+                "properties (\"replication_num\" = \"1\");");
+
+        starRocksAssert.withTable("CREATE TABLE test.t_nested_join (\n" +
+                "  k int,\n" +
+                "  tag int\n" +
+                ")\n" +
+                "duplicate key(k)\n" +
+                "distributed by hash(k) buckets 1\n" +
+                "properties (\"replication_num\" = \"1\");");
+
+        try {
+            executeInsertSql(connectContext,
+                    "insert into test.t_nested_base values ('2024-01-01', 1, 10), ('2024-01-02', 1, 20), ('2024-01-02', 2, 7)");
+            executeInsertSql(connectContext, "insert into test.t_nested_join values (1, 1), (2, 1)");
+
+            // mv1: range-partitioned MV on t1 join t2
+            createAndRefreshMv("CREATE MATERIALIZED VIEW test.mv_nested_1\n" +
+                    "partition by (dt)\n" +
+                    "distributed by hash(k) buckets 1\n" +
+                    "refresh deferred manual\n" +
+                    "properties (\"replication_num\" = \"1\")\n" +
+                    "as\n" +
+                    "select t1.dt, t1.k, sum(t1.v) as s\n" +
+                    "from test.t_nested_base t1 join test.t_nested_join t2 on t1.k = t2.k\n" +
+                    "group by t1.dt, t1.k");
+
+            // mv2: range-partitioned nested MV on mv1
+            createAndRefreshMv("CREATE MATERIALIZED VIEW test.mv_nested_2\n" +
+                    "partition by (dt)\n" +
+                    "distributed by hash(dt) buckets 1\n" +
+                    "refresh deferred manual\n" +
+                    "properties (\"replication_num\" = \"1\")\n" +
+                    "as\n" +
+                    "select dt, sum(s) as ssum\n" +
+                    "from test.mv_nested_1\n" +
+                    "group by dt");
+
+            MaterializedView mv2 = getMv("test", "mv_nested_2");
+
+            // Insert into t2 (non-ref base table of mv1) to make mv1's timeliness FULL
+            executeInsertSql(connectContext, "insert into test.t_nested_join values (1, 2)");
+
+            // After changing t2: mv2 should get FULL refresh, not NPE
+            MvUpdateInfo updateInfo = getMvUpdateInfo(mv2);
+            Assertions.assertNotNull(updateInfo, "getMvUpdateInfo should not return null");
+            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, updateInfo.getMVToRefreshType(),
+                    "nested MV should require full refresh when base MV timeliness is invalid");
+            Assertions.assertFalse(updateInfo.isValidRewrite(),
+                    "nested MV should not be valid for rewrite when base MV timeliness is invalid");
+        } finally {
+            dropMv("test", "mv_nested_1");
+            dropMv("test", "mv_nested_2");
+            starRocksAssert.dropTable("test.t_nested_base");
+            starRocksAssert.dropTable("test.t_nested_join");
+        }
+    }
 }
