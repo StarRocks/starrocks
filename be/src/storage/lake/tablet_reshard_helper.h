@@ -22,6 +22,11 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/primitive/range.h" // Range<rowid_t>, rowid_t
+
+namespace roaring {
+class Roaring;
+} // namespace roaring
 
 namespace starrocks::lake {
 class TabletManager;
@@ -118,6 +123,28 @@ StatusOr<std::vector<TabletRangePB>> compute_disjoint_gaps_within(
 // pre-split tablet that extend beyond the merged tablet range).
 StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
         const std::vector<TabletRangePB>& sorted_disjoint_children);
+
+// A row window in a DCG target segment owned by one source old tablet, or a
+// synthesized gap window (is_gap=true) whose rows are masked by the merge gap
+// delvec. Moved here from tablet_merger.cpp so reconcile_windows_with_gap below
+// is unit-testable.
+struct DcgRowWindow {
+    size_t old_tablet_index = 0;
+    Range<rowid_t> range;
+    bool is_gap = false;
+};
+
+// Walk |sorted_contributors| (ascending by range.begin(), already deduped on
+// same owner+range) and fill coverage holes with synthesized gap windows IFF
+// the hole is fully covered by |gap_bits| (the same Roaring merge_delvecs masks
+// into the delvec). A hole not fully masked, an overlap between distinct
+// owners, a contributor window outside [0, num_rows], or num_rows<=0 returns an
+// error (NotSupported / InternalError). With |gap_bits|==nullptr any hole fails,
+// byte-identical to the pre-fix strict contiguous-coverage behavior. On success,
+// |out_windows| tiles [0, num_rows) exactly (contributor + gap windows).
+Status reconcile_windows_with_gap(const std::vector<DcgRowWindow>& sorted_contributors,
+                                  const roaring::Roaring* gap_bits, rowid_t num_rows,
+                                  std::vector<DcgRowWindow>* out_windows);
 
 // Mirrors Rowset::get_seek_range() fallback chain:
 //   rowset.range if has_range, else ctx_metadata.range if has_range,
