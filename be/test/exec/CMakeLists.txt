@@ -55,6 +55,45 @@ set_target_properties(starrocks_exec_primitive_test_objs PROPERTIES COMPILE_FLAG
 add_executable(exec_primitive_test $<TARGET_OBJECTS:starrocks_exec_primitive_test_objs>)
 target_link_libraries(exec_primitive_test ${EXEC_PRIMITIVE_TEST_LINK_LIBS} gtest_main)
 
+set(EXEC_RUNTIME_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    pipeline_driver_exec_runtime_test.cpp
+)
+
+set(EXEC_RUNTIME_TEST_LINK_LIBS
+    ExecRuntime
+    ComputeEnv
+    ExecPrimitive
+    StoragePrimitive
+    ExprCore
+    Serde
+    RuntimeEnv
+    RuntimeCore
+    Platform
+    FSCore
+    IO
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_exec_runtime_test_objs OBJECT ${EXEC_RUNTIME_TEST_FILES})
+target_link_libraries(starrocks_exec_runtime_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_exec_runtime_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(exec_runtime_test $<TARGET_OBJECTS:starrocks_exec_runtime_test_objs>)
+target_link_libraries(exec_runtime_test ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_main)
+
 set(DATA_SINK_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     data_sink/data_sink_core_test.cpp

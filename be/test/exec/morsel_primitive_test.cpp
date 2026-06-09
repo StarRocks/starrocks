@@ -67,7 +67,10 @@ TEST(MorselPrimitiveTest, DynamicBuilderBuildsTicketedQueue) {
     ASSERT_EQ(MorselQueue::Type::DYNAMIC, queue->type());
     ASSERT_EQ(8, queue->max_degree_of_parallelism());
     ASSERT_TRUE(queue->has_more_scan_ranges());
-    ASSERT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(queue.get()));
+    auto* ticketed_queue = dynamic_cast<TicketedMorselQueue*>(queue.get());
+    ASSERT_NE(nullptr, ticketed_queue);
+    EXPECT_FALSE(ticketed_queue->should_attach_ticket_checker(false));
+    EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(true));
 }
 
 TEST(MorselPrimitiveTest, ScanMorselHandlesEmptyScanRangeMarker) {

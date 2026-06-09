@@ -35,11 +35,13 @@
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/primitives/driver_observer.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/primitives/fragment_runtime_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/primitives/query_runtime_state.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/source_operator.h"
@@ -191,10 +193,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     // attach ticket_checker to both scan source operator and SplitMorselQueue
     auto* driver_scan_op = dynamic_cast<DriverScanOperator*>(source_op);
     auto* ticketed_morsel_queue = dynamic_cast<TicketedMorselQueue*>(_morsel_queue);
-    auto should_attach_ticket_checker =
-            driver_scan_op != nullptr && _morsel_queue != nullptr && ticketed_morsel_queue != nullptr &&
-            ticketed_morsel_queue->could_attch_ticket_checker() &&
-            (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
+    auto should_attach_ticket_checker = driver_scan_op != nullptr && _morsel_queue != nullptr &&
+                                        ticketed_morsel_queue != nullptr &&
+                                        ticketed_morsel_queue->should_attach_ticket_checker(use_cache);
 
     if (should_attach_ticket_checker) {
         auto ticket_checker = std::make_shared<SplitMorselTicketChecker>();

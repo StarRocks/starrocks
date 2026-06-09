@@ -24,6 +24,9 @@ public:
 
     virtual void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) = 0;
     virtual bool could_attch_ticket_checker() const = 0;
+    virtual bool should_attach_ticket_checker(bool cache_enabled) const {
+        return cache_enabled && could_attch_ticket_checker();
+    }
 };
 
 } // namespace starrocks::pipeline
