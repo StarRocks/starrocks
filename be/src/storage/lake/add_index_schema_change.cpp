@@ -227,12 +227,8 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
                                                    uint32_t rssid, IndexDeltaGroupEntryPB* out_entry) {
     DCHECK(out_entry != nullptr);
 
-    // segment_metas is the canonical per-segment file info after load: the
-    // lake_proto_normalizer back-fills it from the legacy deprecated_* parallel
-    // arrays for pre-refactor tablets, so it is always populated here.
-    const auto& seg_meta = rowset_meta.segment_metas(seg_idx_in_rowset);
-    const auto& seg_name = seg_meta.filename();
-    // segment_metas carry relative filenames; resolve them against
+    const auto& seg_name = rowset_meta.segment_metas(seg_idx_in_rowset).filename();
+    // segments in rowset_meta carry relative filenames; resolve them against
     // the new tablet's segment location (same bucket/dir as the base tablet
     // on lake, since the fast path never copies or rewrites segment data).
     const std::string seg_path = _tablet_mgr->segment_location(_new_tablet.id(), seg_name);
@@ -243,19 +239,18 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     //    this one-shot scan, mirroring schema_change.cpp's existing
     //    convention).
     FileInfo seg_fileinfo{.path = seg_path};
-    if (seg_meta.has_encryption_meta()) {
-        seg_fileinfo.encryption_meta = seg_meta.encryption_meta();
+    if (rowset_meta.segment_metas(seg_idx_in_rowset).has_encryption_meta()) {
+        seg_fileinfo.encryption_meta = rowset_meta.segment_metas(seg_idx_in_rowset).encryption_meta();
     }
-    if (seg_meta.has_size()) {
-        seg_fileinfo.size = seg_meta.size();
+    if (rowset_meta.segment_metas(seg_idx_in_rowset).has_size()) {
+        seg_fileinfo.size = rowset_meta.segment_metas(seg_idx_in_rowset).size();
     }
     // Bundled rowsets pack multiple logical segments into one physical file;
     // without this offset the RandomAccessFile starts at byte 0 of the bundle
     // and column reads return the wrong bytes (observed as page checksum
-    // mismatch on the first column read in the fast path). 0 is a legitimate
-    // offset (first segment in a bundle), so test presence via has_*().
-    if (seg_meta.has_bundle_file_offset()) {
-        seg_fileinfo.bundle_file_offset = seg_meta.bundle_file_offset();
+    // mismatch on the first column read in the fast path).
+    if (rowset_meta.segment_metas(seg_idx_in_rowset).has_bundle_file_offset()) {
+        seg_fileinfo.bundle_file_offset = rowset_meta.segment_metas(seg_idx_in_rowset).bundle_file_offset();
     }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
