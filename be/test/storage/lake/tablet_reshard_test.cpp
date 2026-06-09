@@ -466,6 +466,157 @@ protected:
         return result;
     }
 
+    // Drive a 3-way PK merge where two surviving children update column c1 on the
+    // shared base segment (same-column DCG conflict -> rebuild) and the child at
+    // |compacted_index| has compacted its share away, leaving a gap on canonical
+    // R0. Before the gap fix the rebuild's coverage check rejected the gap with
+    // NotSupported; now it accepts the masked gap and fills those rows from the
+    // base segment. Verifies the rebuilt .cols row values (surviving children's
+    // updates on their windows, base values on the gap) and that a gap delvec
+    // masks the compacted child's rows.
+    void run_dcg_conflict_gap_rebuild_case(int compacted_index, int64_t txn_id) {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        constexpr int kNumRows = 30;
+        constexpr int kRangeRows = 10; // three equal key ranges: [0,10) [10,20) [20,30)
+        constexpr int64_t kSchemaId = 4001;
+        constexpr uint32_t kSharedRowsetId = 1;
+
+        const int64_t child_ids[3] = {next_id(), next_id(), next_id()};
+        const int64_t merged_tablet = next_id();
+        for (int64_t child_id : child_ids) prepare_tablet_dirs(child_id);
+        prepare_tablet_dirs(merged_tablet);
+
+        // Base segment: c0 = row index (key == rowid), c1 = row * 10.
+        auto base_value_of = [](int row) { return row * 10; };
+        auto update_of = [](int child_index, int row) { return row + 100000 * (child_index + 1); };
+        const std::string shared_segment_name = "shared_seg.dat";
+        const uint64_t base_segment_size =
+                write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, base_value_of);
+
+        auto set_key_range = [&](TabletRangePB* range, int lower_key, int upper_key) {
+            range->set_lower_bound_included(true);
+            range->set_upper_bound_included(false);
+            *range->mutable_lower_bound() = generate_sort_key(lower_key);
+            *range->mutable_upper_bound() = generate_sort_key(upper_key);
+        };
+
+        for (int i = 0; i < 3; ++i) {
+            const int lower = i * kRangeRows;
+            const int upper = (i + 1) * kRangeRows;
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(child_ids[i]);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(10);
+            const auto [c0_uid, c1_uid] = set_two_column_pk_schema(meta.get(), kSchemaId);
+            (void)c0_uid;
+            set_key_range(meta->mutable_range(), lower, upper);
+
+            if (i == compacted_index) {
+                // Compacted child: a non-shared compaction output rowset (newer
+                // version) covering this range. No shared segment, no DCG -> its
+                // range is a gap on canonical R0.
+                auto* rowset = meta->add_rowsets();
+                rowset->set_id(2);
+                rowset->set_version(new_version);
+                rowset->set_num_rows(upper - lower);
+                rowset->set_data_size(100);
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(fmt::format("compacted_{}.dat", i));
+                segment_meta->set_size(100);
+                set_key_range(rowset->mutable_range(), lower, upper);
+                (*meta->mutable_rowset_to_schema())[2] = kSchemaId;
+            } else {
+                // Surviving child: shares the base segment and updates c1 on its
+                // owned row window via a real .cols file (base copy-through
+                // elsewhere, mirroring production partial-column update output).
+                const std::string cols_name = lake::gen_cols_filename(txn_id + 1 + i);
+                auto cell_value = [&](int row) {
+                    return (row >= lower && row < upper) ? update_of(i, row) : base_value_of(row);
+                };
+                write_c1_only_cols_file(child_ids[i], cols_name, kNumRows, cell_value);
+
+                auto* rowset = meta->add_rowsets();
+                rowset->set_id(kSharedRowsetId);
+                rowset->set_version(base_version);
+                rowset->set_num_rows(kNumRows);
+                rowset->set_data_size(base_segment_size);
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(shared_segment_name);
+                segment_meta->set_size(base_segment_size);
+                segment_meta->set_shared(true);
+                stamp_physical_identity_uid(rowset, shared_segment_name); // same uid across siblings => dedup
+                set_key_range(rowset->mutable_range(), lower, upper);
+                (*meta->mutable_rowset_to_schema())[kSharedRowsetId] = kSchemaId;
+
+                auto& dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[kSharedRowsetId];
+                dcg.add_column_files(cols_name);
+                dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+                dcg.add_versions(1);
+                dcg.add_shared_files(false);
+            }
+            ASSERT_OK(put_tablet_metadata(meta));
+        }
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        for (int64_t child_id : child_ids) merging_info.add_old_tablet_ids(child_id);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        // Before the gap fix this returned NotSupported; the rebuild now succeeds.
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges));
+        auto merged = tablet_metadatas.at(merged_tablet);
+        ASSERT_NE(merged, nullptr);
+
+        // Canonical R0 == the rowset that still owns a shared segment.
+        uint32_t canonical_rssid = 0;
+        for (const auto& rowset : merged->rowsets()) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                if (segment_meta.shared()) {
+                    canonical_rssid = rowset.id();
+                    break;
+                }
+            }
+            if (canonical_rssid != 0) break;
+        }
+        ASSERT_NE(canonical_rssid, 0u);
+
+        // A synthesized gap delvec must mask the compacted child's rows on R0.
+        auto delvec_it = merged->delvec_meta().delvecs().find(canonical_rssid);
+        ASSERT_NE(delvec_it, merged->delvec_meta().delvecs().end());
+        EXPECT_GT(delvec_it->second.size(), 0u);
+
+        // Exactly one rebuilt DCG entry for c1 on canonical R0.
+        const auto& dcgs = merged->dcg_meta().dcgs();
+        auto dcg_it = dcgs.find(canonical_rssid);
+        ASSERT_TRUE(dcg_it != dcgs.end());
+        const auto& rebuilt_entry = dcg_it->second;
+        ASSERT_EQ(1, rebuilt_entry.column_files_size());
+        ASSERT_EQ(1, rebuilt_entry.unique_column_ids_size());
+        ASSERT_EQ(1, rebuilt_entry.unique_column_ids(0).column_ids_size());
+        EXPECT_EQ(1002, rebuilt_entry.unique_column_ids(0).column_ids(0));
+        ASSERT_EQ(1, rebuilt_entry.versions_size());
+        EXPECT_EQ(new_version, rebuilt_entry.versions(0));
+
+        // Rebuilt .cols values: surviving children's updates on their windows;
+        // base values on the compacted child's gap window.
+        auto values = read_c1_only_cols_file(merged_tablet, rebuilt_entry.column_files(0));
+        ASSERT_EQ(kNumRows, static_cast<int>(values.size()));
+        for (int row = 0; row < kNumRows; ++row) {
+            const int range_index = row / kRangeRows;
+            const int expected = (range_index == compacted_index) ? base_value_of(row) : update_of(range_index, row);
+            EXPECT_EQ(expected, values[row]) << "row " << row << " (range " << range_index << ")";
+        }
+    }
+
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
@@ -8878,6 +9029,22 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_two_children_same_
     for (int row = kBoundary; row < kNumRows; ++row) {
         EXPECT_EQ(child_b_update(row), values[row]) << "row " << row << " should carry child B's update";
     }
+}
+
+// DCG same-column conflict combined with a compacted-away child (gap) on
+// canonical R0. The rebuild must accept the masked gap window and fill it from
+// the base segment instead of returning NotSupported. Three cases exercise the
+// leading, internal, and trailing gap positions.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_first_child_compacts) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/0, /*txn_id=*/3101);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_middle_child_compacts) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/1, /*txn_id=*/3102);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_last_child_compacts) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/2, /*txn_id=*/3103);
 }
 
 // When two children's DCG entries share a .cols filename but the entry
