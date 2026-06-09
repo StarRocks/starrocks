@@ -15,7 +15,6 @@ on:
   push:
     branches:
       - main
-      - 2026-05-28-nix-flake-devshell
     paths:
       - ".envrc"
       - ".github/workflows/nix-flake.yml"
