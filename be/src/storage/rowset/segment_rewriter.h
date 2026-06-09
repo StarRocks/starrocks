@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,11 +29,19 @@ public:
     // read from src, write to dest
     // this function will read data from src_file and write to dest file first
     // then append write_column to dest file
+    //
+    // |vector_index_file_paths| / |defer_vector_index_build| direct how vector indexes on the
+    // rewritten columns are produced. Shared-data callers pass the location-provider-resolved .vi
+    // paths (sync mode, so the SegmentWriter builds .vi at the reader-visible path instead of the
+    // IndexDescriptor fallback) or set defer=true (async mode, so .vi is left to the FE-scheduled
+    // build task). Shared-nothing callers leave the defaults: an empty map and defer=false.
     static Status rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                          const std::shared_ptr<const TabletSchema>& tschema,
                                          std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                          uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
-                                         SegmentFileMark segment_file_mark = {});
+                                         SegmentFileMark segment_file_mark = {},
+                                         std::map<int64_t, std::string> vector_index_file_paths = {},
+                                         bool defer_vector_index_build = false);
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,

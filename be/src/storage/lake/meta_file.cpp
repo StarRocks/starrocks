@@ -183,6 +183,14 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
+        // The rewrite produces a full segment; refresh its vector_index_ids to reflect the .vi the
+        // rewrite built inline (sync) or that the FE-scheduled build task will build (async). The
+        // partial segment recorded none of its own (it omitted the vector column), so without this
+        // the dest segment would carry no vector_index_ids and lose its vector index after publish.
+        segment_meta->clear_vector_index_ids();
+        for (int64_t vi_id : replace_seg.second.vector_index_ids) {
+            segment_meta->add_vector_index_ids(vi_id);
+        }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
         // cross-publish, clear the flag so GC routes the rewrite file through the normal
@@ -1255,6 +1263,12 @@ Status MetaFileBuilder::set_final_rowset() {
         segment_meta->set_size(replace_seg.second.size.value());
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
+        }
+        // See apply_opwrite: refresh vector_index_ids for the full rewrite segment so the dest
+        // segment keeps its vector index (sync .vi built inline, or async .vi to be built).
+        segment_meta->clear_vector_index_ids();
+        for (int64_t vi_id : replace_seg.second.vector_index_ids) {
+            segment_meta->add_vector_index_ids(vi_id);
         }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.

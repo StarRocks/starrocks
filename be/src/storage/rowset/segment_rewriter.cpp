@@ -28,7 +28,9 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
                                                const std::shared_ptr<const TabletSchema>& tschema,
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
-                                               SegmentFileMark segment_file_mark) {
+                                               SegmentFileMark segment_file_mark,
+                                               std::map<int64_t, std::string> vector_index_file_paths,
+                                               bool defer_vector_index_build) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
         // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
@@ -70,6 +72,13 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 
     SegmentWriterOptions opts;
     opts.segment_file_mark = std::move(segment_file_mark);
+    // Direct how vector indexes on the rewritten columns are produced. Shared-data sync mode
+    // passes location-provider-resolved .vi paths so the SegmentWriter writes them at the
+    // reader-visible path (instead of the empty-segment_file_mark IndexDescriptor fallback, which
+    // is unreachable via the location provider); async mode sets defer so .vi generation is left
+    // to the FE-scheduled VectorIndexBuildTask. Shared-nothing leaves both at their defaults.
+    opts.vector_index_file_paths = std::move(vector_index_file_paths);
+    opts.defer_vector_index_build = defer_vector_index_build;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
