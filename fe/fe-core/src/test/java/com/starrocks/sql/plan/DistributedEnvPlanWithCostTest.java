@@ -769,12 +769,21 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select ps_partkey,ps_suppkey from partsupp full outer join part on " +
                 "ps_partkey = p_partkey where ps_partkey is null";
         plan = getCostExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "3:HASH JOIN\n" +
                 "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n" +
                 "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
                 "  |  output columns: 1, 2\n" +
                 "  |  cardinality: 4000000");
+=======
+        assertContains(plan, "  3:HASH JOIN\n"
+                + "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n"
+                + "  |  other predicates: [1: PS_PARTKEY, INT, true] IS NULL\n"
+                + "  |  output columns: 1, 2\n"
+                + "  |  cardinality: 8000000");
+>>>>>>> 1fed911c00 ([Enhancement] Consider outer side join key null fractions (unmatched keys) in addition to selectivity (#73489))
     }
 
     @Test
