@@ -38,6 +38,12 @@
 
 namespace starrocks {
 
+#define ASSERT_ARROW_OK(status)                                                    \
+    do {                                                                           \
+        auto&& _status = (status);                                                 \
+        ASSERT_TRUE(_status.ok()) << "Arrow call failed: " << _status.ToString(); \
+    } while (0)
+
 class ArrowScannerTest : public ::testing::Test {
 public:
     static void SetUpTestSuite() {
@@ -158,17 +164,17 @@ protected:
         arrow::StringBuilder str_builder;
         arrow::DoubleBuilder double_builder;
 
-        ASSERT_OK(int_builder.AppendValues({1, 2, 3, 4, 5}));
-        ASSERT_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
-        ASSERT_OK(double_builder.AppendValues({1.1, 2.2, 3.3, 4.4, 5.5}));
+        ASSERT_ARROW_OK(int_builder.AppendValues({1, 2, 3, 4, 5}));
+        ASSERT_ARROW_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
+        ASSERT_ARROW_OK(double_builder.AppendValues({1.1, 2.2, 3.3, 4.4, 5.5}));
 
         std::shared_ptr<arrow::Array> int_array;
         std::shared_ptr<arrow::Array> str_array;
         std::shared_ptr<arrow::Array> double_array;
 
-        ASSERT_OK(int_builder.Finish(&int_array));
-        ASSERT_OK(str_builder.Finish(&str_array));
-        ASSERT_OK(double_builder.Finish(&double_array));
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+        ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+        ASSERT_ARROW_OK(double_builder.Finish(&double_array));
 
         auto schema = arrow::schema({
             arrow::field("c0_int", arrow::int32()),
@@ -179,16 +185,16 @@ protected:
         auto batch = arrow::RecordBatch::Make(schema, 5, {int_array, str_array, double_array});
 
         auto out_file_res = arrow::io::FileOutputStream::Open(*file_path);
-        ASSERT_OK(out_file_res.status());
+        ASSERT_ARROW_OK(out_file_res.status());
         auto out_file = out_file_res.ValueOrDie();
 
         auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
-        ASSERT_OK(writer_res.status());
+        ASSERT_ARROW_OK(writer_res.status());
         auto writer = writer_res.ValueOrDie();
 
-        ASSERT_OK(writer->WriteRecordBatch(*batch));
-        ASSERT_OK(writer->Close());
-        ASSERT_OK(out_file->Close());
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        ASSERT_ARROW_OK(out_file->Close());
     }
 
     inline static std::filesystem::path _tmp_root_dir;
@@ -247,17 +253,17 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMismatchAndCast) {
     arrow::StringBuilder str_builder;
     arrow::Int32Builder extra_int_builder;
 
-    ASSERT_OK(int_builder.AppendValues({100, 200, 300, 400, 500}));
-    ASSERT_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
-    ASSERT_OK(extra_int_builder.AppendValues({10, 20, 30, 40, 50}));
+    ASSERT_ARROW_OK(int_builder.AppendValues({100, 200, 300, 400, 500}));
+    ASSERT_ARROW_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
+    ASSERT_ARROW_OK(extra_int_builder.AppendValues({10, 20, 30, 40, 50}));
 
     std::shared_ptr<arrow::Array> int_array;
     std::shared_ptr<arrow::Array> str_array;
     std::shared_ptr<arrow::Array> extra_array;
 
-    ASSERT_OK(int_builder.Finish(&int_array));
-    ASSERT_OK(str_builder.Finish(&str_array));
-    ASSERT_OK(extra_int_builder.Finish(&extra_array));
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+    ASSERT_ARROW_OK(extra_int_builder.Finish(&extra_array));
 
     // File schema contains extra column c3_extra, and cols are in different order
     auto schema = arrow::schema({
@@ -269,16 +275,16 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMismatchAndCast) {
     auto batch = arrow::RecordBatch::Make(schema, 5, {extra_array, str_array, int_array});
 
     auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
-    ASSERT_OK(out_file_res.status());
+    ASSERT_ARROW_OK(out_file_res.status());
     auto out_file = out_file_res.ValueOrDie();
 
     auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
-    ASSERT_OK(writer_res.status());
+    ASSERT_ARROW_OK(writer_res.status());
     auto writer = writer_res.ValueOrDie();
 
-    ASSERT_OK(writer->WriteRecordBatch(*batch));
-    ASSERT_OK(writer->Close());
-    ASSERT_OK(out_file->Close());
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    ASSERT_ARROW_OK(out_file->Close());
 
     std::vector<std::string> file_names{file_path};
     std::vector<std::string> columns{"c0_bigint", "c1_str", "c2_null"};
@@ -329,14 +335,14 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamNullColumnChunkBoundary) {
     arrow::Int32Builder int_builder;
     arrow::StringBuilder str_builder;
 
-    ASSERT_OK(int_builder.AppendValues({100, 200, 300, 400, 500}));
-    ASSERT_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
+    ASSERT_ARROW_OK(int_builder.AppendValues({100, 200, 300, 400, 500}));
+    ASSERT_ARROW_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
 
     std::shared_ptr<arrow::Array> int_array;
     std::shared_ptr<arrow::Array> str_array;
 
-    ASSERT_OK(int_builder.Finish(&int_array));
-    ASSERT_OK(str_builder.Finish(&str_array));
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
 
     auto schema = arrow::schema({
         arrow::field("c1_str", arrow::utf8()),
@@ -346,16 +352,16 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamNullColumnChunkBoundary) {
     auto batch = arrow::RecordBatch::Make(schema, 5, {str_array, int_array});
 
     auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
-    ASSERT_OK(out_file_res.status());
+    ASSERT_ARROW_OK(out_file_res.status());
     auto out_file = out_file_res.ValueOrDie();
 
     auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
-    ASSERT_OK(writer_res.status());
+    ASSERT_ARROW_OK(writer_res.status());
     auto writer = writer_res.ValueOrDie();
 
-    ASSERT_OK(writer->WriteRecordBatch(*batch));
-    ASSERT_OK(writer->Close());
-    ASSERT_OK(out_file->Close());
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    ASSERT_ARROW_OK(out_file->Close());
 
     std::vector<std::string> file_names{file_path};
     std::vector<std::string> columns{"c0_bigint", "c1_str", "c2_null"};
