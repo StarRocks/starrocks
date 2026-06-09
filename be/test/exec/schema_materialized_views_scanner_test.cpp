@@ -54,7 +54,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
 
     // Test that scanner has the correct number of columns
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(28, slot_descs.size());
+    EXPECT_EQ(34, slot_descs.size());
 
     // Test column names and types
     EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[0]->col_name());
@@ -85,6 +85,12 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
     EXPECT_EQ("LAST_REFRESH_PROCESS_TIME", slot_descs[25]->col_name());
     EXPECT_EQ("LAST_REFRESH_JOB_ID", slot_descs[26]->col_name());
     EXPECT_EQ("LAST_REFRESH_TIME", slot_descs[27]->col_name());
+    EXPECT_EQ("WAREHOUSE", slot_descs[28]->col_name());
+    EXPECT_EQ("REFRESH_MODE", slot_descs[29]->col_name());
+    EXPECT_EQ("REFRESH_TRIGGER", slot_descs[30]->col_name());
+    EXPECT_EQ("REFRESH_POLICY", slot_descs[31]->col_name());
+    EXPECT_EQ("RESOURCE_GROUP", slot_descs[32]->col_name());
+    EXPECT_EQ("QUERY_REWRITE_STATUS_REASON", slot_descs[33]->col_name());
 }
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_uninitialized_scanner) {
@@ -188,6 +194,12 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     mv.__set_last_refresh_process_time("2025-01-01 10:04:30");
     mv.__set_last_refresh_job_id("job_001");
     mv.__set_last_refresh_time("2025-01-01 10:05:00");
+    mv.__set_warehouse("wh_test_001");
+    mv.__set_refresh_mode("INCREMENTAL");
+    mv.__set_refresh_trigger("ON_BASE_TABLE_CHANGE");
+    mv.__set_refresh_policy("MANUAL");
+    mv.__set_resource_group("rg_test_001");
+    mv.__set_query_rewrite_status_reason("UNSUPPORTED_DEFINITION");
 
     scanner._mv_results.materialized_views = {mv};
 
@@ -220,6 +232,12 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     EXPECT_TRUE(row.find("2025-01-01 10:04:30") != std::string::npos);      // LAST_REFRESH_PROCESS_TIME
     EXPECT_TRUE(row.find("job_001") != std::string::npos);                  // LAST_REFRESH_JOB_ID
     EXPECT_TRUE(row.find("2025-01-01 10:05:00") != std::string::npos);      // LAST_REFRESH_TIME
+    EXPECT_TRUE(row.find("wh_test_001") != std::string::npos);              // WAREHOUSE
+    EXPECT_TRUE(row.find("INCREMENTAL") != std::string::npos);              // REFRESH_MODE
+    EXPECT_TRUE(row.find("ON_BASE_TABLE_CHANGE") != std::string::npos);     // REFRESH_TRIGGER
+    EXPECT_TRUE(row.find("MANUAL") != std::string::npos);                   // REFRESH_POLICY
+    EXPECT_TRUE(row.find("rg_test_001") != std::string::npos);              // RESOURCE_GROUP
+    EXPECT_TRUE(row.find("UNSUPPORTED_DEFINITION") != std::string::npos);   // QUERY_REWRITE_STATUS_REASON
 
     chunk->reset();
     EXPECT_OK(scanner.get_next(&chunk, &eos));

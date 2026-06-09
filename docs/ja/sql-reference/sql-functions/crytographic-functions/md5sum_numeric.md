@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "複数の文字列の 128 ビットチェックサムを 10 進数で計算します。"
 ---
 
 # md5sum_numeric

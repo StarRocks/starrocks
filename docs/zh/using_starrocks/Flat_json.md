@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Flat JSON in StarRocks to accelerate JSON queries by extracting common fields into flat columnar storage."
 sidebar_position: 110
 ---
 

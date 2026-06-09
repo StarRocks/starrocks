@@ -58,6 +58,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
@@ -123,6 +124,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
@@ -1738,9 +1740,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     private String jobPropertiesToJsonString() {
         Map<String, String> jobProperties = Maps.newHashMap();
-        jobProperties.put("partitions",
-                partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
-        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
+        jobProperties.put("partitions", partitions == null ? STAR_STRING
+                : partitions.getPartitionNames().stream().map(ParseUtil::backquote).collect(Collectors.joining(",")));
+        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : columnDescsToSql(columnDescs));
         jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
@@ -1759,6 +1761,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
+    }
+
+    private static String columnDescsToSql(List<ImportColumnDesc> columnDescs) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < columnDescs.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            ImportColumnDesc desc = columnDescs.get(i);
+            sb.append(ParseUtil.backquote(desc.getColumnName()));
+            if (desc.getExpr() != null) {
+                sb.append("=").append(ExprToSql.toSql(desc.getExpr()));
+            }
+        }
+        return sb.toString();
     }
 
     public String jobPropertiesToSql() {
@@ -1957,10 +1974,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
+        // Backquote the job name and table name so that reserved-keyword or special-character
+        // identifiers (e.g. `order`) can be re-parsed when the statement is deserialized on FE
+        // restart; otherwise getLoadDesc() fails to parse and routineLoadDesc is lost. ParseUtil
+        // .backquote also escapes embedded backticks (a -> `a`, a`b -> `a``b`), which naive
+        // string concatenation does not.
         String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
                         " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
                         " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
-                name, tableName, originLoadDesc.toSql());
+                ParseUtil.backquote(name), ParseUtil.backquote(tableName), originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatementInfo(sql, 0);
     }

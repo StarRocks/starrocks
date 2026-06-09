@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 SQL 事务以原子方式在 StarRocks 中提交多个 INSERT、UPDATE、DELETE 语句，支持 ACID 特性。"
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'
@@ -148,6 +149,7 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 - 在同一事务内对同一表执行多个 INSERT 语句的操作仅在 v4.0 及更高版本的存算分离集群中支持。
 - 在单个事务内，每张表仅可定义一条 UPDATE 或 DELETE 语句，且必须位于 INSERT 语句之前。
 - 后续的 DML 语句无法读取同一事务中先前语句带来的未提交变更。例如，先前 INSERT 语句的目标表不能作为后续语句的源表，否则系统将返回错误。
+- 出于同样的原因，不允许对同一事务中先前已被修改的表执行部分列更新（即仅写入主键表部分列的 INSERT 语句）。部分列更新需要隐式读取该表的其他列以补全每行数据，这相当于读取先前语句的未提交变更，否则系统将返回错误。
 - 事务中所有 DML 语句的目标表必须位于同一数据库内，不支持跨数据库操作。
 - 当前不支持 INSERT OVERWRITE 操作。
 - 不允许嵌套事务，即不能在一对 BEGIN-COMMIT/ROLLBACK 之间再次指定 BEGIN WORK。

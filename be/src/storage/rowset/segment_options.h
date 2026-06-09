@@ -34,6 +34,10 @@ namespace starrocks {
 class ColumnAccessPath;
 class DeltaColumnGroupLoader;
 class DelvecLoader;
+
+namespace lake {
+class IndexDeltaGroupLoader;
+} // namespace lake
 class ObjectPool;
 class RuntimeProfile;
 class TabletSchema;
@@ -71,6 +75,10 @@ public:
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    // Lake-only: resolves IndexDeltaGroup (.idx) entries visible at `version`.
+    // Readers prefer IDG-backed indexes over footer-embedded ones. Nullptr
+    // leaves the reader on the original footer path (existing behaviour).
+    std::shared_ptr<lake::IndexDeltaGroupLoader> idg_loader;
     std::string rowset_path;
 
     // REQUIRED (null is not allowed)

@@ -1111,7 +1111,11 @@ Status SegmentIterator::_init_ann_reader() {
         }
     }
     if (!tablet_index_meta) {
-        return Status::OK();
+        // The query selected a vector search but this segment's schema has no VECTOR index, so there
+        // is no index meta to build a brute-force fallback from. Fail the scan rather than letting a
+        // null ann_reader be dereferenced downstream (this Status aborts the scan via RETURN_IF_ERROR).
+        return Status::InternalError(
+                fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
 #ifdef WITH_TENANN
@@ -1378,6 +1382,17 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
     iter_opts.has_preaggregation = _opts.has_preaggregation;
+
+    // IDG read-side context (lake only; nullptr loader keeps the iterator on
+    // the legacy footer-only path). Thread through so ScalarColumnIterator
+    // can probe whether a standalone .idx file covers this (segment, col)
+    // and surface it via has_bitmap_index() / has_ngram_bloom_filter_index()
+    // to upper pruning gates.
+    iter_opts.idg_loader = _opts.idg_loader;
+    iter_opts.tablet_id = _opts.tablet_id;
+    iter_opts.segment_id = _opts.rowset_id + segment_id();
+    iter_opts.query_version = _opts.version;
+    iter_opts.col_unique_id = ucid;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
                                  .buffer_size = _opts.lake_io_opts.buffer_size,
@@ -3605,6 +3620,17 @@ IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _column_files.at(cid).get();
     opts.stats = _opts.stats;
+
+    // IDG context (lake only; nullptr loader keeps readers on the footer path).
+    opts.idg_loader = _opts.idg_loader;
+    opts.tablet_id = _opts.tablet_id;
+    opts.segment_id = _opts.rowset_id + segment_id();
+    opts.query_version = _opts.version;
+    // Column unique id needed by the IDG loader to match per-column entries;
+    // -1 when column is virtual / synthesized.
+    if (cid < static_cast<ColumnId>(_schema.num_fields()) && _schema.field(cid) != nullptr) {
+        opts.col_unique_id = _schema.field(cid)->uid();
+    }
     return opts;
 }
 
@@ -3642,6 +3668,15 @@ Status SegmentIterator::_apply_bitmap_index() {
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
+            // IDG context — without this, the IDG branch in
+            // ColumnReader::new_bitmap_index_iterator is unreachable and
+            // fast-path built bitmap indexes stored in .idx sidecar files
+            // would be invisible to the pruning gate.
+            opts.idg_loader = _opts.idg_loader;
+            opts.tablet_id = _opts.tablet_id;
+            opts.segment_id = _opts.rowset_id + segment_id();
+            opts.query_version = _opts.version;
+            opts.col_unique_id = ucid;
 
             BitmapIndexIterator* bitmap_iter = nullptr;
             RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));

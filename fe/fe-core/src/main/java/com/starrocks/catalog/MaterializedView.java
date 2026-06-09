@@ -1721,6 +1721,57 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
+    public String getRefreshTriggerString() {
+        if (refreshScheme == null) {
+            return "NONE";
+        }
+        MaterializedViewRefreshType type = refreshScheme.getType();
+        if (type == MaterializedViewRefreshType.SYNC) {
+            return "NONE";
+        }
+        if (type == MaterializedViewRefreshType.MANUAL) {
+            return "MANUAL";
+        }
+        return isLoadTriggeredRefresh() ? "ON_BASE_TABLE_CHANGE" : "SCHEDULED";
+    }
+
+    public String getRefreshPolicyString() {
+        if (refreshScheme == null) {
+            return "NONE";
+        }
+        MaterializedViewRefreshType type = refreshScheme.getType();
+        if (type == MaterializedViewRefreshType.SYNC) {
+            return "NONE";
+        }
+        if (type == MaterializedViewRefreshType.MANUAL) {
+            return "MANUAL";
+        }
+        if (isLoadTriggeredRefresh()) {
+            return "ON_BASE_TABLE_CHANGE";
+        }
+        StringBuilder sb = new StringBuilder();
+        appendAsyncRefreshSchedule(sb, refreshScheme.getAsyncRefreshContext());
+        return sb.toString().trim();
+    }
+
+    private void appendAsyncRefreshSchedule(StringBuilder sb, AsyncRefreshContext asyncRefreshContext) {
+        if (asyncRefreshContext.isDefineStartTime()) {
+            sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                            .format(DateUtils.DATE_TIME_FORMATTER))
+                    .append("\")");
+        }
+        if (asyncRefreshContext.getTimeUnit() != null) {
+            sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                    .append(asyncRefreshContext.getTimeUnit()).append(")");
+        }
+    }
+
+    public String getResourceGroupString() {
+        TableProperty tableProperty = getTableProperty();
+        String resourceGroup = tableProperty == null ? null : tableProperty.getResourceGroup();
+        return Strings.isNullOrEmpty(resourceGroup) ? ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME : resourceGroup;
+    }
+
     /**
      * Return the partition refresh strategy of the materialized view.
      */
@@ -1911,16 +1962,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         if (refreshScheme != null && refreshScheme.getType() == MaterializedViewRefreshType.ASYNC) {
-            AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-            if (asyncRefreshContext.isDefineStartTime()) {
-                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                .format(DateUtils.DATE_TIME_FORMATTER))
-                        .append("\")");
-            }
-            if (asyncRefreshContext.getTimeUnit() != null) {
-                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
-                        .append(asyncRefreshContext.getTimeUnit()).append(")");
-            }
+            appendAsyncRefreshSchedule(sb, refreshScheme.getAsyncRefreshContext());
         }
 
         // properties
@@ -2227,22 +2269,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Return the status and reason about query rewrite
+     * Return the query rewrite status enum name: VALID, INVALID, or UNKNOWN.
      */
     public String getQueryRewriteStatus() {
+        return getMvPlanValidationResult().getStatus().name();
+    }
+
+    public String getQueryRewriteStatusReason() {
+        return getMvPlanValidationResult().getReasonCode().name();
+    }
+
+    public MVPlanValidationResult getMvPlanValidationResult() {
         // since check mv valid to rewrite query is a heavy operation, we only check it when it's in the plan cache.
         ConnectContext context = ConnectContext.get() == null ? ConnectContext.build() : ConnectContext.get();
-        final MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(context,
+        return MvRewritePreprocessor.isMVValidToRewriteQuery(context,
                 this, Sets.newHashSet(), false, true,
                 context.getSessionVariable().getOptimizerExecuteTimeout());
-        switch (result.getStatus()) {
-            case VALID:
-                return "VALID";
-            case INVALID:
-                return "INVALID: " + result.getReason();
-            default:
-                return "UNKNOWN: " + result.getReason();
-        }
     }
 
     @Override

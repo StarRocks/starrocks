@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在 macOS ARM64（Apple Silicon）上编译、运行、调试和测试 StarRocks。"
 ---
 
 # 基于 macOS ARM64 编译、运行和测试 StarRocks

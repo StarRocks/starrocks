@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 内で実行中のスレッドによって実行されている接続またはクエリを終了します。"
 ---
 
 # KILL

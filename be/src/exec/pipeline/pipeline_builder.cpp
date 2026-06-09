@@ -16,8 +16,9 @@
 
 #include <memory>
 
-#include "adaptive/event.h"
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/query_cache/cache_manager.h"
+#include "compute_env/query_cache/lane_arbiter.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
@@ -33,14 +34,13 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/pipeline/wait_operator.h"
-#include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
-#include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "runtime/service_contexts.h"
 

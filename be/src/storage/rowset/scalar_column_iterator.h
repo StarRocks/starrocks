@@ -198,6 +198,16 @@ private:
     int64_t _element_ordinal = 0;
 
     UInt32Column _array_size;
+
+    // Cached IDG probe result from init(). `_reader` alone only sees the
+    // segment-footer-embedded bloom filter, so for fast-path-built bloom
+    // filters (sidecar .idx file, no footer payload) we need supplemental
+    // bits to surface via has_{original,ngram}_bloom_filter_index() to
+    // BloomFilterSupportChecker and to the short-circuit in
+    // get_row_ranges_by_bloom_filter. At most one flavor can be present per
+    // column at a time, matching the footer constraint.
+    bool _has_idg_ngram_bf = false;
+    bool _has_idg_original_bf = false;
 };
 
 } // namespace starrocks

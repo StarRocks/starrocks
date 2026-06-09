@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "大きなビットマップを複数のサブビットマップに分割します。"
 ---
 
 # subdivide_bitmap

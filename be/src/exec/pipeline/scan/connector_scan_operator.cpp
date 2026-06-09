@@ -18,9 +18,10 @@
 #include "connector/lake_connector.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exprs/expr_executor.h"
 #include "gutil/casts.h"
@@ -362,23 +363,14 @@ void ConnectorScanOperator::begin_driver_process() {
     }
 }
 
-void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
+void ConnectorScanOperator::end_driver_process(DriverState driver_state) {
     _adaptive_processor->check_all_io_tasks_last_timestamp = 0;
     _adaptive_processor->in_driver_process = false;
     _unpluging = false;
 
-    [[maybe_unused]] auto build_debug_string = [&]() {
-        std::stringstream ss;
-        ss << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
-           << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
-        return ss.str();
-    };
-
-    // VLOG_OPERATOR << build_debug_string();
-
     // we think when scan operator is blocked by output full state
     // it's still running, and it will affect consume chunk speed.
-    if (driver->driver_state() == DriverState::OUTPUT_FULL) {
+    if (driver_state == DriverState::OUTPUT_FULL) {
         int64_t now = GetCurrentTimeMicros();
         _adaptive_processor->last_driver_output_full_timestamp = now;
     }
@@ -578,7 +570,7 @@ bool ConnectorScanOperator::need_notify_all() {
 }
 
 Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
-    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
+    SplitMorselTicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
         for (const MorselPtr& morsel : morsels) {

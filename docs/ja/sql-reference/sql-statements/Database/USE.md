@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "USE specifies the active database for your session."
 ---
 
 # USE

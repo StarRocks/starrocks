@@ -81,11 +81,13 @@ ADD_BE_LIB(Formats
         orc/memory_stream/MemoryOutputStream.cc
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
+        parquet/column_materializer.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
         parquet/column_reader_factory.cpp
         parquet/scalar_column_reader.cpp
         parquet/complex_column_reader.cpp
+        parquet/variant_projection.cpp
         parquet/encoding.cpp
         parquet/level_codec.cpp
         parquet/page_reader.cpp

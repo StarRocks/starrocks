@@ -96,6 +96,7 @@ import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
@@ -318,6 +319,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
@@ -3231,15 +3233,10 @@ public class StmtExecutor {
         }
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
-            try {
-                context.getGlobalStateMgr().getDeleteMgr().process((DeleteStmt) stmt);
-                context.getState().setOk();
-            } catch (QueryStateException e) {
-                if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                    LOG.warn("DDL statement({}) process failed.", getRedactedOriginStmtInString(), e);
-                }
-                context.setState(e.getQueryState());
-            }
+            context.setState(executeNonPrimaryKeyDelete(
+                    (DeleteStmt) stmt,
+                    context.getGlobalStateMgr().getDeleteMgr(),
+                    this::getRedactedOriginStmtInString));
             return;
         }
 
@@ -4082,5 +4079,50 @@ public class StmtExecutor {
             }
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    // Run the non-Primary-Key DELETE path and return the resulting QueryState. Encapsulates
+    // the dual completion model of DeleteMgr.process(): a normal return (e.g. partition
+    // pruning yielded no work) is treated as success; a successful job exits via
+    // QueryStateException(OK, "{label,status,txnId}") whose state we keep and onto which
+    // we attach the non-PK DELETE notice. Non-OK QueryStateExceptions are propagated as
+    // the resulting state with the notice suppressed.
+    static QueryState executeNonPrimaryKeyDelete(DeleteStmt stmt, DeleteMgr deleteMgr,
+                                                 Supplier<String> redactedStmtSupplier) throws DdlException {
+        String okInfo = stmt.getOkInfoMessage();
+        try {
+            deleteMgr.process(stmt);
+            QueryState state = new QueryState();
+            if (okInfo != null && !okInfo.isEmpty()) {
+                state.setOk(0, 0, okInfo);
+            } else {
+                state.setOk();
+            }
+            return state;
+        } catch (QueryStateException e) {
+            if (e.getQueryState().getStateType() != MysqlStateType.OK) {
+                LOG.warn("DELETE statement({}) process failed.", redactedStmtSupplier.get(), e);
+            }
+            QueryState state = e.getQueryState();
+            attachDeleteOkInfo(state, okInfo);
+            return state;
+        }
+    }
+
+    // Append the non-Primary-Key DELETE notice on top of an existing OK QueryState.
+    // DeleteMgr signals successful DELETE via QueryStateException(OK, "{label,status,txnId}"),
+    // whose state replaces the executor's state in the catch block. To make the notice
+    // reach the client, we re-call setOk with the merged info string. No-op when the
+    // notice is empty or the state is not OK.
+    static void attachDeleteOkInfo(QueryState state, String okInfo) {
+        if (okInfo == null || okInfo.isEmpty()) {
+            return;
+        }
+        if (state.getStateType() != MysqlStateType.OK) {
+            return;
+        }
+        String existing = state.getInfoMessage();
+        String merged = (existing == null || existing.isEmpty()) ? okInfo : existing + "; " + okInfo;
+        state.setOk(state.getAffectedRows(), state.getWarningRows(), merged);
     }
 }

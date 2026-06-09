@@ -102,6 +102,23 @@ static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_d
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
                                                            get_num_active_file_queued_tasks, nullptr);
 
+// Recent (60s) mean of files-per-batch across DeleteObjects calls. The IntRecorder is wrapped
+// in a Window so the exposed value tracks current batch size after
+// lake_vacuum_min_batch_delete_size tuning instead of the lifetime average dominated by
+// historical samples. Recording happens once per logical batch (before retries) so that retried
+// batches do not contribute duplicate samples that would bias the mean during throttling -- the
+// very condition operators are trying to read.
+static bvar::IntRecorder g_del_file_batch_size;
+static bvar::Window<bvar::IntRecorder> g_del_file_batch_size_minute("lake_vacuum", "del_file_batch_size_minute",
+                                                                    &g_del_file_batch_size, 60);
+
+// Number of delete retries triggered in the last 60s. Surfaces transient throttling
+// pressure (S3 RequestRate / try-again responses) and validates that jitter / backoff
+// tuning actually reduces retry frequency.
+static bvar::Adder<uint64_t> g_del_file_retries;
+static bvar::Window<bvar::Adder<uint64_t>> g_del_file_retries_minute("lake_vacuum", "del_file_retries_minute",
+                                                                     &g_del_file_retries, 60);
+
 // Decorrelated jitter (AWS Architecture Blog "Exponential Backoff And Jitter"):
 //   next_delay = min(cap, rand([base, last_delay * 3]))
 // where cap = base * 2^max_retries.
@@ -166,6 +183,7 @@ Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> path
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
+            g_del_file_retries << 1;
             last_delay = calculate_retry_delay(last_delay, base, max_retries);
             LOG(WARNING) << "Fail to delete: " << st << " will retry after " << last_delay << "ms";
             std::this_thread::sleep_for(std::chrono::milliseconds(last_delay));
@@ -184,6 +202,7 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     }
 
     auto delete_single_batch = [fs](std::span<const std::string> batch) -> Status {
+        g_del_file_batch_size << batch.size();
         auto wait_duration = config::experimental_lake_wait_per_delete_ms;
         if (wait_duration > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
@@ -355,6 +374,16 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
                     }
                 }
             }
+            // IDG .idx files: delayed-delete shared ones, symmetrically with DCG.
+            if (metadata->has_idg_meta()) {
+                for (const auto& [_, idg_ver] : metadata->idg_meta().idgs()) {
+                    for (const auto& entry : idg_ver.entries()) {
+                        if (entry.shared_file() && entry.has_index_file() && !entry.index_file().empty()) {
+                            RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, entry.index_file())));
+                        }
+                    }
+                }
+            }
             if (metadata->has_sstable_meta()) {
                 for (const auto& sstable : metadata->sstable_meta().sstables()) {
                     if (sstable.shared()) {
@@ -398,6 +427,11 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto min_version = std::max<int64_t>(1, tablet_info.min_version());
     // grace_timestamp <= 0 means no grace timestamp
     auto skip_check_grace_timestamp = grace_timestamp <= 0;
+    // Whether the walk read at least one tablet metadata at or below |min_retain_version|. It stays
+    // false when the loop never runs (|min_version| has already advanced past |min_retain_version|)
+    // or when the very first read returns NotFound, i.e. the metadata at and below the retain
+    // boundary has already been vacuumed away by a previous run.
+    bool read_any_metadata = false;
     size_t extra_file_size = 0;
     int64_t prepare_vacuum_file_size = 0;
     // Starting at |*final_retain_version|, read the tablet metadata forward along
@@ -414,6 +448,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             return res.status();
         } else {
             auto metadata = std::move(res).value();
+            read_any_metadata = true;
             extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
@@ -468,6 +503,18 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
     if (!skip_check_grace_timestamp) {
+        if (!read_any_metadata) {
+            // No tablet metadata exists at or below |final_retain_version| (== min_retain_version): the
+            // metadata down there has already been vacuumed away by a previous run. Reporting
+            // `final_retain_version - 1` here understates the real progress. When min_retain_version is
+            // pinned to a PhysicalPartition.metadataSwitchVersion whose metadata is already gone, that
+            // understatement permanently strands the switch version on the FE, because the FE only clears
+            // it once vacuumed_version >= switch_version. Report the true cleaned watermark instead: every
+            // version below |min_version| is gone, so cleanup has reached at least `min_version - 1`, and
+            // never below `final_retain_version` (which itself no longer exists).
+            *vacuumed_version = std::max<int64_t>(final_retain_version, min_version - 1);
+            return Status::OK();
+        }
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
         // So we set vacuumed_version to `final_retain_version - 1` to avoid the garbage files of final_retain_version can
@@ -1117,6 +1164,17 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                         }
                     }
                 }
+                // IDG .idx files for the latest metadata during full vacuum.
+                if (latest_metadata->has_idg_meta()) {
+                    for (const auto& [_, idg_ver] : latest_metadata->idg_meta().idgs()) {
+                        for (const auto& entry : idg_ver.entries()) {
+                            if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                            if (!entry.shared_file() || allow_delete_shared_files) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, entry.index_file())));
+                            }
+                        }
+                    }
+                }
                 if (latest_metadata->sstable_meta().sstables_size() > 0) {
                     for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
                         if (!sst.shared() || allow_delete_shared_files) {
@@ -1300,10 +1358,16 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   total_files++;
                                                   total_bytes += entry.size.value_or(0);
 
-                                                  // should consider segment files, sst, del file, delvector, vector index
+                                                  // should consider segment files, sst, del file, delvector, vector index, idx
+                                                  // NOTE: .idx files are produced by the ADD INDEX fast path (Index
+                                                  // Delta Group). Active .idx files are referenced from
+                                                  // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
+                                                  // MetaFileBuilder::apply_drop_index. Any .idx file that is older
+                                                  // than the expire window and not referenced by any live metadata is
+                                                  // a candidate here and reclaimed by the existing orphan scan logic.
                                                   if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                                       !is_delvec(entry.name) && !is_del(entry.name) &&
-                                                      !is_vector_index(entry.name)) {
+                                                      !is_vector_index(entry.name) && !is_idx(entry.name)) {
                                                       return true;
                                                   }
                                                   if (!entry.mtime.has_value()) {
@@ -1368,6 +1432,30 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
         for (const auto& sst : sstable_meta.sstables()) {
             data_files.erase(sst.filename());
             data_files_in_metadatas.emplace(sst.filename());
+        }
+
+        // Referenced .cols files from DCG metadata are live.
+        if (check_meta->has_dcg_meta()) {
+            for (const auto& [_, dcg] : check_meta->dcg_meta().dcgs()) {
+                for (const auto& fname : dcg.column_files()) {
+                    data_files.erase(fname);
+                    data_files_in_metadatas.emplace(fname);
+                }
+            }
+        }
+        // Referenced .idx files from IDG metadata are live. Note: fully
+        // tombstoned IDG entries have already been removed by apply_drop_index
+        // (their files were moved to orphan_files), so iterating entries here
+        // is correct without extra filtering.
+        if (check_meta->has_idg_meta()) {
+            for (const auto& [_, idg_ver] : check_meta->idg_meta().idgs()) {
+                for (const auto& entry : idg_ver.entries()) {
+                    if (entry.has_index_file() && !entry.index_file().empty()) {
+                        data_files.erase(entry.index_file());
+                        data_files_in_metadatas.emplace(entry.index_file());
+                    }
+                }
+            }
         }
     };
 
@@ -1656,6 +1744,19 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
             for (const auto& filename : dcg_ver.column_files()) {
                 std::string dcg_path = tablet_mgr->segment_location(tablet_id, filename);
                 drop_cache_func(dcg_path, 0 /* offset */, -1 /* unknown size */);
+            }
+        }
+        // Drop local cache for active IDG .idx files. Mirrors the DCG branch
+        // above so that removing a tablet version also evicts its per-segment
+        // index payloads from local cache.
+        if (metadata->has_idg_meta()) {
+            for (const auto& [_, idg_ver] : metadata->idg_meta().idgs()) {
+                for (const auto& entry : idg_ver.entries()) {
+                    if (entry.has_index_file() && !entry.index_file().empty()) {
+                        std::string idx_path = tablet_mgr->segment_location(tablet_id, entry.index_file());
+                        drop_cache_func(idx_path, 0 /* offset */, entry.has_file_size() ? entry.file_size() : -1);
+                    }
+                }
             }
         }
 

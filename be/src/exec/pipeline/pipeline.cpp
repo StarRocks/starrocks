@@ -16,15 +16,14 @@
 
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/schema_scan_operator.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -42,7 +41,7 @@ size_t Pipeline::degree_of_parallelism() const {
     return source_operator_factory()->degree_of_parallelism();
 }
 
-void Pipeline::count_down_driver(RuntimeState* state) {
+void Pipeline::on_driver_finished(RuntimeState* state) {
     size_t num_drivers = _drivers.size();
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
@@ -65,7 +64,13 @@ const Drivers& Pipeline::drivers() const {
 
 void Pipeline::instantiate_drivers(RuntimeState* state) {
     auto* query_ctx = state->query_ctx();
+    auto* query_runtime_state = state->query_runtime_state();
     auto* fragment_ctx = state->fragment_ctx();
+    auto* fragment_runtime_state = state->fragment_runtime_state();
+    if (fragment_runtime_state == nullptr && fragment_ctx != nullptr) {
+        fragment_runtime_state = &fragment_ctx->fragment_runtime_state();
+    }
+    auto pipeline_timer_context = fragment_ctx->pipeline_timer_context();
     auto workgroup = fragment_ctx->workgroup();
 
     size_t dop = degree_of_parallelism();
@@ -77,10 +82,14 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     _drivers.reserve(dop);
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
-        DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
-                                                            fragment_ctx->next_driver_id());
+        DriverPtr driver = std::make_shared<PipelineDriver>(
+                std::move(operators), query_ctx, query_runtime_state, fragment_runtime_state, fragment_ctx,
+                pipeline_event(), this, pipeline_timer_context, fragment_ctx->next_driver_id());
 
         if (state->enable_event_scheduler()) {
+            auto* event_scheduler = fragment_ctx->event_scheduler();
+            DCHECK(event_scheduler != nullptr);
+            driver->set_observer(event_scheduler->create_driver_observer(driver.get()));
             driver->assign_observer();
         }
 
@@ -88,8 +97,6 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
         driver->set_workgroup(workgroup);
         _drivers.emplace_back(std::move(driver));
     }
-
-    query_ctx->query_trace()->register_drivers(fragment_ctx->fragment_instance_id(), _drivers);
 
     if (!source_operator_factory()->with_morsels()) {
         return;
@@ -101,7 +108,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     for (size_t i = 0; i < dop; ++i) {
         auto& driver = _drivers[i];
         driver->set_morsel_queue(morsel_queue_factory->create(i));
-        if (auto* scan_operator = driver->source_scan_operator()) {
+        if (auto* scan_operator = driver->source_driver_scan_operator()) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {

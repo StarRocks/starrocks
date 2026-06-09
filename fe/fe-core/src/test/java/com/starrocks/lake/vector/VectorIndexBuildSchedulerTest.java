@@ -227,7 +227,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(tablet1, tablet2));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 
@@ -237,6 +237,45 @@ public class VectorIndexBuildSchedulerTest {
         ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
         Assertions.assertEquals(5L, pending.get(2001L).latestVersion);
         Assertions.assertEquals(5L, pending.get(2002L).latestVersion);
+    }
+
+    // recoveryScan must scan VISIBLE indexes only, never SHADOW. A shadow tablet of an in-flight
+    // ALTER has only staged (publish_log_version) — not applied — the partition's visibleVersion, so
+    // scheduling it here would dispatch a build that cannot load that metadata. The shadow's
+    // incremental data is enqueued by the schema-change watershed publish instead.
+    @Test
+    public void testRecoveryScanScansVisibleOnlyNotShadow() {
+        LakeTable table = mockLakeTable(true);
+        Database db = mockDatabase(table);
+
+        // Visible index has a lagging tablet -> must be enqueued.
+        LakeTablet visibleTablet = new LakeTablet(2001L);
+        visibleTablet.setVectorIndexBuiltVersion(3L);
+        MaterializedIndex visibleIndex = Mockito.mock(MaterializedIndex.class);
+        Mockito.when(visibleIndex.getTablets()).thenReturn(Lists.newArrayList(visibleTablet));
+
+        // Shadow index also has a lagging tablet -> must NOT be enqueued by recoveryScan.
+        LakeTablet shadowTablet = new LakeTablet(9001L);
+        shadowTablet.setVectorIndexBuiltVersion(3L);
+        MaterializedIndex shadowIndex = Mockito.mock(MaterializedIndex.class);
+        Mockito.when(shadowIndex.getTablets()).thenReturn(Lists.newArrayList(shadowTablet));
+
+        PhysicalPartition partition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Lists.newArrayList(visibleIndex));
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+                .thenReturn(Lists.newArrayList(visibleIndex, shadowIndex));
+        Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
+
+        setupRecoveryScanExpectations(db);
+        scheduler.recoveryScan();
+
+        ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
+        Assertions.assertTrue(pending.containsKey(2001L), "visible lagging tablet must be enqueued");
+        Assertions.assertFalse(pending.containsKey(9001L), "shadow tablet must NOT be enqueued by recoveryScan");
+        Mockito.verify(partition, Mockito.never())
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
     }
 
     @Test
@@ -251,7 +290,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(tablet));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 
@@ -543,6 +582,130 @@ public class VectorIndexBuildSchedulerTest {
         // Must silently no-op when scheduler is not initialized (FE startup race window).
         Assertions.assertDoesNotThrow(
                 () -> VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(1L, 1L)), false));
+    }
+
+    private static VectorIndexBuildInfoPB infoOf(long tabletId, long version, boolean buildNeeded) {
+        VectorIndexBuildInfoPB info = infoOf(tabletId, version);
+        info.buildNeeded = buildNeeded;
+        return info;
+    }
+
+    @Test
+    public void testOnPublishCompleteBuildNeededEnqueues() {
+        mockGetScheduler(scheduler);
+        VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(4201L, 6L, true)), false);
+        Assertions.assertEquals(6L, getPendingTablets().get(4201L).latestVersion);
+    }
+
+    @Test
+    public void testOnPublishCompleteNullFlagTreatedAsBuildNeeded() {
+        mockGetScheduler(scheduler);
+        // Older BE doesn't set build_needed -> null -> treat as "needs build" (safe: enqueue).
+        VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(4202L, 6L)), false);
+        Assertions.assertEquals(6L, getPendingTablets().get(4202L).latestVersion);
+    }
+
+    @Test
+    public void testOnPublishCompleteBuildNotNeededAdvancesDirectly() {
+        mockGetScheduler(scheduler);
+        // build_needed=false routes onPublishComplete -> advanceBuiltVersionForNoBuild: with the
+        // recovery scan done and nothing pending, the frontier advances directly (no CN dispatch).
+        long tabletId = 4203L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(4L);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(true);
+
+        VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(tabletId, 5L, false)), false);
+
+        Assertions.assertEquals(5L, tablet.getVectorIndexBuiltVersion(), "direct-advanced, no build");
+        Assertions.assertTrue(getPendingTablets().isEmpty(), "no CN dispatch enqueued");
+    }
+
+    // ========== advanceBuiltVersionForNoBuild (no-build versions) ==========
+
+    @Test
+    public void testNoBuildAdvancesWhenNothingPending() {
+        long tabletId = 7001L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(4L);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(true);
+
+        scheduler.advanceBuiltVersionForNoBuild(tabletId, 5L, false);
+
+        Assertions.assertEquals(5L, tablet.getVectorIndexBuiltVersion(), "direct-advanced, no build");
+        Assertions.assertTrue(getPendingTablets().isEmpty(), "no CN dispatch enqueued");
+    }
+
+    @Test
+    public void testNoBuildAdvancesAcrossNoViGap() {
+        // No pending build => no un-built vi-version exists in the gap, so jumping the frontier
+        // forward over (purely no-build) versions is safe and needs no dispatch.
+        long tabletId = 7002L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(2L); // gap up to version 5, but nothing pending
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(true);
+
+        scheduler.advanceBuiltVersionForNoBuild(tabletId, 5L, false);
+
+        Assertions.assertEquals(5L, tablet.getVectorIndexBuiltVersion(), "direct-advanced across no-vi gap");
+        Assertions.assertTrue(getPendingTablets().isEmpty(), "no CN dispatch enqueued");
+    }
+
+    @Test
+    public void testNoBuildDoesNotLeapfrogPendingBuild() {
+        long tabletId = 7003L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(4L); // BUT an earlier vi-version build is pending
+        scheduler.addPendingTablet(tabletId, 5L, false);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(true);
+
+        scheduler.advanceBuiltVersionForNoBuild(tabletId, 5L, false);
+
+        Assertions.assertEquals(4L, tablet.getVectorIndexBuiltVersion(),
+                "must not direct-advance while a real build is pending (avoid leapfrog)");
+        Assertions.assertTrue(getPendingTablets().containsKey(tabletId));
+    }
+
+    @Test
+    public void testNoBuildEnqueuesBeforeRecoveryScan() {
+        // Post-leader-switch window: pending set not yet rebuilt -> conservatively enqueue
+        // rather than direct-advance (an un-built vi-version may exist but isn't pending yet).
+        long tabletId = 7005L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(4L);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(false);
+
+        scheduler.advanceBuiltVersionForNoBuild(tabletId, 5L, false);
+
+        Assertions.assertEquals(4L, tablet.getVectorIndexBuiltVersion(), "not direct-advanced before recovery scan");
+        Assertions.assertEquals(5L, getPendingTablets().get(tabletId).latestVersion, "enqueued instead");
+    }
+
+    @Test
+    public void testNoBuildNoOpWhenAlreadyCaughtUp() {
+        long tabletId = 7004L;
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(5L); // already >= version
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+        scheduler.setRecoveryScanDoneForTest(true);
+
+        scheduler.advanceBuiltVersionForNoBuild(tabletId, 5L, false);
+
+        Assertions.assertEquals(5L, tablet.getVectorIndexBuiltVersion());
+        Assertions.assertTrue(getPendingTablets().isEmpty());
+    }
+
+    @Test
+    public void testNoBuildNoOpWhenTabletMissing() {
+        scheduler.setRecoveryScanDoneForTest(true);
+        // findLakeTablet returns null (no mocks) -> must not throw, nothing enqueued.
+        Assertions.assertDoesNotThrow(() -> scheduler.advanceBuiltVersionForNoBuild(9999L, 5L, false));
+        Assertions.assertTrue(getPendingTablets().isEmpty());
     }
 
     // ========== getBuiltVersion tests ==========

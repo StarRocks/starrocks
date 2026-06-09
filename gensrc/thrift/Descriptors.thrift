@@ -230,6 +230,12 @@ enum TIndexType {
   GIN,
   NGRAMBF,
   VECTOR,
+  // Plain (non-ngram) bloom filter. Used as a fast-path thrift tag for the
+  // lake ADD INDEX IDG flow to carry plain-BF build requests; no TabletIndex
+  // object is created on the FE side for plain BF (source of truth is the
+  // column-level is_bf_column flag driven by the `bloom_filter_columns`
+  // table property).
+  BLOOM_FILTER,
 }
 
 // Not define UNKNOWN type for better compatibility with

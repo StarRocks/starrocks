@@ -30,13 +30,15 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/operator.cpp
     pipeline/operator_factory.cpp
     pipeline/source_operator.cpp
+    pipeline/primitives/event.cpp
     pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
+    pipeline/primitives/query_runtime_state.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
     pipeline/scan/scan_morsel.cpp
-    query_cache/ticket_checker.cpp
+    pipeline/scan/split_morsel_ticket_checker.cpp
 )
 
 ADD_BE_LIB(ExecPrimitive
@@ -167,10 +169,10 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
-    pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
+    pipeline/fragment_context_manager.cpp
     pipeline/query_context.cpp
     pipeline/query_context_manager.cpp
     pipeline/schedule/timeout_tasks.cpp
@@ -297,14 +299,12 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
+    pipeline/adaptive/collect_stats_event.cpp
     pipeline/adaptive/utils.cpp
-    pipeline/adaptive/event.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
     query_cache/multilane_operator.cpp
     query_cache/cache_operator.cpp
-    query_cache/cache_manager.cpp
-    query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
 )
 
@@ -513,6 +513,30 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET pipeline_extensions_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
 
+ADD_BE_LIB(ExecRuntime
+    pipeline/pipeline_driver.cpp
+)
+
+target_link_libraries(ExecRuntime PUBLIC
+    ComputeEnv
+    ExecPrimitive
+    StoragePrimitive
+    ExprCore
+    Serde
+    RuntimeEnv
+    RuntimeCore
+    Platform
+    FSCore
+    IO
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
     ${EXEC_DATA_SINK_FILES}
@@ -521,5 +545,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

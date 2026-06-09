@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks の共有データクラスタ用に Shared-data Dashboard と Starlet Dashboard の監視メトリクスを提供します。"
 sidebar_position: 30
 ---
 

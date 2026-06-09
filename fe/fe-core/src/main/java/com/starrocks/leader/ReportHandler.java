@@ -675,6 +675,25 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         continue;
                     }
 
+                    // A replica can end up with a permanent hole in its version chain that normal publish
+                    // can never fill (BE keeps reporting version_miss with a frozen continuous version).
+                    // Route it into the existing recovery path so it is marked bad and cloned. Skip restore
+                    // tables, like needRecover above (here olapTable is already resolved, so check it directly).
+                    if (olapTable.getState() != OlapTable.OlapTableState.RESTORE) {
+                        MaterializedIndex materializedIndex = physicalPartition.getIndex(tabletMeta.getIndexId());
+                        LocalTablet localTablet = materializedIndex == null
+                                ? null : (LocalTablet) materializedIndex.getTablet(tabletId);
+                        if (localTablet != null && needRecoverVersionMiss(olapTable, localTablet, replica,
+                                physicalPartition.getVisibleVersion(), backendTabletInfo)) {
+                            LOG.warn("replica {} of tablet {} on backend {} misses version persistently and "
+                                            + "cannot self-heal, mark it for recovery. replica in FE: {}, "
+                                            + "report version {}, partition visible version {}",
+                                    replica.getId(), tabletId, backendId, replica,
+                                    backendTabletInfo.getVersion(), physicalPartition.getVisibleVersion());
+                            tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
+                        }
+                    }
+
                     TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
                     if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
                         if (storageMedium != backendTabletInfo.getStorage_medium()) {
@@ -839,6 +858,95 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
 
         // lastReportVersion should be increased monotonically.
         return backendTabletInfo.getVersion() < replicaInFe.getLastReportVersion();
+    }
+
+    /**
+     * Detect a replica that is stuck with a permanent hole in its version chain. This happens when a clone
+     * races with publish so a middle version is skipped while later versions keep landing: BE reports
+     * version_miss=true and its reported version (max_continuous_version) stays frozen below the partition's
+     * visible version. Such a replica can never catch up through normal publish, so it must be repaired by a
+     * clone. We route it through the same recovery path as a bad replica (handleRecoverTablet -> setBad), which
+     * removes it from query routing and write-target selection and lets TabletScheduler clone a fresh copy.
+     *
+     * <p>The detection is deliberately conservative: it only fires once the same below-visible continuous
+     * version has been reported with version_miss on two consecutive reports (so a transient out-of-order
+     * publish that fills quickly is not mistaken for a stuck hole), and only when another replica is
+     * genuinely caught up to act as query/clone source, so the tablet is never stranded (single-replica
+     * tablets are skipped). PK, colocate and restore tablets are excluded.
+     *
+     * <p>This method also maintains the replica's version-miss debounce baseline as a side effect, so it must
+     * be called for every (non-restore) report of a normal tablet, including healthy ones, to reset it.
+     */
+    private static boolean needRecoverVersionMiss(OlapTable olapTable, LocalTablet tablet, Replica replica,
+                                                  long visibleVersion, TTabletInfo backendTabletInfo) {
+        // Unconditional filters first: these replicas are never recovered by this path, so return before
+        // touching the debounce baseline below (no needless getter/setter).
+        if (replica.getState() != ReplicaState.NORMAL || replica.isBad()) {
+            return false;
+        }
+        // Replicas reported as unusable (used==false) are already handled by needRecover().
+        if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
+            return false;
+        }
+        // Primary-key tablets recover version errors through their own is_error_state path.
+        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        // Colocate bad replicas take a different scheduler route (COLOCATE_REDUNDANT force-drop), out of
+        // scope for this fix. Checked last among the filters since it takes a global read lock.
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())) {
+            return false;
+        }
+
+        // A version hole below the visible version that normal publish has not filled. Confirm it persists
+        // across two consecutive reports: the baseline holds the previous such report's continuous version,
+        // and is reset whenever the replica is not in this state, so a prior healthy report at the same
+        // version cannot be mistaken for a confirmation.
+        boolean versionMiss = backendTabletInfo.isSetVersion_miss() && backendTabletInfo.isVersion_miss();
+        long reportedContinuousVersion = backendTabletInfo.getVersion();
+        boolean holeBelowVisible = versionMiss && reportedContinuousVersion < visibleVersion;
+        boolean confirmedAcrossReports =
+                holeBelowVisible && replica.getVersionMissBaselineVersion() == reportedContinuousVersion;
+        replica.setVersionMissBaselineVersion(holeBelowVisible ? reportedContinuousVersion : -1L);
+        if (!confirmedAcrossReports) {
+            return false;
+        }
+        // Never strand the tablet: only recover when another replica is genuinely caught up and can serve as
+        // both query source and clone source.
+        return hasCaughtUpSourceReplicaOnAnotherBackend(tablet, replica, visibleVersion);
+    }
+
+    /**
+     * Whether the tablet has, on a backend other than the holed replica's, a healthy replica that is caught
+     * up to the visible version and can act as a query/clone source. Used by {@link #needRecoverVersionMiss}
+     * to avoid stranding a tablet that has no usable copy elsewhere.
+     *
+     * <p>The catch-up check uses {@link Replica#getLastReportVersion()}, which is set straight from the BE
+     * report, so (unlike the FE-side {@code Replica.version} that the version-miss bug inflates) it reflects
+     * the backend's true continuous version and proves the candidate genuinely holds the data.
+     */
+    private static boolean hasCaughtUpSourceReplicaOnAnotherBackend(LocalTablet tablet, Replica holedReplica,
+                                                                    long visibleVersion) {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Replica candidate : tablet.getAllReplicas()) {
+            if (candidate.getBackendId() == holedReplica.getBackendId()) {
+                continue;
+            }
+            if (candidate.isBad() || candidate.isErrorState() || candidate.getState() != ReplicaState.NORMAL
+                    || candidate.getLastFailedVersion() > 0) {
+                continue;
+            }
+            // lastReportVersion comes straight from the BE report, so (unlike the masked Replica.version) it
+            // reflects the candidate's true continuous version and proves it genuinely holds the data.
+            if (candidate.getLastReportVersion() < visibleVersion) {
+                continue;
+            }
+            Backend candidateBackend = systemInfoService.getBackend(candidate.getBackendId());
+            if (candidateBackend != null && candidateBackend.isAlive()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void taskReport(long backendId, Map<TTaskType, Set<Long>> runningTasks) {
@@ -1953,31 +2061,42 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     continue;
                 }
 
-                // already has one update scheam task, ignore to prevent send too many task
-                if (indexMeta.hasUpdateSchemaTask(backendId)) {
+                // Atomically reserve the slot for this backend to prevent sending too many tasks.
+                // The check-then-reserve is a single atomic operation, so two senders running
+                // concurrently under the shared READ lock cannot both observe "no task" and both
+                // enqueue a duplicate task. If a task is already in flight, skip this backend.
+                if (!indexMeta.addUpdateSchemaBackendIfAbsent(backendId)) {
                     continue;
                 }
 
-                List<TColumn> columnsDesc = Lists.newArrayList();
-                List<Integer> columnSortKeyUids = Lists.newArrayList();
+                try {
+                    List<TColumn> columnsDesc = Lists.newArrayList();
+                    List<Integer> columnSortKeyUids = Lists.newArrayList();
 
-                for (Column column : indexMeta.getSchema()) {
-                    TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(column.getColumnId().getId());
-                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
-                    columnsDesc.add(tColumn);
-                }
-                if (indexMeta.getSortKeyUniqueIds() != null) {
-                    columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
-                }
-                TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
-                        indexMeta.getShortKeyColumnCount());
+                    for (Column column : indexMeta.getSchema()) {
+                        TColumn tColumn = column.toThrift();
+                        tColumn.setColumn_name(column.getColumnId().getId());
+                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
+                        columnsDesc.add(tColumn);
+                    }
+                    if (indexMeta.getSortKeyUniqueIds() != null) {
+                        columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+                    }
+                    TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
+                            indexMeta.getShortKeyColumnCount());
 
-                UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                        indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
-                        columnParam);
-                updateSchemaBatchTask.addTask(task);
-                indexMeta.addUpdateSchemaBackend(backendId);
+                    UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
+                            indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            columnParam);
+                    updateSchemaBatchTask.addTask(task);
+                } catch (RuntimeException e) {
+                    // Reservation happened before the task was built/enqueued, so release it on
+                    // failure. Otherwise this backend would stay marked forever (the finish RPC
+                    // only clears it after a task actually completes) and no future UPDATE_SCHEMA
+                    // task would ever be sent for it.
+                    indexMeta.removeUpdateSchemaBackend(backendId);
+                    throw e;
+                }
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }

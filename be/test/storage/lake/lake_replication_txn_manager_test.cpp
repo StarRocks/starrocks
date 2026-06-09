@@ -482,7 +482,7 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_basic_gate) {
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(2, nullptr));
 
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_gate")
+    ASSERT_OK(ThreadPoolBuilder("lake_par_gate")
                       .set_min_threads(1)
                       .set_max_threads(1)
                       .set_max_queue_size(8)
@@ -496,7 +496,7 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_queue_overload
     Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
     config::lake_replication_parallel_copy_min_file_count = 2;
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_overload")
+    ASSERT_OK(ThreadPoolBuilder("lake_par_overld")
                       .set_min_threads(1)
                       .set_max_threads(1)
                       .set_max_queue_size(32)
@@ -519,11 +519,8 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by
     config::lake_replication_parallel_copy_min_file_count = 0;
 
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_disable")
-                      .set_min_threads(1)
-                      .set_max_threads(1)
-                      .set_max_queue_size(8)
-                      .build(&pool));
+    ASSERT_OK(
+            ThreadPoolBuilder("lake_par_dis").set_min_threads(1).set_max_threads(1).set_max_queue_size(8).build(&pool));
 
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
     pool->shutdown();
@@ -1310,7 +1307,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_ope
 
     // Create thread pool and pass it to replication manager
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_repl_test_pool")
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_test")
                       .set_min_threads(2)
                       .set_max_threads(4)
                       .set_max_queue_size(16)
@@ -1361,7 +1358,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
     config::lake_replication_parallel_copy_min_file_count = 2;
 
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_repl_test_err_pool")
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_err")
                       .set_min_threads(2)
                       .set_max_threads(4)
                       .set_max_queue_size(16)

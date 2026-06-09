@@ -22,6 +22,8 @@
 namespace starrocks::pipeline {
 class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
+class QueryRuntimeState;
+class FragmentRuntimeState;
 class QueryContextManager;
 class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;
@@ -41,6 +43,7 @@ using DriverRawPtr = PipelineDriver*;
 using DriverConstRawPtr = const PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
 using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+class DriverObserver;
 class OperatorFactory;
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
 using OpFactories = std::vector<OpFactoryPtr>;

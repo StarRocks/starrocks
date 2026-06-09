@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Flink でテーブルデータを一括読み取りします。"
 ---
 
 # Flink コネクタを使用して StarRocks からデータを読み取る

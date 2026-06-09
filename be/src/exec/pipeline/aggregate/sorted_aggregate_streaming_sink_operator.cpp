@@ -48,6 +48,7 @@ bool SortedAggregateStreamingSinkOperator::is_finished() const {
 }
 
 Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_source();
     _is_finished = true;
     ASSIGN_OR_RETURN(auto res, _aggregator->pull_eos_chunk());
     DCHECK(_accumulator.need_input());

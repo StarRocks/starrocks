@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "複数の異種入力列から順序を保持する複合バイナリキーを作成します。"
 ---
 
 # encode_sort_key

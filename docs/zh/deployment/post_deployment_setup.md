@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "部署 StarRocks 后需执行的初始账户管理和集群配置任务。"
 ---
 
 # 部署后设置
@@ -14,7 +15,7 @@ displayed_sidebar: docs
 
 1. 使用用户名 `root` 和空密码通过 MySQL 客户端连接到 StarRocks。
 
-   ```Bash
+   ```sh
    # 将 <fe_address> 替换为您连接的 FE 节点的 IP 地址（priority_networks）
    # 或 FQDN，将 <query_port> 替换为您在 fe.conf 中指定的 query_port（默认：9030）。
    mysql -h <fe_address> -P<query_port> -uroot
@@ -36,7 +37,7 @@ displayed_sidebar: docs
 
 为使您的 StarRocks 集群在生产环境中正常工作，您需要设置以下系统变量：
 
-###  enable_profile                      
+### enable_profile                      
 
 **StarRocks Version**:  v2.5 或以后        <br/>
 **推荐值**:  false                                                        <br/>
@@ -48,7 +49,7 @@ displayed_sidebar: docs
   SET GLOBAL enable_profile = false;
   ```
 
-###  enable_pipeline_engine              
+### enable_pipeline_engine              
 
 **StarRocks Version**:  v2.3 或以后        <br/>
 **推荐值**:  true                                                         <br/>
@@ -60,7 +61,7 @@ displayed_sidebar: docs
   SET GLOBAL enable_pipeline_engine = true;
   ```
 
-###  parallel_fragment_exec_instance_num 
+### parallel_fragment_exec_instance_num 
 
 **StarRocks Version**:  v2.3 或以后        <br/>
 **推荐值**:  如果您启用了 Pipeline Engine，您可以将此变量设置为`1`。如果您未启用 Pipeline Engine，您可以将此变量设置为 CPU 核数的一半。 <br/>

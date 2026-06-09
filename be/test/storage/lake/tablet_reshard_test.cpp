@@ -469,6 +469,157 @@ protected:
         return result;
     }
 
+    // Drive a 3-way PK merge where two surviving children update column c1 on the
+    // shared base segment (same-column DCG conflict -> rebuild) and the child at
+    // |compacted_index| has compacted its share away, leaving a gap on canonical
+    // R0. Before the gap fix the rebuild's coverage check rejected the gap with
+    // NotSupported; now it accepts the masked gap and fills those rows from the
+    // base segment. Verifies the rebuilt .cols row values (surviving children's
+    // updates on their windows, base values on the gap) and that a gap delvec
+    // masks the compacted child's rows.
+    void run_dcg_conflict_gap_rebuild_case(int compacted_index, int64_t txn_id) {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        constexpr int kNumRows = 30;
+        constexpr int kRangeRows = 10; // three equal key ranges: [0,10) [10,20) [20,30)
+        constexpr int64_t kSchemaId = 4001;
+        constexpr uint32_t kSharedRowsetId = 1;
+
+        const int64_t child_ids[3] = {next_id(), next_id(), next_id()};
+        const int64_t merged_tablet = next_id();
+        for (int64_t child_id : child_ids) prepare_tablet_dirs(child_id);
+        prepare_tablet_dirs(merged_tablet);
+
+        // Base segment: c0 = row index (key == rowid), c1 = row * 10.
+        auto base_value_of = [](int row) { return row * 10; };
+        auto update_of = [](int child_index, int row) { return row + 100000 * (child_index + 1); };
+        const std::string shared_segment_name = "shared_seg.dat";
+        const uint64_t base_segment_size =
+                write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, base_value_of);
+
+        auto set_key_range = [&](TabletRangePB* range, int lower_key, int upper_key) {
+            range->set_lower_bound_included(true);
+            range->set_upper_bound_included(false);
+            *range->mutable_lower_bound() = generate_sort_key(lower_key);
+            *range->mutable_upper_bound() = generate_sort_key(upper_key);
+        };
+
+        for (int i = 0; i < 3; ++i) {
+            const int lower = i * kRangeRows;
+            const int upper = (i + 1) * kRangeRows;
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(child_ids[i]);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(10);
+            const auto [c0_uid, c1_uid] = set_two_column_pk_schema(meta.get(), kSchemaId);
+            (void)c0_uid;
+            set_key_range(meta->mutable_range(), lower, upper);
+
+            if (i == compacted_index) {
+                // Compacted child: a non-shared compaction output rowset (newer
+                // version) covering this range. No shared segment, no DCG -> its
+                // range is a gap on canonical R0.
+                auto* rowset = meta->add_rowsets();
+                rowset->set_id(2);
+                rowset->set_version(new_version);
+                rowset->set_num_rows(upper - lower);
+                rowset->set_data_size(100);
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(fmt::format("compacted_{}.dat", i));
+                segment_meta->set_size(100);
+                set_key_range(rowset->mutable_range(), lower, upper);
+                (*meta->mutable_rowset_to_schema())[2] = kSchemaId;
+            } else {
+                // Surviving child: shares the base segment and updates c1 on its
+                // owned row window via a real .cols file (base copy-through
+                // elsewhere, mirroring production partial-column update output).
+                const std::string cols_name = lake::gen_cols_filename(txn_id + 1 + i);
+                auto cell_value = [&](int row) {
+                    return (row >= lower && row < upper) ? update_of(i, row) : base_value_of(row);
+                };
+                write_c1_only_cols_file(child_ids[i], cols_name, kNumRows, cell_value);
+
+                auto* rowset = meta->add_rowsets();
+                rowset->set_id(kSharedRowsetId);
+                rowset->set_version(base_version);
+                rowset->set_num_rows(kNumRows);
+                rowset->set_data_size(base_segment_size);
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(shared_segment_name);
+                segment_meta->set_size(base_segment_size);
+                segment_meta->set_shared(true);
+                stamp_physical_identity_uid(rowset, shared_segment_name); // same uid across siblings => dedup
+                set_key_range(rowset->mutable_range(), lower, upper);
+                (*meta->mutable_rowset_to_schema())[kSharedRowsetId] = kSchemaId;
+
+                auto& dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[kSharedRowsetId];
+                dcg.add_column_files(cols_name);
+                dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+                dcg.add_versions(1);
+                dcg.add_shared_files(false);
+            }
+            ASSERT_OK(put_tablet_metadata(meta));
+        }
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        for (int64_t child_id : child_ids) merging_info.add_old_tablet_ids(child_id);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        // Before the gap fix this returned NotSupported; the rebuild now succeeds.
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges));
+        auto merged = tablet_metadatas.at(merged_tablet);
+        ASSERT_NE(merged, nullptr);
+
+        // Canonical R0 == the rowset that still owns a shared segment.
+        uint32_t canonical_rssid = 0;
+        for (const auto& rowset : merged->rowsets()) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                if (segment_meta.shared()) {
+                    canonical_rssid = rowset.id();
+                    break;
+                }
+            }
+            if (canonical_rssid != 0) break;
+        }
+        ASSERT_NE(canonical_rssid, 0u);
+
+        // A synthesized gap delvec must mask the compacted child's rows on R0.
+        auto delvec_it = merged->delvec_meta().delvecs().find(canonical_rssid);
+        ASSERT_NE(delvec_it, merged->delvec_meta().delvecs().end());
+        EXPECT_GT(delvec_it->second.size(), 0u);
+
+        // Exactly one rebuilt DCG entry for c1 on canonical R0.
+        const auto& dcgs = merged->dcg_meta().dcgs();
+        auto dcg_it = dcgs.find(canonical_rssid);
+        ASSERT_TRUE(dcg_it != dcgs.end());
+        const auto& rebuilt_entry = dcg_it->second;
+        ASSERT_EQ(1, rebuilt_entry.column_files_size());
+        ASSERT_EQ(1, rebuilt_entry.unique_column_ids_size());
+        ASSERT_EQ(1, rebuilt_entry.unique_column_ids(0).column_ids_size());
+        EXPECT_EQ(1002, rebuilt_entry.unique_column_ids(0).column_ids(0));
+        ASSERT_EQ(1, rebuilt_entry.versions_size());
+        EXPECT_EQ(new_version, rebuilt_entry.versions(0));
+
+        // Rebuilt .cols values: surviving children's updates on their windows;
+        // base values on the compacted child's gap window.
+        auto values = read_c1_only_cols_file(merged_tablet, rebuilt_entry.column_files(0));
+        ASSERT_EQ(kNumRows, static_cast<int>(values.size()));
+        for (int row = 0; row < kNumRows; ++row) {
+            const int range_index = row / kRangeRows;
+            const int expected = (range_index == compacted_index) ? base_value_of(row) : update_of(range_index, row);
+            EXPECT_EQ(expected, values[row]) << "row " << row << " (range " << range_index << ")";
+        }
+    }
+
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
@@ -3025,6 +3176,152 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_
     const auto& added_rowset = published_meta->rowsets(published_meta->rowsets_size() - 1);
     ASSERT_TRUE(added_rowset.has_range());
     EXPECT_EQ(added_rowset.range().SerializeAsString(), published_meta->range().SerializeAsString());
+}
+
+// Cross-publish a multi-statement (non-PK batch) transaction onto split children
+// end-to-end via publish_version, exercising the #10 invariant through the REAL
+// pipeline rather than a hand-built combine input:
+//   convert_txn_log_for_splitting scales EACH statement's stats by /split_count
+//   independently (split_index < n % split_count gets +1, so the remainder of an odd
+//   count lands on the lowest indexes), then NonPrimaryKeyTxnLogApplier's batch combine
+//   merges the per-statement op_writes into one composite rowset on each child.
+// The combine must
+//   (1) retain a statement's segment even when ITS num_rows scaled to 0 on this child
+//       (gated on segment_metas_size, not the scaled num_rows) -- else data is lost,
+//   (2) adopt the FIRST log's uid, CopyFrom-preserved IDENTICALLY across sibling
+//       children -- a stable MERGE dedup identity, and
+//   (3) scale per statement, not once over the aggregate.
+// The TxnLogApplierBatchTest unit tests cover the combine with pre-scaled inputs; this
+// drives publish_version so the scaling and the combine are proven to compose.
+//
+// Inputs are chosen so the per-statement path is distinguishable from a (buggy)
+// sum-then-scale-once path, and so the scaled-to-0 statement is ALSO the uid source:
+//   stmt_a (load0, FIRST log, uid 7777): num_rows=1,  data_size=11
+//   stmt_b (load1,             uid 9999): num_rows=9,  data_size=99
+// Per-statement scaling with split_count=2 (scaled = n/2 + (idx < n%2 ? 1 : 0)):
+//                       child0 (idx 0)     child1 (idx 1)
+//   stmt_a rows      ->     1                  0   <- scales to 0, segment must survive
+//   stmt_b rows      ->     5                  4
+//   merged num_rows  ->     6                  4   (sum 10; sum-then-scale would give 5/5)
+//   stmt_a data      ->     6                  5
+//   stmt_b data      ->    50                 49
+//   merged data_size ->    56                 54   (sum 110; sum-then-scale would give 55/55)
+// Both children adopt stmt_a's uid 7777 (the first log) -- NOT stmt_b's 9999, and NOT
+// "first positive-row contributor" (stmt_a scaled to 0 on child1 yet still defines the uid).
+TEST_F(LakeTabletReshardTest, test_split_cross_publish_multi_stmt_batch_keeps_scaled_zero_segment) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t old_tablet_id = next_id();
+    const int64_t child0_id = next_id();
+    const int64_t child1_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id);
+    prepare_tablet_dirs(child0_id);
+    prepare_tablet_dirs(child1_id);
+
+    // A child's base metadata: non-PK (DUP) so NonPrimaryKeyTxnLogApplier's batch combine
+    // is selected, carrying the post-split sub-range so convert_txn_log_for_splitting can
+    // clip the cross-published rowset ranges.
+    auto make_child_meta = [&](int64_t tablet_id) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(1);
+        meta->mutable_schema()->set_keys_type(DUP_KEYS);
+        meta->mutable_schema()->set_id(1);
+        auto* range = meta->mutable_range();
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+        range->set_upper_bound_included(false);
+        return meta;
+    };
+    EXPECT_OK(put_tablet_metadata(make_child_meta(child0_id)));
+    EXPECT_OK(put_tablet_metadata(make_child_meta(child1_id)));
+
+    const int64_t txn_id = next_id();
+    PUniqueId load0;
+    load0.set_hi(1);
+    load0.set_lo(1);
+    PUniqueId load1;
+    load1.set_hi(1);
+    load1.set_lo(2);
+
+    // One multi-statement transaction with two per-load_id txn logs on the OLD tablet.
+    // |uid_lo| is the rowset's producer uid (hi=1, lo=uid_lo); distinct per statement so
+    // the merged uid can be attributed to a specific source log.
+    auto write_stmt_log = [&](const PUniqueId& load_id, const std::string& segment_name, int64_t num_rows,
+                              int64_t data_size, int64_t uid_lo) {
+        auto log = std::make_shared<TxnLogPB>();
+        log->set_tablet_id(old_tablet_id);
+        log->set_txn_id(txn_id);
+        auto* rowset = log->mutable_op_write()->mutable_rowset();
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(data_size);
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(segment_name);
+        sm->set_size(data_size);
+        rowset->mutable_uid()->set_hi(1);
+        rowset->mutable_uid()->set_lo(uid_lo);
+        EXPECT_OK(_tablet_manager->put_txn_log(log, _tablet_manager->txn_log_location(old_tablet_id, txn_id, load_id)));
+    };
+    write_stmt_log(load0, "stmt_a.dat", /*num_rows=*/1, /*data_size=*/11, /*uid_lo=*/7777);
+    write_stmt_log(load1, "stmt_b.dat", /*num_rows=*/9, /*data_size=*/99, /*uid_lo=*/9999);
+
+    auto make_txn_info = [&]() {
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(1);
+        txn_info.set_force_publish(false);
+        txn_info.add_load_ids()->CopyFrom(load0);
+        txn_info.add_load_ids()->CopyFrom(load1);
+        return txn_info;
+    };
+
+    auto publish_child = [&](int64_t child_id, int32_t split_index) -> RowsetMetadataPB {
+        lake::PublishTabletInfo tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, child_id,
+                                            /*split_count=*/2, split_index);
+        auto txn_info = make_txn_info();
+        auto published_or = lake::publish_version(_tablet_manager.get(), tablet_info, base_version, new_version,
+                                                  std::span<const TxnInfoPB>(&txn_info, 1), false);
+        EXPECT_OK(published_or.status());
+        ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(child_id, new_version));
+        EXPECT_EQ(1, meta->rowsets_size());
+        return meta->rowsets(0);
+    };
+
+    // split_index=1: stmt_a (the FIRST log) scales to num_rows=0, but its segment survives.
+    auto child1_rowset = publish_child(child1_id, /*split_index=*/1);
+    EXPECT_EQ(2, child1_rowset.segment_metas_size())
+            << "the cross-published statement whose num_rows scaled to 0 must keep its segment";
+    EXPECT_EQ(4, child1_rowset.num_rows());   // stmt_a 0 + stmt_b 4
+    EXPECT_EQ(54, child1_rowset.data_size()); // stmt_a 5 + stmt_b 49
+    for (const auto& segment_meta : child1_rowset.segment_metas()) {
+        EXPECT_TRUE(segment_meta.shared());
+    }
+
+    // split_index=0: the odd-count remainders both land here.
+    auto child0_rowset = publish_child(child0_id, /*split_index=*/0);
+    EXPECT_EQ(2, child0_rowset.segment_metas_size());
+    EXPECT_EQ(6, child0_rowset.num_rows());   // stmt_a 1 + stmt_b 5
+    EXPECT_EQ(56, child0_rowset.data_size()); // stmt_a 6 + stmt_b 50
+
+    // Per-statement scaling, not sum-then-scale: aggregate scaling would yield 5/5 rows and
+    // 55/55 data on both children; the asymmetric 6/4 and 56/54 prove each statement scaled
+    // on its own. Conservation: the per-child shares add back to the originals (10 and 110).
+    EXPECT_EQ(10, child0_rowset.num_rows() + child1_rowset.num_rows());
+    EXPECT_EQ(110, child0_rowset.data_size() + child1_rowset.data_size());
+
+    // Cross-sibling MERGE identity: both children adopt the FIRST log's (stmt_a) producer uid
+    // 7777 verbatim -- not stmt_b's 9999, and not a "first positive-row" pick (stmt_a scaled
+    // to 0 on child1 yet still defines the uid).
+    EXPECT_TRUE(child0_rowset.has_uid());
+    EXPECT_EQ(child1_rowset.uid().SerializeAsString(), child0_rowset.uid().SerializeAsString());
+    EXPECT_EQ(1, child0_rowset.uid().hi());
+    EXPECT_EQ(7777, child0_rowset.uid().lo());
 }
 
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for_splitting) {
@@ -8735,6 +9032,22 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_two_children_same_
     for (int row = kBoundary; row < kNumRows; ++row) {
         EXPECT_EQ(child_b_update(row), values[row]) << "row " << row << " should carry child B's update";
     }
+}
+
+// DCG same-column conflict combined with a compacted-away child (gap) on
+// canonical R0. The rebuild must accept the masked gap window and fill it from
+// the base segment instead of returning NotSupported. Three cases exercise the
+// leading, internal, and trailing gap positions.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_first_child_compacts) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/0, /*txn_id=*/3101);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_middle_child_compacts) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/1, /*txn_id=*/3102);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_last_child_compacts) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/2, /*txn_id=*/3103);
 }
 
 // When two children's DCG entries share a .cols filename but the entry

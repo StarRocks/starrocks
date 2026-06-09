@@ -153,6 +153,17 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_mInt32(alter_tablet_worker_count, "3");
+// Maximum number of segment-level sub-tasks executed in parallel within a single
+// lake schema-change task (per-tablet). Currently only the ADD INDEX fast path
+// (lake AddIndexSchemaChange) submits sub-tasks to the dedicated lake_schema_change
+// thread pool; LinkedSchemaChange / DirectSchemaChange / SortedSchemaChange and
+// the DROP INDEX fast path remain single-threaded and are unaffected.
+//
+// The dedicated _thread_pool_lake_schema_change capacity is auto-derived as:
+//     pool_max = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+// so the outer alter pool and inner segment pool stay physically isolated and
+// never deadlock against each other.
+CONF_mInt32(lake_schema_change_per_tablet_parallelism, "4");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
@@ -506,11 +517,12 @@ CONF_mInt32(lake_rows_mapper_read_parallelism, "32");
 // few-but-large output segments at the cost of more range-reads and an extra
 // memcpy on consume. Defaults to 4 MiB (starcache disk-tier block-friendly).
 CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
-// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
-// mem tracker is already past this percent (0-100) of its limit. In that regime the function
-// falls back to a single-pass loop that holds only one decoded del-file column at a time,
-// trading the cold-start latency win for bounded peak memory.
-CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
+// Memory-pressure gate for the parallel prefetch paths used while rebuilding the shared-data
+// primary key index. When the update mem tracker is already past this percent (0-100) of its
+// limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a
+// time, trading the cold-start latency win for bounded peak memory. Gates parallel reads of
+// del, segment, and other files during the rebuild.
+CONF_mInt32(pk_index_parallel_rebuild_mem_ratio, "50");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
@@ -764,6 +776,16 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
+
+// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
+// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
+// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+CONF_Bool(enable_http_auth, "false");
+
+// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
+// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
+// This config is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action, "true");
 
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
@@ -1324,9 +1346,6 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Valid example: jaeger_endpoint = localhost:14268
 // Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
-
-// Config for query debug trace
-CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");

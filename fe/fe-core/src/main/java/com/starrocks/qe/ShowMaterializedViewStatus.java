@@ -24,9 +24,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -39,6 +42,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -75,6 +79,12 @@ public class ShowMaterializedViewStatus {
     private long taskId;
     private String taskName;
     private long lastRefreshTime;
+    private String warehouse;
+    private String refreshMode;
+    private String refreshTrigger;
+    private String refreshPolicy;
+    private String resourceGroup;
+    private String queryRewriteStatusReason;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -332,7 +342,8 @@ public class ShowMaterializedViewStatus {
         if (refreshScheme == null) {
             status.setRefreshType("UNKNOWN");
         } else {
-            status.setRefreshType(String.valueOf(mv.getRefreshScheme().getType()));
+            MaterializedViewRefreshType type = refreshScheme.getType();
+            status.setRefreshType(type == MaterializedViewRefreshType.SYNC ? "SYNC" : "ASYNC");
         }
         // is_active
         status.setActive(mv.isActive());
@@ -345,8 +356,9 @@ public class ShowMaterializedViewStatus {
         status.setRows(mv.getRowCount());
         // materialized view ddl
         status.setText(mv.getMaterializedViewDdlStmt(true));
-        // rewrite status
-        status.setQueryRewriteStatus(mv.getQueryRewriteStatus());
+        // Compute once: the status/reason getters each re-run the heavy validation and can diverge.
+        MVPlanValidationResult rewriteResult = mv.getMvPlanValidationResult();
+        status.setQueryRewriteStatus(rewriteResult.getStatus().name());
         // task_name
         final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
@@ -357,6 +369,14 @@ public class ShowMaterializedViewStatus {
         if (refreshScheme != null) {
             status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
         }
+        boolean syncRefresh = refreshScheme != null
+                && refreshScheme.getType() == MaterializedViewRefreshType.SYNC;
+        status.setWarehouse(syncRefresh || !RunMode.isSharedDataMode() ? "" : mv.getWarehouseName());
+        status.setRefreshMode(syncRefresh || mv.getRefreshMode() == null ? null : mv.getRefreshMode().name());
+        status.setRefreshTrigger(mv.getRefreshTriggerString());
+        status.setRefreshPolicy(mv.getRefreshPolicyString());
+        status.setResourceGroup(mv.getResourceGroupString());
+        status.setQueryRewriteStatusReason(rewriteResult.getReasonCode().name());
         status.setLastJobTaskRunStatus(taskTaskStatusJob);
         return status;
     }
@@ -365,7 +385,7 @@ public class ShowMaterializedViewStatus {
         ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(indexMeta.getIndexMetaId(), dbName,
                 olapTable.getIndexNameByMetaId(indexMeta.getIndexMetaId()));
         // refresh_type
-        status.setRefreshType("ROLLUP");
+        status.setRefreshType("SYNC");
         // is_active
         status.setActive(true);
         // partition type
@@ -388,6 +408,11 @@ public class ShowMaterializedViewStatus {
         } else {
             status.setRows(0L);
         }
+        status.setWarehouse("");
+        status.setRefreshMode(null);
+        status.setRefreshTrigger("NONE");
+        status.setRefreshPolicy("NONE");
+        status.setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
         return status;
     }
 
@@ -493,6 +518,54 @@ public class ShowMaterializedViewStatus {
 
     public void setLastRefreshTime(long lastRefreshTime) {
         this.lastRefreshTime = lastRefreshTime;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getRefreshMode() {
+        return refreshMode;
+    }
+
+    public void setRefreshMode(String refreshMode) {
+        this.refreshMode = refreshMode;
+    }
+
+    public String getRefreshTrigger() {
+        return refreshTrigger;
+    }
+
+    public void setRefreshTrigger(String refreshTrigger) {
+        this.refreshTrigger = refreshTrigger;
+    }
+
+    public String getRefreshPolicy() {
+        return refreshPolicy;
+    }
+
+    public void setRefreshPolicy(String refreshPolicy) {
+        this.refreshPolicy = refreshPolicy;
+    }
+
+    public String getResourceGroup() {
+        return resourceGroup;
+    }
+
+    public void setResourceGroup(String resourceGroup) {
+        this.resourceGroup = resourceGroup;
+    }
+
+    public String getQueryRewriteStatusReason() {
+        return queryRewriteStatusReason;
+    }
+
+    public void setQueryRewriteStatusReason(String queryRewriteStatusReason) {
+        this.queryRewriteStatusReason = queryRewriteStatusReason;
     }
 
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
@@ -674,6 +747,12 @@ public class ShowMaterializedViewStatus {
         if (lastRefreshTime > 0) {
             status.setLast_refresh_time(TimeUtils.longToTimeString(lastRefreshTime));
         }
+        status.setWarehouse(Strings.nullToEmpty(this.warehouse));
+        status.setRefresh_mode(Strings.nullToEmpty(this.refreshMode));
+        status.setRefresh_trigger(Strings.nullToEmpty(this.refreshTrigger));
+        status.setRefresh_policy(Strings.nullToEmpty(this.refreshPolicy));
+        status.setResource_group(Strings.nullToEmpty(this.resourceGroup));
+        status.setQuery_rewrite_status_reason(Strings.nullToEmpty(this.queryRewriteStatusReason));
 
         return status;
     }
@@ -749,6 +828,12 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, refreshJobStatus.getJobId());
         // last refresh time (data version timestamp used for staleness check)
         addField(resultRow, lastRefreshTime > 0 ? TimeUtils.longToTimeString(lastRefreshTime) : "");
+        addField(resultRow, Strings.nullToEmpty(warehouse));
+        addField(resultRow, Strings.nullToEmpty(refreshMode));
+        addField(resultRow, Strings.nullToEmpty(refreshTrigger));
+        addField(resultRow, Strings.nullToEmpty(refreshPolicy));
+        addField(resultRow, Strings.nullToEmpty(resourceGroup));
+        addField(resultRow, Strings.nullToEmpty(queryRewriteStatusReason));
 
         return resultRow;
     }

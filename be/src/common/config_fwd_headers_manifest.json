@@ -464,7 +464,9 @@
         "max_download_speed_kbps",
         "download_low_speed_limit_kbps",
         "download_low_speed_time",
-        "enable_token_check"
+        "enable_token_check",
+        "enable_http_auth",
+        "enable_stop_be_action"
       ]
     },
     {
@@ -738,7 +740,8 @@
         "pk_index_parallel_execution_min_rows",
         "lake_rows_mapper_read_parallelism",
         "lake_rows_mapper_sub_chunk_bytes",
-        "pk_index_parallel_load_dels_mem_ratio",
+        "pk_index_parallel_rebuild_mem_ratio",
+        "vector_chunk_size",
         "pk_index_memtable_max_count",
         "pk_index_memtable_max_wait_flush_timeout_ms",
         "pk_index_size_tiered_min_level_size",
@@ -872,6 +875,7 @@
         "delete_worker_count_normal_priority",
         "delete_worker_count_high_priority",
         "alter_tablet_worker_count",
+        "lake_schema_change_per_tablet_parallelism",
         "parallel_clone_task_per_path",
         "storage_medium_migrate_count",
         "update_schema_worker_count",
@@ -934,7 +938,6 @@
         "pipeline_gcore_output_dir",
         "enable_core_file_size_optimization",
         "try_release_resource_before_core_dump",
-        "query_debug_trace_dir",
         "sys_mlock_modules",
         "exception_stack_black_list",
         "exception_stack_level",

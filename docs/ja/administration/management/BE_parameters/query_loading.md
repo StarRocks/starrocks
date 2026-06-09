@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：クエリ実行とデータロードに関連する設定項目。"
 sidebar_label: "Query and Loading"
 ---
 

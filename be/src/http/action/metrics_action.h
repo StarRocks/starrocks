@@ -60,6 +60,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    bool need_auth() const override { return false; }
+
 private:
     void _collect_table_metrics(starrocks::MetricsVisitor* visitor);
 

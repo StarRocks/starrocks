@@ -389,7 +389,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
 
     if (config::enable_jemalloc_memory_tracker) {
         std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
-        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_track");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
 #endif

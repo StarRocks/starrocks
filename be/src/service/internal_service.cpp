@@ -66,6 +66,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/primitives/driver_executor.h"
@@ -465,9 +466,9 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     }
 
     // prepare_global_state is success when reach here, so we must count down once
-    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+    auto query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id);
     if (query_context != nullptr) {
-        query_context->count_down_fragments();
+        _exec_env->query_context_mgr()->count_down_fragments(query_context.get());
     }
 
     status.to_protobuf(response->mutable_status());

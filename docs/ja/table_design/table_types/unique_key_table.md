@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ユニークキーテーブルは StarRocks でユニークキーに基づいてデータを重複排除し、最新値を返します (主キーテーブルに移行中)。"
 sidebar_position: 50
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ANY_MATCH関数は配列のいずれかの要素が指定された述語に一致するかどうかを返します。"
 ---
 
 # any_match

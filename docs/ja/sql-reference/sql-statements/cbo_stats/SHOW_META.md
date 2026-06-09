@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CBO 統計のメタデータを表示します（基本統計とヒストグラムを含みます）。"
 ---
 
 # SHOW META

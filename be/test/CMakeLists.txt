@@ -76,6 +76,7 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -86,6 +87,7 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
         ./exec/schema_scanner/schema_scanner_test.cpp
         ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
+        ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/tablet_info_test.cpp
@@ -245,11 +247,13 @@ set(EXEC_FILES
         ./formats/disk_range_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
+        ./http/handler_required_privilege_test.cpp
         ./http/http_core_test.cpp
         ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
+        ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/pprof_actions_test.cpp
@@ -318,6 +322,7 @@ set(EXEC_FILES
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+        ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./udf/python/env_test.cpp
         ./udf/java/java_native_method_test.cpp
@@ -440,6 +445,8 @@ SET(DW_TEST_FILES
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
+    ./storage/lake/index_delta_group_loader_test.cpp
+    ./storage/lake/index_file_writer_reader_test.cpp
     ./storage/lake/auto_increment_partial_update_test.cpp
     ./storage/lake/compaction_policy_test.cpp
     ./storage/lake/compaction_scheduler_test.cpp
@@ -470,6 +477,8 @@ SET(DW_TEST_FILES
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
+    ./storage/lake/segment_task_runner_test.cpp
+    ./storage/lake/add_index_schema_change_test.cpp
     ./storage/lake/schema_change_test.cpp
     ./storage/lake/lake_replication_txn_manager_test.cpp
     ./storage/lake/spill_mem_table_sink_test.cpp
@@ -486,6 +495,7 @@ SET(DW_TEST_FILES
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
+    ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp
     ./storage/lake/write_combined_txn_log_test.cpp
     ./storage/lake/lake_persistent_index_fileset_test.cpp
@@ -561,6 +571,7 @@ SET(DW_TEST_FILES
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_metrics_test.cpp
+    ./storage/storage_engine_compaction_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/table_reader_remote_test.cpp
     ./storage/table_reader_test.cpp

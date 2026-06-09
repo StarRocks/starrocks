@@ -37,6 +37,7 @@
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -45,6 +46,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"
@@ -76,13 +78,12 @@ public:
 
         ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
         _query_ctx->set_total_fragments(1);
-        _query_ctx->set_delivery_expire_seconds(60);
-        _query_ctx->set_query_expire_seconds(60);
-        _query_ctx->extend_delivery_lifetime();
-        _query_ctx->extend_query_lifetime();
+        _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+        _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+        _query_ctx->query_runtime_state().extend_delivery_lifetime();
+        _query_ctx->query_runtime_state().extend_query_lifetime();
         _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                      GlobalEnv::GetInstance()->query_pool_mem_tracker());
-        _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
         _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
         _fragment_ctx->set_query_id(query_id);

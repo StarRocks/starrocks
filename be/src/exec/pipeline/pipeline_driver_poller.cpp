@@ -17,7 +17,11 @@
 #include <chrono>
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
+#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
@@ -91,7 +95,7 @@ void PipelineDriverPoller::run_internal() {
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
                 WARN_IF_POLLER_TIMEOUT(driver->to_readable_string());
-                if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
+                if (!driver->is_query_never_expired() && driver->query_runtime_state()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                     // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -103,17 +107,17 @@ void PipelineDriverPoller::run_internal() {
                         LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
                         driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
                     }
-                    auto query_id = driver->query_ctx()->query_id();
-                    size_t timeout = driver->query_ctx()->get_query_expire_seconds();
+                    auto query_id = driver->query_runtime_state()->query_id();
+                    size_t timeout = driver->query_runtime_state()->get_query_expire_seconds();
                     hook_on_query_timeout(query_id, timeout);
                     driver->fragment_ctx()->cancel(
                             Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
-                } else if (driver->fragment_ctx()->is_canceled()) {
+                } else if (driver->fragment_ctx()->runtime_state()->is_cancelled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
-                } else if (driver->need_report_exec_state()) {
+                } else if (!driver->is_finished() && driver->fragment_ctx()->need_report_exec_state()) {
                     // If the runtime profile is enabled, the driver should be rescheduled after the timeout for triggering
                     // the profile report prcessing.
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
@@ -128,8 +132,9 @@ void PipelineDriverPoller::run_internal() {
                         // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
                         // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
                         // FragmentContext is unregistered prematurely.
-                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                                       : DriverState::FINISH);
+                        driver->set_driver_state(driver->fragment_ctx()->runtime_state()->is_cancelled()
+                                                         ? DriverState::CANCELED
+                                                         : DriverState::FINISH);
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
