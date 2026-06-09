@@ -382,6 +382,16 @@ description: "Alphabetical a - c"
 - 单位：字节
 - 描述：副本克隆使用的内存。
 
+## `cluster_snapshot_consecutive_failures`
+
+- 单位：个
+- 描述：自上次成功以来连续失败的自动化集群快照任务数量。该值持续增长表明快照存储卷配置错误或无法访问。
+
+## `cluster_snapshot_last_finished_time`
+
+- 单位：毫秒
+- 描述：最近一次完成的自动化集群快照的时间（毫秒时间戳）；若从未完成则为 0。
+
 ## `column_metadata_mem_bytes`
 
 - 单位：字节
