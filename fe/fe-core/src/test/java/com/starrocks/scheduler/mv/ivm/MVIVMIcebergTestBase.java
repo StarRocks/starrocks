@@ -28,6 +28,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -70,6 +71,28 @@ public class MVIVMIcebergTestBase extends MVIVMTestBase {
                         TvrDeltaStats.EMPTY)
         );
         mockListTableDeltaTraits(deltas);
+    }
+
+    /**
+     * Emit one append trait per version in {@code (from, to]}, where version {@code v} adds
+     * {@code rowsPerVersion[v-1]} rows, so the adaptive cap has a real multi-trait delta to split.
+     */
+    public void mockListTableDeltaTraitsPerVersion(long... rowsPerVersion) {
+        new MockUp<MockIcebergMetadata>() {
+            @Mock
+            public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
+                                                                 TvrTableSnapshot fromSnapshotExclusive,
+                                                                 TvrTableSnapshot toSnapshotInclusive) {
+                long from = fromSnapshotExclusive.isEmpty() ? 0L : fromSnapshotExclusive.getSnapshotId();
+                long to = toSnapshotInclusive.getSnapshotId();
+                List<TvrTableDeltaTrait> traits = new ArrayList<>();
+                for (long v = from + 1; v <= to; v++) {
+                    traits.add(TvrTableDeltaTrait.ofMonotonic(
+                            TvrTableDelta.of(v - 1, v), new TvrDeltaStats(rowsPerVersion[(int) (v - 1)], 0L)));
+                }
+                return traits;
+            }
+        };
     }
 
     public void mockListTableDeltaTraitsThrows(String message) {
