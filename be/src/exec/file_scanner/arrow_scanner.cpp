@@ -205,6 +205,7 @@ Status ArrowScanner::open_next_reader() {
 }
 
 Status ArrowScanner::next_batch() {
+    SCOPED_RAW_TIMER(&_counter->read_batch_ns);
     _batch_start_idx = 0;
     _batch = nullptr;
     if (_curr_file_reader == nullptr) {
@@ -311,7 +312,13 @@ Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
                                    cast_chunk->num_rows());
         }
     }
+    if (VLOG_ROW_IS_ON) {
+        VLOG_ROW << "before finalize chunk: " << (*chunk)->debug_columns();
+    }
     ASSIGN_OR_RETURN(auto dest_chunk, materialize(*chunk, cast_chunk));
+    if (VLOG_ROW_IS_ON) {
+        VLOG_ROW << "after finalize chunk: " << dest_chunk->debug_columns();
+    }
     *chunk = dest_chunk;
     _chunk_start_idx = 0;
     return Status::OK();
