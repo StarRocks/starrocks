@@ -97,6 +97,10 @@ public class ClusterSnapshotJob implements Writable {
         this.errMsg = errMsg;
     }
 
+    public String getErrMsg() {
+        return errMsg;
+    }
+
     public String getSnapshotName() {
         return snapshot.getSnapshotName();
     }

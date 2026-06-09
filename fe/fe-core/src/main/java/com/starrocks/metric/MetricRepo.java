@@ -592,6 +592,7 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
+<<<<<<< HEAD
         GAUGE_LICENSE_EXPIRE_DAYS = new GaugeMetric<Long>(
                 "license_expire_days", MetricUnit.NOUNIT, "remaining whole days before the effective license expires") {
             @Override
@@ -600,6 +601,27 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LICENSE_EXPIRE_DAYS);
+=======
+        GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
+                "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
+                "epoch millis of the last finished automated cluster snapshot, 0 if none") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getLastSuccessTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotLastSuccessTime);
+
+        GaugeMetric<Long> snapshotConsecutiveFailures = new GaugeMetric<Long>(
+                "cluster_snapshot_consecutive_failures", MetricUnit.NOUNIT,
+                "consecutive failed automated cluster snapshot jobs since the last success") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getConsecutiveFailureCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotConsecutiveFailures);
+>>>>>>> 0620250aa53... [BugFix] Do not freeze CatalogRecycleBin when cluster snapshot keeps failing (#74379)
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
