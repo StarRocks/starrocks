@@ -17,9 +17,6 @@
 #include <filesystem>
 #include <memory>
 
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
@@ -35,6 +32,8 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -97,7 +96,7 @@ public:
         CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
 
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkFactory::new_chunk(schema, 128);
+        auto chunk = ChunkHelper::new_chunk(schema, 128);
         auto cols = chunk->columns();
         for (int64_t i = 0; i < 128; ++i) {
             cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(version * 1000 + i)));
