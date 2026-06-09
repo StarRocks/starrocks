@@ -17,6 +17,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 :::
 
+## `active_query_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of in-flight queries currently being executed on this FE (size of `QeProcessorImpl.coordinatorMap`). Reflects the live count of active SQL statements on the FE, independent of whether query queue is enabled.
+
 ## `active_scan_context_count`
 
 - Unit: Count

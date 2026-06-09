@@ -17,6 +17,12 @@ description: "Alphabetical a - c"
 
 :::
 
+## `active_query_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：当前 FE 上正在执行的查询数（即 `QeProcessorImpl.coordinatorMap` 的大小）。反映当前 FE 上活跃执行中的 SQL 数量，不依赖 query queue 是否开启。
+
 ## `active_scan_context_count`
 
 - 单位：计数
