@@ -92,8 +92,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     // a min/max gate (WHERE score()>c, no score output) is present. slot_id < 0
     // means gate-only: narrow the bitmap, do not materialize a score column.
     {
-        bool has_gate =
-                thrift_olap_scan_node.__isset.bm25_score_min || thrift_olap_scan_node.__isset.bm25_score_max;
+        bool has_gate = thrift_olap_scan_node.__isset.bm25_score_min || thrift_olap_scan_node.__isset.bm25_score_max;
         _use_bm25_score = thrift_olap_scan_node.__isset.bm25_score_slot_id || has_gate;
         if (_use_bm25_score) {
             _bm25_score_slot_id =

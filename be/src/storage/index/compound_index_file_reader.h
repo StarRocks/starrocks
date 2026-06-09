@@ -36,8 +36,7 @@ public:
     // cleanly. Header parsing reads at most a few KB; the data region is
     // never touched.
     static StatusOr<std::unique_ptr<CompoundIndexFileReader>> open(const std::string& bin_path);
-    static StatusOr<std::unique_ptr<CompoundIndexFileReader>> open(const std::string& bin_path,
-                                                                    FileSystem* fs);
+    static StatusOr<std::unique_ptr<CompoundIndexFileReader>> open(const std::string& bin_path, FileSystem* fs);
 
     // Look up an index entry by (kind, index_id). Returns NotFound if no
     // matching entry exists in the header.

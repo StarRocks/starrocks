@@ -27,8 +27,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <initializer_list>
 #include <filesystem>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -71,10 +71,8 @@ std::vector<uint32_t> array_to_vector(const tb::RustU32Array& arr) {
 }
 
 // Build a writer at `index_path`, append `docs` in order, commit, and free.
-void build_index(const std::string& index_path, const std::string& field,
-                 const std::vector<std::string>& docs) {
-    tb::RustResult cw =
-            tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "english");
+void build_index(const std::string& index_path, const std::string& field, const std::vector<std::string>& docs) {
+    tb::RustResult cw = tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "english");
     RustResultGuard g_cw{cw};
     ASSERT_TRUE(cw.success) << "create_index_writer: " << (cw.error ? cw.error : "?");
     void* writer = cw.value.ptr;
@@ -83,8 +81,7 @@ void build_index(const std::string& index_path, const std::string& field,
     std::vector<tb::FFISlice> slices;
     slices.reserve(docs.size());
     for (const auto& d : docs) {
-        slices.push_back(tb::FFISlice{
-                reinterpret_cast<const uint8_t*>(d.data()), d.size()});
+        slices.push_back(tb::FFISlice{reinterpret_cast<const uint8_t*>(d.data()), d.size()});
     }
 
     {
@@ -126,8 +123,8 @@ TEST(TantivySmoke, RoundTripTermQuery) {
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
         const char* term = "tantivy";
-        tb::RustResult r = tb::tantivy_term_query(
-                reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
+        tb::RustResult r =
+                tb::tantivy_term_query(reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << "term_query: " << (r.error ? r.error : "?");
         std::vector<uint32_t> hits = array_to_vector(out);
@@ -139,8 +136,8 @@ TEST(TantivySmoke, RoundTripTermQuery) {
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
         const char* term = "nonexistent_term";
-        tb::RustResult r = tb::tantivy_term_query(
-                reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
+        tb::RustResult r =
+                tb::tantivy_term_query(reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success);
         EXPECT_EQ(out.len, 0u);
@@ -154,12 +151,14 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
     ASSERT_FALSE(index_path.empty());
     struct PathCleanup {
         std::string p;
-        ~PathCleanup() { std::error_code ec; std::filesystem::remove_all(p, ec); }
+        ~PathCleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(p, ec);
+        }
     } cleanup{index_path};
 
     const std::string field = "f";
-    build_index(index_path, field,
-                {"the quick brown fox", "the lazy brown dog", "quick fox jumps over"});
+    build_index(index_path, field, {"the quick brown fox", "the lazy brown dog", "quick fox jumps over"});
 
     tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
     RustResultGuard g_lr{lr};
@@ -234,7 +233,10 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
     ASSERT_FALSE(index_path.empty());
     struct PathCleanup {
         std::string p;
-        ~PathCleanup() { std::error_code ec; std::filesystem::remove_all(p, ec); }
+        ~PathCleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(p, ec);
+        }
     } cleanup{index_path};
 
     const std::string field = "f";
@@ -249,8 +251,7 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
     tb::RustU32Array out{};
     RustU32ArrayGuard g_out{out};
     const char* term = "alpha";
-    tb::RustResult r = tb::tantivy_term_query(
-            reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
+    tb::RustResult r = tb::tantivy_term_query(reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
     RustResultGuard g{r};
     ASSERT_TRUE(r.success);
     std::vector<uint32_t> hits = array_to_vector(out);
@@ -262,8 +263,7 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
 
 TEST(TantivySmoke, CreateWriterReportsError) {
     // /proc is read-only on Linux, so create_dir_all + index init should fail.
-    tb::RustResult r = tb::tantivy_create_index_writer("/proc/sr_tantivy_should_fail", "title",
-                                                       "english");
+    tb::RustResult r = tb::tantivy_create_index_writer("/proc/sr_tantivy_should_fail", "title", "english");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);
     EXPECT_NE(r.error, nullptr);
@@ -277,16 +277,17 @@ TEST(TantivySmoke, UnsupportedTokenizerReportsError) {
     ASSERT_FALSE(index_path.empty());
     struct PathCleanup {
         std::string p;
-        ~PathCleanup() { std::error_code ec; std::filesystem::remove_all(p, ec); }
+        ~PathCleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(p, ec);
+        }
     } cleanup{index_path};
 
-    tb::RustResult r =
-            tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer");
+    tb::RustResult r = tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);
     ASSERT_NE(r.error, nullptr);
-    EXPECT_NE(std::string(r.error).find("unsupported tokenizer"), std::string::npos)
-            << "got: " << r.error;
+    EXPECT_NE(std::string(r.error).find("unsupported tokenizer"), std::string::npos) << "got: " << r.error;
 }
 
 } // namespace starrocks

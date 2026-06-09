@@ -69,10 +69,10 @@
 namespace starrocks {
 
 #define INDEX_ADD_VALUES(index, data, size) \
-    do {                                     \
-        if (index != nullptr) {              \
-            index->add_values(data, size);   \
-        }                                    \
+    do {                                    \
+        if (index != nullptr) {             \
+            index->add_values(data, size);  \
+        }                                   \
     } while (0)
 
 #define INDEX_ADD_NULLS(index, count) \

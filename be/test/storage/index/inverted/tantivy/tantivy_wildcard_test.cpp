@@ -61,8 +61,7 @@ std::vector<uint32_t> array_to_vector(const tb::RustU32Array& arr) {
     return std::vector<uint32_t>(arr.ptr, arr.ptr + arr.len);
 }
 
-void build_index_raw(const std::string& index_path, const std::string& field,
-                     const std::vector<std::string>& docs) {
+void build_index_raw(const std::string& index_path, const std::string& field, const std::vector<std::string>& docs) {
     // tokenizer="raw" → no tokenization, term dict equals the original strings.
     // This gives the wildcard FFI parser=none semantics.
     tb::RustResult cw = tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "raw");
@@ -74,8 +73,7 @@ void build_index_raw(const std::string& index_path, const std::string& field,
     std::vector<tb::FFISlice> slices;
     slices.reserve(docs.size());
     for (const auto& d : docs) {
-        slices.push_back(tb::FFISlice{
-                reinterpret_cast<const uint8_t*>(d.data()), d.size()});
+        slices.push_back(tb::FFISlice{reinterpret_cast<const uint8_t*>(d.data()), d.size()});
     }
     {
         tb::RustResult r = tb::tantivy_index_add_strings_batch(writer, slices.data(), slices.size());
@@ -93,8 +91,8 @@ void build_index_raw(const std::string& index_path, const std::string& field,
 std::vector<uint32_t> wildcard_hits(void* reader, const std::string& pattern) {
     tb::RustU32Array out{};
     RustU32ArrayGuard g_out{out};
-    tb::RustResult r = tb::tantivy_wildcard_query(
-            reader, reinterpret_cast<const uint8_t*>(pattern.data()), pattern.size(), &out);
+    tb::RustResult r =
+            tb::tantivy_wildcard_query(reader, reinterpret_cast<const uint8_t*>(pattern.data()), pattern.size(), &out);
     RustResultGuard g{r};
     EXPECT_TRUE(r.success) << "wildcard_query: " << (r.error ? r.error : "?");
     auto v = array_to_vector(out);
@@ -118,8 +116,7 @@ TEST(TantivyWildcard, SubstringPrefixSuffixAndStarEquivalence) {
     PathCleanup cleanup{index_path};
 
     const std::string field = "f";
-    build_index_raw(index_path, field,
-                    {"foo", "foobar", "barfoo", "baz", "afoob", "FOO"});
+    build_index_raw(index_path, field, {"foo", "foobar", "barfoo", "baz", "afoob", "FOO"});
 
     tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw");
     RustResultGuard g_lr{lr};

@@ -265,8 +265,8 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             for (const auto& segment : rowset.segments()) {
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
                 if (is_segment(segment)) {
-                    (void)deleter->delete_file(join_path(base_dir,
-                            IndexDescriptor::compound_index_file_path_from_segment(segment)));
+                    (void)deleter->delete_file(
+                            join_path(base_dir, IndexDescriptor::compound_index_file_path_from_segment(segment)));
                 }
             }
         }
@@ -798,8 +798,7 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   total_files++;
                                                   total_bytes += entry.size.value_or(0);
 
-                                                  if (!is_segment(entry.name) &&
-                                                      !is_sst(entry.name) &&
+                                                  if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                                       !is_compound_index(entry.name)) {
                                                       return true;
                                                   }

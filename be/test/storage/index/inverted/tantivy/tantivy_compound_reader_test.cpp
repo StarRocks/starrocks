@@ -52,15 +52,14 @@ struct PathCleanup {
     }
 };
 
-CompoundIndexEntry write_and_pack(const std::string& index_dir, const std::vector<Slice>& values,
-                                  int num_nulls) {
+CompoundIndexEntry write_and_pack(const std::string& index_dir, const std::vector<Slice>& values, int num_nulls) {
     TypeInfoPtr typeinfo = get_type_info(TYPE_VARCHAR);
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
 
     std::unique_ptr<InvertedWriter> writer;
-    EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_writer(typeinfo, "content", index_dir,
-                                                                         &tablet_index, &writer));
+    EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_writer(typeinfo, "content", index_dir, &tablet_index,
+                                                                         &writer));
     EXPECT_OK(writer->init());
 
     if (!values.empty()) {
@@ -79,8 +78,8 @@ std::string build_file_table_json(const CompoundIndexLayout& layout) {
     std::string json = "{";
     for (size_t i = 0; i < layout.files.size(); ++i) {
         if (i > 0) json += ",";
-        json += fmt::format("\"{}\":{{\"offset\":{},\"length\":{}}}", layout.files[i].name,
-                            layout.files[i].offset, layout.files[i].length);
+        json += fmt::format("\"{}\":{{\"offset\":{},\"length\":{}}}", layout.files[i].name, layout.files[i].offset,
+                            layout.files[i].length);
     }
     json += "}";
     return json;
@@ -95,8 +94,8 @@ TEST(TantivyCompoundReaderTest, FullRoundTrip) {
     PathCleanup cleanup{temp_dir};
 
     std::string index_dir = temp_dir + "/index";
-    std::vector<Slice> values = {Slice("the quick brown fox"), Slice("lazy brown dog"),
-                                 Slice("quick fox jumps"), Slice("starrocks tantivy search")};
+    std::vector<Slice> values = {Slice("the quick brown fox"), Slice("lazy brown dog"), Slice("quick fox jumps"),
+                                 Slice("starrocks tantivy search")};
 
     auto entry = write_and_pack(index_dir, values, 1);
     entry.index_id = 100;
@@ -128,8 +127,8 @@ TEST(TantivyCompoundReaderTest, FullRoundTrip) {
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
-    ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(index_dir, tablet_index_sp,
-                                                                         TYPE_VARCHAR, &reader));
+    ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(index_dir, tablet_index_sp, TYPE_VARCHAR,
+                                                                         &reader));
 
     auto* tantivy_reader = dynamic_cast<TantivyInvertedReader*>(reader.get());
     ASSERT_NE(nullptr, tantivy_reader);
@@ -160,8 +159,7 @@ TEST(TantivyCompoundReaderTest, FullRoundTrip) {
     {
         roaring::Roaring bm;
         Slice text("fox dog");
-        ASSERT_OK(
-                tantivy_reader->query(nullptr, "content", &text, InvertedIndexQueryType::MATCH_ANY_QUERY, &bm));
+        ASSERT_OK(tantivy_reader->query(nullptr, "content", &text, InvertedIndexQueryType::MATCH_ANY_QUERY, &bm));
         EXPECT_EQ(3u, bm.cardinality());
     }
 
@@ -169,8 +167,7 @@ TEST(TantivyCompoundReaderTest, FullRoundTrip) {
     {
         roaring::Roaring bm;
         Slice text("quick fox");
-        ASSERT_OK(
-                tantivy_reader->query(nullptr, "content", &text, InvertedIndexQueryType::MATCH_ALL_QUERY, &bm));
+        ASSERT_OK(tantivy_reader->query(nullptr, "content", &text, InvertedIndexQueryType::MATCH_ALL_QUERY, &bm));
         EXPECT_EQ(2u, bm.cardinality());
         EXPECT_TRUE(bm.contains(0));
         EXPECT_TRUE(bm.contains(2));
@@ -182,8 +179,7 @@ TEST(TantivyCompoundReaderTest, FullRoundTrip) {
         PhraseQueryValue pqv;
         pqv.text = Slice("quick brown");
         pqv.slop = 0;
-        ASSERT_OK(tantivy_reader->query(nullptr, "content", &pqv,
-                                        InvertedIndexQueryType::MATCH_PHRASE_QUERY, &bm));
+        ASSERT_OK(tantivy_reader->query(nullptr, "content", &pqv, InvertedIndexQueryType::MATCH_PHRASE_QUERY, &bm));
         EXPECT_EQ(1u, bm.cardinality());
         EXPECT_TRUE(bm.contains(0));
     }
@@ -236,8 +232,7 @@ TEST(TantivyCompoundReaderTest, MultipleIndexesInOneBin) {
         ti.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
         auto ti_sp = std::make_shared<TabletIndex>(ti);
         std::unique_ptr<InvertedReader> reader;
-        ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(idx0_dir, ti_sp, TYPE_VARCHAR,
-                                                                              &reader));
+        ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(idx0_dir, ti_sp, TYPE_VARCHAR, &reader));
         auto* tr = dynamic_cast<TantivyInvertedReader*>(reader.get());
         ASSERT_OK(tr->load_compound(std::move(ra_file), json));
 
@@ -260,8 +255,7 @@ TEST(TantivyCompoundReaderTest, MultipleIndexesInOneBin) {
         ti.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
         auto ti_sp = std::make_shared<TabletIndex>(ti);
         std::unique_ptr<InvertedReader> reader;
-        ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(idx1_dir, ti_sp, TYPE_VARCHAR,
-                                                                              &reader));
+        ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(idx1_dir, ti_sp, TYPE_VARCHAR, &reader));
         auto* tr = dynamic_cast<TantivyInvertedReader*>(reader.get());
 
         for (const auto& fe : lay.files) {

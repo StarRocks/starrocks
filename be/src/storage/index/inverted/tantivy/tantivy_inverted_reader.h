@@ -30,9 +30,8 @@ public:
     static Status create(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index,
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
 
-    static Status open_compound(TantivyInvertedReader* reader, FileSystem* fs,
-                                const std::string& bin_path, int64_t index_id,
-                                const std::string& column_name);
+    static Status open_compound(TantivyInvertedReader* reader, FileSystem* fs, const std::string& bin_path,
+                                int64_t index_id, const std::string& column_name);
 
     TantivyInvertedReader(std::string path, uint32_t index_id, std::string field_name, std::string tokenizer_name);
     ~TantivyInvertedReader() override = default;
@@ -56,8 +55,7 @@ public:
                         InvertedIndexQueryType query_type, int32_t limit, float min_score, float max_score,
                         roaring::Roaring* bit_map, std::unordered_map<uint32_t, float>* row_to_score) override;
 
-    Status query_null(OlapReaderStatistics* stats, const std::string& column_name,
-                      roaring::Roaring* bit_map) override;
+    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override;
 
     InvertedIndexReaderType get_inverted_index_reader_type() override;
 

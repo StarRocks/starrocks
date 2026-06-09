@@ -546,10 +546,8 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                                                                      &_inverted_index));
 
                        if (imp_type == InvertedImplementType::TANTIVY) {
-                           auto* tantivy_rdr =
-                                   dynamic_cast<TantivyInvertedReader*>(_inverted_index.get());
-                           RETURN_IF(tantivy_rdr == nullptr,
-                                     Status::Corruption("expected TantivyInvertedReader"));
+                           auto* tantivy_rdr = dynamic_cast<TantivyInvertedReader*>(_inverted_index.get());
+                           RETURN_IF(tantivy_rdr == nullptr, Status::Corruption("expected TantivyInvertedReader"));
                            std::string bin_path;
                            FileSystem* fs_ptr = nullptr;
                            if (!opts.rowset_path.empty()) {
@@ -557,15 +555,14 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                        opts.rowset_path, opts.rowsetid.to_string(), _segment->id());
                                fs_ptr = opts.fs ? opts.fs.get() : FileSystem::Default();
                            } else {
-                               bin_path = IndexDescriptor::compound_index_file_path_from_segment(
-                                       _segment->file_name());
+                               bin_path = IndexDescriptor::compound_index_file_path_from_segment(_segment->file_name());
                                fs_ptr = _segment->file_system();
                            }
                            // open_compound returns NotFound when the .idx file is
                            // absent — that's the legacy local-directory path; any
                            // other failure must propagate.
-                           auto st = TantivyInvertedReader::open_compound(
-                                   tantivy_rdr, fs_ptr, bin_path, index_meta->index_id(), _name);
+                           auto st = TantivyInvertedReader::open_compound(tantivy_rdr, fs_ptr, bin_path,
+                                                                          index_meta->index_id(), _name);
                            if (st.ok()) {
                                return Status::OK();
                            }

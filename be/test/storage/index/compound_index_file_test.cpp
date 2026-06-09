@@ -58,8 +58,7 @@ struct TempDirGuard {
 };
 
 // Write `content` to `dir/name` and return absolute path.
-std::string write_temp_file(const std::string& dir, const std::string& name,
-                            const std::string& content) {
+std::string write_temp_file(const std::string& dir, const std::string& name, const std::string& content) {
     std::string full = dir + "/" + name;
     std::ofstream ofs(full, std::ios::binary);
     ofs.write(content.data(), content.size());
@@ -113,10 +112,10 @@ TEST(CompoundIndexFile, SingleEntryRoundTrip) {
     TempDirGuard tg{make_tempdir("compound_single")};
     ASSERT_FALSE(tg.path.empty());
 
-    std::string bin_path = pack_fixture(tg.path, {
-                                                         {1001, {{"meta.json", "{\"v\":1}"},
-                                                                 {"data.idx", std::string(1024, 'A')}}},
-                                                 });
+    std::string bin_path =
+            pack_fixture(tg.path, {
+                                          {1001, {{"meta.json", "{\"v\":1}"}, {"data.idx", std::string(1024, 'A')}}},
+                                  });
 
     auto reader_or = CompoundIndexFileReader::open(bin_path);
     ASSERT_TRUE(reader_or.ok()) << reader_or.status().message();
@@ -141,19 +140,16 @@ TEST(CompoundIndexFile, SingleEntryRoundTrip) {
     // Read each subfile back through its (offset, length) and verify byte
     // identity with what we packed.
     EXPECT_EQ(read_slice(bin_path, layout.files[0].offset, layout.files[0].length), "{\"v\":1}");
-    EXPECT_EQ(read_slice(bin_path, layout.files[1].offset, layout.files[1].length),
-              std::string(1024, 'A'));
+    EXPECT_EQ(read_slice(bin_path, layout.files[1].offset, layout.files[1].length), std::string(1024, 'A'));
 }
 
 TEST(CompoundIndexFile, MultipleIndicesPreserveLayout) {
     TempDirGuard tg{make_tempdir("compound_multi")};
     std::string bin_path =
             pack_fixture(tg.path, {
-                                          {1001, {{"a.bin", "alpha-content"},
-                                                  {"b.bin", "beta-content"}}},
+                                          {1001, {{"a.bin", "alpha-content"}, {"b.bin", "beta-content"}}},
                                           {1002, {{"c.bin", "gamma-content"}}},
-                                          {1003, {{"d.bin", std::string(4096, 'X')},
-                                                  {"e.bin", "epsilon"}}},
+                                          {1003, {{"d.bin", std::string(4096, 'X')}, {"e.bin", "epsilon"}}},
                                   });
 
     auto reader = std::move(*CompoundIndexFileReader::open(bin_path));
@@ -183,14 +179,12 @@ TEST(CompoundIndexFile, MultipleIndicesPreserveLayout) {
     }
 
     // Spot-check the largest subfile's bytes round-trip.
-    EXPECT_EQ(read_slice(bin_path, l3.files[0].offset, l3.files[0].length),
-              std::string(4096, 'X'));
+    EXPECT_EQ(read_slice(bin_path, l3.files[0].offset, l3.files[0].length), std::string(4096, 'X'));
 }
 
 TEST(CompoundIndexFile, FindIndexNotFound) {
     TempDirGuard tg{make_tempdir("compound_notfound")};
-    std::string bin_path =
-            pack_fixture(tg.path, {{42, {{"only.bin", "x"}}}});
+    std::string bin_path = pack_fixture(tg.path, {{42, {{"only.bin", "x"}}}});
     auto reader = std::move(*CompoundIndexFileReader::open(bin_path));
 
     auto missing = reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 9999);
@@ -288,24 +282,20 @@ TEST(CompoundIndexFile, HeaderLargerThanInitialProbeProbe_GrowsAndSucceeds) {
 // snippets at multiple call sites.
 TEST(IndexDescriptorPathTest, CompoundIndexPathFromSegment_BasicAndEdges) {
     // Standard local segment file.
-    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("seg_0.dat"),
-              "seg_0.idx");
+    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("seg_0.dat"), "seg_0.idx");
 
     // Remote URI with rowset prefix and dots in directory components.
-    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment(
-                      "s3://bucket/path.with.dots/seg_42_3.dat"),
+    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("s3://bucket/path.with.dots/seg_42_3.dat"),
               "s3://bucket/path.with.dots/seg_42_3.idx");
 
     // No extension: helper falls back to appending ".idx" so callers don't crash
     // on ill-formed input. (vacuum guards via is_segment(); writers via the
     // .dat suffix, so this shape isn't expected in production but the helper
     // must remain total.)
-    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("noextension"),
-              "noextension.idx");
+    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("noextension"), "noextension.idx");
 
     // Already an .idx: rfind('.') strips the trailing extension and reapplies it.
-    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("seg.idx"),
-              "seg.idx");
+    EXPECT_EQ(IndexDescriptor::compound_index_file_path_from_segment("seg.idx"), "seg.idx");
 }
 
 // IndexDescriptor::lake_compound_index_build_dir owns the lake-mode build path
@@ -316,21 +306,17 @@ TEST(IndexDescriptorPathTest, LakeCompoundIndexBuildDir_TxnAndFallback) {
     // tablet_id != 0 && txn_id != 0 → per-transaction isolation. The instance_key
     // is appended in lowercase hex so two concurrently-alive SegmentWriter
     // instances for the same (tablet, txn, seg, idx) never share a temp dir.
-    EXPECT_EQ(IndexDescriptor::lake_compound_index_build_dir(
-                      "/tmp/tantivy_tmp", 100, 200, 3, 4, 0xCAFE),
+    EXPECT_EQ(IndexDescriptor::lake_compound_index_build_dir("/tmp/tantivy_tmp", 100, 200, 3, 4, 0xCAFE),
               "/tmp/tantivy_tmp/100_200_3_4_cafe.ivt");
 
     // tablet_id == 0 → fallback uses instance_key, segment, index_id (decimal,
     // legacy shape unchanged).
-    EXPECT_EQ(IndexDescriptor::lake_compound_index_build_dir(
-                      "/tmp/tantivy_tmp", 0, 200, 3, 4, 0xCAFE),
+    EXPECT_EQ(IndexDescriptor::lake_compound_index_build_dir("/tmp/tantivy_tmp", 0, 200, 3, 4, 0xCAFE),
               "/tmp/tantivy_tmp/51966_3_4.ivt");
 
     // Different (tablet, txn) yield different paths so retries can't collide.
-    EXPECT_NE(IndexDescriptor::lake_compound_index_build_dir(
-                      "/tmp/tantivy_tmp", 100, 200, 3, 4, 0),
-              IndexDescriptor::lake_compound_index_build_dir(
-                      "/tmp/tantivy_tmp", 100, 201, 3, 4, 0));
+    EXPECT_NE(IndexDescriptor::lake_compound_index_build_dir("/tmp/tantivy_tmp", 100, 200, 3, 4, 0),
+              IndexDescriptor::lake_compound_index_build_dir("/tmp/tantivy_tmp", 100, 201, 3, 4, 0));
 }
 
 // Same (tablet, txn, seg, idx) but different SegmentWriter instances (different
@@ -359,8 +345,7 @@ TEST(IndexDescriptorPathTest, LakeBuildDirIsolatesByInstanceKey) {
     auto zero_key = IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, 0);
     EXPECT_TRUE(zero_key.ends_with("_0.ivt")) << zero_key;
 
-    auto max_key =
-            IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, UINTPTR_MAX);
+    auto max_key = IndexDescriptor::lake_compound_index_build_dir(root, tablet, txn, seg, idx, UINTPTR_MAX);
     // UINTPTR_MAX in lowercase hex is all 'f's; just check the suffix shape and
     // that it doesn't equal the zero variant.
     EXPECT_NE(max_key, zero_key);

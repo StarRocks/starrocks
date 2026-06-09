@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/index/inverted/tantivy/tantivy_plugin.h"
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -20,7 +22,6 @@
 #include "storage/index/inverted/inverted_index_common.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
-#include "storage/index/inverted/tantivy/tantivy_plugin.h"
 #include "storage/rowset/options.h"
 #include "storage/tablet_index.h"
 #include "testutil/assert.h"

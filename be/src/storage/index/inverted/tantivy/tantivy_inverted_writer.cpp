@@ -62,8 +62,7 @@ Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
 Status TantivyInvertedWriter::init() {
     std::error_code ec;
     if (std::filesystem::exists(_temp_dir, ec)) {
-        return Status::AlreadyExist("tantivy: temp dir already exists, refusing to overwrite: " +
-                                    _temp_dir);
+        return Status::AlreadyExist("tantivy: temp dir already exists, refusing to overwrite: " + _temp_dir);
     }
     std::filesystem::create_directories(_temp_dir, ec);
     if (ec) {

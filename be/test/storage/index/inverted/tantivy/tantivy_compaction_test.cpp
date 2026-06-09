@@ -52,15 +52,14 @@ struct PathCleanup {
     }
 };
 
-CompoundIndexEntry write_segment_index(const std::string& index_dir, const std::vector<Slice>& values,
-                                       int num_nulls) {
+CompoundIndexEntry write_segment_index(const std::string& index_dir, const std::vector<Slice>& values, int num_nulls) {
     TypeInfoPtr typeinfo = get_type_info(TYPE_VARCHAR);
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
 
     std::unique_ptr<InvertedWriter> writer;
-    EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_writer(typeinfo, "content", index_dir,
-                                                                         &tablet_index, &writer));
+    EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_writer(typeinfo, "content", index_dir, &tablet_index,
+                                                                         &writer));
     EXPECT_OK(writer->init());
 
     if (!values.empty()) {
@@ -75,8 +74,7 @@ CompoundIndexEntry write_segment_index(const std::string& index_dir, const std::
     return std::move(entry_or).value();
 }
 
-std::string pack_to_idx(const std::string& dir, const std::string& name,
-                        std::vector<CompoundIndexEntry>& entries) {
+std::string pack_to_idx(const std::string& dir, const std::string& name, std::vector<CompoundIndexEntry>& entries) {
     std::string bin_path = dir + "/" + name;
     auto fs = FileSystem::Default();
     auto wfile = *fs->new_writable_file(bin_path);
@@ -89,23 +87,22 @@ std::string build_file_table_json(const CompoundIndexLayout& layout) {
     std::string json = "{";
     for (size_t i = 0; i < layout.files.size(); ++i) {
         if (i > 0) json += ",";
-        json += fmt::format("\"{}\":{{\"offset\":{},\"length\":{}}}", layout.files[i].name,
-                            layout.files[i].offset, layout.files[i].length);
+        json += fmt::format("\"{}\":{{\"offset\":{},\"length\":{}}}", layout.files[i].name, layout.files[i].offset,
+                            layout.files[i].length);
     }
     json += "}";
     return json;
 }
 
 std::unique_ptr<TantivyInvertedReader> open_compound_reader(const std::string& bin_path,
-                                                             const CompoundIndexLayout& layout,
-                                                             const std::string& dummy_dir) {
+                                                            const CompoundIndexLayout& layout,
+                                                            const std::string& dummy_dir) {
     auto fs = FileSystem::Default();
     TabletIndex ti;
     ti.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
     auto ti_sp = std::make_shared<TabletIndex>(ti);
     std::unique_ptr<InvertedReader> reader;
-    EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(dummy_dir, ti_sp, TYPE_VARCHAR,
-                                                                         &reader));
+    EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(dummy_dir, ti_sp, TYPE_VARCHAR, &reader));
     auto* tr = dynamic_cast<TantivyInvertedReader*>(reader.get());
     EXPECT_NE(nullptr, tr);
 
@@ -135,8 +132,7 @@ TEST(TantivyCompactionTest, ThreeSegmentsMergedIntoOne) {
     PathCleanup cleanup{temp_dir};
 
     // --- Input segment 0: 3 docs ---
-    std::vector<Slice> seg0_values = {Slice("the quick brown fox"), Slice("lazy dog sleeps"),
-                                      Slice("fox jumps high")};
+    std::vector<Slice> seg0_values = {Slice("the quick brown fox"), Slice("lazy dog sleeps"), Slice("fox jumps high")};
     auto entry0 = write_segment_index(temp_dir + "/seg0", seg0_values, 0);
     entry0.index_id = 100;
 
@@ -270,15 +266,13 @@ TEST(TantivyCompactionTest, MultiColumnCompaction) {
     entryB1.index_id = 201;
 
     // Merge: column A gets all A values, column B gets all B values.
-    auto mergedA = write_segment_index(temp_dir + "/merged_A",
-                                       {Slice("alpha beta"), Slice("gamma"), Slice("beta delta"),
-                                        Slice("alpha epsilon")},
-                                       0);
+    auto mergedA =
+            write_segment_index(temp_dir + "/merged_A",
+                                {Slice("alpha beta"), Slice("gamma"), Slice("beta delta"), Slice("alpha epsilon")}, 0);
     mergedA.index_id = 200;
 
     auto mergedB = write_segment_index(temp_dir + "/merged_B",
-                                       {Slice("one two"), Slice("three"), Slice("four five"), Slice("one six")},
-                                       1);
+                                       {Slice("one two"), Slice("three"), Slice("four five"), Slice("one six")}, 1);
     mergedB.index_id = 201;
 
     std::vector<CompoundIndexEntry> out_entries = {mergedA, mergedB};

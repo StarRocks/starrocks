@@ -308,8 +308,7 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
                                                               InvertedIndexQueryType query_type,
                                                               roaring::Roaring* bitmap) {
     if (query_type == InvertedIndexQueryType::MATCH_PHRASE_QUERY) {
-        return Status::NotSupported(
-                "MATCH_PHRASE is not supported by builtin inverted index; use clucene or tantivy");
+        return Status::NotSupported("MATCH_PHRASE is not supported by builtin inverted index; use clucene or tantivy");
     }
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     bitmap->clear();

@@ -323,8 +323,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (_use_bm25_score) {
         _bm25_score_slot_id =
                 thrift_lake_scan_node.__isset.bm25_score_slot_id ? thrift_lake_scan_node.bm25_score_slot_id : -1;
-        _bm25_score_limit =
-                thrift_lake_scan_node.__isset.bm25_score_limit ? thrift_lake_scan_node.bm25_score_limit : 0;
+        _bm25_score_limit = thrift_lake_scan_node.__isset.bm25_score_limit ? thrift_lake_scan_node.bm25_score_limit : 0;
         // [min, max] score gate for a `WHERE score() > c` predicate; absent = unbounded.
         if (thrift_lake_scan_node.__isset.bm25_score_min) {
             _bm25_score_min = static_cast<float>(thrift_lake_scan_node.bm25_score_min);

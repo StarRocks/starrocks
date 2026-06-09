@@ -52,11 +52,11 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
-#include "storage/rowset/options.h"
 #include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -2353,8 +2353,8 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.segment_rows = num_rows();
 
         if (_inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
-                    ucid, &_inverted_index_iterators[cid], _opts, index_opts));
+            RETURN_IF_ERROR(
+                    _segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts, index_opts));
             _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
         }
     }

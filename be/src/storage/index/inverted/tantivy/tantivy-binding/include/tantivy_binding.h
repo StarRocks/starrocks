@@ -20,8 +20,8 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
-#include <ostream>
 #include <new>
+#include <ostream>
 
 namespace starrocks::tantivy_binding {
 
@@ -30,8 +30,8 @@ namespace starrocks::tantivy_binding {
  * the integer values.
  */
 enum class ValueTag : uint8_t {
-  None = 0,
-  Ptr = 1,
+    None = 0,
+    Ptr = 1,
 };
 
 /**
@@ -42,8 +42,8 @@ enum class ValueTag : uint8_t {
  * adding new variants is a localized change.
  */
 struct Value {
-  ValueTag tag;
-  void *ptr;
+    ValueTag tag;
+    void* ptr;
 };
 
 /**
@@ -55,9 +55,9 @@ struct Value {
  * `free_rust_result` exactly once on every result the FFI returned to you.
  */
 struct RustResult {
-  bool success;
-  Value value;
-  const char *error;
+    bool success;
+    Value value;
+    const char* error;
 };
 
 /**
@@ -68,17 +68,17 @@ struct RustResult {
  * and drops it).
  */
 struct RustU32Array {
-  uint32_t *ptr;
-  uintptr_t len;
-  uintptr_t cap;
+    uint32_t* ptr;
+    uintptr_t len;
+    uintptr_t cap;
 };
 
 /**
  * A `{ptr, len}` slice passed from C++ to Rust. Does not own the memory.
  */
 struct FFISlice {
-  const uint8_t *ptr;
-  uintptr_t len;
+    const uint8_t* ptr;
+    uintptr_t len;
 };
 
 /**
@@ -87,9 +87,9 @@ struct FFISlice {
  * `row_ids[i]`. Must be released via `tantivy_free_f32_array`.
  */
 struct RustF32Array {
-  float *ptr;
-  uintptr_t len;
-  uintptr_t cap;
+    float* ptr;
+    uintptr_t len;
+    uintptr_t cap;
 };
 
 /**
@@ -97,8 +97,8 @@ struct RustF32Array {
  * `tantivy_free_string_array`.
  */
 struct RustStringArray {
-  char **ptr;
-  uintptr_t len;
+    char** ptr;
+    uintptr_t len;
 };
 
 extern "C" {
@@ -109,9 +109,7 @@ extern "C" {
  *
  * SAFETY: `path` and `field_name` must be valid NUL-terminated C strings.
  */
-RustResult tantivy_load_index_reader(const char *path,
-                                     const char *field_name,
-                                     const char *tokenizer_name);
+RustResult tantivy_load_index_reader(const char* path, const char* field_name, const char* tokenizer_name);
 
 /**
  * Open an index from a compound `.idx` file via PullDirectory.
@@ -131,10 +129,8 @@ RustResult tantivy_load_index_reader(const char *path,
  * the returned reader. `file_table_json` and `field_name` must be valid
  * NUL-terminated C strings.
  */
-RustResult tantivy_open_compound_reader(void *ra_file_handle,
-                                        const char *file_table_json,
-                                        const char *field_name,
-                                        const char *tokenizer_name);
+RustResult tantivy_open_compound_reader(void* ra_file_handle, const char* file_table_json, const char* field_name,
+                                        const char* tokenizer_name);
 
 /**
  * Single-term query. Matching row ids are written into `*out`. Caller MUST
@@ -142,10 +138,7 @@ RustResult tantivy_open_compound_reader(void *ra_file_handle,
  *
  * SAFETY: `reader` and `out` must be non-NULL; `term` must be NUL-terminated.
  */
-RustResult tantivy_term_query(const void *reader,
-                              const uint8_t *term_ptr,
-                              uintptr_t term_len,
-                              RustU32Array *out);
+RustResult tantivy_term_query(const void* reader, const uint8_t* term_ptr, uintptr_t term_len, RustU32Array* out);
 
 /**
  * MATCH_ANY query: returns rows matching ANY of `terms`.
@@ -153,20 +146,14 @@ RustResult tantivy_term_query(const void *reader,
  * SAFETY: `reader`, `out` non-NULL; `terms` is a `count`-array of NUL-
  * terminated C strings (or `count == 0`).
  */
-RustResult tantivy_match_query(const void *reader,
-                               const FFISlice *terms,
-                               uintptr_t count,
-                               RustU32Array *out);
+RustResult tantivy_match_query(const void* reader, const FFISlice* terms, uintptr_t count, RustU32Array* out);
 
 /**
  * MATCH_ALL query: returns rows matching ALL of `terms`.
  *
  * SAFETY: same as `tantivy_match_query`.
  */
-RustResult tantivy_match_all_query(const void *reader,
-                                   const FFISlice *terms,
-                                   uintptr_t count,
-                                   RustU32Array *out);
+RustResult tantivy_match_all_query(const void* reader, const FFISlice* terms, uintptr_t count, RustU32Array* out);
 
 /**
  * MATCH_ANY query WITH BM25 scores. Fills two PARALLEL arrays:
@@ -184,14 +171,9 @@ RustResult tantivy_match_all_query(const void *reader,
  * SAFETY: `reader`, `out_ids`, `out_scores` non-NULL; `terms` is a `count`-
  * array of FFISlice (or `count == 0`).
  */
-RustResult tantivy_match_query_scored(const void *reader,
-                                      const FFISlice *terms,
-                                      uintptr_t count,
-                                      uint64_t limit,
-                                      float min_score,
-                                      float max_score,
-                                      RustU32Array *out_ids,
-                                      RustF32Array *out_scores);
+RustResult tantivy_match_query_scored(const void* reader, const FFISlice* terms, uintptr_t count, uint64_t limit,
+                                      float min_score, float max_score, RustU32Array* out_ids,
+                                      RustF32Array* out_scores);
 
 /**
  * MATCH_ALL query WITH BM25 scores. Same parallel-array contract as
@@ -199,14 +181,9 @@ RustResult tantivy_match_query_scored(const void *reader,
  *
  * SAFETY: same as `tantivy_match_query_scored`.
  */
-RustResult tantivy_match_all_query_scored(const void *reader,
-                                          const FFISlice *terms,
-                                          uintptr_t count,
-                                          uint64_t limit,
-                                          float min_score,
-                                          float max_score,
-                                          RustU32Array *out_ids,
-                                          RustF32Array *out_scores);
+RustResult tantivy_match_all_query_scored(const void* reader, const FFISlice* terms, uintptr_t count, uint64_t limit,
+                                          float min_score, float max_score, RustU32Array* out_ids,
+                                          RustF32Array* out_scores);
 
 /**
  * MATCH_PHRASE query: returns rows where `terms` appear in order with at
@@ -214,11 +191,8 @@ RustResult tantivy_match_all_query_scored(const void *reader,
  *
  * SAFETY: same as `tantivy_match_query`.
  */
-RustResult tantivy_phrase_match_query(const void *reader,
-                                      const FFISlice *terms,
-                                      uintptr_t count,
-                                      uint32_t slop,
-                                      RustU32Array *out);
+RustResult tantivy_phrase_match_query(const void* reader, const FFISlice* terms, uintptr_t count, uint32_t slop,
+                                      RustU32Array* out);
 
 /**
  * MATCH_WILDCARD query: returns rows whose indexed term matches the SQL
@@ -227,10 +201,8 @@ RustResult tantivy_phrase_match_query(const void *reader,
  * SAFETY: `reader` and `out` must be non-NULL; `pattern_ptr` may be NULL
  * only when `pattern_len == 0`.
  */
-RustResult tantivy_wildcard_query(const void *reader,
-                                  const uint8_t *pattern_ptr,
-                                  uintptr_t pattern_len,
-                                  RustU32Array *out);
+RustResult tantivy_wildcard_query(const void* reader, const uint8_t* pattern_ptr, uintptr_t pattern_len,
+                                  RustU32Array* out);
 
 /**
  * Release a reader handle. Safe on NULL.
@@ -238,7 +210,7 @@ RustResult tantivy_wildcard_query(const void *reader,
  * SAFETY: `reader` must be NULL or have been returned by
  * `tantivy_load_index_reader` and not previously freed.
  */
-void tantivy_free_index_reader(void *reader);
+void tantivy_free_index_reader(void* reader);
 
 /**
  * Create a fresh tantivy index at `path` with one TEXT field named
@@ -249,9 +221,7 @@ void tantivy_free_index_reader(void *reader);
  * SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
  * C strings.
  */
-RustResult tantivy_create_index_writer(const char *path,
-                                       const char *field_name,
-                                       const char *tokenizer);
+RustResult tantivy_create_index_writer(const char* path, const char* field_name, const char* tokenizer);
 
 /**
  * Append a batch of UTF-8 strings as documents in order. `values_ptr` is an
@@ -261,9 +231,7 @@ RustResult tantivy_create_index_writer(const char *path,
  * SAFETY: `writer` must be a non-NULL writer handle; `values_ptr` must be a
  * non-NULL array of `count` `FFISlice` structs (or `count == 0`).
  */
-RustResult tantivy_index_add_strings_batch(void *writer,
-                                           const FFISlice *values_ptr,
-                                           uintptr_t count);
+RustResult tantivy_index_add_strings_batch(void* writer, const FFISlice* values_ptr, uintptr_t count);
 
 /**
  * Flush queued docs to disk. After success, a freshly loaded reader will
@@ -271,7 +239,7 @@ RustResult tantivy_index_add_strings_batch(void *writer,
  *
  * SAFETY: same as `tantivy_index_add_strings_batch`.
  */
-RustResult tantivy_commit_index(void *writer);
+RustResult tantivy_commit_index(void* writer);
 
 /**
  * Release a writer handle. Safe on NULL.
@@ -279,7 +247,7 @@ RustResult tantivy_commit_index(void *writer);
  * SAFETY: `writer` must be NULL or have been returned by
  * `tantivy_create_index_writer` and not previously freed.
  */
-void tantivy_free_index_writer(void *writer);
+void tantivy_free_index_writer(void* writer);
 
 /**
  * Release a `RustResult` and any owned content it carries.
@@ -317,13 +285,11 @@ void tantivy_free_f32_array(RustF32Array array);
  */
 void tantivy_free_string_array(RustStringArray array);
 
-RustResult tantivy_tokenize(const char *tokenizer_name,
-                            const uint8_t *text_ptr,
-                            uintptr_t text_len,
-                            RustStringArray *out);
+RustResult tantivy_tokenize(const char* tokenizer_name, const uint8_t* text_ptr, uintptr_t text_len,
+                            RustStringArray* out);
 
-}  // extern "C"
+} // extern "C"
 
-}  // namespace starrocks::tantivy_binding
+} // namespace starrocks::tantivy_binding
 
-#endif  // TANTIVY_BINDING_H
+#endif // TANTIVY_BINDING_H

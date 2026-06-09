@@ -62,29 +62,27 @@ Status TantivyInvertedReader::create(const std::string& path, const std::shared_
     }
 
     uint32_t index_id = static_cast<uint32_t>(tablet_index->index_id());
-    auto reader = std::make_unique<TantivyInvertedReader>(path, index_id, std::move(field_name), std::move(tokenizer_name));
+    auto reader =
+            std::make_unique<TantivyInvertedReader>(path, index_id, std::move(field_name), std::move(tokenizer_name));
     *res = std::move(reader);
     return Status::OK();
 }
 
-Status TantivyInvertedReader::open_compound(TantivyInvertedReader* reader, FileSystem* fs,
-                                            const std::string& bin_path, int64_t index_id,
-                                            const std::string& column_name) {
+Status TantivyInvertedReader::open_compound(TantivyInvertedReader* reader, FileSystem* fs, const std::string& bin_path,
+                                            int64_t index_id, const std::string& column_name) {
     auto exists = fs->path_exists(bin_path);
     if (!exists.ok()) {
         return Status::NotFound("compound .idx not present: " + bin_path);
     }
 
     ASSIGN_OR_RETURN(auto compound_file, CompoundIndexFileReader::open(bin_path, fs));
-    ASSIGN_OR_RETURN(auto layout,
-                     compound_file->find_index(CompoundIndexKind::INVERTED_TANTIVY, index_id));
+    ASSIGN_OR_RETURN(auto layout, compound_file->find_index(CompoundIndexKind::INVERTED_TANTIVY, index_id));
 
     std::string file_table_json = "{";
     for (size_t i = 0; i < layout.files.size(); ++i) {
         if (i > 0) file_table_json += ",";
-        file_table_json += fmt::format(R"("{}":{{"offset":{},"length":{}}})",
-                                       layout.files[i].name, layout.files[i].offset,
-                                       layout.files[i].length);
+        file_table_json += fmt::format(R"("{}":{{"offset":{},"length":{}}})", layout.files[i].name,
+                                       layout.files[i].offset, layout.files[i].length);
     }
     file_table_json += "}";
 
@@ -110,8 +108,7 @@ Status TantivyInvertedReader::open_compound(TantivyInvertedReader* reader, FileS
 Status TantivyInvertedReader::load(const IndexReadOptions& /*opt*/, void* /*meta*/) {
     if (_loaded) return Status::OK();
 
-    tb::RustResult r = tb::tantivy_load_index_reader(_index_path.c_str(), _field_name.c_str(),
-                                                      _tokenizer_name.c_str());
+    tb::RustResult r = tb::tantivy_load_index_reader(_index_path.c_str(), _field_name.c_str(), _tokenizer_name.c_str());
     TantivyResultGuard guard(r);
     RETURN_IF_ERROR(tantivy_status_from_error(r));
 
@@ -136,7 +133,7 @@ Status TantivyInvertedReader::load(const IndexReadOptions& /*opt*/, void* /*meta
 }
 
 Status TantivyInvertedReader::load_compound(std::unique_ptr<RandomAccessFile> ra_file,
-                                             const std::string& file_table_json) {
+                                            const std::string& file_table_json) {
     if (_loaded) return Status::OK();
 
     _compound_ra_file = std::move(ra_file);
@@ -164,8 +161,7 @@ Status TantivyInvertedReader::query(OlapReaderStatistics* /*stats*/, const std::
                                     roaring::Roaring* bit_map) {
     void* handle = _is_compound ? _compound_reader.get() : _reader.get();
     if (handle == nullptr) {
-        return Status::InternalError(_is_compound ? "tantivy compound reader not loaded"
-                                                  : "tantivy reader not loaded");
+        return Status::InternalError(_is_compound ? "tantivy compound reader not loaded" : "tantivy reader not loaded");
     }
     return _query_impl(handle, query_value, query_type, bit_map);
 }
@@ -176,8 +172,7 @@ Status TantivyInvertedReader::query_scored(OlapReaderStatistics* /*stats*/, cons
                                            std::unordered_map<uint32_t, float>* row_to_score) {
     void* handle = _is_compound ? _compound_reader.get() : _reader.get();
     if (handle == nullptr) {
-        return Status::InternalError(_is_compound ? "tantivy compound reader not loaded"
-                                                  : "tantivy reader not loaded");
+        return Status::InternalError(_is_compound ? "tantivy compound reader not loaded" : "tantivy reader not loaded");
     }
     return _query_impl_scored(handle, query_value, query_type, limit, min_score, max_score, bit_map, row_to_score);
 }
@@ -192,9 +187,8 @@ struct TokenizedTerms {
 StatusOr<TokenizedTerms> tokenize_query(const std::string& tokenizer_name, const std::string& text) {
     TokenizedTerms result;
     tb::RustStringArray out{};
-    tb::RustResult r = tb::tantivy_tokenize(tokenizer_name.c_str(),
-                                             reinterpret_cast<const uint8_t*>(text.data()),
-                                             text.size(), &out);
+    tb::RustResult r = tb::tantivy_tokenize(tokenizer_name.c_str(), reinterpret_cast<const uint8_t*>(text.data()),
+                                            text.size(), &out);
     TantivyResultGuard rg(r);
     if (!r.success) {
         if (out.ptr) tb::tantivy_free_string_array(out);
@@ -215,16 +209,14 @@ StatusOr<TokenizedTerms> tokenize_query(const std::string& tokenizer_name, const
 } // namespace
 
 Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query_value,
-                                          InvertedIndexQueryType query_type,
-                                          roaring::Roaring* bit_map) {
+                                          InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         tb::RustU32Array out{};
         TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r = tb::tantivy_term_query(reader_handle,
-                                                   reinterpret_cast<const uint8_t*>(slice->data),
-                                                   slice->size, &out);
+        tb::RustResult r =
+                tb::tantivy_term_query(reader_handle, reinterpret_cast<const uint8_t*>(slice->data), slice->size, &out);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         bit_map->addMany(out.len, out.ptr);
@@ -271,9 +263,8 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         tb::RustU32Array out{};
         TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r = tb::tantivy_wildcard_query(reader_handle,
-                                                       reinterpret_cast<const uint8_t*>(slice->data),
-                                                       slice->size, &out);
+        tb::RustResult r = tb::tantivy_wildcard_query(reader_handle, reinterpret_cast<const uint8_t*>(slice->data),
+                                                      slice->size, &out);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         bit_map->addMany(out.len, out.ptr);

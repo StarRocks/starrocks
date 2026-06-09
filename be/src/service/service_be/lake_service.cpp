@@ -22,17 +22,18 @@
 #include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
-#include "fs/fs.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/compaction_policy.h"
-#include "storage/lake/filenames.h"
-#include "storage/lake/join_path.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
@@ -40,7 +41,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
-#include "storage/index/index_descriptor.h"
 #include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
@@ -1356,9 +1356,9 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
 }
 
 void LakeServiceImpl::delete_compound_index_files(::google::protobuf::RpcController* controller,
-                                                   const ::starrocks::DeleteCompoundIndexFilesRequest* request,
-                                                   ::starrocks::DeleteCompoundIndexFilesResponse* response,
-                                                   ::google::protobuf::Closure* done) {
+                                                  const ::starrocks::DeleteCompoundIndexFilesRequest* request,
+                                                  ::starrocks::DeleteCompoundIndexFilesResponse* response,
+                                                  ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
     std::vector<std::string> idx_files;

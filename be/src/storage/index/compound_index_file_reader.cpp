@@ -33,8 +33,7 @@ public:
     Status need(size_t n) {
         if (_pos + n > _size) {
             _truncated = true;
-            return Status::ResourceBusy("compound bin: header probe too small at offset " +
-                                        std::to_string(_pos));
+            return Status::ResourceBusy("compound bin: header probe too small at offset " + std::to_string(_pos));
         }
         return Status::OK();
     }
@@ -81,7 +80,6 @@ private:
     bool _truncated = false;
 };
 
-
 // Header sniff buffer — large enough for typical layouts (a few hundred files
 // across a handful of indices). If we hit the end of this buffer mid-parse
 // the reader transparently re-reads with a doubled cap, up to 16 MiB.
@@ -90,8 +88,7 @@ constexpr size_t kMaxHeaderProbeBytes = 16 * 1024 * 1024;
 
 } // namespace
 
-StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open(
-        const std::string& bin_path) {
+StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open(const std::string& bin_path) {
     auto fs_or = FileSystem::CreateSharedFromString(bin_path);
     if (!fs_or.ok()) {
         return fs_or.status();
@@ -99,8 +96,8 @@ StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open
     return open(bin_path, fs_or.value().get());
 }
 
-StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open(
-        const std::string& bin_path, FileSystem* fs) {
+StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open(const std::string& bin_path,
+                                                                                 FileSystem* fs) {
     ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file(bin_path));
     ASSIGN_OR_RETURN(uint64_t total_size, raf->get_size());
     if (total_size < 12) {
@@ -124,8 +121,7 @@ StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open
             }
             ASSIGN_OR_RETURN(uint32_t version, p.get_u32());
             if (version != COMPOUND_BIN_VERSION) {
-                return Status::Corruption("compound bin: unsupported version " +
-                                          std::to_string(version));
+                return Status::Corruption("compound bin: unsupported version " + std::to_string(version));
             }
             ASSIGN_OR_RETURN(uint32_t num_indices, p.get_u32());
 
@@ -154,8 +150,7 @@ StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open
                     ASSIGN_OR_RETURN(fe.offset, p.get_u64());
                     ASSIGN_OR_RETURN(fe.length, p.get_u64());
                     if (fe.offset + fe.length > total_size) {
-                        return Status::Corruption(
-                                "compound bin: file '" + fe.name + "' overruns file end");
+                        return Status::Corruption("compound bin: file '" + fe.name + "' overruns file end");
                     }
                     layout.files.push_back(std::move(fe));
                 }
@@ -169,8 +164,7 @@ StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open
     };
 
     StatusOr<std::vector<CompoundIndexLayout>> layouts_or = parse_with_buffer(probe);
-    while (!layouts_or.ok() && truncated && probe < kMaxHeaderProbeBytes &&
-           probe < total_size) {
+    while (!layouts_or.ok() && truncated && probe < kMaxHeaderProbeBytes && probe < total_size) {
         // Header runs longer than our probe. Double the buffer and retry.
         probe = std::min(std::min(probe * 2, kMaxHeaderProbeBytes), static_cast<size_t>(total_size));
         buf.assign(probe, 0u);
@@ -181,8 +175,8 @@ StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open
         // still flagged), surface a clear corruption status rather than the
         // ResourceBusy sentinel.
         if (truncated) {
-            return Status::Corruption("compound bin: header exceeds " +
-                                      std::to_string(probe) + " bytes (probe cap reached)");
+            return Status::Corruption("compound bin: header exceeds " + std::to_string(probe) +
+                                      " bytes (probe cap reached)");
         }
         return layouts_or.status();
     }
@@ -191,15 +185,13 @@ StatusOr<std::unique_ptr<CompoundIndexFileReader>> CompoundIndexFileReader::open
             new CompoundIndexFileReader(bin_path, std::move(layouts_or).value()));
 }
 
-StatusOr<CompoundIndexLayout> CompoundIndexFileReader::find_index(CompoundIndexKind kind,
-                                                                  int64_t index_id) const {
+StatusOr<CompoundIndexLayout> CompoundIndexFileReader::find_index(CompoundIndexKind kind, int64_t index_id) const {
     for (const auto& layout : _layouts) {
         if (layout.kind == kind && layout.index_id == index_id) {
             return layout;
         }
     }
-    return Status::NotFound("compound bin: no entry for kind=" +
-                            std::to_string(static_cast<int>(kind)) +
+    return Status::NotFound("compound bin: no entry for kind=" + std::to_string(static_cast<int>(kind)) +
                             " index_id=" + std::to_string(index_id) + " in " + _bin_path);
 }
 

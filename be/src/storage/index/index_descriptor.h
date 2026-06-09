@@ -55,8 +55,8 @@ public:
     // Compound index file path — one .idx per (rowset, segment), holding all
     // tantivy / future-vector indexes for that segment. Distinct from
     // inverted_index_file_path so clucene/builtin paths stay untouched.
-    static std::string compound_index_file_path(const std::string& rowset_dir,
-                                                const std::string& rowset_id, int segment_id) {
+    static std::string compound_index_file_path(const std::string& rowset_dir, const std::string& rowset_id,
+                                                int segment_id) {
         return fmt::format("{}/{}_{}.{}", rowset_dir, rowset_id, segment_id, "idx");
     }
 
@@ -70,9 +70,8 @@ public:
         return segment_path + ".idx";
     }
 
-    static std::string lake_compound_index_build_dir(const std::string& tmp_root, int64_t tablet_id,
-                                                     int64_t txn_id, int segment_id, int64_t index_id,
-                                                     uintptr_t instance_key) {
+    static std::string lake_compound_index_build_dir(const std::string& tmp_root, int64_t tablet_id, int64_t txn_id,
+                                                     int segment_id, int64_t index_id, uintptr_t instance_key) {
         if (tablet_id != 0 && txn_id != 0) {
             return fmt::format("{}/{}_{}_{}_{}_{:x}.ivt", tmp_root, tablet_id, txn_id, segment_id, index_id,
                                instance_key);
