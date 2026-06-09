@@ -475,7 +475,6 @@ private:
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
-    Status _prepare_vector_index();
     Status _init_ann_reader();
     void _setup_brute_force_fallback(const TabletIndex& index);
     void _compute_brute_force_distances(const Column* vector_column, Chunk* chunk);
@@ -916,7 +915,6 @@ Status SegmentIterator::_init_internal() {
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
     _init_column_access_paths();
-    RETURN_IF_ERROR(_prepare_vector_index());
     RETURN_IF_ERROR(_init_ann_reader());
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
@@ -1006,7 +1004,7 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
 }
 
 // Sets up brute-force fallback state and ensures the vector data column is in _schema.
-// Called from _prepare_vector_index and _init_ann_reader, both before _init_column_iterators.
+// Called from _init_ann_reader, before _init_column_iterators.
 void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     int32_t vector_col_uid = index.col_unique_ids()[0];
     _vector_index_ctx->use_vector_index = false;
@@ -1066,43 +1064,16 @@ void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     _vector_index_ctx->added_vector_data_column = true;
 }
 
-// Handles the case where the segment footer explicitly marks no .vi file (skip_vector_index).
-// Adds the vector column to _schema so it's read in the same I/O pass as other columns.
-Status SegmentIterator::_prepare_vector_index() {
-    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index || _vector_index_ctx->refine_distance) {
-        return Status::OK();
-    }
-
-    if (!_segment->skip_vector_index()) {
-        return Status::OK();
-    }
-
-    // Footer marks no .vi file — find the vector index and set up brute-force
-    for (const auto& index : *_segment->tablet_schema().indexes()) {
-        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
-            _setup_brute_force_fallback(index);
-            break;
-        }
-    }
-    return Status::OK();
-}
-
-// Opens the .vi file and initializes the ANN reader.
-// If the .vi file is missing at runtime (e.g., async build not yet finished),
-// falls back to brute-force — the vector column added to _schema will be
-// initialized by the subsequent _init_column_iterators call.
+// Opens the .vi and inits the ANN reader. If the index is unusable (footer marks no .vi, or the .vi
+// is missing at runtime), turns it off and -- only for the trust path -- sets up the brute-force
+// fallback (refine recomputes above the scan). Runs before _init_column_iterators so any column the
+// fallback adds to _schema is read in the same pass.
 Status SegmentIterator::_init_ann_reader() {
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
     }
 
-    if (_segment->skip_vector_index()) {
-        // Already handled by _prepare_vector_index
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-
-    // Find vector index from tablet schema
+    // Locate the vector index (needed to open the .vi or to build a brute-force fallback).
     std::shared_ptr<TabletIndex> tablet_index_meta;
     for (const auto& index : *_segment->tablet_schema().indexes()) {
         if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
@@ -1111,15 +1082,16 @@ Status SegmentIterator::_init_ann_reader() {
         }
     }
     if (!tablet_index_meta) {
-        // The query selected a vector search but this segment's schema has no VECTOR index, so there
-        // is no index meta to build a brute-force fallback from. Fail the scan rather than letting a
-        // null ann_reader be dereferenced downstream (this Status aborts the scan via RETURN_IF_ERROR).
+        // Vector query but no VECTOR index in this segment's schema -- fail rather than deref a null reader.
         return Status::InternalError(
                 fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
+    if (_segment->skip_vector_index()) {
+        // Footer marks no .vi for this segment.
+        _vector_index_ctx->use_vector_index = false;
+    } else {
 #ifdef WITH_TENANN
-    {
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
             index_path =
@@ -1128,19 +1100,16 @@ Status SegmentIterator::_init_ann_reader() {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
         }
-
         FileSystem* vi_fs = _opts.belonged_to_cloud_native ? _segment->file_system() : nullptr;
+        // Turns off use_vector_index on a runtime NotFound / not-supported.
         RETURN_IF_ERROR(_init_reader_from_file(index_path, tablet_index_meta, _vector_index_ctx->query_params, vi_fs));
-    }
 #else
-    // Without TenANN, ANN index is not available — force brute-force
-    _vector_index_ctx->use_vector_index = false;
+        _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif
+    }
 
     if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
-        // .vi file not found, empty reader, or no TenANN support. Set up the brute-force fallback only
-        // for the trust-distance path; the refine path recomputes the distance from the full-precision
-        // vectors in the expression layer above the scan, so it needs no BE-produced distance column.
+        // No usable index: trust needs brute-force to produce the distance column; refine recomputes above.
         _setup_brute_force_fallback(*tablet_index_meta);
     }
 
