@@ -57,6 +57,21 @@ description: "Alphabetical q - r"
 
 ## `readable_blocks_total (Deprecated)`
 
+## `recycle_bin_database_num`
+
+- 単位: 個
+- 説明: FE カタログのリサイクルビンに現在保持されているデータベースの数。
+
+## `recycle_bin_partition_num`
+
+- 単位: 個
+- 説明: FE カタログのリサイクルビンに現在保持されているパーティションの数。
+
+## `recycle_bin_table_num`
+
+- 単位: 個
+- 説明: FE カタログのリサイクルビンに現在保持されているテーブルの数。
+
 ## `resource_group_bigquery_count`
 
 - 単位: カウント
