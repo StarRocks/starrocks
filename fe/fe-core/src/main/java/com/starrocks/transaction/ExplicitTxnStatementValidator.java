@@ -61,22 +61,6 @@ public final class ExplicitTxnStatementValidator {
             return true;
         }
 
-<<<<<<< HEAD
-        // We validate two categories:
-        // 1. Pure QueryStatement (SELECT ...).
-        // 2. INSERT ... SELECT, where the source query should not read tables modified earlier.
-        QueryStatement queryForValidation = null;
-        if (statement instanceof QueryStatement) {
-            queryForValidation = (QueryStatement) statement;
-        } else if (statement instanceof InsertStmt insertStmt && insertStmt.getQueryStatement() != null) {
-            // Normal INSERT (non-overwrite already checked) that has a source query.
-            queryForValidation = insertStmt.getQueryStatement();
-        } else {
-            return false; // Other statements are not validated here.
-        }
-
-=======
->>>>>>> bd4889cf5f ([BugFix] Reject partial update targeting a same-transaction-modified table in explicit txn (#74344))
         ExplicitTxnState explicitTxnState = GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr()
                 .getExplicitTxnState(context.getTxnId());
@@ -102,6 +86,7 @@ public final class ExplicitTxnStatementValidator {
             if (target != null && modifiedTableIds.contains(target.getId())) {
                 ErrorReport.reportSemanticException(
                         ErrorCode.ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE, target.getName());
+                return true;
             }
         }
 
@@ -115,7 +100,7 @@ public final class ExplicitTxnStatementValidator {
             // Normal INSERT (non-overwrite already checked) that has a source query.
             queryForValidation = insertStmt.getQueryStatement();
         } else {
-            return; // Other statements are not validated here.
+            return false; // Other statements are not validated here.
         }
 
         Map<TableName, Table> referencedTables = AnalyzerUtils.collectAllTable(queryForValidation);
