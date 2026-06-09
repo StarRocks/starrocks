@@ -71,7 +71,11 @@ import static org.apache.iceberg.types.Types.NestedField.required;
 
 public class MockIcebergMetadata implements ConnectorMetadata {
     private static final Map<String, Map<String, IcebergTableInfo>> MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
-    private final AtomicLong idGen = new AtomicLong(0L);
+    // Start db ids well above the hard-coded mock table ids (1, 2, 3, ...) so a generated db id can
+    // never equal a table id. Otherwise lockTablesWithIntensiveDbLock would request a table lock on
+    // the same rid that already holds the db intention lock, which LockManager rejects ("Can't
+    // request Database READ/WRITE Lock (main|N) in the scope of Database INTENTION_* Lock (main|N)").
+    private final AtomicLong idGen = new AtomicLong(100000L);
     public static final String MOCKED_ICEBERG_CATALOG_NAME = "iceberg0";
     public static final String MOCKED_UNPARTITIONED_DB_NAME = "unpartitioned_db";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";

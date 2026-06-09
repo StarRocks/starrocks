@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.automv.lattice;
 
-import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.pn.TimeGranule;
@@ -31,7 +30,6 @@ public class AutoMVPartitionPolicyIcebergTest extends MVTestBase {
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
-        Config.lock_manager_enabled = false;
     }
 
     @Test
