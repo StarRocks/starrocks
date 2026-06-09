@@ -50,7 +50,10 @@ SkewedPartitionRebalancer::SkewedPartitionRebalancer(int32_t task_count,
 }
 
 int32_t SkewedPartitionRebalancer::get_task_id(uint32_t partition_id, int64_t index) const {
+    DCHECK_LT(partition_id, static_cast<uint32_t>(kPartitionCount));
+    DCHECK_GE(index, 0);
     const auto& task_ids = _partition_assignments[partition_id];
+    DCHECK(!task_ids.empty());
     return task_ids[index % static_cast<int64_t>(task_ids.size())].task_id;
 }
 
@@ -59,6 +62,9 @@ void SkewedPartitionRebalancer::add_data_processed(int64_t data_size) {
 }
 
 void SkewedPartitionRebalancer::add_partition_row_count(int32_t partition, int64_t row_count) {
+    DCHECK_GE(partition, 0);
+    DCHECK_LT(partition, kPartitionCount);
+    DCHECK_GE(row_count, 0);
     _partition_row_count[partition] += row_count;
 }
 
