@@ -63,16 +63,14 @@ size_t spill_expected_reserved_bytes(const QueryRuntimeState* query_runtime_stat
 
 } // namespace
 
-PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx,
-                               QueryRuntimeState* query_runtime_state, FragmentRuntimeState* fragment_runtime_state,
-                               FragmentContext* fragment_ctx, Event* pipeline_event, DriverObserver* driver_observer,
-                               PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id)
+PipelineDriver::PipelineDriver(const Operators& operators, QueryRuntimeState* query_runtime_state,
+                               FragmentRuntimeState* fragment_runtime_state, Event* pipeline_event,
+                               DriverObserver* driver_observer, PipelineTimerContextPtr pipeline_timer_context,
+                               int32_t driver_id)
         : _operator_mem_resource_managers(operators.size()),
           _operators(operators),
-          _query_ctx(query_ctx),
           _query_runtime_state(query_runtime_state),
           _fragment_runtime_state(fragment_runtime_state),
-          _fragment_ctx(fragment_ctx),
           _pipeline_event(pipeline_event),
           _driver_observer(driver_observer),
           _pipeline_timer_context(std::move(pipeline_timer_context)),
@@ -87,17 +85,15 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 }
 
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
-        : PipelineDriver(driver._operators, driver._query_ctx, driver._query_runtime_state,
-                         driver._fragment_runtime_state, driver._fragment_ctx, driver._pipeline_event,
-                         driver._driver_observer, driver._pipeline_timer_context, driver._driver_id) {}
+        : PipelineDriver(driver._operators, driver._query_runtime_state, driver._fragment_runtime_state,
+                         driver._pipeline_event, driver._driver_observer, driver._pipeline_timer_context,
+                         driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
         : _operator_mem_resource_managers(),
           _operators(),
-          _query_ctx(nullptr),
           _query_runtime_state(nullptr),
           _fragment_runtime_state(nullptr),
-          _fragment_ctx(nullptr),
           _pipeline_event(nullptr),
           _driver_observer(nullptr),
           _pipeline_timer_context(nullptr),
