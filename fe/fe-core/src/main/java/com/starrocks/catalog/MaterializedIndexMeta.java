@@ -50,10 +50,10 @@ import com.starrocks.thrift.TStorageType;
 
 import java.io.DataInput;
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
@@ -87,7 +87,12 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private boolean isColocateMVIndex = false;
 
     private Expr whereClause;
-    private Set<Long> updateSchemaBackendId;
+
+    // Tracks backends that currently have an in-flight UPDATE_SCHEMA task. Accessed concurrently:
+    // the BE-report send path (add) runs under a shared READ lock at the same time as task-finish
+    // RPCs (remove), so this must be a thread-safe set. It carries no @SerializedName and is skipped
+    // by Gson (see HiddenAnnotationExclusionStrategy), so it is transient runtime state only.
+    private final Set<Long> updateSchemaBackendId = ConcurrentHashMap.newKeySet();
 
     public MaterializedIndexMeta() {
     }
@@ -238,21 +243,21 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return whereClause;
     }
 
-    public boolean hasUpdateSchemaTask(Long backendId) {
-        return updateSchemaBackendId != null && updateSchemaBackendId.contains(backendId);
-    }
-
-    public void addUpdateSchemaBackend(Long backendId) {
-        if (updateSchemaBackendId == null) {
-            updateSchemaBackendId = new HashSet<>();
-        }
-        updateSchemaBackendId.add(backendId);
+    /**
+     * Atomically reserves an UPDATE_SCHEMA slot for {@code backendId}. Returns {@code true} if the
+     * backend was newly reserved (the caller should send a task), or {@code false} if a task is
+     * already in flight for this backend (the caller should skip to avoid sending duplicate tasks).
+     *
+     * <p>This collapses the former check-then-act (a membership probe followed by a separate add)
+     * into a single atomic operation, so two senders running concurrently under the shared READ
+     * lock cannot both observe "no task" and both enqueue a duplicate task.
+     */
+    public boolean addUpdateSchemaBackendIfAbsent(Long backendId) {
+        return updateSchemaBackendId.add(backendId);
     }
 
     public void removeUpdateSchemaBackend(Long backendId) {
-        if (updateSchemaBackendId != null) {
-            updateSchemaBackendId.remove(backendId);
-        }
+        updateSchemaBackendId.remove(backendId);
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
