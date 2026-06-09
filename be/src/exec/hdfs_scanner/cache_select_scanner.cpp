@@ -68,7 +68,7 @@ Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     }
 
     // handle iceberg delete files
-    if (!_scanner_params.deletes.empty()) {
+    if (!_scanner_params.table_specific.iceberg_delete_files.empty()) {
         RETURN_IF_ERROR(_fetch_iceberg_delete_files());
     }
 
@@ -221,11 +221,11 @@ Status CacheSelectScanner::_fetch_textfile() {
 
 // for iceberg delete files, we fetch an entire file directly
 Status CacheSelectScanner::_fetch_iceberg_delete_files() {
-    for (const auto* delete_file : _scanner_params.deletes) {
+    for (const auto* delete_file : _scanner_params.table_specific.iceberg_delete_files) {
         RETURN_IF_ERROR(_write_entire_file(delete_file->full_path, delete_file->length));
     }
 
-    _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
+    _app_stats.iceberg_delete_files_per_scan += _scanner_params.table_specific.iceberg_delete_files.size();
     return Status::OK();
 }
 

@@ -227,6 +227,10 @@ struct HdfsScannerOptions {
     bool parquet_bloom_filter_enable = false;
     bool use_file_metacache = false;
     bool use_file_pagecache = false;
+    bool enable_split_tasks = false;
+    bool enable_dynamic_prune_scan_range = true;
+    bool use_partition_column_value_only = false;
+    int64_t connector_max_split_size = 0;
 };
 
 // All conjunct contexts and slot metadata derived from the scan plan node.
@@ -269,53 +273,46 @@ struct HdfsScannerConjuncts {
     std::unordered_set<SlotId> slots_of_multi_field;
 };
 
+// Table-format-specific state carried through the scan pipeline.
+struct TableSpecificData {
+    std::vector<const TIcebergDeleteFile*> iceberg_delete_files;
+    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor;
+    const TIcebergSchema* iceberg_schema = nullptr;
+    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
+};
+
 struct HdfsScannerParams {
-    // one file split (parition_id, file_path, file_length, offset, length, file_format)
+    // ---- scan-range identity ----
     const THdfsScanRange* scan_range = nullptr;
-    // only used in global late materialization
     int32_t scan_range_id = -1;
 
-    bool enable_split_tasks = false;
     const HdfsSplitContext* split_context = nullptr;
 
-    // runtime bloom filter.
+    // ---- conjuncts & options (non-owning pointers into HiveDataSource) ----
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
-
-    // Non-owning pointer to the conjuncts owned by HiveDataSource.
-    // Never null after HiveDataSource::_init_scanner() completes.
     const HdfsScannerConjuncts* conjuncts = nullptr;
-
-    // Non-owning pointer to scan options owned by HiveDataSource.
-    // Never null after HiveDataSource::_init_scanner() completes.
     const HdfsScannerOptions* options = nullptr;
 
-    // The FileSystem used to open the file to be scanned
+    // ---- target file ----
     FileSystem* fs = nullptr;
-    // The file to scan
     std::string path;
-    // The file size. -1 means unknown.
     int64_t file_size = -1;
-    // the table location
     std::string table_location;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
-    // columns read from file
+    // ---- materialized columns ----
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
-    // default values for materialize_slots that have default value defined.
-    // used when the slot doesn't exist in the data file during scanning.
     std::unordered_map<SlotId, std::string> materialize_slot_default_values;
 
-    // columns of partition info
+    // ---- partition columns ----
     std::vector<SlotDescriptor*> partition_slots;
     std::vector<int> partition_index_in_chunk;
-    // partition index in hdfs partition columns.
     std::vector<int> _partition_index_in_hdfs_partition_columns;
-
-    // partition conjunct, used to generate partition columns
     std::vector<ExprContext*> partition_values;
 
+    // ---- extended columns (iceberg data_seq_num etc.) ----
     std::vector<SlotDescriptor*> extended_col_slots;
     std::vector<int> extended_col_index_in_chunk;
     std::vector<int> index_in_extended_columns;
@@ -328,234 +325,230 @@ struct HdfsScannerParams {
 
     HdfsScanProfile* profile = nullptr;
 
-    std::vector<const TIcebergDeleteFile*> deletes;
+    // ---- table-format-specific data ----
+    TableSpecificData table_specific;
 
-    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
-
-    const TIcebergSchema* lake_schema = nullptr;
     const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
-    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
-
     DataCacheOptions datacache_options{};
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
-    int64_t connector_max_split_size = 0;
-
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
-};
 
-struct HdfsScannerContext {
-    struct ColumnInfo {
-        int idx_in_chunk;
-        SlotDescriptor* slot_desc;
-        bool decode_needed = true;
+    // ---- file-scan state (populated per split, not owned by params) ----
 
-        std::string formatted_name(bool case_sensitive) const {
-            auto n = std::string(name());
-            return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
+    struct HdfsScannerContext {
+        struct ColumnInfo {
+            int idx_in_chunk;
+            SlotDescriptor* slot_desc;
+            bool decode_needed = true;
+
+            std::string formatted_name(bool case_sensitive) const {
+                auto n = std::string(name());
+                return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
+            }
+            std::string_view name() const { return slot_desc->col_name(); }
+            int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+            std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
+            const SlotId slot_id() const { return slot_desc->id(); }
+            const TypeDescriptor& slot_type() const { return slot_desc->type(); }
+        };
+
+        // Non-owning pointer to the immutable params that built this context.
+        // Lifetime: _scanner_params outlives _scanner_ctx (both are HdfsScanner members).
+        const HdfsScannerParams* params = nullptr;
+
+        std::string formatted_name(const std::string& name) const {
+            return params->options->case_sensitive ? name : boost::algorithm::to_lower_copy(name);
         }
-        std::string_view name() const { return slot_desc->col_name(); }
-        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
-        std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
-        const SlotId slot_id() const { return slot_desc->id(); }
-        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
+
+        std::vector<SlotDescriptor*> slot_descs;
+        std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
+
+        // materialized column read from parquet file
+        std::vector<ColumnInfo> materialized_columns;
+
+        // partition column
+        std::vector<ColumnInfo> partition_columns;
+
+        // partition column value which read from hdfs file path
+        Columns partition_values;
+
+        // extended column
+        std::vector<ColumnInfo> extended_columns;
+
+        Columns extended_values;
+
+        std::vector<HdfsSplitContextPtr> split_tasks;
+        bool has_split_tasks = false;
+        size_t estimated_mem_usage_per_split_task = 0;
+
+        bool is_first_split = false;
+        bool can_use_file_record_count = false;
+
+        // used by short circuit cases:
+        // get_next just returns chunk for once.
+        // and it returns EOF the next time.
+        bool no_more_chunks = false;
+
+        std::string timezone;
+
+        HdfsScanStats* stats = nullptr;
+
+        RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;
+
+        bool can_use_count_optimization() const;
+
+        bool can_use_min_max_optimization() const;
+
+        // update none_existed_slot
+        // update conjunct
+        void update_with_none_existed_slot(SlotDescriptor* slot);
+
+        void update_return_count_columns();
+        void update_min_max_columns();
+
+        // update materialized column against data file.
+        // and to update not_existed slots and conjuncts.
+        // and to update `conjunct_ctxs_by_slot` field.
+        Status update_materialized_columns(const std::unordered_set<std::string>& names);
+        // "not existed columns" are materialized columns not found in file
+        // this usually happens when use changes schema. for example
+        // user create table with 3 fields A, B, C, and there is one file F1
+        // but user change schema and add one field like D.
+        // when user select(A, B, C, D), then D is the non-existed column in file F1.
+        Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+        // If there is no partition column in the chunk，append partition column to chunk，
+        // otherwise update partition column in chunk
+        void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+        void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+        void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+        MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value,
+                                                     size_t row_count);
+
+        void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+        void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
+                                              const Columns& values);
+
+        // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
+        StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
+        std::vector<SlotDescriptor*> not_existed_slots;
+        // for iceberg reserved fields
+        std::vector<SlotDescriptor*> reserved_field_slots;
+        std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
+
+        // other helper functions.
+        bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
+        Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
+
+        void merge_split_tasks();
+
+        // used for parquet zone map filter only
+        std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
+        std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+        PredicateTree predicate_tree;
     };
 
-    // Non-owning pointer to the immutable params that built this context.
-    // Lifetime: _scanner_params outlives _scanner_ctx (both are HdfsScanner members).
-    const HdfsScannerParams* params = nullptr;
+    struct OpenFileOptions {
+        FileSystem* fs = nullptr;
+        std::string path;
+        int64_t file_size = -1;
+        HdfsScanStats* fs_stats = nullptr;
+        HdfsScanStats* app_stats = nullptr;
 
-    std::string formatted_name(const std::string& name) const {
-        return params->options->case_sensitive ? name : boost::algorithm::to_lower_copy(name);
-    }
+        // for datacache
+        DataCacheOptions datacache_options;
 
-    std::vector<SlotDescriptor*> slot_descs;
-    std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
+        // for compressed text file
+        CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
+    };
 
-    // materialized column read from parquet file
-    std::vector<ColumnInfo> materialized_columns;
+    class HdfsScanner {
+    public:
+        HdfsScanner() = default;
+        virtual ~HdfsScanner() = default;
 
-    // partition column
-    std::vector<ColumnInfo> partition_columns;
+        Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
+        Status open(RuntimeState* runtime_state);
+        Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
+        void close() noexcept;
 
-    // partition column value which read from hdfs file path
-    Columns partition_values;
+        int64_t num_bytes_read() const { return _app_stats.bytes_read; }
+        int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
+        int64_t num_rows_read() const { return _app_stats.rows_read; }
+        int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
+        int64_t io_time_spent() const { return _app_stats.io_ns; }
+        virtual int64_t estimated_mem_usage() const;
+        void update_counter();
 
-    // extended column
-    std::vector<ColumnInfo> extended_columns;
+        RuntimeState* runtime_state() { return _runtime_state; }
 
-    Columns extended_values;
+        virtual Status do_open(RuntimeState* runtime_state) = 0;
+        virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
+        virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
+        virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
+        virtual void do_update_counter(HdfsScanProfile* profile);
+        virtual Status reinterpret_status(const Status& st);
 
-    std::vector<HdfsSplitContextPtr> split_tasks;
-    bool has_split_tasks = false;
-    size_t estimated_mem_usage_per_split_task = 0;
+        // ORC and Parquet push conjunct_ctxs_by_slot into their own column-level
+        // readers (lazy materialisation, dict filter, etc.) and do NOT want the base
+        // class to apply them a second time.  All other formats return false so the
+        // base class handles by-slot evaluation uniformly in get_next().
+        virtual bool scanner_handles_predicate_by_slot_internally() const { return false; }
 
-    bool is_first_split = false;
-    bool can_use_file_record_count = false;
+        // True if the scanner evaluates multi-slot predicates (conjuncts->scanner_ctxs)
+        // internally inside do_get_next(), so the base class must not apply them again.
+        // Scanners that return true MUST guarantee row-level correctness — the ORC
+        // search-argument / Parquet statistics pass is only an approximate skip; the
+        // actual predicate must still be evaluated on every returned row.
+        // Future expression-driven Parquet lazy materialisation will also set this true
+        // once it can interleave predicate evaluation with column loading.
+        virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
+        void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
+        bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
-    // used by short circuit cases:
-    // get_next just returns chunk for once.
-    // and it returns EOF the next time.
-    bool no_more_chunks = false;
+        static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
+                std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+                std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
 
-    std::string timezone;
+    protected:
+        Status open_random_access_file();
+        static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
-    HdfsScanStats* stats = nullptr;
+        void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
+        void do_update_deletion_vector_build_counter(RuntimeProfile* parent_profile);
+        void do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile);
 
-    RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;
+    private:
+        bool _opened = false;
+        std::atomic<bool> _closed = false;
+        Status _build_scanner_context();
+        void update_hdfs_counter(HdfsScanProfile* profile);
 
-    bool can_use_count_optimization() const;
+    protected:
+        HdfsScannerContext _scanner_ctx;
+        HdfsScannerParams _scanner_params;
+        RuntimeState* _runtime_state = nullptr;
+        HdfsScanStats _app_stats;
+        HdfsScanStats _fs_stats;
+        std::unique_ptr<RandomAccessFile> _file;
+        // by default it's no compression.
+        CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
+        std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+        std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+        int64_t _total_running_time = 0;
 
-    bool can_use_min_max_optimization() const;
-
-    // update none_existed_slot
-    // update conjunct
-    void update_with_none_existed_slot(SlotDescriptor* slot);
-
-    void update_return_count_columns();
-    void update_min_max_columns();
-
-    // update materialized column against data file.
-    // and to update not_existed slots and conjuncts.
-    // and to update `conjunct_ctxs_by_slot` field.
-    Status update_materialized_columns(const std::unordered_set<std::string>& names);
-    // "not existed columns" are materialized columns not found in file
-    // this usually happens when use changes schema. for example
-    // user create table with 3 fields A, B, C, and there is one file F1
-    // but user change schema and add one field like D.
-    // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-
-    // If there is no partition column in the chunk，append partition column to chunk，
-    // otherwise update partition column in chunk
-    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
-
-    void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
-                                          const Columns& values);
-
-    // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
-    StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
-    std::vector<SlotDescriptor*> not_existed_slots;
-    // for iceberg reserved fields
-    std::vector<SlotDescriptor*> reserved_field_slots;
-    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
-
-    // other helper functions.
-    bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
-    Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
-
-    void merge_split_tasks();
-
-    // used for parquet zone map filter only
-    std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
-    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
-    PredicateTree predicate_tree;
-};
-
-struct OpenFileOptions {
-    FileSystem* fs = nullptr;
-    std::string path;
-    int64_t file_size = -1;
-    HdfsScanStats* fs_stats = nullptr;
-    HdfsScanStats* app_stats = nullptr;
-
-    // for datacache
-    DataCacheOptions datacache_options;
-
-    // for compressed text file
-    CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
-};
-
-class HdfsScanner {
-public:
-    HdfsScanner() = default;
-    virtual ~HdfsScanner() = default;
-
-    Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    Status open(RuntimeState* runtime_state);
-    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
-    void close() noexcept;
-
-    int64_t num_bytes_read() const { return _app_stats.bytes_read; }
-    int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
-    int64_t num_rows_read() const { return _app_stats.rows_read; }
-    int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
-    int64_t io_time_spent() const { return _app_stats.io_ns; }
-    virtual int64_t estimated_mem_usage() const;
-    void update_counter();
-
-    RuntimeState* runtime_state() { return _runtime_state; }
-
-    virtual Status do_open(RuntimeState* runtime_state) = 0;
-    virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
-    virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
-    virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
-    virtual void do_update_counter(HdfsScanProfile* profile);
-    virtual Status reinterpret_status(const Status& st);
-
-    // ORC and Parquet push conjunct_ctxs_by_slot into their own column-level
-    // readers (lazy materialisation, dict filter, etc.) and do NOT want the base
-    // class to apply them a second time.  All other formats return false so the
-    // base class handles by-slot evaluation uniformly in get_next().
-    virtual bool scanner_handles_predicate_by_slot_internally() const { return false; }
-
-    // True if the scanner evaluates multi-slot predicates (conjuncts->scanner_ctxs)
-    // internally inside do_get_next(), so the base class must not apply them again.
-    // Scanners that return true MUST guarantee row-level correctness — the ORC
-    // search-argument / Parquet statistics pass is only an approximate skip; the
-    // actual predicate must still be evaluated on every returned row.
-    // Future expression-driven Parquet lazy materialisation will also set this true
-    // once it can interleave predicate evaluation with column loading.
-    virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
-    void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
-    bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
-
-    static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
-            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
-
-protected:
-    Status open_random_access_file();
-    static CompressionTypePB get_compression_type_from_path(const std::string& filename);
-
-    void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
-    void do_update_deletion_vector_build_counter(RuntimeProfile* parent_profile);
-    void do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile);
-
-private:
-    bool _opened = false;
-    std::atomic<bool> _closed = false;
-    Status _build_scanner_context();
-    void update_hdfs_counter(HdfsScanProfile* profile);
-
-protected:
-    HdfsScannerContext _scanner_ctx;
-    HdfsScannerParams _scanner_params;
-    RuntimeState* _runtime_state = nullptr;
-    HdfsScanStats _app_stats;
-    HdfsScanStats _fs_stats;
-    std::unique_ptr<RandomAccessFile> _file;
-    // by default it's no compression.
-    CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
-    std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
-    std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
-    int64_t _total_running_time = 0;
-
-public:
-    static constexpr const char* ICEBERG_ROW_ID = "_row_id";
-    static constexpr const char* ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
-    static constexpr const char* ICEBERG_ROW_POSITION = "_pos";
-    // Iceberg v3 spec reserved field IDs for row lineage columns.
-    // See: https://iceberg.apache.org/spec/#reserved-field-ids
-    static constexpr int32_t ICEBERG_ROW_ID_COLUMN_ID = 2147483540;
-    static constexpr int32_t ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID = 2147483539;
-};
+    public:
+        static constexpr const char* ICEBERG_ROW_ID = "_row_id";
+        static constexpr const char* ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
+        static constexpr const char* ICEBERG_ROW_POSITION = "_pos";
+        // Iceberg v3 spec reserved field IDs for row lineage columns.
+        // See: https://iceberg.apache.org/spec/#reserved-field-ids
+        static constexpr int32_t ICEBERG_ROW_ID_COLUMN_ID = 2147483540;
+        static constexpr int32_t ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID = 2147483539;
+    };
 
 } // namespace starrocks

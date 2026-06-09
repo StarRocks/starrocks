@@ -945,7 +945,7 @@ void HdfsScannerContext::merge_split_tasks() {
         auto head_ctx = split_tasks[head].get();
 
         if ((ctx->split_start != prev_ctx->split_end) ||
-            (ctx->split_end - head_ctx->split_start > params->connector_max_split_size)) {
+            (ctx->split_end - head_ctx->split_start > params->options->connector_max_split_size)) {
             cut = true;
         }
 
@@ -961,7 +961,7 @@ void HdfsScannerContext::merge_split_tasks() {
     if (new_size >= 2) {
         auto tail_ctx = new_split_tasks[new_size - 1].get();
         size_t tail_size = (tail_ctx->split_end - tail_ctx->split_start);
-        if ((tail_size * 2) < params->connector_max_split_size) {
+        if ((tail_size * 2) < params->options->connector_max_split_size) {
             auto last_ctx = new_split_tasks[new_size - 2].get();
             if (last_ctx->split_end == tail_ctx->split_start) {
                 last_ctx->split_end = tail_ctx->split_end;

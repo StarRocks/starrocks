@@ -322,12 +322,12 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 }
 
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
-    if (_scanner_params.deletes.empty()) return Status::OK();
+    if (_scanner_params.table_specific.iceberg_delete_files.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
     const auto iceberg_delete_builder =
             std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, _runtime_state, _scanner_params);
 
-    for (const auto& delete_file : _scanner_params.deletes) {
+    for (const auto& delete_file : _scanner_params.table_specific.iceberg_delete_files) {
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
             RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
         } else {
@@ -338,17 +338,17 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
         }
     }
 
-    _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
+    _app_stats.iceberg_delete_files_per_scan += _scanner_params.table_specific.iceberg_delete_files.size();
     return Status::OK();
 }
 
 Status HdfsOrcScanner::build_paimon_delete_file_builder() {
-    if (_scanner_params.paimon_deletion_file == nullptr) {
+    if (_scanner_params.table_specific.paimon_deletion_file == nullptr) {
         return Status::OK();
     }
     std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
             new PaimonDeleteFileBuilder(_scanner_params.fs, _skip_rows_ctx));
-    RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_params.paimon_deletion_file.get()));
+    RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_params.table_specific.paimon_deletion_file.get()));
     return Status::OK();
 }
 
@@ -446,7 +446,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes) {
     // we can split task if we enable split tasks feature and have >= 2 stripes.
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks = (_scanner_ctx.params->enable_split_tasks && stripes.size() >= 2) &&
+    bool enable_split_tasks = (_scanner_ctx.params->options->enable_split_tasks && stripes.size() >= 2) &&
                               (_scanner_ctx.params->split_context == nullptr);
     if (!enable_split_tasks) return Status::OK();
 

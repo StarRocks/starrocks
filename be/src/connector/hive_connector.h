@@ -19,9 +19,9 @@
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "connector/hive_chunk_sink.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "hive_chunk_sink.h"
 
 namespace starrocks {
 class HiveTableDescriptor;
@@ -63,7 +63,7 @@ protected:
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
-    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+    mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class HiveDataSource final : public DataSource {
@@ -77,9 +77,6 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
-    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
-        return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
-    }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
     int32_t extended_column_index(SlotId id) const;
 
@@ -113,19 +110,15 @@ private:
     Status _init_scanner(RuntimeState* state);
     Status _check_all_slots_nullable();
 
-    const std::string OPENXJSON_SERDE_LIB = "org.openx.data.jsonserde.JsonSerDe";
-
     // =====================================
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
-    HdfsScanner* _scanner = nullptr;
-    DataCacheOptions _datacache_options{};
-    bool _enable_dynamic_prune_scan_range = true;
-    bool _enable_split_tasks = false;
 
-    // ============ conjuncts =================
-    // Single owner of all conjunct vectors; scanners receive a const pointer.
+    HdfsScanner* _scanner = nullptr;
     HdfsScannerConjuncts _conjuncts;
+    HdfsScannerOptions _options;
+    HdfsScannerParams _scanner_params;
+    HdfsScanProfile _profile;
 
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {
@@ -135,53 +128,12 @@ private:
         bool filter_by_eval = false;
     };
     PartitionFilter _partition_filter;
-    bool _no_data = false;
 
-    int _min_max_tuple_id = 0;
+    bool _no_more_chunks = false;
     const TupleDescriptor* _min_max_tuple_desc = nullptr;
-
-    // ============ scan options =================
-    // Immutable query options shared with HdfsScannerParams via non-owning pointer.
-    HdfsScannerOptions _options;
-
-    // materialized columns.
-    std::vector<SlotDescriptor*> _materialize_slots;
-    std::vector<int> _materialize_index_in_chunk;
-    // default values for materialize_slots that have default value defined.
-    // used when the slot doesn't exist in the data file during scanning.
-    std::unordered_map<SlotId, std::string> _materialize_slot_default_values;
-
-    // partition columns.
-    std::vector<SlotDescriptor*> _partition_slots;
-
-    std::vector<ExprContext*> _extended_column_values;
-    // extended columns.
-    std::vector<SlotDescriptor*> _extended_slots;
-    // extended column index in `tuple_desc`
-    std::vector<int> _extended_index_in_chunk;
-    // index in extended columns
-    std::vector<int> _index_in_extended_column;
-    bool _has_extended_columns = false;
-
-    // partition column index in `tuple_desc`
-    std::vector<int> _partition_index_in_chunk;
-    // partition index in hdfs partition columns
-    std::vector<int> _partition_index_in_hdfs_partition_columns;
-    bool _has_partition_columns = false;
-
     std::vector<std::string> _hive_column_names;
     const HiveTableDescriptor* _hive_table = nullptr;
-
-    bool _has_scan_range_indicate_const_column = false;
-    bool _use_partition_column_value_only = false;
-    // only used in global late materialization
-    int32_t _scan_range_id = -1;
     std::vector<ColumnAccessPathPtr> _column_access_paths;
-    bool _disable_column_access_path_hints = false;
-
-    // ======================================
-    // The following are profile metrics
-    HdfsScanProfile _profile;
 };
 
 } // namespace starrocks::connector

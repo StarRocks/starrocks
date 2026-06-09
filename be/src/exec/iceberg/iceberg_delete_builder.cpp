@@ -97,6 +97,11 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     }
 
     auto scanner_ctx = std::make_unique<HdfsScannerContext>();
+    HdfsScannerParams local_params;
+    HdfsScannerOptions local_options;
+    local_params.options = &local_options;
+    scanner_ctx->params = &local_params;
+
     std::vector<HdfsScannerContext::ColumnInfo> columns;
     THdfsScanRange scan_range;
     scan_range.offset = 0;
@@ -132,10 +137,10 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
     scanner_ctx->timezone = timezone;
     scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->lake_schema = &iceberg_schema;
+    scanner_ctx->table_specific.iceberg_schema = &iceberg_schema;
     scanner_ctx->materialized_columns = std::move(columns);
-    scanner_ctx->scan_range = &scan_range;
-    scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
+    local_params.scan_range = &scan_range;
+    local_params.lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
     scanner_ctx->stats = &app_scan_stats;
     RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
 

@@ -87,13 +87,13 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->params->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
+    if (_scanner_ctx->params->table_specific.iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // Use LakeMetaHelper only when both an Iceberg/Paimon lake schema is present AND
         // the parquet file carries field ids.  Without field ids, the lake schema cannot
         // be matched reliably and we fall back to ParquetMetaHelper which handles
         // col_unique_id / col_physical_name / name lookup chains correctly.
         return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options->case_sensitive,
-                                                _scanner_ctx->params->lake_schema);
+                                                _scanner_ctx->params->table_specific.iceberg_schema);
     } else {
         return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options->case_sensitive);
     }
@@ -116,7 +116,7 @@ Status FileReader::_build_split_tasks() {
     // don't do split in following cases:
     // 1. this feature is not enabled
     // 2. we have already done split before (that's why `split_context` is nullptr)
-    if (!_scanner_ctx->params->enable_split_tasks || _scanner_ctx->params->split_context != nullptr) {
+    if (!_scanner_ctx->params->options->enable_split_tasks || _scanner_ctx->params->split_context != nullptr) {
         return Status::OK();
     }
 

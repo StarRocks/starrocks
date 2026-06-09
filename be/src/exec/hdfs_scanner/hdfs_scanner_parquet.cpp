@@ -34,11 +34,11 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         return Status::OK();
     }
 
-    if (!scanner_params.deletes.empty()) {
+    if (!scanner_params.table_specific.iceberg_delete_files.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         auto iceberg_delete_builder =
                 std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, scanner_params);
-        for (const auto& delete_file : scanner_params.deletes) {
+        for (const auto& delete_file : scanner_params.table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
                 RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
             } else {
@@ -48,12 +48,12 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 return Status::InternalError(s);
             }
         }
-        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
-    } else if (scanner_params.paimon_deletion_file != nullptr) {
+        _app_stats.iceberg_delete_files_per_scan += scanner_params.table_specific.iceberg_delete_files.size();
+    } else if (scanner_params.table_specific.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
                 new PaimonDeleteFileBuilder(scanner_params.fs, _skip_rows_ctx));
-        RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
-    } else if (scanner_params.deletion_vector_descriptor != nullptr) {
+        RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.table_specific.paimon_deletion_file.get()));
+    } else if (scanner_params.table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
         std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
         RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
