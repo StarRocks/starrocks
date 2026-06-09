@@ -20,10 +20,14 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "runtime/exec_env.h"
+#include "runtime/load_path_mgr.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -444,6 +448,135 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamNullColumnChunkBoundary) {
     ASSERT_TRUE(res2.status().is_end_of_file());
 
     scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamStrictModeQualityError) {
+    std::string file_path = (_tmp_root_dir / "test_strict_mode.arrow").string();
+
+    arrow::Int32Builder int_builder;
+    arrow::StringBuilder str_builder;
+
+    ASSERT_ARROW_OK(int_builder.AppendValues({100, 200, 300}));
+    ASSERT_ARROW_OK(str_builder.AppendValues({"a", "too_long_string", "b"}));
+
+    auto int_field = std::make_shared<arrow::Field>("c0_bigint", arrow::int32());
+    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
+    auto schema = arrow::schema({int_field, str_field});
+
+    std::shared_ptr<arrow::Array> int_array;
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    std::shared_ptr<arrow::Array> str_array;
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+    auto batch = arrow::RecordBatch::Make(schema, 3, {int_array, str_array});
+
+    auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
+    ASSERT_ARROW_OK(out_file_res.status());
+    auto out_file = out_file_res.ValueOrDie();
+
+    auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
+    ASSERT_ARROW_OK(writer_res.status());
+    auto writer = writer_res.ValueOrDie();
+
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    ASSERT_ARROW_OK(out_file->Close());
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    src_slot_infos.emplace_back("c1_str", TypeDescriptor::create_char_type(2), true);
+
+    SlotTypeDescInfoArray dst_slot_infos;
+    dst_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    dst_slot_infos.emplace_back("c1_str", TypeDescriptor::create_char_type(2), true); // CHAR(2)
+
+    std::vector<std::string> file_names = {file_path};
+    auto ranges = generate_ranges(file_names, 2, {});
+
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    query_options.log_rejected_record_num = 10;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    ExecEnv* exec_env = ExecEnv::GetInstance();
+    ASSERT_NE(nullptr, exec_env);
+    ASSERT_NE(nullptr, exec_env->load_path_mgr());
+
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), query_options, query_globals, &exec_env->query_execution_services(), exec_env));
+
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+    state->set_db("test_db");
+    state->set_load_label("test_label");
+    state->set_txn_id(12345);
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->strict_mode = true;
+    params->__isset.strict_mode = true;
+    std::vector<TupleDescriptor*> tuples;
+    desc_tbl->get_tuple_descs(&tuples);
+    const auto num_tuples = tuples.size();
+    params->src_tuple_id = 0;
+    params->dest_tuple_id = num_tuples - 1;
+    const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+    const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        auto& src_slot = src_tuple->slots()[i];
+        auto& dst_slot = dst_tuple->slots()[i];
+        params->expr_of_dest_slot[dst_slot->id()] =
+                create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+        params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
+    }
+    params->__isset.dest_sid_to_src_sid_without_trans = true;
+
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        params->src_slot_ids.emplace_back(i);
+    }
+
+    RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+    ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+
+    TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+
+    // Expecting 2 rows since the middle row failed quality checks and was filtered out
+    ASSERT_EQ(2, chunk->num_rows());
+
+    auto c0 = chunk->columns()[0];
+    auto c1 = chunk->columns()[1];
+
+    ASSERT_EQ(100, c0->get(0).get_int64());
+    ASSERT_EQ("a", c1->get(0).get_slice());
+
+    ASSERT_EQ(300, c0->get(1).get_int64());
+    ASSERT_EQ("b", c1->get(1).get_slice());
+
+    auto res2 = scanner->get_next();
+    ASSERT_TRUE(res2.status().is_end_of_file());
+
+    std::string error_log_path = state->get_error_log_file_path();
+    scanner->close();
+
+    std::string absolute_path = exec_env->load_path_mgr()->get_load_error_absolute_path(error_log_path);
+    std::ifstream file(absolute_path);
+    ASSERT_TRUE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string error_log_content = buffer.str();
+
+    ASSERT_FALSE(error_log_content.empty());
+    ASSERT_NE(error_log_content.find("too_long_string"), std::string::npos);
 }
 
 } // namespace starrocks
