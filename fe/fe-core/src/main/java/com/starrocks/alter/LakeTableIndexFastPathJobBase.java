@@ -475,18 +475,35 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             return;
         }
         if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN
-                || jobState == JobState.RUNNING || jobState == JobState.FINISHED_REWRITING) {
+                || jobState == JobState.RUNNING) {
             table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        } else if (jobState == JobState.FINISHED_REWRITING) {
+            table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            // The live runRunningJob bumped each partition's nextVersion to
+            // commitVersion+1 at the FINISHED_REWRITING transition (see
+            // updateNextVersion). The edit log persists the job's state but
+            // NOT that in-memory catalog bump, so a cold-started or
+            // leader-switched FE must redo it here. Without this the
+            // partition's nextVersion stays one behind the version reserved
+            // here, and the next operation that asserts
+            // nextVersion == its own reserved commitVersion -- e.g. a
+            // following LakeTableSchemaChangeJob.replay() -> updateNextVersion
+            // -- fails its Preconditions.checkState and aborts journal replay,
+            // leaving the FE unable to start.
+            replayUpdateNextVersion(table);
         } else if (jobState == JobState.FINISHED) {
             // Reapply catalog mutation at replay so a cold-started FE sees
             // the post-alter table state. The mutation is idempotent by
             // design (add checks presence, drop is no-op on missing).
             //
-            // Also re-bump each partition's visibleVersion: the live FE
-            // captured this in memory only, and the next image may have been
-            // taken before the bump landed. Skip a partition whose live
-            // visibleVersion already covers the commitVersion (idempotent on
-            // replay-after-checkpoint).
+            // Also re-bump each partition's nextVersion and visibleVersion:
+            // the live FE captured both in memory only, and the next image may
+            // have been taken before the bump landed (or before the
+            // FINISHED_REWRITING journal that carries the nextVersion bump).
+            // Both bumps are idempotent: skip a partition that already
+            // advanced past the target (replay-after-checkpoint, or a later
+            // op that moved the version on).
+            replayUpdateNextVersion(table);
             for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
                 if (pp != null && pp.getVisibleVersion() < e.getValue()) {
@@ -496,7 +513,29 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             applyCatalogMutation(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
         } else if (jobState == JobState.CANCELLED) {
+            // A job force-cancelled out of FINISHED_REWRITING has already
+            // reserved a commitVersion and bumped nextVersion on the live FE;
+            // reproduce that bump on replay too (no-op when the job was
+            // cancelled before reserving, since commitVersionMap is empty).
+            replayUpdateNextVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    // Reproduce, idempotently, the nextVersion bump that the live
+    // runRunningJob applied via updateNextVersion at the FINISHED_REWRITING
+    // transition. Never regress a partition whose nextVersion already covers
+    // commitVersion+1 (e.g. when the checkpoint image was taken after the bump
+    // landed, or after a later operation advanced the version).
+    private void replayUpdateNextVersion(OlapTable table) {
+        if (commitVersionMap == null) {
+            return;
+        }
+        for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
+            PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
+            if (pp != null && pp.getNextVersion() < e.getValue() + 1) {
+                pp.setNextVersion(e.getValue() + 1);
+            }
         }
     }
 
