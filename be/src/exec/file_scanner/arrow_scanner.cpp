@@ -25,10 +25,15 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/stream_load_pipe.h"
-#include "base/time/timezone_utils.h"
+#include "runtime/rejected_record_writer.h"
+#include "gutil/strings/substitute.h"
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 namespace starrocks {
+
+static const int MAX_ERROR_MESSAGE_COUNTER = 100;
 
 namespace {
 
@@ -96,6 +101,46 @@ ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const T
     _file_format_str = "arrow";
     _chunk_filter.reserve(_max_chunk_size);
     _conv_ctx.timezone = state->timezone();
+    _conv_ctx.report_error_message = [state, ctx = &_conv_ctx](const std::string& reason, const std::string& raw_data,
+                                                               int64_t row_offset_in_array) {
+        if (ctx->error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
+        ctx->error_message_counter += 1;
+        const std::string& col_name = ctx->current_column_name;
+        std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
+                                                    col_name.empty() ? "null" : col_name, raw_data);
+        RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+
+        auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+        if (writer != nullptr) {
+            const std::string key = col_name.empty() ? std::string("_raw") : col_name;
+
+            rapidjson::Document src_doc;
+            src_doc.SetObject();
+            auto& alloc = src_doc.GetAllocator();
+            src_doc.AddMember("format", rapidjson::Value("arrow", 5, alloc), alloc);
+            src_doc.AddMember("file",
+                              rapidjson::Value(ctx->current_file.c_str(),
+                                               static_cast<rapidjson::SizeType>(ctx->current_file.size()), alloc),
+                              alloc);
+            if (ctx->current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
+                int64_t row_in_file = ctx->current_batch_first_row_in_file + row_offset_in_array;
+                src_doc.AddMember("row_in_file", rapidjson::Value(row_in_file), alloc);
+            }
+            if (ctx->file_size >= 0) {
+                src_doc.AddMember("file_size", rapidjson::Value(ctx->file_size), alloc);
+            }
+            if (ctx->file_mtime_ms >= 0) {
+                src_doc.AddMember("file_mtime_ms", rapidjson::Value(ctx->file_mtime_ms), alloc);
+            }
+            rapidjson::StringBuffer src_buf;
+            rapidjson::Writer<rapidjson::StringBuffer> src_writer(src_buf);
+            src_doc.Accept(src_writer);
+
+            writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}}, {key},
+                                       /*error_code=*/"TYPE_MISMATCH", reason, col_name,
+                                       std::string(src_buf.GetString(), src_buf.GetSize()));
+        }
+    };
 }
 
 ArrowScanner::~ArrowScanner() = default;
@@ -144,6 +189,10 @@ Status ArrowScanner::open_next_reader() {
 
     _curr_file_reader = reader_res.ValueOrDie();
     _conv_ctx.current_file = range_desc.path;
+    _conv_ctx.current_batch_first_row_in_file = -1;
+    _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
+    _conv_ctx.file_size = range_desc.size;
+    _last_file_scan_rows = 0;
     return Status::OK();
 }
 
@@ -169,6 +218,9 @@ Status ArrowScanner::next_batch() {
         _curr_file_reader.reset();
         return Status::EndOfFile("reach end of current file");
     }
+    
+    _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
+    _last_file_scan_rows += _batch->num_rows();
     
     return Status::OK();
 }
