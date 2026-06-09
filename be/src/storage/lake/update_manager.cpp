@@ -1316,14 +1316,32 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
+    // TRACE_COUNTER_* reads a thread-local current trace that pool worker threads do not
+    // inherit, so counters incremented inside a submitted compare task would silently drop.
+    // Capture the publish thread's trace and re-adopt it inside each worker task.
+    Trace* parent_trace = Trace::CurrentTrace();
 
     std::mutex mutex;
     Status status = Status::OK();
     // Per-chunk results accumulated in iteration order; consumed after the compare barrier.
     std::vector<std::unique_ptr<ChunkCondMergeResult>> chunk_results;
+
+    // Lookahead-by-one: under parallel mode hold the first chunk's compare task instead
+    // of submitting it. If it turns out to be the only chunk, run it inline on the publish
+    // thread to skip a pointless pool round-trip; once a second chunk proves there is real
+    // parallel work, flush the held first task and submit every chunk from then on.
+    std::function<void()> first_task;
+    bool went_parallel = false;
+    auto submit = [&](std::function<void()>&& fn) {
+        auto submit_st = token->submit_func(std::move(fn));
+        if (!submit_st.ok()) {
+            std::lock_guard<std::mutex> lock(mutex);
+            status.update(submit_st);
+        }
+    };
 
     for (; !upsert->done(); upsert->next()) {
         auto current = upsert->current();
@@ -1332,6 +1350,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         result->chunk_physical_rowid_offset = current.physical_rowid_offset;
 
         auto compare_func = [&, result, current]() {
+            ADOPT_TRACE(parent_trace);
             auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
                                                                         upsert.get(), current, tablet_column,
                                                                         read_column_ids, index, result);
@@ -1341,21 +1360,37 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
             }
         };
 
-        if (token) {
-            auto submit_st = token->submit_func(compare_func);
-            if (!submit_st.ok()) {
-                std::lock_guard<std::mutex> lock(mutex);
-                status.update(submit_st);
-            }
-        } else {
+        if (!token) {
+            // Parallel execution disabled: run serially, streaming one chunk at a time.
             compare_func();
             RETURN_IF_ERROR(status);
+        } else if (!went_parallel && !first_task) {
+            // First chunk: hold it; it may turn out to be the only one.
+            first_task = std::move(compare_func);
+        } else {
+            // Second-or-later chunk: there is real parallel work. Flush the held first
+            // task once, then submit this and every subsequent chunk straight to the pool.
+            if (first_task) {
+                submit(std::move(first_task));
+                first_task = nullptr;
+            }
+            went_parallel = true;
+            submit(std::move(compare_func));
         }
     }
 
     if (token) {
         TRACE_COUNTER_SCOPE_LATENCY_US("condition_update_compare_phase_us");
-        token->wait();
+        if (first_task) {
+            // Exactly one chunk: compare on the publish thread, no pool round-trip.
+            first_task();
+            first_task = nullptr;
+        } else {
+            // Always drain submitted tasks before returning, even on a prior submit error:
+            // worker closures reference locals (mutex/status/results) by reference, and the
+            // token destructor would otherwise wait only after those locals are destroyed.
+            token->wait();
+        }
     }
     RETURN_IF_ERROR(status);
     RETURN_IF_ERROR(upsert->status());
