@@ -115,7 +115,7 @@ private:
     Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
                                             const PreparedTabletReadStatePtr& prepared_tablet_read_state);
     Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
-                                                               RowidRangeOptionPtr* local_rowid_range);
+                                                                RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
     Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,

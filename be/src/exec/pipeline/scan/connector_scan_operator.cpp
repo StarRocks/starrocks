@@ -706,8 +706,7 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     if (morsel_queue_factory != nullptr && morsel_queue_factory->enable_random_append_split_morsel()) {
         int64_t split_source_count = 0;
         for (const auto& morsel : morsels) {
-            split_source_count +=
-                    can_generate_split_tasks(down_cast<ScanMorsel*>(morsel.get()), _morsel_queue) ? 1 : 0;
+            split_source_count += can_generate_split_tasks(down_cast<ScanMorsel*>(morsel.get()), _morsel_queue) ? 1 : 0;
         }
         morsel_queue_factory->add_split_source_morsels(split_source_count);
     }

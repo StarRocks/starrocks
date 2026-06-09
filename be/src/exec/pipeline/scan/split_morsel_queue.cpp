@@ -119,7 +119,7 @@ public:
     LakePreparedPhysicalSplitMorselQueueBuilder(Morsels&& morsels, bool has_more_scan_ranges,
                                                 size_t degree_of_parallelism, int64_t splitted_scan_rows)
             : SplitMorselQueueBuilderBase(std::move(morsels), degree_of_parallelism, splitted_scan_rows,
-                                           has_more_scan_ranges) {}
+                                          has_more_scan_ranges) {}
     ~LakePreparedPhysicalSplitMorselQueueBuilder() override = default;
 
     bool can_uniform_distribute() const override { return true; }
@@ -764,8 +764,7 @@ bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     return _has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished();
 }
 
-LakePreparedPhysicalSplitMorselQueue::LakePreparedPhysicalSplitMorselQueue(Morsels&& morsels,
-                                                                           bool has_more_scan_ranges,
+LakePreparedPhysicalSplitMorselQueue::LakePreparedPhysicalSplitMorselQueue(Morsels&& morsels, bool has_more_scan_ranges,
                                                                            int64_t splitted_scan_rows,
                                                                            size_t degree_of_parallelism)
         : _splitted_scan_rows(splitted_scan_rows),
@@ -832,16 +831,14 @@ std::vector<TInternalScanRange*> LakePreparedPhysicalSplitMorselQueue::prepare_o
 }
 
 void LakePreparedPhysicalSplitMorselQueue::enter_ticket(ScanMorsel* morsel) {
-    if (_ticket_checker != nullptr && morsel->has_owner_id() &&
-        !morsel->is_ticket_checker_entered()) {
+    if (_ticket_checker != nullptr && morsel->has_owner_id() && !morsel->is_ticket_checker_entered()) {
         morsel->set_ticket_checker_entered(true);
         _ticket_checker->enter(morsel->owner_id(), morsel->is_last_split());
     }
 }
 
 LakePreparedPhysicalSplitMorselQueue::PreRefinementCandidateState
-LakePreparedPhysicalSplitMorselQueue::pre_refinement_candidate_state(
-        const PreRefinementCandidate& candidate) const {
+LakePreparedPhysicalSplitMorselQueue::pre_refinement_candidate_state(const PreRefinementCandidate& candidate) const {
     if (candidate.prepared_tablet_read_state == nullptr || candidate.prepared_segment_read_state == nullptr ||
         candidate.rowset_index >= candidate.prepared_tablet_read_state->rowsets.size() ||
         candidate.rowset_index >= candidate.prepared_tablet_read_state->rowset_segments.size() ||
@@ -906,7 +903,8 @@ StatusOr<MorselPtr> LakePreparedPhysicalSplitMorselQueue::allocate_pre_refinemen
         _pre_refinement_candidates.pop();
         auto& tablet_state = candidate.prepared_tablet_read_state;
         auto& segment_state = candidate.prepared_segment_read_state;
-        if (tablet_state == nullptr || segment_state == nullptr || candidate.rowset_index >= tablet_state->rowsets.size() ||
+        if (tablet_state == nullptr || segment_state == nullptr ||
+            candidate.rowset_index >= tablet_state->rowsets.size() ||
             candidate.rowset_index >= tablet_state->rowset_segments.size() ||
             candidate.segment_index >= tablet_state->rowset_segments[candidate.rowset_index].size()) {
             continue;
@@ -925,8 +923,8 @@ StatusOr<MorselPtr> LakePreparedPhysicalSplitMorselQueue::allocate_pre_refinemen
                 continue;
             }
 
-            const auto rows_per_split =
-                    _splitted_scan_rows > 0 ? static_cast<size_t>(_splitted_scan_rows) : std::numeric_limits<size_t>::max();
+            const auto rows_per_split = _splitted_scan_rows > 0 ? static_cast<size_t>(_splitted_scan_rows)
+                                                                : std::numeric_limits<size_t>::max();
             size_t num_taken_rows = 0;
             while (segment_state->coarse_scan_range_iter.has_more() && num_taken_rows < rows_per_split) {
                 const size_t remaining_rows = segment_state->coarse_scan_range_iter.remaining_rows();
@@ -943,8 +941,7 @@ StatusOr<MorselPtr> LakePreparedPhysicalSplitMorselQueue::allocate_pre_refinemen
                 const bool is_first_split_of_segment = segment_state->allocated_coarse_ranges.span_size() == 0;
                 segment_state->allocated_coarse_ranges |= taken_range;
                 num_taken_rows += taken_range.span_size();
-                rowid_range->add(rowset.get(), segment.get(),
-                                 std::make_shared<SparseRange<>>(std::move(taken_range)),
+                rowid_range->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(taken_range)),
                                  is_first_split_of_segment);
             }
             candidate_still_live =
@@ -991,8 +988,8 @@ MorselQueueBuilderPtr make_lake_prepared_physical_split_morsel_queue_builder(Mor
                                                                              size_t max_degree_of_parallelism,
                                                                              int64_t splitted_scan_rows) {
     const size_t degree_of_parallelism = max_degree_of_parallelism > 0 ? max_degree_of_parallelism : morsels.size();
-    return std::make_unique<LakePreparedPhysicalSplitMorselQueueBuilder>(
-            std::move(morsels), has_more_scan_ranges, degree_of_parallelism, splitted_scan_rows);
+    return std::make_unique<LakePreparedPhysicalSplitMorselQueueBuilder>(std::move(morsels), has_more_scan_ranges,
+                                                                         degree_of_parallelism, splitted_scan_rows);
 }
 
 } // namespace starrocks::pipeline
