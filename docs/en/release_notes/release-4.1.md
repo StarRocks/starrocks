@@ -55,7 +55,6 @@ Release Date: April 13, 2026
 - Supports pipeline execution for MemTable flush and merge, improving ingestion throughput for cloud-native tables in shared-data clusters. [#67878](https://github.com/StarRocks/starrocks/pull/67878)
 - Supports `dry_run` mode for repairing cloud-native tables, allowing users to preview repair actions before execution. [#68494](https://github.com/StarRocks/starrocks/pull/68494)
 - Added a thread pool for publish transactions in shared-nothing clusters, improving publish throughput. [#67797](https://github.com/StarRocks/starrocks/pull/67797)
-- Supports dynamically modifying the `datacache.enable` property for cloud-native tables. [#69011](https://github.com/StarRocks/starrocks/pull/69011)
 
 ### Data Lake Analytics
 
