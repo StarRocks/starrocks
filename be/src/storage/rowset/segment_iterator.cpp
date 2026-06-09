@@ -4656,7 +4656,7 @@ StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segm
         rowid_t upper_rowid = segment->num_rows();
         if (!range.upper().empty()) {
             upper_rowid = upper_bound_block_aligned_rowid(segment, range.upper(), !range.inclusive_upper(),
-                                                         segment->num_rows());
+                                                          segment->num_rows());
         }
         if (!range.lower().empty() && upper_rowid > 0) {
             lower_rowid = lower_bound_block_aligned_rowid(segment, range.lower(), range.inclusive_lower());

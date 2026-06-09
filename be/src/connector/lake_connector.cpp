@@ -88,9 +88,8 @@ RowidRangeOptionPtr trim_coarse_split_by_pruned_range(const pipeline::LakeSplitC
     }
 
     const auto& rowset = split_context.prepared_tablet_read_state->rowsets[split_context.rowset_index];
-    const auto& segment =
-            split_context.prepared_tablet_read_state
-                    ->rowset_segments[split_context.rowset_index][split_context.segment_index];
+    const auto& segment = split_context.prepared_tablet_read_state
+                                  ->rowset_segments[split_context.rowset_index][split_context.segment_index];
     if (rowset == nullptr || segment == nullptr) {
         return split_context.rowid_range;
     }

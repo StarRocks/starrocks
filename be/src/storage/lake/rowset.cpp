@@ -476,9 +476,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                 context.reusable_segment_iterators->resize(i + 1);
             }
             const bool reuse_segment_iter = (*context.reusable_segment_iterators)[i] != nullptr;
-            auto res =
-                    seg_ptr->new_reusable_iterator(segment_schema, schema, seg_options,
-                                                   &(*context.reusable_segment_iterators)[i]);
+            auto res = seg_ptr->new_reusable_iterator(segment_schema, schema, seg_options,
+                                                      &(*context.reusable_segment_iterators)[i]);
             if (res.status().is_end_of_file()) {
                 continue;
             }

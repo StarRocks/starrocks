@@ -222,8 +222,8 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
     }
     std::stringstream task_id;
     task_id << task.id;
-    std::string ret =
-            fmt::format("Stack trace id: {}, tid: {} cid:{} \n{}", stack_trace_id, tid, task_id.str(), task.to_string());
+    std::string ret = fmt::format("Stack trace id: {}, tid: {} cid:{} \n{}", stack_trace_id, tid, task_id.str(),
+                                  task.to_string());
     return ret;
 }
 
