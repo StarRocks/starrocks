@@ -196,6 +196,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 this.taskRunState = retryProcessTaskRun(context);
                 if (this.taskRunState == Constants.TaskRunState.SUCCESS) {
                     logger.info("Refresh materialized view {} finished successfully.", mv.getName());
+                    // advance LAST_FRESHNESS_CONFIRMED_AT even when the refresh changed no version
+                    mvRefreshProcessor.confirmFreshness();
                     // if success, try to generate next task run
                     mvRefreshProcessor.generateNextTaskRunIfNeeded();
                 } else {

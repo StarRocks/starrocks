@@ -133,6 +133,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             } else {
                 logger.info("No base table has changed, skip the refresh for materialized view: {}",
                         mv.getName());
+                // No base-table change means the MV is confirmed fresh as of this run's start.
+                confirmFreshness();
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -443,6 +445,14 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (mvContext.getStatus() != null) {
             newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
         }
+        // Seed the batch's first-run start on the leader's spawn; later runs already carry it via the property copy above.
+        // A partial-request leader seeds 0 so no run in its chain confirms whole-MV freshness.
+        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null) {
+            long processStartTime = mvContext.getStatus().getProcessStartTime();
+            newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
+                    mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            ? String.valueOf(processStartTime) : "0");
+        }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -467,6 +477,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         } else {
             taskManager.executeTask(taskName, option);
         }
+    }
+
+    @Override
+    public boolean hasNextBatchRun() {
+        return hasNextTaskRun;
     }
 
     private InsertStmt prepareRefreshPlan() throws AnalysisException, LockTimeoutException {
