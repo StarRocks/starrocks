@@ -86,9 +86,10 @@ void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
 
 OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader)
         : _scanner_ctx(scanner_ctx), _reader(reader), _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
-    if (_scanner_ctx.min_max_tuple_desc != nullptr) {
-        VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_ctx.min_max_tuple_desc->debug_string();
-        for (ExprContext* ctx : _scanner_ctx.conjuncts->min_max_ctxs) {
+    if (_scanner_ctx.params->min_max_tuple_desc != nullptr) {
+        VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = "
+                  << _scanner_ctx.params->min_max_tuple_desc->debug_string();
+        for (ExprContext* ctx : _scanner_ctx.params->conjuncts->min_max_ctxs) {
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
@@ -99,8 +100,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
 
-    const auto* scan_range = _scanner_ctx.scan_range;
-    size_t scan_start = scan_range->offset;
+    const auto* scan_range = _scanner_ctx.params->scan_range size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
     if (offset >= scan_start && offset < scan_end) {
@@ -112,8 +112,8 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
-    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.min_max_tuple_desc;
-    ChunkPtr min_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.params->min_max_tuple_desc ChunkPtr min_chunk =
+            RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     ChunkPtr max_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
@@ -170,7 +170,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
 
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
-    for (auto& min_max_conjunct_ctx : _scanner_ctx.conjuncts->min_max_ctxs) {
+    for (auto& min_max_conjunct_ctx : _scanner_ctx.params->conjuncts->min_max_ctxs) {
         // TODO: add a warning log here
         auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
         auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
@@ -189,7 +189,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
 bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
                                               const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                               const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilters) {
-    if (_scanner_ctx.min_max_tuple_desc != nullptr) {
+    if (_scanner_ctx.params->min_max_tuple_desc != nullptr) {
         if (filterMinMax(rowGroupIdx, rowIndexes, bloomFilters)) {
             VLOG_FILE << "OrcRowReaderFilter: skip row group " << rowGroupIdx << ", stripe " << _current_stripe_index;
             return true;
@@ -356,8 +356,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     uint64_t stripe_number = reader->getNumberOfStripes();
     std::vector<DiskRange> stripe_disk_ranges{};
 
-    const auto* scan_range = _scanner_ctx.scan_range;
-    size_t scan_start = scan_range->offset;
+    const auto* scan_range = _scanner_ctx.params->scan_range size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
@@ -401,9 +400,9 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
-    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
-                                          _scanner_ctx.options->case_sensitive,
-                                          _scanner_ctx.options->orc_use_column_names);
+    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.params->hive_column_names,
+                                          reader->getType(), _scanner_ctx.params->options->case_sensitive,
+                                          _scanner_ctx.params->options->orc_use_column_names);
     RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -414,7 +413,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = Utils::format_name(column.name(), _scanner_ctx.options->case_sensitive);
+        auto col_name = Utils::format_name(column.name(), _scanner_ctx.params->options->case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
@@ -447,8 +446,8 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes) {
     // we can split task if we enable split tasks feature and have >= 2 stripes.
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks =
-            (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
+    bool enable_split_tasks = (_scanner_ctx.params->enable_split_tasks && stripes.size() >= 2) &&
+                              (_scanner_ctx.params->split_context == nullptr);
     if (!enable_split_tasks) return Status::OK();
 
     auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
@@ -476,7 +475,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     if (_input_stream == nullptr) {
         _input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
-        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
+        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.params->lazy_column_coalesce_counter);
         _input_stream->set_app_stats(&_app_stats);
     }
     ORCHdfsFileStream* orc_hdfs_file_stream = _input_stream.get();
@@ -488,8 +487,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
-        if (_scanner_ctx.split_context != nullptr) {
-            auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
+        if (_scanner_ctx.params->split_context != nullptr) {
+            auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.params->split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
         reader = orc::createReader(std::move(_input_stream), options);
@@ -528,9 +527,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
-    _orc_reader->set_hive_column_names(_scanner_ctx.hive_column_names);
-    _orc_reader->set_case_sensitive(_scanner_ctx.options->case_sensitive);
-    _orc_reader->set_use_orc_column_names(_scanner_ctx.options->orc_use_column_names);
+    _orc_reader->set_hive_column_names(_scanner_ctx.params->hive_column_names);
+    _orc_reader->set_case_sensitive(_scanner_ctx.params->options->case_sensitive);
+    _orc_reader->set_use_orc_column_names(_scanner_ctx.params->options->orc_use_column_names);
     // for hive table, we set this flag
     _orc_reader->set_invalid_as_null(true);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
@@ -552,7 +551,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             conjuncts.push_back(it->root());
         }
     }
-    const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
+    const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.params->runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
 
     // create iceberg delete builder at last
@@ -573,7 +572,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
     size_t rows_read = 0;
 
-    if (_scanner_ctx.options->use_count_opt) {
+    if (_scanner_ctx.params->options->use_count_opt) {
         ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
     } else {
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
@@ -713,10 +712,10 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
         bool require_load_lazy_columns = rows_read > 0;
         if (require_load_lazy_columns) {
             // still need to load lazy column
-            _scanner_ctx.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+            _scanner_ctx.params->lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
         } else {
             // dont need to load lazy column
-            _scanner_ctx.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
+            _scanner_ctx.params->lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
             _app_stats.late_materialize_skip_rows += origin_rows_read;
             continue;
         }

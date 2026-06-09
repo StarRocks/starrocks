@@ -364,8 +364,12 @@ struct HdfsScannerContext {
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
+    // Non-owning pointer to the immutable params that built this context.
+    // Lifetime: _scanner_params outlives _scanner_ctx (both are HdfsScanner members).
+    const HdfsScannerParams* params = nullptr;
+
     std::string formatted_name(const std::string& name) const {
-        return options->case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+        return params->options->case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
     std::vector<SlotDescriptor*> slot_descs;
@@ -385,31 +389,9 @@ struct HdfsScannerContext {
 
     Columns extended_values;
 
-    // scan range
-    const THdfsScanRange* scan_range = nullptr;
-    int32_t scan_range_id = -1;
-    bool enable_split_tasks = false;
-    const HdfsSplitContext* split_context = nullptr;
     std::vector<HdfsSplitContextPtr> split_tasks;
     bool has_split_tasks = false;
     size_t estimated_mem_usage_per_split_task = 0;
-
-    // min max slots
-    const TupleDescriptor* min_max_tuple_desc = nullptr;
-
-    // Non-owning pointer shared with HdfsScannerParams.  Provides access to
-    // min_max_ctxs, scanner_ctxs, and all_ctxs without extra copies.
-    // conjunct_ctxs_by_slot below is a per-scanner mutable shallow copy of
-    // conjuncts->by_slot (see update_with_none_existed_slot()).
-    const HdfsScannerConjuncts* conjuncts = nullptr;
-
-    // Non-owning pointer to immutable scan options shared from HdfsScannerParams.
-    const HdfsScannerOptions* options = nullptr;
-
-    // runtime filters.
-    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
-
-    std::vector<std::string>* hive_column_names = nullptr;
 
     bool is_first_split = false;
     bool can_use_file_record_count = false;
@@ -421,16 +403,9 @@ struct HdfsScannerContext {
 
     std::string timezone;
 
-    const TIcebergSchema* lake_schema = nullptr;
-    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
-
     HdfsScanStats* stats = nullptr;
 
-    std::atomic<int32_t>* lazy_column_coalesce_counter;
-
-    int64_t connector_max_split_size = 0;
-
-    RuntimeScanRangePruner* rf_scan_range_pruner = nullptr;
+    RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;
 
     bool can_use_count_optimization() const;
 
@@ -468,9 +443,6 @@ struct HdfsScannerContext {
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
-    // default values for materialize_slots that have default value defined.
-    // used when the slot doesn't exist in the data file during scanning.
-    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
     // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
@@ -485,8 +457,6 @@ struct HdfsScannerContext {
     std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
     std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
     PredicateTree predicate_tree;
-
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 struct OpenFileOptions {
