@@ -462,7 +462,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
-        const std::vector<SparseRangePtr>* rowid_range_per_segment) {
+        const std::vector<SparseRangePtr>* rowid_range_per_segment,
+        const std::vector<OlapReaderStatistics*>* per_segment_stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
     {
@@ -489,6 +490,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
+        // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
+        // shared stats object; otherwise all segments share `stats`.
+        if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
+            seg_options.stats = (*per_segment_stats)[i];
+        }
         seg_options.tablet_range = std::nullopt;
         if (i < _metadata->segment_metas_size() && _metadata->segment_metas(i).shared() &&
             shared_segment_range.has_value()) {
