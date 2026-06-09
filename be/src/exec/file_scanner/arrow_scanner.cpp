@@ -14,22 +14,22 @@
 
 #include "exec/file_scanner/arrow_scanner.h"
 
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
+
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "exprs/expr_factory.h"
 #include "fs/fs_broker.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/rejected_record_writer.h"
-#include "gutil/strings/substitute.h"
-#include <rapidjson/document.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
 
 namespace starrocks {
 
@@ -207,7 +207,6 @@ Status ArrowScanner::open_next_reader() {
 Status ArrowScanner::next_batch() {
     SCOPED_RAW_TIMER(&_counter->read_batch_ns);
     _batch_start_idx = 0;
-    _batch = nullptr;
     if (_curr_file_reader == nullptr) {
         auto status = open_next_reader();
         if (!status.ok()) {
