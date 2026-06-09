@@ -20,6 +20,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -688,16 +689,25 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
     DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
              (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
+    auto append_column = [dst_column](const Column& column, size_t offset, size_t count) {
+        if (column.is_nullable() && !dst_column->is_nullable()) {
+            const auto& nullable_column = down_cast<const NullableColumn&>(column);
+            DCHECK(!nullable_column.has_null());
+            dst_column->append(*nullable_column.data_column(), offset, count);
+        } else {
+            dst_column->append(column, offset, count);
+        }
+    };
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
         // Unpack const column, then append it to dst.
         auto* const_column = down_cast<ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
-        dst_column->append(*const_column->data_column(), 0, chunk_size);
+        append_column(*const_column->data_column(), 0, chunk_size);
     } else {
         // Most cases.
-        dst_column->append(*src_column, 0, chunk_size);
+        append_column(*src_column, 0, chunk_size);
     }
 }
 
