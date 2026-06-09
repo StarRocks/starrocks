@@ -101,8 +101,12 @@ protected:
     std::unique_ptr<ArrowScanner> create_arrow_scanner(
             const std::string& timezone, DescriptorTbl* desc_tbl,
             const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-            const std::vector<TBrokerRangeDesc>& ranges) {
+            const std::vector<TBrokerRangeDesc>& ranges,
+            int32_t batch_size = 0) {
         TQueryOptions query_options;
+        if (batch_size > 0) {
+            query_options.__set_batch_size(batch_size);
+        }
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
         RuntimeState* state = _obj_pool.add(
@@ -311,6 +315,123 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMismatchAndCast) {
     ASSERT_EQ(500, c0->get(4).get_int64());
     ASSERT_EQ("e", c1->get(4).get_slice());
     ASSERT_TRUE(c2->is_null(4));
+
+    // Next get_next should return EOF
+    auto res2 = scanner->get_next();
+    ASSERT_TRUE(res2.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamNullColumnChunkBoundary) {
+    std::string file_path = (_tmp_root_dir / "test_null_column_boundary.arrow").string();
+
+    arrow::Int32Builder int_builder;
+    arrow::StringBuilder str_builder;
+
+    ASSERT_OK(int_builder.AppendValues({100, 200, 300, 400, 500}));
+    ASSERT_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
+
+    std::shared_ptr<arrow::Array> int_array;
+    std::shared_ptr<arrow::Array> str_array;
+
+    ASSERT_OK(int_builder.Finish(&int_array));
+    ASSERT_OK(str_builder.Finish(&str_array));
+
+    auto schema = arrow::schema({
+        arrow::field("c1_str", arrow::utf8()),
+        arrow::field("c0_bigint", arrow::int32())
+    });
+
+    auto batch = arrow::RecordBatch::Make(schema, 5, {str_array, int_array});
+
+    auto out_file_res = arrow::io::FileOutputStream::Open(file_path);
+    ASSERT_OK(out_file_res.status());
+    auto out_file = out_file_res.ValueOrDie();
+
+    auto writer_res = arrow::ipc::MakeStreamWriter(out_file, schema);
+    ASSERT_OK(writer_res.status());
+    auto writer = writer_res.ValueOrDie();
+
+    ASSERT_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_OK(writer->Close());
+    ASSERT_OK(out_file->Close());
+
+    std::vector<std::string> file_names{file_path};
+    std::vector<std::string> columns{"c0_bigint", "c1_str", "c2_null"};
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    src_slot_infos.emplace_back("c2_null", TypeDescriptor::from_logical_type(TYPE_INT), true);
+
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    auto ranges = generate_ranges(file_names, columns.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    // Create the scanner with batch_size = 2
+    auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges, 2);
+
+    ASSERT_OK(scanner->open());
+
+    // 1st chunk: should have 2 rows
+    {
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(2, chunk->num_rows());
+
+        auto c0 = chunk->columns()[0];
+        auto c1 = chunk->columns()[1];
+        auto c2 = chunk->columns()[2];
+
+        ASSERT_EQ(100, c0->get(0).get_int64());
+        ASSERT_EQ("a", c1->get(0).get_slice());
+        ASSERT_TRUE(c2->is_null(0));
+
+        ASSERT_EQ(200, c0->get(1).get_int64());
+        ASSERT_EQ("b", c1->get(1).get_slice());
+        ASSERT_TRUE(c2->is_null(1));
+    }
+
+    // 2nd chunk: should have 2 rows
+    {
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(2, chunk->num_rows());
+
+        auto c0 = chunk->columns()[0];
+        auto c1 = chunk->columns()[1];
+        auto c2 = chunk->columns()[2];
+
+        ASSERT_EQ(300, c0->get(0).get_int64());
+        ASSERT_EQ("c", c1->get(0).get_slice());
+        ASSERT_TRUE(c2->is_null(0));
+
+        ASSERT_EQ(400, c0->get(1).get_int64());
+        ASSERT_EQ("d", c1->get(1).get_slice());
+        ASSERT_TRUE(c2->is_null(1));
+    }
+
+    // 3rd chunk: should have 1 row
+    {
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(1, chunk->num_rows());
+
+        auto c0 = chunk->columns()[0];
+        auto c1 = chunk->columns()[1];
+        auto c2 = chunk->columns()[2];
+
+        ASSERT_EQ(500, c0->get(0).get_int64());
+        ASSERT_EQ("e", c1->get(0).get_slice());
+        ASSERT_TRUE(c2->is_null(0));
+    }
 
     // Next get_next should return EOF
     auto res2 = scanner->get_next();
