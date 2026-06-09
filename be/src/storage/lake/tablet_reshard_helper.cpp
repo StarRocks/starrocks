@@ -14,8 +14,11 @@
 
 #include "storage/lake/tablet_reshard_helper.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <numeric>
+#include <roaring/roaring.hh>
 
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
@@ -23,6 +26,66 @@
 #include "util/uid_util.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
+
+namespace {
+// True iff every rowid in the half-open range [range_begin, range_end) is set
+// in |gap_bits|. An empty range is trivially covered. nullptr |gap_bits| covers
+// nothing.
+bool range_fully_masked(const roaring::Roaring* gap_bits, rowid_t range_begin, rowid_t range_end) {
+    if (range_begin >= range_end) return true;
+    if (gap_bits == nullptr) return false;
+    // containsRange(x, y) tests that every value in the half-open range [x, y)
+    // is present; it does not enumerate the range.
+    return gap_bits->containsRange(static_cast<uint64_t>(range_begin), static_cast<uint64_t>(range_end));
+}
+} // namespace
+
+Status reconcile_windows_with_gap(const std::vector<DcgRowWindow>& sorted_contributors,
+                                  const roaring::Roaring* gap_bits, rowid_t num_rows,
+                                  std::vector<DcgRowWindow>* out_windows) {
+    if (num_rows <= 0) {
+        return Status::NotSupported("DCG rebuild: target segment has 0 rows");
+    }
+    out_windows->clear();
+    // The highest rowid covered so far by an emitted (contributor or gap) window.
+    rowid_t covered_up_to = 0;
+    for (const auto& contributor : sorted_contributors) {
+        const rowid_t contributor_begin = contributor.range.begin();
+        const rowid_t contributor_end = contributor.range.end();
+        // Defensive bound check (helper is exported; guard against misuse).
+        if (contributor_begin < 0 || contributor_end > num_rows || contributor_begin > contributor_end) {
+            return Status::InternalError(fmt::format("DCG rebuild: contributor window [{}, {}) out of [0, {}]",
+                                                     contributor_begin, contributor_end, num_rows));
+        }
+        if (contributor_begin > covered_up_to) {
+            // Coverage hole ahead of this contributor: accept only if fully masked.
+            if (!range_fully_masked(gap_bits, covered_up_to, contributor_begin)) {
+                return Status::NotSupported(
+                        fmt::format("DCG rebuild: row window coverage gap [{}, {}) not masked by delvec", covered_up_to,
+                                    contributor_begin));
+            }
+            out_windows->push_back(DcgRowWindow{/*old_tablet_index=*/0,
+                                                Range<rowid_t>(covered_up_to, contributor_begin),
+                                                /*is_gap=*/true});
+        } else if (contributor_begin < covered_up_to) {
+            // Overlap between distinct owners must surface, not be collapsed.
+            return Status::NotSupported(fmt::format("DCG rebuild: row window overlap at {} (covered up to {})",
+                                                    contributor_begin, covered_up_to));
+        }
+        out_windows->push_back(contributor);
+        covered_up_to = contributor_end;
+    }
+    if (covered_up_to < num_rows) {
+        if (!range_fully_masked(gap_bits, covered_up_to, num_rows)) {
+            return Status::NotSupported(
+                    fmt::format("DCG rebuild: row window coverage gap at end [{}, {}) not masked by delvec",
+                                covered_up_to, num_rows));
+        }
+        out_windows->push_back(
+                DcgRowWindow{/*old_tablet_index=*/0, Range<rowid_t>(covered_up_to, num_rows), /*is_gap=*/true});
+    }
+    return Status::OK();
+}
 
 // Generates a fresh, non-zero global rowset uid (a 128-bit PUniqueId).
 PUniqueId make_rowset_uid() {
