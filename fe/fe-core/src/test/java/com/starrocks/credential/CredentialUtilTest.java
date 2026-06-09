@@ -18,7 +18,6 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
 import org.junit.jupiter.api.Assertions;
@@ -49,9 +48,9 @@ public class CredentialUtilTest {
         CredentialUtil.maskCredential(properties);
         Assertions.assertEquals("he******eh", properties.get(key));
 
-        properties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, "path");
+        properties.put(CloudConfigurationConstants.AZURE_PATH_KEY, "path");
         CredentialUtil.maskCredential(properties);
-        Assertions.assertFalse(properties.containsKey(AzureCloudConfigurationProvider.AZURE_PATH_KEY));
+        Assertions.assertFalse(properties.containsKey(CloudConfigurationConstants.AZURE_PATH_KEY));
     }
 
     @Test

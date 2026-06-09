@@ -19,7 +19,6 @@ import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.logging.log4j.LogManager;
@@ -78,7 +77,7 @@ public class CredentialUtil {
 
     private static void doMask(Map<String, String> properties, String configKey) {
         // This key is only auxiliary authentication for Azure and does not need to be exposed.
-        properties.remove(AzureCloudConfigurationProvider.AZURE_PATH_KEY);
+        properties.remove(CloudConfigurationConstants.AZURE_PATH_KEY);
 
         // Remove for jdbc catalog's password
         properties.remove(JDBCResource.PASSWORD);
