@@ -1119,6 +1119,317 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
     return {file_cnt, row_cnt};
 }
 
+namespace {
+
+// One decoded chunk-worth of keys+values. The batch keeps the source key column alive (see fields)
+// so its `keys` Slices stay valid until they are inserted, without copying the key bytes.
+struct RebuildInsertBatch {
+    // Exactly one of these owns the key bytes the `keys` Slices point into, kept alive until Phase C
+    // inserts -- so no copy is needed. `chunk` holds the source chunk for the non-encoded single-column
+    // path (keys point into its key column); `encoded_keys` holds the freshly-encoded pk column for the
+    // multi-column / V2-encoding path.
+    ChunkUniquePtr chunk;
+    MutableColumnPtr encoded_keys;
+    Buffer<Slice> keys;             // Slices into chunk's key column or into encoded_keys
+    std::vector<IndexValue> values; // (rssid<<32)+rowid
+};
+
+// One flat parallel scan unit: exactly one segment of one rebuild rowset. `global_seq` ascends in
+// (rowset version order, segment order) so Phase C inserts in the correct order by walking the units
+// in index order. `itr` is owned by RebuildScanPlan::rowset_iters and only borrowed here.
+struct RebuildScanUnit {
+    size_t global_seq = 0;
+    int rowset_ord = 0; // index into RebuildScanPlan::rebuild_rowsets
+    int seg_ord = 0;    // segment index within the rowset
+    int64_t rowset_version = 0;
+    ChunkIterator* itr = nullptr;
+    uint32_t rssid = 0;
+};
+
+// Per-segment scan output, indexed by RebuildScanUnit::global_seq. Each slot is written by exactly
+// one task -> no mutex needed.
+struct RebuildScanUnitResult {
+    std::vector<RebuildInsertBatch> batches; // ordered as produced by get_next
+    int64_t num_rows = 0;                    // rebuild_index_num_rows contribution
+};
+
+// One rebuild rowset, recorded in version order during Phase A. Phase C applies each rowset's del
+// files after that rowset's segment inserts and before the next rowset.
+struct RebuildRowsetEntry {
+    RowsetPtr rowset;
+    int64_t rowset_version = 0;
+    bool has_del_files = false;
+};
+
+// One rebuild rowset's built scan state. `iters` owns all the rowset's segment iterators (including
+// skipped ones, which are closed) and MUST outlive any scan of `units`, which only borrow the raw
+// iterator pointers. `seg_stats` (parallel path only) holds one OlapReaderStatistics per segment that
+// the iterators were created against, so concurrent scans don't race on a shared stats object; it
+// must outlive the iterators too, and stays address-stable across vector moves.
+struct OneRowsetScan {
+    std::vector<ChunkIteratorPtr> iters;
+    std::vector<OlapReaderStatistics> seg_stats;
+    std::vector<RebuildScanUnit> units; // seg_ord/rssid/rowset_version set; global_seq/rowset_ord set by caller
+    int64_t rowset_version = 0;
+    bool has_del_files = false;
+};
+
+// Output of Phase A for the parallel path. `rowset_iters`/`rowset_seg_stats` own the per-rowset
+// iterators and per-segment stats and MUST outlive the Phase B scan (scan units only borrow the raw
+// iterator pointers; iterators only borrow the stats pointers).
+struct RebuildScanPlan {
+    std::vector<std::vector<ChunkIteratorPtr>> rowset_iters;
+    std::vector<std::vector<OlapReaderStatistics>> rowset_seg_stats;
+    std::vector<RebuildRowsetEntry> rebuild_rowsets;
+    std::vector<RebuildScanUnit> scan_units;
+};
+
+// Immutable inputs + thread-safe sinks shared by every Phase B worker.
+struct RebuildScanContext {
+    const Schema& pkey_schema;
+    PrimaryKeyEncodingType pk_encoding_type;
+    bool need_encode; // build a per-row pk-encoder column (multi-column PK or V2 encoding)
+    size_t key_size;  // fixed encoded key size, used by the non-binary key path
+    uint64_t rebuild_rss_rowid_point;
+    std::mutex* err_mutex;
+    Status* scan_status;
+};
+
+// Merge the IO fields the rebuild traces from one segment's stats into the aggregate (the only fields
+// load_from_lake_tablet emits; per-segment stats exist solely to make the parallel scan race-free).
+void merge_rebuild_io_stats(const OlapReaderStatistics& from, OlapReaderStatistics* to) {
+    to->io_count_local_disk += from.io_count_local_disk;
+    to->io_count_remote += from.io_count_remote;
+    to->io_ns_read_local_disk += from.io_ns_read_local_disk;
+    to->io_ns_remote += from.io_ns_remote;
+}
+
+// Build one rebuild rowset's segment iterators + scan units (SERIAL, caller thread). Returns nullopt
+// if the rowset does not need rebuild. get_each_segment_iterator_with_delvec internally parallelises
+// across segments via its own threadpool -- DO NOT call this from a worker on that pool. When
+// `use_per_segment_stats` is set, each segment iterator gets its own stats (stored in the returned
+// seg_stats) for race-free concurrent scanning; otherwise all segments share `stats`.
+StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& rowset, int64_t base_version,
+                                                             const MetaFileBuilder* builder, const Schema& pkey_schema,
+                                                             uint32_t rebuild_rss_id, uint64_t rebuild_rss_rowid_point,
+                                                             OlapReaderStatistics* stats, bool use_per_segment_stats) {
+    TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
+    TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
+    if (!LakePersistentIndex::needs_rowset_rebuild(rowset->metadata(), rebuild_rss_id)) {
+        return std::optional<OneRowsetScan>{};
+    }
+    OneRowsetScan out;
+    out.rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
+    out.has_del_files = rowset->metadata().del_files_size() > 0;
+
+    const int num_segments = static_cast<int>(rowset->num_segments());
+    // Build per-segment rowid ranges to skip rows already covered by SSTables.
+    // For the segment containing rebuild_rss_rowid_point, only rows after that point need rebuild.
+    std::vector<SparseRangePtr> rowid_ranges(num_segments);
+    if (rebuild_rss_rowid_point > 0) {
+        for (int32_t si = 0; si < num_segments; si++) {
+            uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), si);
+            if (rssid == rebuild_rss_id) {
+                uint32_t low_rowid = rebuild_rss_rowid_point & 0xFFFFFFFF;
+                if (low_rowid < std::numeric_limits<uint32_t>::max()) {
+                    uint32_t start_rowid = low_rowid + 1;
+                    auto range = std::make_shared<SparseRange<>>();
+                    range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
+                    rowid_ranges[si] = std::move(range);
+                } else {
+                    // low_rowid == UINT32_MAX means the entire segment is covered by SSTables,
+                    // set an empty range so the segment iterator skips all rows.
+                    rowid_ranges[si] = std::make_shared<SparseRange<>>();
+                }
+                break;
+            }
+        }
+    }
+    // Per-segment stats: one OlapReaderStatistics per segment, so concurrent Phase B scans of
+    // different segments of this rowset never write the same stats object. The pointers below are
+    // captured by the iterators; out.seg_stats stays address-stable across the moves out of here.
+    std::vector<OlapReaderStatistics*> seg_stats_ptrs;
+    if (use_per_segment_stats) {
+        out.seg_stats.resize(num_segments);
+        seg_stats_ptrs.reserve(num_segments);
+        for (int i = 0; i < num_segments; i++) {
+            seg_stats_ptrs.push_back(&out.seg_stats[i]);
+        }
+    }
+    StatusOr<std::vector<ChunkIteratorPtr>> res;
+    {
+        // Stays serial; internally parallelises across segments via its own segment threadpool.
+        TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
+        res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, stats, &rowid_ranges,
+                                                            use_per_segment_stats ? &seg_stats_ptrs : nullptr);
+    }
+    RETURN_IF_ERROR(res.status());
+    out.iters = std::move(res).value();
+    CHECK(out.iters.size() == rowset->num_segments()) << "itrs.size != num_segments";
+
+    // One flat scan unit per non-null, non-skipped segment; the unit borrows the iterator owned by
+    // out.iters.
+    for (size_t i = 0; i < out.iters.size(); i++) {
+        auto* itr = out.iters[i].get();
+        if (itr == nullptr) {
+            continue;
+        }
+        uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+        if (rssid < rebuild_rss_id) {
+            // lower than rebuild point, skip. Close it now: a skipped segment never becomes a ScanUnit,
+            // so no scanner will close it and ~ChunkIterator does not call close() -- matching the
+            // original loop's per-iterator DeferOp close.
+            // Notice: segment id that equal `rebuild_rss_id` can't be skip because there are maybe some
+            // rows need to rebuild.
+            itr->close();
+            continue;
+        }
+        RebuildScanUnit unit;
+        unit.seg_ord = static_cast<int>(i);
+        unit.rowset_version = out.rowset_version;
+        unit.itr = itr;
+        unit.rssid = rssid;
+        out.units.emplace_back(unit);
+    }
+    return std::optional<OneRowsetScan>{std::move(out)};
+}
+
+// Phase A for the parallel path: build every rebuild rowset's iterators + flat scan units up front
+// (the parallel scan needs them all alive concurrently), each segment with its own stats. `global_seq`
+// is the running append index, so it ascends in (rowset version order, segment order). The serial path
+// does NOT use this; it builds and consumes one rowset at a time (see load_from_lake_tablet).
+StatusOr<RebuildScanPlan> build_rebuild_scan_units(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                                   int64_t base_version, const MetaFileBuilder* builder,
+                                                   const Schema& pkey_schema, uint32_t rebuild_rss_id,
+                                                   uint64_t rebuild_rss_rowid_point, OlapReaderStatistics* stats) {
+    RebuildScanPlan plan;
+    auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
+    plan.rowset_iters.reserve(rowsets.size());
+    plan.rowset_seg_stats.reserve(rowsets.size());
+    plan.rebuild_rowsets.reserve(rowsets.size());
+    for (auto& rowset : rowsets) {
+        ASSIGN_OR_RETURN(auto one,
+                         build_one_rowset_scan(rowset, base_version, builder, pkey_schema, rebuild_rss_id,
+                                               rebuild_rss_rowid_point, stats, /*use_per_segment_stats=*/true));
+        if (!one.has_value()) {
+            continue;
+        }
+        const int rowset_ord = static_cast<int>(plan.rebuild_rowsets.size());
+        plan.rebuild_rowsets.push_back(RebuildRowsetEntry{rowset, one->rowset_version, one->has_del_files});
+        for (auto& unit : one->units) {
+            unit.global_seq = plan.scan_units.size();
+            unit.rowset_ord = rowset_ord;
+            plan.scan_units.emplace_back(unit);
+        }
+        plan.rowset_iters.emplace_back(std::move(one->iters));
+        plan.rowset_seg_stats.emplace_back(std::move(one->seg_stats));
+    }
+    return plan;
+}
+
+// Phase B worker: scan a single segment (one ScanUnit) into its result slot. Read-only and
+// thread-safe: uses worker-local chunk/rowids/pk-encoder column and never touches
+// _memtable/insert/load_dels. Closes the segment's iterator once its scan finishes (it stays alive
+// in RebuildScanPlan::rowset_iters until then). Runs either inline or on a worker thread.
+// `emit` is invoked once per decoded chunk-batch: the parallel path buffers it (inserted later in
+// version order), the serial path inserts it immediately so only one chunk is held at a time. An emit
+// error stops the scan and is recorded like any scan error.
+void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx,
+                           const std::function<Status(RebuildInsertBatch&)>& emit) {
+    auto* itr = unit.itr;
+    DeferOp close_iter([&] { itr->close(); });
+    const uint32_t rssid = unit.rssid;
+    const auto record_err = [&](const Status& s) {
+        std::lock_guard<std::mutex> l(*ctx.err_mutex);
+        ctx.scan_status->update(s);
+    };
+
+    // Worker-local scratch: the pk-encoder column is NOT thread-safe, so each task gets its own
+    // chunk/rowids/pk-encoder column. IO accounting is task-local too: each unit's iterator was created
+    // with its own OlapReaderStatistics (see build_one_rowset_scan), merged into the aggregate after
+    // token->wait(), so concurrent get_next() calls never race on a shared stats object.
+    std::vector<uint32_t> local_rowids;
+    local_rowids.reserve(config::vector_chunk_size);
+    // The scan chunk is reused across iterations on the encoded path (keys live in a per-batch encoded
+    // column there), but is moved into the batch on the non-encoded path (keys point straight into its
+    // column); a moved-out chunk is reallocated at the top of the next iteration.
+    ChunkUniquePtr local_chunk_sp;
+
+    while (true) {
+        if (local_chunk_sp == nullptr) {
+            local_chunk_sp = ChunkHelper::new_chunk(ctx.pkey_schema, config::vector_chunk_size);
+        } else {
+            local_chunk_sp->reset();
+        }
+        auto* local_chunk = local_chunk_sp.get();
+        local_rowids.clear();
+        auto st = itr->get_next(local_chunk, &local_rowids);
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            record_err(st);
+            break;
+        }
+        // On the encoded path, encode into a FRESH column per batch so the batch can own it; on the
+        // non-encoded path the keys come straight from the chunk's single key column.
+        Column* pkc = nullptr;
+        MutableColumnPtr encoded_keys;
+        if (ctx.need_encode) {
+            if (!PrimaryKeyEncoder::create_column(ctx.pkey_schema, &encoded_keys, ctx.pk_encoding_type).ok()) {
+                CHECK(false) << "create column for primary key encoder failed";
+            }
+            PrimaryKeyEncoder::encode(ctx.pkey_schema, *local_chunk, 0, local_chunk->num_rows(), encoded_keys.get(),
+                                      ctx.pk_encoding_type);
+            pkc = encoded_keys.get();
+        } else {
+            pkc = const_cast<Column*>(local_chunk->columns()[0].get());
+        }
+        uint64_t base = ((uint64_t)rssid) << 32;
+        std::vector<IndexValue> values;
+        values.reserve(pkc->size());
+        DCHECK(pkc->size() <= local_rowids.size());
+        for (uint32_t r = 0; r < pkc->size(); r++) {
+            values.emplace_back(base + local_rowids[r]);
+        }
+        if (values.back().get_value() <= ctx.rebuild_rss_rowid_point) {
+            // lower AND equal than rebuild point, skip
+            continue;
+        }
+
+        // Build keys as Slices into the source column and keep that column alive in the batch, so
+        // Phase C can insert after the scan without copying the key bytes. Same extraction as the
+        // serial path: binary columns expose their key Slices via raw_data(); fixed-size columns
+        // expose a contiguous `_key_size`-strided buffer via continuous_data().
+        RebuildInsertBatch batch;
+        batch.values = std::move(values);
+        const size_t n = pkc->size();
+        batch.keys.reserve(n);
+        if (pkc->is_binary()) {
+            const auto* src = reinterpret_cast<const Slice*>(pkc->raw_data());
+            for (size_t k = 0; k < n; ++k) {
+                batch.keys.emplace_back(src[k]);
+            }
+        } else {
+            const auto* fkeys = pkc->continuous_data();
+            for (size_t k = 0; k < n; ++k) {
+                batch.keys.emplace_back(fkeys, ctx.key_size);
+                fkeys += ctx.key_size;
+            }
+        }
+        if (ctx.need_encode) {
+            batch.encoded_keys = std::move(encoded_keys);
+        } else {
+            batch.chunk = std::move(local_chunk_sp); // hand the chunk's key column to the batch
+        }
+        if (auto es = emit(batch); !es.ok()) {
+            record_err(es);
+            break;
+        }
+    }
+}
+
+} // namespace
+
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
@@ -1143,138 +1454,128 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
-        // more than one key column or big endian encoding
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
+    const bool need_encode = pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
+
+    // Mutex-guarded status sink so parallel workers can report the first scan error without serializing.
+    std::mutex scan_err_mutex;
+    Status scan_status;
+    const RebuildScanContext ctx{.pkey_schema = pkey_schema,
+                                 .pk_encoding_type = pk_encoding_type,
+                                 .need_encode = need_encode,
+                                 .key_size = static_cast<size_t>(_key_size),
+                                 .rebuild_rss_rowid_point = rebuild_rss_rowid_point,
+                                 .err_mutex = &scan_err_mutex,
+                                 .scan_status = &scan_status};
+
+    // Count the rebuild scan units (one per eligible (rowset, segment)) from metadata, so we can pick
+    // the path WITHOUT building any iterators -- the serial fallback must not materialize them all.
+    int rebuild_unit_count = 0;
+    for (const auto& rs : metadata->rowsets()) {
+        if (needs_rowset_rebuild(rs, rebuild_rss_id)) {
+            rebuild_unit_count += static_cast<int>(rebuild_segment_counts(rs, rebuild_rss_id).first);
         }
     }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
-    auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
-    int64_t get_next_cost_us = 0;
-    int64_t pk_encode_cost_us = 0;
-    int64_t build_values_cost_us = 0;
-    // Rowset whose version is between max_sstable_version and base_version should be recovered.
-    for (auto& rowset : rowsets) {
-        TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
-        TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
-        if (!needs_rowset_rebuild(rowset->metadata(), rebuild_rss_id)) {
-            continue;
-        }
-        const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
-        // Build per-segment rowid ranges to skip rows already covered by SSTables.
-        // For the segment containing rebuild_rss_rowid_point, only rows after that point need rebuild.
-        std::vector<SparseRangePtr> rowid_ranges(rowset->num_segments());
-        if (rebuild_rss_rowid_point > 0) {
-            for (int32_t si = 0; si < rowset->num_segments(); si++) {
-                uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), si);
-                if (rssid == rebuild_rss_id) {
-                    uint32_t low_rowid = rebuild_rss_rowid_point & 0xFFFFFFFF;
-                    if (low_rowid < std::numeric_limits<uint32_t>::max()) {
-                        uint32_t start_rowid = low_rowid + 1;
-                        auto range = std::make_shared<SparseRange<>>();
-                        range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
-                        rowid_ranges[si] = std::move(range);
-                    } else {
-                        // low_rowid == UINT32_MAX means the entire segment is covered by SSTables,
-                        // set an empty range so the segment iterator skips all rows.
-                        rowid_ranges[si] = std::make_shared<SparseRange<>>();
-                    }
-                    break;
-                }
+    // Gate the parallel scan with the same helper load_dels uses (enabled, >1 unit, and the update
+    // tracker not already past pk_index_parallel_rebuild_mem_ratio). The parallel path buffers every
+    // unit's decoded keys+values AND holds every rowset's iterators at once; under memory pressure (or
+    // a single unit) fall back to a serial scan that builds, scans-and-inserts, and releases ONE rowset
+    // at a time on the caller thread (no thread pool) -- the segment-scan analog of load_dels reading
+    // one del file at a time.
+    const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
+
+    if (use_parallel) {
+        // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
+        // stats), since the parallel scan needs them all alive concurrently.
+        ASSIGN_OR_RETURN(auto plan, build_rebuild_scan_units(tablet_mgr, metadata, base_version, builder, pkey_schema,
+                                                             rebuild_rss_id, rebuild_rss_rowid_point, &stats));
+        auto& scan_units = plan.scan_units;
+        auto& rebuild_rowsets = plan.rebuild_rowsets;
+        std::vector<RebuildScanUnitResult> unit_results(scan_units.size());
+
+        // Phase B (PARALLEL): one task per (rowset, segment) unit on pk_index_execution_thread_pool via
+        // ONE CONCURRENT token; each worker buffers its decoded batches into its own result slot. This
+        // is the only parallel layer; Phase A's get_each_segment_iterator stays serial (own pool).
+        auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+        for (const auto& unit : scan_units) {
+            const auto* unit_ptr = &unit;
+            auto* result = &unit_results[unit.global_seq];
+            auto buffer_emit = [result](RebuildInsertBatch& batch) -> Status {
+                result->num_rows += static_cast<int64_t>(batch.values.size());
+                result->batches.emplace_back(std::move(batch));
+                return Status::OK();
+            };
+            auto st = token->submit_func(
+                    [unit_ptr, &ctx, buffer_emit]() { scan_one_rebuild_unit(*unit_ptr, ctx, buffer_emit); });
+            if (!st.ok()) {
+                // Fall back to inline scan for this unit on submit failure.
+                scan_one_rebuild_unit(unit, ctx, buffer_emit);
             }
         }
-        StatusOr<std::vector<ChunkIteratorPtr>> res;
-        {
-            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
-            res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats,
-                                                                &rowid_ranges);
+        token->wait();
+        // Propagate the first scan error before mutating the shared index.
+        RETURN_IF_ERROR(scan_status);
+        // Fold the per-segment IO stats back into the aggregate for tracing.
+        for (const auto& seg_vec : plan.rowset_seg_stats) {
+            for (const auto& s : seg_vec) {
+                merge_rebuild_io_stats(s, &stats);
+            }
         }
-        if (!res.ok()) {
-            return res.status();
+
+        // Phase C (SERIAL, caller thread): walk rebuild_rowsets in version order, insert each rowset's
+        // buffered batches in segment order, then apply its del files -- preserving the original "this
+        // rowset's segments, then its del files, then the next rowset" ordering, including for rowsets
+        // whose segments were all skipped. scan_units are appended in (rowset_ord, seg_ord) order, so
+        // each rowset's units form a contiguous run. insert()/load_dels are NOT thread-safe and MUST
+        // run on the caller thread only.
+        size_t unit_cursor = 0;
+        for (size_t ro = 0; ro < rebuild_rowsets.size(); ro++) {
+            while (unit_cursor < scan_units.size() && static_cast<size_t>(scan_units[unit_cursor].rowset_ord) == ro) {
+                const auto& unit = scan_units[unit_cursor];
+                TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
+                auto& result = unit_results[unit.global_seq];
+                TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+                TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
+                for (auto& batch : result.batches) {
+                    RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
+                                           batch.values.data(), unit.rowset_version));
+                }
+                unit_cursor++;
+            }
+            if (rebuild_rowsets[ro].has_del_files) {
+                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
+            }
         }
-        auto& itrs = res.value();
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        for (size_t i = 0; i < itrs.size(); i++) {
-            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            auto itr = itrs[i].get();
-            if (itr == nullptr) {
+    } else {
+        // Serial fallback: build, scan-and-insert, and release ONE rowset at a time, so peak memory is
+        // bounded to a single rowset's iterators plus one decoded chunk. Inserts each chunk straight
+        // away (at most one chunk held), and applies a rowset's del files after its segments.
+        auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
+        for (auto& rowset : rowsets) {
+            ASSIGN_OR_RETURN(auto one,
+                             build_one_rowset_scan(rowset, base_version, builder, pkey_schema, rebuild_rss_id,
+                                                   rebuild_rss_rowid_point, &stats, /*use_per_segment_stats=*/false));
+            if (!one.has_value()) {
                 continue;
             }
-            DeferOp close_iter([&] { itr->close(); });
-            uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
-            if (rssid < rebuild_rss_id) {
-                // lower than rebuild point, skip
-                // Notice: segment id that equal `rebuild_rss_id` can't be skip because
-                // there are maybe some rows need to rebuild.
-                continue;
+            for (const auto& unit : one->units) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
+                TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+                int64_t unit_rows = 0;
+                auto insert_emit = [&](RebuildInsertBatch& batch) -> Status {
+                    unit_rows += static_cast<int64_t>(batch.values.size());
+                    return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
+                                  batch.values.data(), unit.rowset_version);
+                };
+                scan_one_rebuild_unit(unit, ctx, insert_emit);
+                RETURN_IF_ERROR(scan_status);
+                TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
-            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
-            while (true) {
-                chunk->reset();
-                rowids.clear();
-                int64_t t1 = GetCurrentTimeMicros();
-                auto st = itr->get_next(chunk, &rowids);
-                get_next_cost_us += GetCurrentTimeMicros() - t1;
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    Column* pkc = nullptr;
-                    if (pk_column) {
-                        int64_t t2 = GetCurrentTimeMicros();
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
-                        pk_encode_cost_us += GetCurrentTimeMicros() - t2;
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = const_cast<Column*>(chunk->columns()[0].get());
-                    }
-                    int64_t t3 = GetCurrentTimeMicros();
-                    uint64_t base = ((uint64_t)rssid) << 32;
-                    std::vector<IndexValue> values;
-                    values.reserve(pkc->size());
-                    DCHECK(pkc->size() <= rowids.size());
-                    for (uint32_t i = 0; i < pkc->size(); i++) {
-                        values.emplace_back(base + rowids[i]);
-                    }
-                    build_values_cost_us += GetCurrentTimeMicros() - t3;
-                    if (values.back().get_value() <= rebuild_rss_rowid_point) {
-                        // lower AND equal than rebuild point, skip
-                        continue;
-                    }
-                    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                                               values.data(), rowset_version));
-                    } else {
-                        std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
-                            keys.emplace_back(fkeys, _key_size);
-                            fkeys += _key_size;
-                        }
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
-                                               rowset_version));
-                    }
-                }
+            if (one->has_del_files) {
+                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version));
             }
-        }
-        // Rebuild from del files
-        if (rowset->metadata().del_files_size() > 0) {
-            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
         }
     }
-    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
-    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);
-    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
