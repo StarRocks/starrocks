@@ -94,6 +94,7 @@ enum THdfsFileFormat {
   PARQUET = 5,
   ORC = 6,
   SEQUENCE_FILE = 7,
+  LANCE = 8,
 
   UNKNOWN = 100
 }
