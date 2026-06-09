@@ -1176,6 +1176,18 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                                    config::sdcg_dense_threshold);
                 }
 
+                // SDCG flexible: a heterogeneous per-row load CANNOT be applied via the dense union
+                // path (_update_source_chunk_by_upt overlays the full union, including NULL
+                // placeholders for the columns a given row did NOT declare, destroying those base
+                // values). Honoring per-row presence is correctness-critical, not a perf option, so
+                // a flexible apply MUST take the packed-presence path regardless of the SDCG density
+                // decision (enable_sparse_dcg, the K/M gate, or M being unknown). The packed path
+                // tolerates source_num_rows==0 (it uses M only as a guard) and builds presence from
+                // the actual covered source_rowids.
+                if (flexible_mode) {
+                    take_sparse = true;
+                }
+
                 // SDCG convergence (in-place promotion): even when the density decision favors a new sparse
                 // layer, force the dense path when the EXISTING sparse chain for this rssid's batch columns
                 // is already deep. Two independent triggers:
@@ -1186,7 +1198,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 // The dense rewrite reads the source THROUGH the overlay readers, materializing the whole
                 // chain, and append_dcg's dense-supersede then orphans every superseded sparse layer --
                 // convergence without any background compaction worker.
-                if (take_sparse) {
+                // Skip in-place promotion for flexible: it would flip take_sparse back to false and
+                // route the apply onto the flexible-unaware dense path (corrupting omitted columns).
+                // Flexible chains converge via compaction, not the promotion dense-rewrite.
+                if (take_sparse && !flexible_mode) {
                     int32_t chain_len = 0;
                     int64_t cum_k = 0;
                     inspect_existing_sparse_chain(params.metadata, rssid, selective_unique_update_column_ids,
