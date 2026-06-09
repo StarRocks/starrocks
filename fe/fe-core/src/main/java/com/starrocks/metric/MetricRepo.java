@@ -411,6 +411,33 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(snapshotConsecutiveFailures);
 
+        GaugeMetric<Long> recycleBinPartitionNum = new GaugeMetric<Long>(
+                "recycle_bin_partition_num", MetricUnit.NOUNIT, "number of partitions in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinPartitionNum);
+
+        GaugeMetric<Long> recycleBinTableNum = new GaugeMetric<Long>(
+                "recycle_bin_table_num", MetricUnit.NOUNIT, "number of tables in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinTableNum);
+
+        GaugeMetric<Long> recycleBinDatabaseNum = new GaugeMetric<Long>(
+                "recycle_bin_database_num", MetricUnit.NOUNIT, "number of databases in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleDatabaseNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinDatabaseNum);
+
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
             Metric<Long> gauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
