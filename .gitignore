@@ -58,6 +58,7 @@ tags
 .tags
 .ctags
 .cache
+.direnv/
 *.vim
 *.swo
 compile_commands.json

@@ -55,9 +55,20 @@ def get_user():
 def get_hostname():
     if os.path.exists('/.dockerenv'):
         return "docker"
-    res = subprocess.Popen(["hostname", "-f"], stdout=subprocess.PIPE)
-    out, _ = res.communicate()
-    return out.decode('utf-8').strip()
+    try:
+        res = subprocess.run(
+            ["hostname", "-f"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True)
+    except FileNotFoundError:
+        return platform.node() or "unknown"
+
+    hostname = res.stdout.strip()
+    if res.returncode == 0 and hostname:
+        return hostname
+    return platform.node() or "unknown"
 
 def get_build_distro_info():
     """ parse /etc/os-release and load the info into a dictionary

@@ -1,0 +1,10 @@
+diff --git a/include/makemd5.c b/include/makemd5.c
+index 07c318e..f7d1e58 100644
+--- a/include/makemd5.c
++++ b/include/makemd5.c
+@@ -158 +158 @@ static int print_pre(FILE *f)
+-	  "The following makes PROTOTYPES default to 0 if it has not already\n"
++	  "The following makes PROTOTYPES default to 1 if it has not already\n"
+@@ -162 +162 @@ static int print_pre(FILE *f)
+-	  "#define PROTOTYPES 0\n"
++	  "#define PROTOTYPES 1\n"
