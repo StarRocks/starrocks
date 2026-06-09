@@ -312,7 +312,7 @@ public class Load {
                                    List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, isLoadJson, false);
+                columnsFromPath, isLoadJson, false, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -322,6 +322,18 @@ public class Load {
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isLoadJson,
                                    boolean partialUpdate) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, false);
+    }
+
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate, boolean flexible) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -424,6 +436,16 @@ public class Load {
                 copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
                         isLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
             }
+        }
+
+        // SDCG flexible partial update: declare the hidden per-row column-set id "__cset__"
+        // as a synthetic SOURCE field (mirroring "__op"). The json scanner never reads it from
+        // the JSON object -- it COMPUTES the set-id per row from the present columns and writes
+        // it into this slot. Declaring it here gives the scanner a source slot to fill AND lets
+        // the dest "__cset__" slot map to it in finalizeParams (otherwise the dest slot has no
+        // source field and analysis throws "column has no source field, column=__cset__").
+        if (flexible) {
+            copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_CSET_COLUMN, null));
         }
 
         // generate a map for checking easily
@@ -564,6 +586,12 @@ public class Load {
                         // columns:__op,pk,col1,col2 equals to columns:srccol0,srccol1,srccol2,srccol3,__op=srccol0,pk=srccol1,col1=srccol2,col2=srccol3
                         slotDesc.setType(IntegerType.TINYINT);
                         slotDesc.setColumn(new Column(columnName, IntegerType.TINYINT));
+                        slotDesc.setIsMaterialized(true);
+                    } else if (columnName.equals(Load.LOAD_CSET_COLUMN)) {
+                        // SDCG flexible partial update: the hidden set-id source slot is a
+                        // materialized SMALLINT, filled per-row by the json scanner.
+                        slotDesc.setType(IntegerType.SMALLINT);
+                        slotDesc.setColumn(new Column(columnName, IntegerType.SMALLINT));
                         slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(VarcharType.VARCHAR);
