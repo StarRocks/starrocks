@@ -21,6 +21,7 @@
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exec/file_scanner/arrow_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
@@ -107,6 +108,8 @@ Status FileDataSource::_create_scanner() {
             // avro routine load
             _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
         }
+    } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ARROW) {
+        _scanner = std::make_unique<ArrowScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }

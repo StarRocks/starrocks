@@ -29,6 +29,7 @@
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
 #endif
+#include "exec/file_scanner/arrow_scanner.h"
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
@@ -227,6 +228,8 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     case TFileFormatType::FORMAT_AVRO:
         return std::make_unique<AvroScanner>(runtime_state(), runtime_profile(), scan_range, counter);
 #endif
+    case TFileFormatType::FORMAT_ARROW:
+        return std::make_unique<ArrowScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     default:
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }

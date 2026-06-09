@@ -106,6 +106,8 @@ static TFileFormatType::type parse_format(const std::string& format_str) {
         return TFileFormatType::FORMAT_CSV_DEFLATE;
     } else if (boost::iequals(format_str, "zstd")) {
         return TFileFormatType::FORMAT_CSV_ZSTD;
+    } else if (boost::iequals(format_str, "arrow")) {
+        return TFileFormatType::FORMAT_ARROW;
     }
     return TFileFormatType::FORMAT_UNKNOWN;
 }
@@ -119,6 +121,7 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     case TFileFormatType::FORMAT_CSV_DEFLATE:
     case TFileFormatType::FORMAT_CSV_ZSTD:
     case TFileFormatType::FORMAT_JSON:
+    case TFileFormatType::FORMAT_ARROW:
         return true;
     default:
         return false;
