@@ -180,6 +180,20 @@ public class MergeIntoAnalyzer {
                                         ErrorCode.ERR_DUP_FIELDNAME, colName);
                             }
                         }
+                        // Reject omission of a non-null target column: Iceberg V2 has
+                        // no defaults, so getNotMatchedColumnValue's NULL fallback
+                        // would either fail at sink time or write an invalid row.
+                        for (Column dataCol : icebergTable.getBaseSchema()) {
+                            if (dataCol.isHidden()) {
+                                continue;
+                            }
+                            if (!dataCol.isAllowNull() && !seen.contains(dataCol.getName())) {
+                                throw new SemanticException(
+                                        "Column '%s' is not nullable and has no default value; " +
+                                                "MERGE INTO INSERT must provide a value for it",
+                                        dataCol.getName());
+                            }
+                        }
                     }
                 }
             }

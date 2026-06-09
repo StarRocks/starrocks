@@ -443,26 +443,38 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         // expressions like `SET data = s.secret`. In that case do not exclude;
         // re-checking the target's SELECT is harmless because the target privileges
         // already cleared above.
-        List<TableName> excludeTables = sourceReferencesTarget(statement, tableNameForSelect)
+        List<TableName> excludeTables = sourceReferencesTarget(statement)
                 ? Lists.newArrayList()
                 : Lists.newArrayList(tableNameForSelect);
         checkSelectTableAction(context, statement.getQueryStatement(), excludeTables);
         return null;
     }
 
-    private static boolean sourceReferencesTarget(MergeIntoStmt statement, TableName targetName) {
-        if (statement.getSourceRelation() == null) {
+    /**
+     * True when any {@link TableRelation} reachable from the source side resolves
+     * to the same {@link Table} object as the target. Comparing Table identity
+     * avoids the false-negative where the user writes the source unqualified
+     * (e.g. {@code USING t AS s} in the target db), so the source TableName lacks
+     * catalog/db and would not equal the canonical target TableName even though
+     * both sides point at the same physical table.
+     */
+    private static boolean sourceReferencesTarget(MergeIntoStmt statement) {
+        Table targetTable = statement.getTable();
+        if (targetTable == null || statement.getSourceRelation() == null) {
             return false;
         }
-        Set<TableName> sourceTables = new HashSet<>();
+        Set<Table> sourceTables = new HashSet<>();
         new AstTraverser<Void, Void>() {
             @Override
             public Void visitTable(TableRelation node, Void context) {
-                sourceTables.add(node.getName());
+                Table t = node.getTable();
+                if (t != null) {
+                    sourceTables.add(t);
+                }
                 return null;
             }
         }.visit(statement.getSourceRelation());
-        return sourceTables.contains(targetName);
+        return sourceTables.contains(targetTable);
     }
 
     public void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {

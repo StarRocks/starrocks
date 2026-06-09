@@ -235,4 +235,55 @@ public class AuthorizerStmtVisitorTest {
         Assertions.assertTrue(capturedExcludes.get(0).isEmpty(),
                 "Self-merge must not exclude the target table; got excludeTables=" + capturedExcludes.get(0));
     }
+
+    @Test
+    public void testMergeSelfMergeWithUnqualifiedSourceStillDetected() {
+        // Self-merge with the source written unqualified (current-db form):
+        // the source TableRelation carries a TableName without catalog/db,
+        // while the target's TableName.fromTableRef result is fully qualified.
+        // Comparing raw TableName strings would miss this and let the visitor
+        // exclude the target — masking source-side reads. The fix compares
+        // resolved Table object identity, which holds across qualified/unqualified
+        // syntaxes because both sides resolve through the same session cache.
+        String savedCatalog = connectContext.getCurrentCatalog();
+        String savedDb = connectContext.getDatabase();
+        try {
+            connectContext.setCurrentCatalog("iceberg0");
+            connectContext.setDatabase("unpartitioned_db");
+
+            MergeIntoStmt stmt = (MergeIntoStmt) SqlParser.parse(
+                    "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                            "USING t0_v2 AS s " +
+                            "ON t.id = s.id " +
+                            "WHEN MATCHED THEN UPDATE SET data = s.data",
+                    connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(stmt, connectContext);
+
+            List<List<TableName>> capturedExcludes = new ArrayList<>();
+
+            try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class);
+                    MockedStatic<ColumnPrivilege> columnPrivilegeMockedStatic = Mockito.mockStatic(ColumnPrivilege.class)) {
+                columnPrivilegeMockedStatic.when(() -> ColumnPrivilege.check(
+                        Mockito.any(ConnectContext.class),
+                        Mockito.any(QueryStatement.class),
+                        Mockito.anyList()))
+                        .thenAnswer(invocation -> {
+                            capturedExcludes.add(invocation.getArgument(2));
+                            return null;
+                        });
+
+                new AuthorizerStmtVisitor().visitMergeIntoStatement(stmt, connectContext);
+            }
+
+            Assertions.assertEquals(1, capturedExcludes.size(),
+                    "ColumnPrivilege.check must be invoked exactly once for MERGE");
+            Assertions.assertTrue(capturedExcludes.get(0).isEmpty(),
+                    "Unqualified self-merge source must still be detected; got excludeTables=" + capturedExcludes.get(0));
+        } finally {
+            connectContext.setCurrentCatalog(savedCatalog);
+            if (savedDb != null) {
+                connectContext.setDatabase(savedDb);
+            }
+        }
+    }
 }
