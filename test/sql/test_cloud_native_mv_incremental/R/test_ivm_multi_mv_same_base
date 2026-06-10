@@ -1,0 +1,281 @@
+-- name: test_ivm_two_mvs_coexist @cloud
+CREATE TABLE mb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO mb VALUES (1,10),(2,20),(3,-5);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mb_proj
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM mb WHERE v > 0;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mb_agg
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, sum(v) AS sv FROM mb GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mb_proj WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_mb_agg WITH SYNC MODE;
+INSERT INTO mb VALUES (4,40),(2,5),(5,-1);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mb_proj WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_mb_agg WITH SYNC MODE;
+SELECT k, v FROM mv_mb_proj ORDER BY k, v;
+-- result:
+1	10
+2	5
+2	20
+4	40
+-- !result
+SELECT k, sv FROM mv_mb_agg ORDER BY k;
+-- result:
+1	10
+2	25
+3	-5
+4	40
+5	-1
+-- !result
+SELECT COUNT(*) AS proj_diff FROM (SELECT k, v FROM mv_mb_proj EXCEPT SELECT k, v FROM mb WHERE v > 0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS proj_diff_rev FROM (SELECT k, v FROM mb WHERE v > 0 EXCEPT SELECT k, v FROM mv_mb_proj) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS agg_diff FROM (SELECT k, sv FROM mv_mb_agg EXCEPT SELECT k, sum(v) FROM mb GROUP BY k) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS agg_diff_rev FROM (SELECT k, sum(v) FROM mb GROUP BY k EXCEPT SELECT k, sv FROM mv_mb_agg) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT
+  CASE WHEN DEFINITION LIKE '%mv_mb_proj%' OR EXTRA_MESSAGE LIKE '%mv_mb_proj%' THEN 'proj' ELSE 'agg' END AS mv,
+  get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (DEFINITION LIKE '%mv_mb_proj%' OR EXTRA_MESSAGE LIKE '%mv_mb_proj%'
+       OR DEFINITION LIKE '%mv_mb_agg%' OR EXTRA_MESSAGE LIKE '%mv_mb_agg%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2, 3;
+-- result:
+agg	INCREMENTAL	SUCCESS
+agg	PCT	SUCCESS
+proj	INCREMENTAL	SUCCESS
+proj	PCT	SUCCESS
+-- !result
+-- name: test_ivm_staggered_bookmarks @cloud
+CREATE TABLE sb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO sb VALUES (1,10);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sb_a
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM sb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sb_a WITH SYNC MODE;
+INSERT INTO sb VALUES (2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sb_b
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM sb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sb_b WITH SYNC MODE;
+INSERT INTO sb VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sb_a WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_sb_b WITH SYNC MODE;
+SELECT k, v FROM mv_sb_a ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT k, v FROM mv_sb_b ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT COUNT(*) AS a_diff FROM (SELECT k, v FROM mv_sb_a EXCEPT SELECT k, v FROM sb) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS a_diff_rev FROM (SELECT k, v FROM sb EXCEPT SELECT k, v FROM mv_sb_a) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS b_diff FROM (SELECT k, v FROM mv_sb_b EXCEPT SELECT k, v FROM sb) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS b_diff_rev FROM (SELECT k, v FROM sb EXCEPT SELECT k, v FROM mv_sb_b) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (DEFINITION LIKE '%mv_sb_%' OR EXTRA_MESSAGE LIKE '%mv_sb_%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_auto_refresh_fanout @cloud
+CREATE TABLE afb (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO afb VALUES (1,10),(2,20),(3,-5);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_afb_proj
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH ASYNC
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM afb WHERE v > 0;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_afb_agg
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH ASYNC
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, sum(v) AS sv FROM afb GROUP BY k;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afb_proj", 1)
+-- result:
+None
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afb_agg", 1)
+-- result:
+None
+-- !result
+INSERT INTO afb VALUES (4,40),(2,5),(5,-1);
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afb_proj", 2)
+-- result:
+None
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afb_agg", 2)
+-- result:
+None
+-- !result
+SELECT k, v FROM mv_afb_proj ORDER BY k, v;
+-- result:
+1	10
+2	5
+2	20
+4	40
+-- !result
+SELECT k, sv FROM mv_afb_agg ORDER BY k;
+-- result:
+1	10
+2	25
+3	-5
+4	40
+5	-1
+-- !result
+SELECT COUNT(*) AS proj_diff FROM (SELECT k, v FROM mv_afb_proj EXCEPT SELECT k, v FROM afb WHERE v > 0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS proj_diff_rev FROM (SELECT k, v FROM afb WHERE v > 0 EXCEPT SELECT k, v FROM mv_afb_proj) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS agg_diff FROM (SELECT k, sv FROM mv_afb_agg EXCEPT SELECT k, sum(v) FROM afb GROUP BY k) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS agg_diff_rev FROM (SELECT k, sum(v) FROM afb GROUP BY k EXCEPT SELECT k, sv FROM mv_afb_agg) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT
+  CASE WHEN DEFINITION LIKE '%mv_afb_proj%' OR EXTRA_MESSAGE LIKE '%mv_afb_proj%' THEN 'proj' ELSE 'agg' END AS mv,
+  get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (DEFINITION LIKE '%mv_afb_proj%' OR EXTRA_MESSAGE LIKE '%mv_afb_proj%'
+       OR DEFINITION LIKE '%mv_afb_agg%' OR EXTRA_MESSAGE LIKE '%mv_afb_agg%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2, 3;
+-- result:
+agg	INCREMENTAL	SUCCESS
+agg	PCT	SUCCESS
+proj	INCREMENTAL	SUCCESS
+proj	PCT	SUCCESS
+-- !result
+-- name: test_ivm_drop_one_of_many @cloud
+CREATE TABLE dom (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dom VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dom_a
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM dom WHERE v > 0;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dom_b
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, sum(v) AS sv FROM dom GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dom_a WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_dom_b WITH SYNC MODE;
+DROP MATERIALIZED VIEW mv_dom_a;
+-- result:
+-- !result
+INSERT INTO dom VALUES (3,30),(2,5);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dom_b WITH SYNC MODE;
+SELECT k, sv FROM mv_dom_b ORDER BY k;
+-- result:
+1	10
+2	25
+3	30
+-- !result
+SELECT COUNT(*) AS b_diff FROM (SELECT k, sv FROM mv_dom_b EXCEPT SELECT k, sum(v) FROM dom GROUP BY k) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS b_diff_rev FROM (SELECT k, sum(v) FROM dom GROUP BY k EXCEPT SELECT k, sv FROM mv_dom_b) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS dropped_gone FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_dom_a';
+-- result:
+0
+-- !result
