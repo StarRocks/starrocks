@@ -513,6 +513,7 @@
         "connector_io_tasks_adjust_smooth",
         "scan_use_query_mem_ratio",
         "connector_scan_use_query_mem_ratio",
+        "enable_connector_footer_prefetch_on_stall",
         "enable_short_key_for_one_column_filter",
         "desc_hint_split_range",
         "olap_string_max_length",

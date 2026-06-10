@@ -29,6 +29,7 @@ class ScanNode;
 namespace pipeline {
 
 struct ConnectorScanOperatorIOTasksMemLimiter;
+class FooterPrefetchState;
 
 struct ConnectorScanOperatorMemShareArbitrator {
     static constexpr double kChunkBufferMemRatio = 0.5;
@@ -82,12 +83,23 @@ public:
         return _active_inputs_empty.compare_exchange_strong(val, false);
     }
 
+    // Footer prefetch: built by the provider/scan node, installed here after factory
+    // creation. Shared with every operator instance; cancelled in do_close().
+    void set_footer_prefetch_state(std::shared_ptr<FooterPrefetchState> state) {
+        _footer_prefetch_state = std::move(state);
+    }
+    const std::shared_ptr<FooterPrefetchState>& footer_prefetch_state() const { return _footer_prefetch_state; }
+    // Tail-append incrementally-delivered scan ranges to the sidecar (no-op if prefetch is not
+    // installed). Resolves new items through the data source provider.
+    void append_footer_prefetch_ranges(RuntimeState* state, const std::vector<TScanRangeParams>& scan_ranges);
+
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
     std::atomic_int _num_active_inputs{};
     std::atomic_bool _active_inputs_empty{};
+    std::shared_ptr<FooterPrefetchState> _footer_prefetch_state;
 
 public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
@@ -105,6 +117,8 @@ public:
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+
+    void try_submit_metadata_prefetch(RuntimeState* state) override;
 
     connector::ConnectorType connector_type();
 

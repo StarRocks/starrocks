@@ -473,6 +473,15 @@ This topic introduces the following types of BE configurations:
 - Description: It is the memory percent of write buffer for meta in rocksdb. default is 5% of system memory. However, aside from this, the final calculated size of the write buffer memory will not be less than 64MB nor exceed 1G (rocksdb_max_write_buffer_memory_bytes)
 - Introduced in: v3.5.0
 
+### enable_connector_footer_prefetch_on_stall
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to prefetch Parquet file footers when an external table scan is waiting. When a scan over external (data lake) tables has to wait — for example, because a downstream join is still building and cannot accept more rows — the BE uses that idle time to read the footers (file metadata) of the upcoming files into cache. By the time the scan reaches those files, their metadata is already cached, so it avoids a separate remote read for each file. `true` enables this behavior; `false` disables it. Only the footers of Parquet files read by the native reader are prefetched.
+- Introduced in: -
+
 ## Other
 
 ### default_mv_resource_group_concurrency_limit

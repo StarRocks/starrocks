@@ -461,6 +461,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：rocksdb中write buffer可以使用的内存占比。默认值是百分之5，最终取值不会小于64MB，也不会大于1GB。
 - 引入版本：v3.5.0
 
+### enable_connector_footer_prefetch_on_stall
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在外部表扫描等待时预取 Parquet 文件的 footer（文件元数据）。当外部（数据湖）表的扫描需要等待时——例如下游的 Join 仍在构建、无法接收更多数据行——BE 会利用这段空闲时间，提前将后续文件的 footer 读入缓存。当扫描到达这些文件时，其元数据已在缓存中，从而避免对每个文件单独发起一次远程读取。`true` 表示启用该行为，`false` 表示禁用。仅预取由 native reader 读取的 Parquet 文件的 footer。
+- 引入版本：-
+
 ## 其他
 
 ### default_mv_resource_group_concurrency_limit

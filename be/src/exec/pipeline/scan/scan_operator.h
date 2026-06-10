@@ -130,6 +130,18 @@ protected:
 
     virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
 
+    // Footer-prefetch: connector operators submit metadata-only ScanTasks to the scan
+    // executor when stalled. Expose the executor + workgroup injected by pipeline setup
+    // (set_scan_executor / set_workgroup) without making the members public. The WG queue
+    // dereferences task.workgroup, so a submitted task must carry this workgroup.
+    workgroup::ScanExecutor* scan_executor() const { return _scan_executor; }
+    const workgroup::WorkGroupPtr& scan_workgroup() const { return _workgroup; }
+
+    // Footer-prefetch hook: called from _try_to_trigger_next_scan when the row chunk buffer
+    // is full (the scan is stalled). Default no-op; ConnectorScanOperator submits
+    // metadata-only prefetch tasks to the scan executor on the idle io-task slots.
+    virtual void try_submit_metadata_prefetch(RuntimeState* state) {}
+
     ChunkPtr get_chunk_from_buffer() {
         auto& chunk_buffer = get_chunk_buffer();
         ChunkPtr chunk = nullptr;

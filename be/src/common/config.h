@@ -1928,6 +1928,10 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.05");
 // Whether enable spill intermediate data for connector sink.
 CONF_mBool(enable_connector_sink_spill, "true");
 
+// Kill-switch for stall-time Parquet footer prefetch (warm upcoming files' footers into cache on
+// idle scan-executor tasks while a connector scan is back-pressured). Bounds derive from scan dop.
+CONF_mBool(enable_connector_footer_prefetch_on_stall, "true");
+
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 

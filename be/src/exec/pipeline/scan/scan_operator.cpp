@@ -337,6 +337,13 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // because we want to update state based on raw data.
     int total_cnt = available_pickup_morsel_count();
 
+    // Drive the stall-time footer prefetcher: it submits warm tasks only while is_buffer_full()
+    // (a downstream hash join still building) and clears the stall flag the moment the buffer
+    // drains, so the self-resubmitting tasks stop contending with row I/O once the scan resumes.
+    // Call unconditionally for that clear-on-resume; no-op unless overridden (connector scans) and
+    // the feature is armed.
+    try_submit_metadata_prefetch(state);
+
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
@@ -428,6 +435,12 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         }
         _is_io_task_running[chunk_source_index] = false;
     }
+
+    // An io task just finished. Drive the prefetcher here too: when the driver is parked
+    // OUTPUT_FULL on a build stall, pull_chunk -- and thus _try_to_trigger_next_scan -- does not
+    // run, so this is the path that keeps warming while stalled and clears the stall flag on
+    // resume. Outside the lock to avoid nesting the footer-state mutex under _task_mutex.
+    try_submit_metadata_prefetch(state);
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {

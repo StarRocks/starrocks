@@ -51,6 +51,8 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/common.h"
@@ -814,6 +816,24 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         }
     });
 
+    // Feed the initial (upfront) scan ranges into the footer prefetcher now that operators exist
+    // and the prefetch state is installed. Incremental batches arrive later via the per-RPC append
+    // path. No-op for non-connector sources or when prefetch was not installed (state == nullptr).
+    _fragment_ctx->iterate_pipeline([&request, runtime_state](Pipeline* pipeline) {
+        auto* src = pipeline->source_operator_factory();
+        auto* conn = dynamic_cast<pipeline::ConnectorScanOperatorFactory*>(src);
+        if (conn == nullptr) {
+            return;
+        }
+        const int node_id = src->plan_node_id();
+        // Initial ranges arrive in two forms: per-node, and per-driver-seq for bucket/colocate/
+        // group-execution assignments. Feed both so those plans activate upfront (state dedups by key).
+        conn->append_footer_prefetch_ranges(runtime_state, request.scan_ranges_of_node(node_id));
+        for (const auto& per_driver : request.per_driver_seq_scan_ranges_of_node(node_id)) {
+            conn->append_footer_prefetch_ranges(runtime_state, per_driver.second);
+        }
+    });
+
     // collect unready pipeline groups and instantiate ready drivers
     PipelineGroupMap unready_pipeline_groups;
     _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, fragment_ctx = _fragment_ctx.get()](Pipeline* pipeline) {
@@ -1059,6 +1079,18 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     }
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
+    // Tail-append incrementally-delivered ranges to the connector footer-prefetch sidecar so
+    // the largest (streamed) scans keep warming footers. No-op unless prefetch is installed.
+    auto append_footer_prefetch = [&](int node_id, const std::vector<TScanRangeParams>& ranges) {
+        fragment_ctx->iterate_pipeline([&](Pipeline* pipeline) {
+            auto* src = pipeline->source_operator_factory();
+            if (src->plan_node_id() != node_id) return;
+            if (auto* conn = dynamic_cast<pipeline::ConnectorScanOperatorFactory*>(src)) {
+                conn->append_footer_prefetch_ranges(runtime_state, ranges);
+            }
+        });
+    };
+
     std::unordered_set<int> notify_ids;
     std::vector<int32_t> closed_scan_nodes;
 
@@ -1084,6 +1116,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
+        append_footer_prefetch(node_id, scan_ranges);
 
         if (morsel_queue_factory->reach_limit()) {
             closed_scan_nodes.push_back(node_id);
@@ -1113,6 +1146,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 [[maybe_unused]] bool local_has_more;
                 pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
+                append_footer_prefetch(node_id, scan_ranges);
             }
             morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
             notify_ids.insert(node_id);

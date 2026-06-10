@@ -464,6 +464,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.4
 
+### enable_connector_footer_prefetch_on_stall
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 外部テーブルのスキャンが待機している間に Parquet ファイルの footer（ファイルメタデータ）をプリフェッチするかどうか。外部（データレイク）テーブルのスキャンが待機する必要がある場合（たとえば、下流の Join がまだ構築中で、これ以上の行を受け取れない場合）、BE はそのアイドル時間を利用して、後続ファイルの footer をキャッシュに先読みします。スキャンがそれらのファイルに到達したときには、メタデータはすでにキャッシュされているため、ファイルごとに個別のリモート読み取りを行う必要がなくなります。`true` は有効、`false` は無効を示します。native reader で読み取られる Parquet ファイルの footer のみがプリフェッチされます。
+- 導入バージョン: -
+
 ## その他
 
 ### default_mv_resource_group_concurrency_limit
