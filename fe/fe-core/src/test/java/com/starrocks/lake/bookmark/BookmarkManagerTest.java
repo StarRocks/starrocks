@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.bookmark;
 
+import com.codahale.metrics.MetricRegistry;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -419,6 +420,207 @@ public class BookmarkManagerTest extends BookmarkTestBase {
                 Optional.empty(), Optional.empty(), Optional.of(100L));
         assertEquals(1, bmFiltered.size());
         assertEquals(100L, bmFiltered.get(0).getBookmark().getBookmarkId());
+    }
+
+    /* ---------- Active stats / metrics ---------- */
+
+    @Test
+    public void testGetActiveStats() {
+        // Two trackers seeded via replay so the test doesn't need real OlapTables.
+        // (db=1, table=2) holds bookmark@100 with one reference @ 1_100.
+        // (db=1, table=3) holds bookmark@200 with two references @ 2_100 and 2_200.
+        BookmarkManager mgr = new BookmarkManager();
+        Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
+        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
+        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+
+        Bookmark bA = new Bookmark(1L, 2L, 100L, 1_000L, partsA);
+        Bookmark bB = new Bookmark(1L, 3L, 200L, 2_000L, partsB);
+
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("stats_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("stats_h2");
+        BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("stats_h3");
+
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(bA, h1, 1_100L));
+
+        Map<HolderId, Reference> bInitial = new HashMap<>();
+        bInitial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo()));
+        bInitial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo()));
+        mgr.replay(new BookmarkLogEntry.AddBookmark(bB, bInitial));
+
+        BookmarkActiveStats stats = mgr.getActiveStats();
+        assertEquals(2L, stats.bookmarkCount());
+        assertEquals(3L, stats.referenceCount());
+        assertEquals(3L, stats.logicalPartitionCount());           // 1 + 2
+        assertTrue(stats.maxBookmarkAgeMs().isPresent());
+        assertTrue(stats.maxReferenceAgeMs().isPresent());
+        // Ages are computed against System.currentTimeMillis(); just assert
+        // the older bookmark / reference produces the larger age value.
+        assertTrue(stats.maxBookmarkAgeMs().getAsLong() > 0L);
+        assertTrue(stats.maxReferenceAgeMs().getAsLong() > 0L);
+
+        // An empty manager produces empty stats — no trackers walked.
+        BookmarkActiveStats noTrackers = new BookmarkManager().getActiveStats();
+        assertEquals(0L, noTrackers.bookmarkCount());
+        assertEquals(0L, noTrackers.referenceCount());
+        assertFalse(noTrackers.maxBookmarkAgeMs().isPresent());
+    }
+
+    @Test
+    public void testRegisterMetrics() {
+        BookmarkManager mgr = new BookmarkManager();
+        MetricRegistry coda = new MetricRegistry();
+        // Should not throw, even when invoked twice on the same manager —
+        // histograms are get-or-create on the registry, counters/gauges are
+        // appended to the global MetricRepo.
+        mgr.registerMetrics(coda);
+        mgr.registerMetrics(coda);
+    }
+
+    @Test
+    public void testReplayBumpsAllMetrics() {
+        // Replay path bumps both cardinality and cumulative metrics — a
+        // follower promoted to leader needs *_total to reflect the work it
+        // applied via replay, otherwise its rate() would start from 0 and
+        // hide everything that happened before the promotion.
+        BookmarkManager mgr = new BookmarkManager();
+        long fakeDbId = 998_001L;
+        long fakeTableId = 998_101L;
+        long fakeBookmarkIdA = 998_201L;
+        long fakeBookmarkIdB = 998_301L;
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("repcc_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("repcc_h2");
+
+        Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
+        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
+        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+
+        Bookmark bA = new Bookmark(fakeDbId, fakeTableId, fakeBookmarkIdA, 1_000L, partsA);
+        Bookmark bB = new Bookmark(fakeDbId, fakeTableId, fakeBookmarkIdB, 2_000L, partsB);
+
+        // AddBookmark for A — 1 bookmark, 1 ref, 1 logical / 1 physical partition.
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(bA, h1, 1_100L));
+        assertEquals(1L, mgr.metrics().bookmarkCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkLogicalPartitionCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkPhysicalPartitionCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkCreatedTotal.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkReferenceAddedTotal.longValue());
+
+        // AddBookmark for B with 2 initial refs and 2 logical / 2 physical partitions.
+        Map<HolderId, Reference> bInitial = new HashMap<>();
+        bInitial.put(h1.getHolderId(), new Reference(2_100L, h1.getHolderInfo()));
+        bInitial.put(h2.getHolderId(), new Reference(2_200L, h2.getHolderInfo()));
+        mgr.replay(new BookmarkLogEntry.AddBookmark(bB, bInitial));
+        assertEquals(2L, mgr.metrics().bookmarkCount.longValue());
+        assertEquals(3L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(3L, mgr.metrics().bookmarkLogicalPartitionCount.longValue());
+        assertEquals(3L, mgr.metrics().bookmarkPhysicalPartitionCount.longValue());
+        assertEquals(2L, mgr.metrics().bookmarkCreatedTotal.longValue());
+        assertEquals(3L, mgr.metrics().bookmarkReferenceAddedTotal.longValue());
+
+        // AcquireReference for h2 on A — bookmarkReferenceCount bumps to 4.
+        mgr.replay(BookmarkLogEntry.AcquireReference.of(
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h2, 1_500L));
+        assertEquals(4L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(4L, mgr.metrics().bookmarkReferenceAddedTotal.longValue());
+
+        // Idempotent AcquireReference (h2 already there) — no double-bump.
+        mgr.replay(BookmarkLogEntry.AcquireReference.of(
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h2, 1_500L));
+        assertEquals(4L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(4L, mgr.metrics().bookmarkReferenceAddedTotal.longValue());
+
+        // ReleaseReference removes the holder; bookmark stays because h1
+        // still references it.
+        Reference relRefAh2 = new Reference(1_500L, h2.getHolderInfo());
+        mgr.replay(BookmarkLogEntry.ReleaseReference.of(
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h2.getHolderId(), relRefAh2));
+        assertEquals(3L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkReferenceReleasedTotal.longValue());
+
+        // Idempotent ReleaseReference for same holder — no double-decrement.
+        mgr.replay(BookmarkLogEntry.ReleaseReference.of(
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h2.getHolderId(), relRefAh2));
+        assertEquals(3L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkReferenceReleasedTotal.longValue());
+
+        // Final ReleaseReference on A — last reference, bookmark is reclaimed,
+        // bookmarkCount and partition counts both drop.
+        Reference relRefAh1 = new Reference(1_100L, h1.getHolderInfo());
+        mgr.replay(BookmarkLogEntry.ReleaseReference.of(
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h1.getHolderId(), relRefAh1));
+        assertEquals(1L, mgr.metrics().bookmarkCount.longValue());
+        assertEquals(2L, mgr.metrics().bookmarkReferenceCount.longValue());
+        assertEquals(2L, mgr.metrics().bookmarkLogicalPartitionCount.longValue());
+        assertEquals(2L, mgr.metrics().bookmarkPhysicalPartitionCount.longValue());
+        assertEquals(1L, mgr.metrics().bookmarkRemovedTotal.longValue());
+        assertEquals(2L, mgr.metrics().bookmarkReferenceReleasedTotal.longValue());
+    }
+
+    @Test
+    public void testRunAfterCatalogReadyRefreshesMaxAges() throws Exception {
+        // Seed two trackers via replay so the test doesn't need real OlapTables,
+        // then exercise the daemon entry point that the metric scrape relies on.
+        BookmarkManager mgr = new BookmarkManager();
+        Bookmark b = new Bookmark(1L, 2L, 100L, 1_000L, Collections.emptyMap());
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("age_h1");
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(b, h, 1_100L));
+
+        // Before the daemon runs the cached values are the AtomicLong default (0).
+        assertEquals(0L, mgr.metrics().bookmarkMaxActiveAgeMs.get());
+        assertEquals(0L, mgr.metrics().bookmarkReferenceMaxActiveAgeMs.get());
+
+        mgr.runAfterCatalogReady();
+
+        // Bookmark was created at epoch=1_000ms, reference acquired at
+        // 1_100ms; both ages are well in the past, so the cached values
+        // should now be strictly positive.
+        assertTrue(mgr.metrics().bookmarkMaxActiveAgeMs.get() > 0L);
+        assertTrue(mgr.metrics().bookmarkReferenceMaxActiveAgeMs.get() > 0L);
+    }
+
+    @Test
+    public void testImageSeedsCardinality() throws Exception {
+        long tableA = createDefaultTable();
+        long tableB = createDefaultTable();
+        BookmarkManager src = manager();
+        BookmarkHolder hA = BookmarkHolder.forEmptyInfo("iseed_a");
+        BookmarkHolder hB1 = BookmarkHolder.forEmptyInfo("iseed_b1");
+        BookmarkHolder hB2 = BookmarkHolder.forEmptyInfo("iseed_b2");
+
+        // tableA: one bookmark, 1 reference. tableB: one bookmark, 2 references.
+        src.create(dbId, tableA, hA);
+        src.create(dbId, tableB, hB1);
+        src.create(dbId, tableB, hB2);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        src.save(image.getImageWriter());
+
+        BookmarkManager loaded = new BookmarkManager();
+        // Cardinality is at zero before load — the gson path has not fired apply().
+        assertEquals(0L, loaded.metrics().bookmarkCount.longValue());
+        assertEquals(0L, loaded.metrics().bookmarkReferenceCount.longValue());
+
+        SRMetaBlockReader reader = image.getMetaBlockReader();
+        try {
+            loaded.load(reader);
+        } finally {
+            reader.close();
+        }
+
+        // After load, cardinality reflects the inherited state: 2 bookmarks
+        // and 3 total references (1 + 2).
+        assertEquals(2L, loaded.metrics().bookmarkCount.longValue());
+        assertEquals(3L, loaded.metrics().bookmarkReferenceCount.longValue());
+        // Cumulative counters stayed at zero — image load is not "work done",
+        // and the gson path skips apply() entirely.
+        assertEquals(0L, loaded.metrics().bookmarkCreatedTotal.longValue());
+        assertEquals(0L, loaded.metrics().bookmarkReferenceAddedTotal.longValue());
     }
 
     /* ---------- Image ---------- */

@@ -47,8 +47,8 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
         final Semaphore release = new Semaphore(0);
         volatile boolean armed = true;
 
-        TestTracker(long dbId, long tableId) {
-            super(dbId, tableId);
+        TestTracker(long dbId, long tableId, BookmarkMetrics metrics) {
+            super(dbId, tableId, metrics);
         }
 
         @Override
@@ -71,7 +71,7 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
 
         @Override
         protected TableBookmarkTracker createTracker(long dbId, long tableId) {
-            TestTracker t = new TestTracker(dbId, tableId);
+            TestTracker t = new TestTracker(dbId, tableId, metrics());
             last = t;
             return t;
         }
@@ -197,7 +197,7 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
 
     @Test
     public void testListAllBookmarks() {
-        TableBookmarkTracker tracker = new TableBookmarkTracker(1L, 2L);
+        TableBookmarkTracker tracker = new TableBookmarkTracker(1L, 2L, new BookmarkMetrics());
 
         // Seed two bookmarks via replay path: avoids needing a real OlapTable.
         // Lower bookmarkId has 1 reference, higher bookmarkId has 2 references.
@@ -251,5 +251,56 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
         assertTrue(holderIds.contains(h3.getHolderId().getId()));
         assertTrue(acquiredAts.contains(2_100L));
         assertTrue(acquiredAts.contains(2_200L));
+    }
+
+    @Test
+    public void testGetActiveStats() {
+        TableBookmarkTracker tracker = new TableBookmarkTracker(1L, 2L, new BookmarkMetrics());
+
+        // No bookmarks yet — empty stats, ages absent.
+        BookmarkActiveStats.Builder emptyBuilder = BookmarkActiveStats.newBuilder();
+        tracker.fillStats(emptyBuilder);
+        BookmarkActiveStats empty = emptyBuilder.build();
+        assertEquals(0L, empty.bookmarkCount());
+        assertEquals(0L, empty.referenceCount());
+        assertEquals(0L, empty.logicalPartitionCount());
+        assertEquals(0L, empty.physicalPartitionCount());
+        assertEquals(false, empty.maxBookmarkAgeMs().isPresent());
+
+        // Seed two bookmarks via the replay path so the tracker doesn't need a
+        // real OlapTable. b1 has one logical partition + one reference; b2 has
+        // two logical partitions + two references.
+        Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
+        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
+        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+
+        Bookmark b1 = new Bookmark(1L, 2L, 100L, 1_000L, partsA);
+        Bookmark b2 = new Bookmark(1L, 2L, 200L, 2_000L, partsB);
+
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("stats_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("stats_h2");
+        BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("stats_h3");
+
+        tracker.replayLogEntry(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L));
+        Map<HolderId, Reference> b2Initial = new HashMap<>();
+        b2Initial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo()));
+        b2Initial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo()));
+        tracker.replayLogEntry(new BookmarkLogEntry.AddBookmark(b2, b2Initial));
+
+        BookmarkActiveStats.Builder builder = BookmarkActiveStats.newBuilder();
+        tracker.fillStats(builder);
+        BookmarkActiveStats stats = builder.build();
+        assertEquals(2L, stats.bookmarkCount());
+        assertEquals(3L, stats.referenceCount());
+        assertEquals(3L, stats.logicalPartitionCount());     // 1 + 2
+        assertEquals(3L, stats.physicalPartitionCount());    // 1 + 2
+        // Ages are computed against System.currentTimeMillis(); the older
+        // bookmark / reference yields the larger age.
+        assertTrue(stats.maxBookmarkAgeMs().isPresent());
+        assertTrue(stats.maxReferenceAgeMs().isPresent());
+        assertTrue(stats.maxBookmarkAgeMs().getAsLong() > 0L);
+        assertTrue(stats.maxReferenceAgeMs().getAsLong() > 0L);
     }
 }

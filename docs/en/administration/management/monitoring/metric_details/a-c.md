@@ -318,6 +318,78 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by Bloomfilter indexes.
 
+## `bookmark_created_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of bookmarks created since FE start.
+
+## `bookmark_removed_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of bookmarks removed (after the last reference released) since FE start.
+
+## `bookmark_reference_added_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of bookmark references added since FE start.
+
+## `bookmark_reference_released_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of bookmark references released since FE start.
+
+## `bookmark_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Current number of active bookmarks across all cloud-native tables.
+
+## `bookmark_reference_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Current number of active bookmark references across all cloud-native tables.
+
+## `bookmark_logical_partition_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Sum of per-bookmark logical partition counts across all active bookmarks (a partition captured by N bookmarks is counted N times).
+
+## `bookmark_physical_partition_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Sum of per-bookmark physical partition counts across all active bookmarks (a partition captured by N bookmarks is counted N times).
+
+## `bookmark_max_active_age_ms`
+
+- Unit: ms
+- Type: Gauge
+- Description: Age of the oldest currently-active bookmark.
+
+## `bookmark_reference_max_active_age_ms`
+
+- Unit: ms
+- Type: Gauge
+- Description: Age of the oldest currently-active bookmark reference.
+
+## `bookmark_completed_age_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Distribution of completed bookmark lifetimes (from creation to removal) for cloud-native table bookmarks.
+
+## `bookmark_reference_completed_age_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Distribution of completed bookmark-reference hold times (from acquire to release).
+
 ## `broker_count`
 
 - Unit: Count

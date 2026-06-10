@@ -63,6 +63,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
@@ -1086,6 +1087,13 @@ public final class MetricRepo {
         PipeMetricMgr.startPipeMetricCleanTimer();
 
         hasInit = true;
+
+        // Register subsystem metrics that re-enter MetricRepo via addMetric().
+        // Must run after hasInit=true so addMetric short-circuits init().
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        if (bm != null) {
+            bm.registerMetrics(METRIC_REGISTER);
+        }
 
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);

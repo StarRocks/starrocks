@@ -318,6 +318,78 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: ブルームフィルターインデックスが使用するメモリ。
 
+## `bookmark_created_total`
+
+- 単位: カウント
+- タイプ: Counter
+- 説明: FE 起動以降に作成されたブックマークの累計数。
+
+## `bookmark_removed_total`
+
+- 単位: カウント
+- タイプ: Counter
+- 説明: FE 起動以降に削除されたブックマーク（最後の参照が解放された後）の累計数。
+
+## `bookmark_reference_added_total`
+
+- 単位: カウント
+- タイプ: Counter
+- 説明: FE 起動以降に追加されたブックマーク参照の累計数。
+
+## `bookmark_reference_released_total`
+
+- 単位: カウント
+- タイプ: Counter
+- 説明: FE 起動以降に解放されたブックマーク参照の累計数。
+
+## `bookmark_count`
+
+- 単位: カウント
+- タイプ: Gauge
+- 説明: すべてのクラウドネイティブテーブルにおける現在のアクティブブックマーク数。
+
+## `bookmark_reference_count`
+
+- 単位: カウント
+- タイプ: Gauge
+- 説明: すべてのクラウドネイティブテーブルにおける現在のアクティブブックマーク参照数。
+
+## `bookmark_logical_partition_count`
+
+- 単位: カウント
+- タイプ: Gauge
+- 説明: すべてのアクティブブックマークにおけるブックマークごとの論理パーティション数の合計（N 個のブックマークにキャプチャされたパーティションは N 回カウントされます）。
+
+## `bookmark_physical_partition_count`
+
+- 単位: カウント
+- タイプ: Gauge
+- 説明: すべてのアクティブブックマークにおけるブックマークごとの物理パーティション数の合計（N 個のブックマークにキャプチャされたパーティションは N 回カウントされます）。
+
+## `bookmark_max_active_age_ms`
+
+- 単位: ms
+- タイプ: Gauge
+- 説明: 現在アクティブな最も古いブックマークの経過時間。
+
+## `bookmark_reference_max_active_age_ms`
+
+- 単位: ms
+- タイプ: Gauge
+- 説明: 現在アクティブな最も古いブックマーク参照の保持時間。
+
+## `bookmark_completed_age_ms`
+
+- 単位: ms
+- タイプ: Histogram
+- 説明: クラウドネイティブテーブルのブックマークの完了したライフタイム（作成から削除まで）の分布。
+
+## `bookmark_reference_completed_age_ms`
+
+- 単位: ms
+- タイプ: Histogram
+- 説明: 完了したブックマーク参照の保持時間（acquire から release まで）の分布。
+
 ## `broker_count`
 
 - 単位: カウント

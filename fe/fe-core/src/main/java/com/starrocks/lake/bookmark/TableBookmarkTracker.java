@@ -71,12 +71,22 @@ public class TableBookmarkTracker {
     // checks observe it without taking the lock.
     private transient volatile Bookmark creating;
 
+    // Empty after gson's no-arg constructor; BookmarkManager calls
+    // setMetrics() before the tracker accepts apply() traffic. Fresh
+    // trackers get it through the 3-arg constructor instead.
+    private transient Optional<BookmarkMetrics> metrics = Optional.empty();
+
     private TableBookmarkTracker() {
     }
 
-    public TableBookmarkTracker(long dbId, long tableId) {
+    public TableBookmarkTracker(long dbId, long tableId, BookmarkMetrics metrics) {
         this.dbId = dbId;
         this.tableId = tableId;
+        this.metrics = Optional.of(metrics);
+    }
+
+    void setMetrics(BookmarkMetrics metrics) {
+        this.metrics = Optional.of(metrics);
     }
 
     public long getDbId() {
@@ -412,6 +422,27 @@ public class TableBookmarkTracker {
         }
     }
 
+    void fillStats(BookmarkActiveStats.Builder builder) {
+        rwLock.readLock().lock();
+        try {
+            long nowMs = System.currentTimeMillis();
+            for (Bookmark b : activeBookmarks.values()) {
+                long bookmarkAge = Math.max(0L, nowMs - b.getBookmarkTimeMs());
+                builder.addBookmark(bookmarkAge, b.getLogicalPartitionCount(), b.getPhysicalPartitionCount());
+                ReferenceSet refSet = referencesByBookmark.get(b.getBookmarkId());
+                if (refSet == null) {
+                    continue;
+                }
+                for (Reference ref : refSet.entries().values()) {
+                    long refAge = Math.max(0L, nowMs - ref.getAcquiredAtMs());
+                    builder.addReference(refAge);
+                }
+            }
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
     /* ---------- internals ---------- */
 
     private OlapTable resolveTable() {
@@ -497,7 +528,8 @@ public class TableBookmarkTracker {
     }
 
     private void applyAddBookmark(BookmarkLogEntry.AddBookmark entry, boolean isReplay) {
-        long bookmarkId = entry.getBookmark().getBookmarkId();
+        Bookmark bookmark = entry.getBookmark();
+        long bookmarkId = bookmark.getBookmarkId();
         if (activeBookmarks.containsKey(bookmarkId)) {
             // Idempotent replay path: image load already restored this bookmark.
             return;
@@ -519,8 +551,10 @@ public class TableBookmarkTracker {
         for (Map.Entry<HolderId, Reference> e : refs.entrySet()) {
             refSet.put(e.getKey(), e.getValue());
         }
-        activeBookmarks.put(bookmarkId, entry.getBookmark());
+        activeBookmarks.put(bookmarkId, bookmark);
         referencesByBookmark.put(bookmarkId, refSet);
+        metrics.ifPresent(m -> m.onBookmarkCreated(
+                refs.size(), bookmark.getLogicalPartitionCount(), bookmark.getPhysicalPartitionCount()));
         Level level = isReplay ? Level.DEBUG : Level.INFO;
         LOG.log(level, "bookmark created: db={}, table={}, bookmarkId={}", dbId, tableId, bookmarkId);
         for (HolderId holderId : refs.keySet()) {
@@ -538,7 +572,10 @@ public class TableBookmarkTracker {
         }
         Level level = isReplay ? Level.DEBUG : Level.INFO;
         for (Map.Entry<HolderId, Reference> e : entry.getReferences().entrySet()) {
-            refSet.put(e.getKey(), e.getValue());
+            boolean added = refSet.put(e.getKey(), e.getValue());
+            if (added) {
+                metrics.ifPresent(BookmarkMetrics::onReferenceAdded);
+            }
             LOG.log(level, "bookmark reference added: db={}, table={}, bookmarkId={}, holder={}",
                     dbId, tableId, entry.getBookmarkId(), e.getKey());
         }
@@ -552,15 +589,28 @@ public class TableBookmarkTracker {
             // reclaimed when its last reference left.
             return;
         }
+        long now = System.currentTimeMillis();
         Level level = isReplay ? Level.DEBUG : Level.INFO;
-        for (HolderId holderId : entry.getReferences().keySet()) {
-            refSet.remove(holderId);
+        for (Map.Entry<HolderId, Reference> e : entry.getReferences().entrySet()) {
+            HolderId holderId = e.getKey();
+            Reference released = refSet.remove(holderId);
+            if (released != null) {
+                long refAgeMs = Math.max(0L, now - released.getAcquiredAtMs());
+                metrics.ifPresent(m -> m.onReferenceReleased(refAgeMs));
+            }
             LOG.log(level, "bookmark reference released: db={}, table={}, bookmarkId={}, holder={}",
                     dbId, tableId, bookmarkId, holderId);
         }
         if (refSet.isEmpty()) {
-            activeBookmarks.remove(bookmarkId);
+            Bookmark removed = activeBookmarks.remove(bookmarkId);
             referencesByBookmark.remove(bookmarkId);
+            if (removed != null) {
+                long bookmarkAgeMs = Math.max(0L, now - removed.getBookmarkTimeMs());
+                metrics.ifPresent(m -> m.onBookmarkRemoved(
+                        bookmarkAgeMs,
+                        removed.getLogicalPartitionCount(),
+                        removed.getPhysicalPartitionCount()));
+            }
             LOG.log(level, "bookmark removed: db={}, table={}, bookmarkId={}", dbId, tableId, bookmarkId);
         }
     }

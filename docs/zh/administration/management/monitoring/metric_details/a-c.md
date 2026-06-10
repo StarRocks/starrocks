@@ -318,6 +318,78 @@ description: "Alphabetical a - c"
 - 单位：字节
 - 描述：布隆过滤器索引使用的内存。
 
+## `bookmark_created_total`
+
+- 单位：计数
+- 类型：Counter
+- 描述：自 FE 启动以来累计创建的 bookmark 数。
+
+## `bookmark_removed_total`
+
+- 单位：计数
+- 类型：Counter
+- 描述：自 FE 启动以来累计移除（最后一个 reference 释放后）的 bookmark 数。
+
+## `bookmark_reference_added_total`
+
+- 单位：计数
+- 类型：Counter
+- 描述：自 FE 启动以来累计添加的 bookmark reference 数。
+
+## `bookmark_reference_released_total`
+
+- 单位：计数
+- 类型：Counter
+- 描述：自 FE 启动以来累计释放的 bookmark reference 数。
+
+## `bookmark_count`
+
+- 单位：计数
+- 类型：Gauge
+- 描述：当前所有 cloud-native 表的 active bookmark 总数。
+
+## `bookmark_reference_count`
+
+- 单位：计数
+- 类型：Gauge
+- 描述：当前所有 cloud-native 表的 active bookmark reference 总数。
+
+## `bookmark_logical_partition_count`
+
+- 单位：计数
+- 类型：Gauge
+- 描述：所有 active bookmark 捕获的 logical partition 数之和（被 N 个 bookmark 捕获的 partition 计 N 次）。
+
+## `bookmark_physical_partition_count`
+
+- 单位：计数
+- 类型：Gauge
+- 描述：所有 active bookmark 捕获的 physical partition 数之和（被 N 个 bookmark 捕获的 partition 计 N 次）。
+
+## `bookmark_max_active_age_ms`
+
+- 单位：毫秒
+- 类型：Gauge
+- 描述：当前最老 active bookmark 的存在时长。
+
+## `bookmark_reference_max_active_age_ms`
+
+- 单位：毫秒
+- 类型：Gauge
+- 描述：当前最老 active bookmark reference 的持有时长。
+
+## `bookmark_completed_age_ms`
+
+- 单位：毫秒
+- 类型：Histogram
+- 描述：cloud-native 表 bookmark 已结束生命周期（从创建到移除）的时长分布。
+
+## `bookmark_reference_completed_age_ms`
+
+- 单位：毫秒
+- 类型：Histogram
+- 描述：bookmark reference 已结束生命周期（从 acquire 到 release）的持有时长分布。
+
 ## `broker_count`
 
 - 单位：计数

@@ -45,17 +45,22 @@ public final class ReferenceSet {
         return referencedSinceMs;
     }
 
-    /** Idempotent: if the holder already has a reference, this call is a no-op. */
-    public void put(HolderId holderId, Reference ref) {
-        references.putIfAbsent(holderId, ref);
+    /**
+     * If the holder already has a reference, this call leaves the map
+     * unchanged. Returns true when a new entry was inserted, false when one
+     * was already there.
+     */
+    public boolean put(HolderId holderId, Reference ref) {
+        return references.putIfAbsent(holderId, ref) == null;
     }
 
     public Reference get(HolderId holderId) {
         return references.get(holderId);
     }
 
-    public void remove(HolderId holderId) {
-        references.remove(holderId);
+    /** Returns the removed reference, or null when the holder had none. */
+    public Reference remove(HolderId holderId) {
+        return references.remove(holderId);
     }
 
     public int size() {

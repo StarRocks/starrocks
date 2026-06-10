@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.bookmark;
 
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
@@ -52,14 +53,31 @@ public class BookmarkManager extends FrontendDaemon {
 
     private final ReentrantReadWriteLock trackerMapLock = new ReentrantReadWriteLock();
 
+    private final BookmarkMetrics metrics = new BookmarkMetrics();
+
     public BookmarkManager() {
         super("BookmarkManager", Config.bookmark_cleanup_interval_sec * 1000L);
     }
 
+    public void registerMetrics(MetricRegistry registry) {
+        metrics.register(registry);
+    }
+
+    BookmarkMetrics metrics() {
+        return metrics;
+    }
+
     @Override
     protected void runAfterCatalogReady() {
-        // TODO: implement TTL-based sweep of stale references.
         setInterval(Config.bookmark_cleanup_interval_sec * 1000L);
+        // FrontendDaemon.runOneCycle() gates this on isReady(), which keeps
+        // the checkpoint clone from getting here, so walking every tracker
+        // can't race image load.
+        BookmarkActiveStats snapshot = getActiveStats();
+        metrics.setMaxActiveAges(
+                snapshot.maxBookmarkAgeMs().orElse(0L),
+                snapshot.maxReferenceAgeMs().orElse(0L));
+        // TODO: implement TTL-based sweep of stale references.
     }
 
     /* ---------- bookmark lifecycle ---------- */
@@ -317,9 +335,18 @@ public class BookmarkManager extends FrontendDaemon {
         BookmarkManagerImageHeader header = reader.readJson(BookmarkManagerImageHeader.class);
         for (int i = 0; i < header.totalTrackerCount; i++) {
             TableBookmarkTracker tr = reader.readJson(TableBookmarkTracker.class);
+            tr.setMetrics(metrics);
             trackers.computeIfAbsent(tr.getDbId(), k -> new ConcurrentHashMap<>())
                     .put(tr.getTableId(), tr);
         }
+        // gson skips the apply() hooks, so the cardinality counters miss
+        // the inherited state. Seed them once from the loaded trackers.
+        BookmarkActiveStats snapshot = getActiveStats();
+        metrics.initFromImage(
+                snapshot.bookmarkCount(),
+                snapshot.referenceCount(),
+                snapshot.logicalPartitionCount(),
+                snapshot.physicalPartitionCount());
     }
 
     /** Header block; @SerializedName is required for Gson's HiddenAnnotationExclusionStrategy. */
@@ -355,7 +382,20 @@ public class BookmarkManager extends FrontendDaemon {
 
     /** Overridable so tests can inject a tracker subclass with extra hooks. */
     protected TableBookmarkTracker createTracker(long dbId, long tableId) {
-        return new TableBookmarkTracker(dbId, tableId);
+        return new TableBookmarkTracker(dbId, tableId, metrics);
+    }
+
+    // No trackerMapLock: the concurrent maps plus fillStats's per-tracker readLock
+    // already keep each tracker's read internally consistent. A removeEmptyTracker
+    // dropping a tracker mid-walk is fine — a metric snapshot is allowed to miss it.
+    BookmarkActiveStats getActiveStats() {
+        BookmarkActiveStats.Builder builder = BookmarkActiveStats.newBuilder();
+        for (Map<Long, TableBookmarkTracker> dbMap : trackers.values()) {
+            for (TableBookmarkTracker tr : dbMap.values()) {
+                tr.fillStats(builder);
+            }
+        }
+        return builder.build();
     }
 
     // Holding the write lock here keeps a concurrent create from re-growing the
