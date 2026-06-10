@@ -98,6 +98,10 @@ protected:
         auto* ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         _scanner_params.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+        // Reset per-scope pointers that were set by a previous scope block.
+        _scanner_params.table_specific.iceberg_schema = nullptr;
+        _scanner_params.table_specific.deletion_vector_descriptor = nullptr;
+        _scanner_params.table_specific.paimon_deletion_file = nullptr;
 
         ctx->params = &_scanner_params;
         ctx->stats = &g_hdfs_scan_stats;
