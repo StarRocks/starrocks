@@ -376,7 +376,7 @@ TEST_F(BinaryPlainPageTest, test_delta_offset_roundtrip) {
     const bool saved = config::enable_binary_plain_delta_offset;
 
     std::vector<Slice> slices;
-    slices.emplace_back("");          // zero-length value -> delta 0
+    slices.emplace_back(""); // zero-length value -> delta 0
     slices.emplace_back("a");
     slices.emplace_back("persona,1");
     slices.emplace_back("persona,1234567");
