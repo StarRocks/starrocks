@@ -72,20 +72,30 @@ jobs:
             exit 0
           fi
 
-          extract() {
-            # $1 is the literal field label (without trailing colon).
-            # LLM may wrap the line or value in **bold**; strip leading * and
-            # then keep only valid GitHub login chars (so @, backticks, quotes
-            # all get dropped).
+          # $1 is the literal field label (without trailing colon). LLM may
+          # wrap the line or value in **bold**; strip leading * and trailing
+          # markdown, then keep only the relevant slug chars. Two variants:
+          #   extract_user  -- GitHub login: [A-Za-z0-9-]
+          #   extract_team  -- team ref: [A-Za-z0-9-] plus '/' so a qualified
+          #                    `org/team-slug` is preserved intact. Using the
+          #                    user regex on a qualified team would truncate
+          #                    at the first '/', losing the team segment.
+          extract_user() {
             local key="$1"
             grep -iE "^\**${key}:" "$ai_output" | tail -1 \
               | sed -E "s|^\**[^:]*:\**[[:space:]]*||" \
               | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1
           }
+          extract_team() {
+            local key="$1"
+            grep -iE "^\**${key}:" "$ai_output" | tail -1 \
+              | sed -E "s|^\**[^:]*:\**[[:space:]]*||" \
+              | grep -oE '[A-Za-z0-9][A-Za-z0-9/-]*' | head -1
+          }
 
-          owner=$(extract "Recommended reviewer")
-          affinity=$(extract "Affinity reviewer")
-          global=$(extract "Global reviewer")
+          owner=$(extract_user "Recommended reviewer")
+          affinity=$(extract_user "Affinity reviewer")
+          global=$(extract_team "Global reviewer")
           author=$(gh pr view "$PR" -R "$REPO" --json author -q '.author.login' 2>/dev/null || true)
 
           assign_user() {
@@ -167,15 +177,15 @@ jobs:
             exit 0
           fi
 
-          extract() {
+          extract_user() {
             local key="$1"
             grep -iE "^\**${key}:" "$ai_output" | tail -1 \
               | sed -E "s|^\**[^:]*:\**[[:space:]]*||" \
               | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1
           }
 
-          owner=$(extract "Recommended reviewer")
-          affinity=$(extract "Affinity reviewer")
+          owner=$(extract_user "Recommended reviewer")
+          affinity=$(extract_user "Affinity reviewer")
           # De-dup + drop empty/none, preserve owner-before-affinity order.
           reviewers=$(printf '%s\n%s\n' "$owner" "$affinity" \
             | awk 'NF && $0!="none" && !seen[$0]++')
