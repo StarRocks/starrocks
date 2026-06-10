@@ -21,15 +21,21 @@
 #include <sstream>
 
 #include "butil/time.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 
 namespace starrocks {
 
 class EncryptionFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() override {}
+    void SetUp() override { _max_length_for_to_base64 = config::max_length_for_to_base64; }
+
+    void TearDown() override { config::max_length_for_to_base64 = _max_length_for_to_base64; }
+
+private:
+    int64_t _max_length_for_to_base64 = 0;
 };
 
 // ==================== AES Encrypt/Decrypt with Mode Tests ====================
@@ -94,7 +100,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_Test) {
         // which don't use padding. For 16-byte aligned input, PKCS#7 adds a full 16-byte padding block.
         // We verify correctness through encrypt-decrypt cycle instead of comparing encrypted output.
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_GT(encrypted_data->get_data()[0].size, 0); // Ensure encryption succeeded
+        ASSERT_GT(encrypted_data->get_slice(0).size, 0); // Ensure encryption succeeded
 
         // Decrypt
         Columns decrypt_columns;
@@ -107,7 +113,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string());
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string());
     }
 }
 
@@ -175,7 +181,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CBC_Test) {
         // which don't use padding. For 16-byte aligned input, PKCS#7 adds a full 16-byte padding block.
         // We verify correctness through encrypt-decrypt cycle instead of comparing encrypted output.
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_GT(encrypted_data->get_data()[0].size, 0); // Ensure encryption succeeded
+        ASSERT_GT(encrypted_data->get_slice(0).size, 0); // Ensure encryption succeeded
 
         // Decrypt
         Columns decrypt_columns;
@@ -188,7 +194,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CBC_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string());
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string());
     }
 }
 
@@ -252,7 +258,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CFB_Test) {
 
         // For stream modes (CFB), verify encrypted length equals plain length (no padding)
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_EQ(tc.plain.size(), encrypted_data->get_data()[0].size)
+        ASSERT_EQ(tc.plain.size(), encrypted_data->get_slice(0).size)
                 << "CFB mode should not add padding, encrypted length should equal plain length";
 
         // Decrypt and verify we can recover the original plaintext
@@ -266,7 +272,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CFB_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string()) << "Decrypted text should match original plaintext";
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string()) << "Decrypted text should match original plaintext";
     }
 }
 
@@ -332,7 +338,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_OFB_Test) {
 
         // For stream modes (OFB), verify encrypted length equals plain length (no padding)
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_EQ(tc.plain.size(), encrypted_data->get_data()[0].size)
+        ASSERT_EQ(tc.plain.size(), encrypted_data->get_slice(0).size)
                 << "OFB mode should not add padding, encrypted length should equal plain length";
 
         // Decrypt and verify we can recover the original plaintext
@@ -346,7 +352,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_OFB_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string()) << "Decrypted text should match original plaintext";
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string()) << "Decrypted text should match original plaintext";
     }
 }
 
@@ -412,7 +418,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CTR_Test) {
 
         // For stream modes (CTR), verify encrypted length equals plain length (no padding)
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_EQ(tc.plain.size(), encrypted_data->get_data()[0].size)
+        ASSERT_EQ(tc.plain.size(), encrypted_data->get_slice(0).size)
                 << "CTR mode should not add padding, encrypted length should equal plain length";
 
         // Decrypt and verify we can recover the original plaintext
@@ -426,7 +432,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CTR_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string()) << "Decrypted text should match original plaintext";
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string()) << "Decrypted text should match original plaintext";
     }
 }
 
@@ -536,7 +542,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_GCM_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string());
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string());
     }
 }
 
@@ -599,7 +605,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_GCM_with_AAD_Test) {
     ASSERT_FALSE(decrypted->is_null(0));
 
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-    ASSERT_EQ(plain, result->get_data()[0].to_string());
+    ASSERT_EQ(plain, result->get_slice(0).to_string());
 
     // Decrypt with wrong AAD should fail (authentication failure)
     auto wrong_aad_col = BinaryColumn::create();
@@ -638,7 +644,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_GCM_with_AAD_Test) {
     ASSERT_FALSE(decrypted_no_aad->is_null(0));
 
     auto result_no_aad = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted_no_aad);
-    ASSERT_EQ(plain, result_no_aad->get_data()[0].to_string());
+    ASSERT_EQ(plain, result_no_aad->get_slice(0).to_string());
 }
 
 // Test NULL handling
@@ -714,7 +720,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_NULL_IV_Test) {
     ASSERT_FALSE(decrypted->is_null(0));
 
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-    ASSERT_EQ("test data", result->get_data()[0].to_string());
+    ASSERT_EQ("test data", result->get_slice(0).to_string());
 }
 
 // Test case-insensitive mode string
@@ -758,7 +764,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CaseInsensitive_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plain, result->get_data()[0].to_string());
+        ASSERT_EQ(plain, result->get_slice(0).to_string());
     }
 }
 
@@ -803,7 +809,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_LargeData_Test) {
     ASSERT_FALSE(decrypted->is_null(0));
 
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-    ASSERT_EQ(plain, result->get_data()[0].to_string());
+    ASSERT_EQ(plain, result->get_slice(0).to_string());
 }
 
 // Test batch encryption with constant key/mode (optimized path)
@@ -885,7 +891,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_with_NULL_IV_Test) {
     ASSERT_FALSE(encrypted->is_null(0)) << "ECB mode should work with NULL IV";
 
     auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-    ASSERT_GT(encrypted_data->get_data()[0].size, 0);
+    ASSERT_GT(encrypted_data->get_slice(0).size, 0);
 
     // Decrypt - should also work with NULL IV
     Columns decrypt_columns;
@@ -898,7 +904,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_with_NULL_IV_Test) {
     ASSERT_FALSE(result->is_null(0));
 
     auto result_data = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-    ASSERT_EQ(plain, result_data->get_data()[0].to_string());
+    ASSERT_EQ(plain, result_data->get_slice(0).to_string());
 }
 
 // Test non-ECB mode with NULL IV (should return NULL)
@@ -942,16 +948,15 @@ TEST_F(EncryptionFunctionsTest, aes_encryptGeneralTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         text->append(texts[j]);
     }
 
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -963,8 +968,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptGeneralTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -981,7 +986,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
                              "09529C15ECF0FC27073310DCEB76FAF4", "0143DB63EE66B0CDFF9F69917680151E",
                              "0143DB63EE66B0CDFF9F69917680151E"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         if (j % 2 == 0) {
             null_column->append(DATUM_NOT_NULL);
@@ -995,9 +1000,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
     auto nullable_text = NullableColumn::create(std::move(text), std::move(null_column));
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(nullable_text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1007,7 +1011,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
     columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
     ASSERT_TRUE(result->is_nullable());
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         if (j % 2 == 0) {
             ASSERT_FALSE(result->is_null(j));
             auto datum = result->get(j);
@@ -1030,16 +1034,15 @@ TEST_F(EncryptionFunctionsTest, aes_encryptBigDataTest) {
                              "9B247414C29023C0E208DD1C4914EEB1AD7912069B5F47EF7B4E1CBDDDE7551C",
                              "CB49B2B910DA7C511C559B241183471C3718BF908D1946600ED4B7CE729E2684"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         text->append(texts[j]);
     }
 
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1051,8 +1054,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptBigDataTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1068,7 +1071,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullPlainTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         plain_null->append(0);
         text->append(texts[j]);
@@ -1095,8 +1098,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullPlainTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1113,7 +1116,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullTextTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         text->append(texts[j]);
         text_null->append(0);
@@ -1139,8 +1142,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullTextTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1161,9 +1164,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstTextTest) {
 
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1175,8 +1177,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstTextTest) {
     result = StringFunctions::hex_string(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1204,8 +1206,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstAllTest) {
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(v->data_column());
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], data_column->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], data_column->get_slice(j).to_string());
     }
 }
 
@@ -1220,7 +1222,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptGeneralTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         text->append(texts[j]);
     }
@@ -1232,17 +1234,16 @@ TEST_F(EncryptionFunctionsTest, aes_decryptGeneralTest) {
     columns.clear();
     columns.emplace_back(std::move(result));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
     result = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1258,7 +1259,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptBigDataTest) {
                              "9B247414C29023C0E208DD1C4914EEB1AD7912069B5F47EF7B4E1CBDDDE7551C",
                              "CB49B2B910DA7C511C559B241183471C3718BF908D1946600ED4B7CE729E2684"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         text->append(texts[j]);
     }
@@ -1270,17 +1271,16 @@ TEST_F(EncryptionFunctionsTest, aes_decryptBigDataTest) {
     columns.clear();
     columns.emplace_back(std::move(result));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
     result = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1296,7 +1296,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullPlainTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         plain_null->append(0);
         text->append(texts[j]);
@@ -1322,8 +1322,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullPlainTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1340,7 +1340,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullTextTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         text->append(texts[j]);
         text_null->append(0);
@@ -1366,8 +1366,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullTextTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1393,9 +1393,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstTextTest) {
     columns.clear();
     columns.emplace_back(std::move(result));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1403,8 +1402,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstTextTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1434,8 +1433,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstAllTest) {
 
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(v->data_column());
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], data_column->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], data_column->get_slice(j).to_string());
     }
 }
 
@@ -1464,7 +1463,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(encrypted->is_null(0));
 
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_GT(encrypted_data->get_data()[0].size, 0);
+        ASSERT_GT(encrypted_data->get_slice(0).size, 0);
 
         // Decrypt with 2 parameters
         Columns decrypt_columns;
@@ -1475,7 +1474,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(0).to_string());
     }
 
     // Test case 2: Binary data
@@ -1504,7 +1503,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(0).to_string());
     }
 
     // Test case 3: Empty string
@@ -1533,7 +1532,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(0).to_string());
     }
 }
 
@@ -1631,7 +1630,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_batch_test) {
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
     for (size_t i = 0; i < plaintexts.size(); ++i) {
         ASSERT_FALSE(decrypted->is_null(i));
-        ASSERT_EQ(plaintexts[i], result->get_data()[i].to_string());
+        ASSERT_EQ(plaintexts[i], result->get_slice(i).to_string());
     }
 }
 
@@ -1681,15 +1680,15 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_mixed_null_test) {
     ASSERT_EQ(decrypted->size(), 4);
 
     // For NullableColumn, we need to access the data_column
-    auto nullable_result = down_cast<NullableColumn*>(decrypted.get());
-    auto result = down_cast<BinaryColumn*>(nullable_result->data_column().get());
+    auto nullable_result = down_cast<const NullableColumn*>(decrypted.get());
+    auto result = down_cast<const BinaryColumn*>(nullable_result->data_column().get());
 
     ASSERT_FALSE(decrypted->is_null(0));
-    ASSERT_EQ("data1", result->get_data()[0].to_string());
+    ASSERT_EQ("data1", result->get_slice(0).to_string());
     ASSERT_TRUE(decrypted->is_null(1));
     ASSERT_TRUE(decrypted->is_null(2));
     ASSERT_FALSE(decrypted->is_null(3));
-    ASSERT_EQ("data4", result->get_data()[3].to_string());
+    ASSERT_EQ("data4", result->get_slice(3).to_string());
 }
 
 // Test 2-parameter version with constant columns (optimization path)
@@ -1723,7 +1722,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_const_test) {
     auto encrypted_unpacked = ColumnHelper::unpack_and_duplicate_const_column(encrypted->size(), encrypted);
     auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted_unpacked);
     for (size_t i = 1; i < 5; ++i) {
-        ASSERT_EQ(encrypted_data->get_data()[0].to_string(), encrypted_data->get_data()[i].to_string());
+        ASSERT_EQ(encrypted_data->get_slice(0).to_string(), encrypted_data->get_slice(i).to_string());
     }
 
     // Decrypt
@@ -1738,7 +1737,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_const_test) {
     auto decrypted_unpacked = ColumnHelper::unpack_and_duplicate_const_column(decrypted->size(), decrypted);
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted_unpacked);
     for (size_t i = 0; i < 5; ++i) {
-        ASSERT_EQ(plaintext, result->get_data()[i].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(i).to_string());
     }
 }
 
@@ -1799,8 +1798,8 @@ TEST_F(EncryptionFunctionsTest, from_base64GeneralTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1828,8 +1827,8 @@ TEST_F(EncryptionFunctionsTest, from_base64NullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     result2->is_null(j);
 }
@@ -1848,8 +1847,8 @@ TEST_F(EncryptionFunctionsTest, from_base64ConstTest) {
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(v->data_column());
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], data_column->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], data_column->get_slice(j).to_string());
     }
 }
 
@@ -1871,9 +1870,30 @@ TEST_F(EncryptionFunctionsTest, to_base64Test) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
+}
+
+TEST_F(EncryptionFunctionsTest, to_base64LargeInputTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    constexpr size_t kInputSize = 8 * 1024 * 1024;
+    std::string input(kInputSize, 'x');
+    config::max_length_for_to_base64 = kInputSize;
+
+    plain->append(input);
+    columns.emplace_back(std::move(plain));
+
+    ColumnPtr encoded = EncryptionFunctions::to_base64(ctx.get(), columns).value();
+
+    Columns decode_columns;
+    decode_columns.emplace_back(encoded);
+
+    ColumnPtr decoded = EncryptionFunctions::from_base64(ctx.get(), decode_columns).value();
+    ASSERT_EQ(input, decoded->get(0).get_slice().to_string());
 }
 
 TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
@@ -1900,8 +1920,8 @@ TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1920,8 +1940,8 @@ TEST_F(EncryptionFunctionsTest, to_base64ConstTest) {
     auto result2 = ColumnHelper::as_column<ConstColumn>(result)->data_column();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1943,8 +1963,8 @@ TEST_F(EncryptionFunctionsTest, md5GeneralTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1972,8 +1992,8 @@ TEST_F(EncryptionFunctionsTest, md5NullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1989,7 +2009,7 @@ TEST_F(EncryptionFunctionsTest, md5ConstTest) {
 
     ColumnPtr result = EncryptionFunctions::md5(ctx.get(), columns).value();
 
-    ConstColumn::Ptr result2 = ColumnHelper::as_column<ConstColumn>(result);
+    auto result2 = ColumnHelper::as_column<ConstColumn>(result);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     for (auto& result : results) {
@@ -2014,8 +2034,8 @@ TEST_F(EncryptionFunctionsTest, md5sumTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -2044,8 +2064,8 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -2072,8 +2092,8 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j]);
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->immutable_data()[j]);
     }
 }
 
@@ -2102,8 +2122,8 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j]);
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->immutable_data()[j]);
     }
 }
 
@@ -2143,7 +2163,7 @@ TEST_P(ShaTestFixture, test_sha2) {
         EXPECT_TRUE(result->is_null(0));
     } else {
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        EXPECT_EQ(expected, v->get_data()[0].to_string());
+        EXPECT_EQ(expected, v->get_slice(0).to_string());
     }
 
     ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),

@@ -251,7 +251,7 @@ static void BM_primitive(benchmark::State& state) {
     orcChunkReader.disable_broker_load_mode();
 
     std::unique_ptr<ORCColumnReader> orcColumnReader =
-            ORCColumnReader::create(c0Type, orcType, isNullable, orcMapping, &orcChunkReader).value();
+            ORCColumnReader::create(c0Type, orcType, isNullable, orcMapping.get(), &orcChunkReader).value();
 
     for (auto _ : state) {
         ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = rr->createRowBatch(columnSize);
@@ -261,7 +261,7 @@ static void BM_primitive(benchmark::State& state) {
         size_t totalNumRows = 0;
         while (rr->next(*batch, &pos)) {
             ColumnPtr column = ColumnHelper::create_column(c0Type, isNullable);
-            CHECK(orcColumnReader->get_next(c0, column, 0, columnSize).ok());
+            CHECK(orcColumnReader->get_next(c0, column.get(), 0, columnSize).ok());
             DCHECK_EQ(columnSize, column->size());
             totalNumRows += columnSize;
         }

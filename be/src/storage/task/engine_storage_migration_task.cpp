@@ -36,12 +36,13 @@
 
 #include <fmt/format.h>
 
+#include "base/utility/defer_op.h"
 #include "runtime/exec_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -53,7 +54,7 @@ EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSch
           _need_rebuild_pk_index(need_rebuild_pk_index) {}
 
 Status EngineStorageMigrationTask::execute() {
-    StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
+    StorageMetrics::instance()->storage_migrate_requests_total.increment(1);
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "Not found tablet: " << _tablet_id;
@@ -625,7 +626,7 @@ Status EngineStorageMigrationTask::_copy_index_and_data_files(const string& sche
             return Status::InternalError("Process is going to quit.");
         }
 
-        ASSIGN_OR_RETURN(auto copy_size, rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path));
+        ASSIGN_OR_RETURN(auto copy_size, rs->copy_files_to(schema_hash_path));
         _copy_size += copy_size;
     }
     uint64_t total_time_ms = watch.elapsed_time() / 1000 / 1000;

@@ -336,3 +336,16 @@ create table t_format_bytes(bytes bigint)
 insert into t_format_bytes values (0), (123), (1024), (1048576), (1073741824), (-1), (null);
 select bytes, format_bytes(bytes) from t_format_bytes order by bytes;
 
+
+-- name: test_raise_error
+-- function: raise_error
+select raise_error('custom error message');
+select raise_error(null);
+select raise_error('');
+create table t_raise_error(id int, msg varchar(100))
+        DUPLICATE KEY(id)
+        DISTRIBUTED BY HASH(id)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+insert into t_raise_error values (1, null), (2, null);
+select raise_error(msg) from t_raise_error order by id;

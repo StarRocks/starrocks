@@ -1,0 +1,36 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector;
+
+import com.starrocks.common.AnalysisException;
+
+/**
+ * Resolves an external base table partition to one or more MV partition keys.
+ * <p>
+ * Each connector type provides its own implementation. The resolver is stateless;
+ * all inputs come from {@link ExternalPartitionMappingContext} and the partition name.
+ */
+public interface ExternalPartitionKeyResolver {
+
+    /**
+     * Resolve a single external base partition name to MV partition key(s).
+     *
+     * @param mappingContext shared mapping context (base table, partition columns, MV partition expr)
+     * @param basePartitionName the external base-table partition name (e.g., "col=value" or "col1=v1/col2=v2")
+     * @return resolution result containing one or more PartitionKeys and the path taken
+     */
+    PartitionKeyResolutionResult resolve(ExternalPartitionMappingContext mappingContext, String basePartitionName)
+            throws AnalysisException;
+}

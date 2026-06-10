@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/internal_service_recoverable_stub.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 
 #include <gtest/gtest.h>
 
-#include "util/ref_count_closure.h"
+#include "base/brpc/ref_count_closure.h"
 
 using namespace starrocks;
 

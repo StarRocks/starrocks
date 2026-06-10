@@ -34,8 +34,18 @@
 
 #include "http_service.h"
 
+#include <fmt/format.h>
+
+#include <optional>
+
 #include "cache/datacache.h"
+#include "common/config_http_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_path_fwd.h"
+#include "common/config_update_registry.h"
+#include "common/utils.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
@@ -46,6 +56,7 @@
 #ifdef STARROCKS_JIT_ENABLE
 #include "http/action/jit_cache_action.h"
 #endif
+#include "common/metrics/process_metrics_registry.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -67,15 +78,23 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
+#include "http/utils.h"
 #include "http/web_page_handler.h"
+#include "platform/store_path.h"
+#include "runtime/base_load_path_mgr.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "service/service_be/config_update_hooks.h"
+#include "service/service_be/http_auth_response.h"
 
 namespace starrocks {
 
-HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, int port, int num_threads)
+HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, const GlobalEnv& global_env,
+                             ProcessMetricsRegistry* process_metrics_registry, int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
+          _global_env(global_env),
+          _process_metrics_registry(process_metrics_registry),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -95,7 +114,12 @@ void HttpServiceBE::join() {
 }
 
 Status HttpServiceBE::start() {
-    add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
+    register_config_update_hooks(_env, _global_env);
+    ConfigUpdateRegistry::instance()->set_ready();
+
+    add_default_path_handlers(_web_page_handler.get(), _global_env);
+
+    _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
     // register load
     auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
@@ -150,6 +174,7 @@ Status HttpServiceBE::start() {
     // Register Stop Be action
     auto* stop_be_action = new StopBeAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/_stop_be", stop_be_action);
     _http_handlers.emplace_back(stop_be_action);
 
     // register pprof actions
@@ -181,7 +206,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/cmdline", cmdline_action);
     _http_handlers.emplace_back(cmdline_action);
 
-    auto* symbol_action = new SymbolAction(_env->bfd_parser());
+    auto* symbol_action = new SymbolAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
@@ -193,11 +218,11 @@ Status HttpServiceBE::start() {
 
     // register metrics
     {
-        auto action = new MetricsAction(StarRocksMetrics::instance()->metrics());
+        auto action = new MetricsAction(_process_metrics_registry);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 
-        auto memory_metric_action = new MemoryMetricsAction();
+        auto memory_metric_action = new MemoryMetricsAction(_global_env);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics/memory", memory_metric_action);
         _http_handlers.emplace_back(memory_metric_action);
     }
@@ -208,7 +233,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction();
+    auto* checksum_action = new ChecksumAction(_global_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 
@@ -248,7 +273,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
     _http_handlers.emplace_back(show_running_action);
 
-    auto* update_config_action = new UpdateConfigAction(_env);
+    auto* update_config_action = new UpdateConfigAction();
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
 

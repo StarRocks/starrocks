@@ -24,7 +24,6 @@
 #include <memory>
 
 #include "fs/s3/pool_base.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::poco {

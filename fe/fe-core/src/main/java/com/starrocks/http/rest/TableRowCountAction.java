@@ -43,8 +43,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -96,25 +96,25 @@ public class TableRowCountAction extends RestBaseAction {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
             }
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
-            try {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-                if (table == null) {
-                    throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
-                            "Table [" + tableName + "] " + "does not exists");
-                }
-                // just only support OlapTable, ignore others such as ESTable
-                if (!(table instanceof OlapTable)) {
-                    // Forbidden
-                    throw new StarRocksHttpException(HttpResponseStatus.FORBIDDEN, "Table [" + tableName + "] "
-                            + "is not a OlapTable, only support OlapTable currently");
-                }
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
+                        "Table [" + tableName + "] " + "does not exists");
+            }
+            // just only support OlapTable, ignore others such as ESTable
+            if (!(table instanceof OlapTable)) {
+                // Forbidden
+                throw new StarRocksHttpException(HttpResponseStatus.FORBIDDEN, "Table [" + tableName + "] "
+                        + "is not a OlapTable, only support OlapTable currently");
+            }
+            // No revalidation under the lock (cf. lockTableAndCheckDbExist pattern):
+            // this endpoint is documented as approximate, and REST delivery already
+            // races with drop/rename. The lock is still needed to protect
+            // proximateRowCount's partition walk from concurrent mutation.
+            try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
                 OlapTable olapTable = (OlapTable) table;
                 resultMap.put("status", 200);
                 resultMap.put("size", olapTable.proximateRowCount());
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

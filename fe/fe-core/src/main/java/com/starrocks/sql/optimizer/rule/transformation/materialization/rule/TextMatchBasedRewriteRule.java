@@ -25,6 +25,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -220,6 +221,8 @@ public class TextMatchBasedRewriteRule extends Rule {
                 return null;
             }
             int mvRelatedCount = 0;
+            MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                    MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
             for (MaterializedView mv : candidateMvs) {
                 Pair<Boolean, String> status = isValidForTextBasedRewrite(context, mv);
                 if (!status.first) {
@@ -232,7 +235,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
                             "stale partitions {}", mv.getName(), mvUpdateInfo);
@@ -255,6 +258,11 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
                 final MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                         mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
+                if (mvContext == null) {
+                    logMVRewrite(context, this,
+                            "Skip text-based rewrite for {} because its metadata copy is unavailable", mv.getName());
+                    continue;
+                }
                 final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
@@ -300,7 +308,11 @@ public class TextMatchBasedRewriteRule extends Rule {
             logMVRewrite(context, this, "MV is not active: {}", mv.getName());
             return Pair.create(false, "MV is not active");
         }
-
+        if (mv.getRefreshMode().isIncrementalOrAuto()) {
+            String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
+            logMVRewrite(context, this, message);
+            return Pair.create(false, message);
+        }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();

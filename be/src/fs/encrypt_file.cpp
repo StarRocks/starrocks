@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -25,11 +26,11 @@
 #include <cpuid.h>
 #endif
 
-#include "fmt/format.h"
+#include "base/format.h"
+#include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
 #include "io/input_stream.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

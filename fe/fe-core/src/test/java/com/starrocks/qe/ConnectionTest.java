@@ -32,6 +32,7 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TListConnectionRequest;
@@ -46,6 +47,8 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -98,12 +101,20 @@ public class ConnectionTest {
         GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
     }
 
+    private List<Pair<String, String>> buildPropertyPairs(SetUserPropertyStmt stmt) {
+        List<Pair<String, String>> properties = new ArrayList<>();
+        for (SetUserPropertyVar property : stmt.getPropertyList()) {
+            properties.add(Pair.create(property.getPropertyKey(), property.getPropertyValue()));
+        }
+        return properties;
+    }
+
     private void setUserMaxConnections(String userName, long maxConn) throws Exception {
         String sql = String.format("set property for '%s' 'max_user_connections' = '%d'", userName, maxConn);
         SetUserPropertyStmt setUserPropertyStmt =
                 (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                .updateUserProperty(userName, setUserPropertyStmt.getPropertyPairList());
+                .updateUserProperty(userName, buildPropertyPairs(setUserPropertyStmt));
     }
 
     private int getUserConnCount(ConnectScheduler scheduler, String userName) {
@@ -138,7 +149,7 @@ public class ConnectionTest {
         SetUserPropertyStmt setUserPropertyStmt =
                 (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                .updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+                .updateUserProperty("test", buildPropertyPairs(setUserPropertyStmt));
 
         Pair<Boolean, String> result =
                 ExecuteEnv.getInstance().getScheduler()

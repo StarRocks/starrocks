@@ -180,7 +180,7 @@ private:
         StatusOr<ColumnPtr> lower;
         if (haystack_column->is_nullable()) {
             auto haystack_nullable = ColumnHelper::as_column<NullableColumn>(haystack_column);
-            res_null = haystack_nullable->null_column();
+            res_null = NullColumn::static_pointer_cast(Column::mutate(haystack_nullable->null_column()));
             haystackPtr = haystack_nullable->data_column();
         } else {
             haystackPtr = haystack_column;
@@ -190,7 +190,7 @@ private:
             haystackPtr = StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(haystackPtr);
         }
 
-        BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
+        const BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
         size_t chunk_size = haystack->size();
         auto res = RunTimeColumnType<TYPE_DOUBLE>::create(chunk_size);
 

@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -124,8 +125,14 @@ public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)) {
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET)) {
             return true;
         }
         return false;
@@ -150,6 +157,11 @@ public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean
 
     @Override
     public Boolean visitCreateCatalogStatement(CreateCatalogStmt statement, Void context) {
+        return true;
+    }
+
+    @Override
+    public Boolean visitCreateRepositoryStatement(CreateRepositoryStmt statement, Void context) {
         return true;
     }
 

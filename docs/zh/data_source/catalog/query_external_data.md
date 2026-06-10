@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "External Catalog 方便访问并查询存储在各类外部数据源的数据，无需创建外部表。"
 ---
 
 # 查询外部数据
@@ -34,7 +35,7 @@ displayed_sidebar: docs
     USE catalog_name.db_name;
     ```
 
-5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
+5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md)。
 
     ```SQL
     SELECT * FROM table_name;

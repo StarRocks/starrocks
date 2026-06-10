@@ -17,14 +17,17 @@
 #include <memory>
 #include <vector>
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h" // for Slice
+#include "column/chunk_factory.h"
+#include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
-#include "util/slice.h" // for Slice
-#include "util/unaligned_access.h"
+#include "storage/rowset/common.h"
 
 namespace starrocks {
 
@@ -33,10 +36,9 @@ using strings::Substitute;
 template <LogicalType Type>
 DictPageBuilder<Type>::DictPageBuilder(const PageBuilderOptions& options)
         : _options(options),
-          _finished(false),
+
           _data_page_builder(nullptr),
-          _dict_builder(nullptr),
-          _encoding_type(DICT_ENCODING) {
+          _dict_builder(nullptr) {
     // initially use DICT_ENCODING
     _data_page_builder = std::make_unique<BitshufflePageBuilder<DataTypeTraits<Type>::type>>(options);
     _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
@@ -161,8 +163,7 @@ bool DictPageBuilder<Type>::is_valid_global_dict(const GlobalDictMap* global_dic
 }
 
 template <LogicalType Type>
-DictPageDecoder<Type>::DictPageDecoder(Slice data)
-        : _data(data), _data_page_decoder(nullptr), _parsed(false), _encoding_type(UNKNOWN_ENCODING) {}
+DictPageDecoder<Type>::DictPageDecoder(Slice data) : _data(data), _data_page_decoder(nullptr) {}
 
 template <LogicalType Type>
 Status DictPageDecoder<Type>::init() {
@@ -219,15 +220,17 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(DataTypeTraits<Type>::type, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(DataTypeTraits<Type>::type, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
-    using cast_type = typename CppTypeTraits<DataTypeTraits<Type>::type>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<DataTypeTraits<Type>::type>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
     std::vector<ValueType> numbers;
     raw::stl_vector_resize_uninitialized(&numbers, nread);
     for (int i = 0; i < nread; ++i) {

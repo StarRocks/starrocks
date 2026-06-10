@@ -16,13 +16,18 @@
 
 #include <utility>
 
+#include "common/config_exec_flow_fwd.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
-#include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr.h"
-#include "runtime/buffer_control_block.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
 
@@ -63,8 +68,9 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
     }
 
     auto dop = state->query_options().pipeline_dop;
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
-                                                                   std::min(dop << 1, 1024), &_sender));
+    auto* query_execution_services = state->query_execution_services();
+    RETURN_IF_ERROR(query_execution_services->runtime->result_mgr->create_sender(state->fragment_instance_id(),
+                                                                                 std::min(dop << 1, 1024), &_sender));
     _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
     RETURN_IF_ERROR(_writer->init(state));
 
@@ -84,8 +90,10 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     if (_sender != nullptr) {
         auto query_statistic = std::make_shared<QueryStatistics>();
         QueryContext* query_ctx = state->query_ctx();
-        query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
-        query_statistic->add_cpu_costs(query_ctx->cpu_cost());
+        auto* query_runtime_state = state->query_runtime_state();
+        query_statistic->add_scan_stats(query_runtime_state->cur_scan_rows_num(),
+                                        query_runtime_state->get_scan_bytes());
+        query_statistic->add_cpu_costs(query_runtime_state->cpu_cost());
         query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
         query_statistic->set_returned_rows(num_written_rows);
         _sender->set_query_statistics(query_statistic);
@@ -97,7 +105,8 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         _sender.reset();
 
-        (void)_state->exec_env()->result_mgr()->cancel_at_time(
+        auto* query_execution_services = _state->query_execution_services();
+        (void)query_execution_services->runtime->result_mgr->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
     }
     SinkIOBuffer::close(state);
@@ -173,15 +182,15 @@ FileSinkOperatorFactory::FileSinkOperatorFactory(int32_t id, std::vector<TExpr> 
 
 Status FileSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     _file_sink_buffer = std::make_shared<FileSinkIOBuffer>(_output_expr_ctxs, _file_opts, _num_sinkers, _fragment_ctx);
     return Status::OK();
 }
 
 void FileSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
 
     OperatorFactory::close(state);
 }

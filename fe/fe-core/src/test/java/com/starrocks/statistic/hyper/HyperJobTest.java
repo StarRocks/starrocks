@@ -37,6 +37,7 @@ import com.starrocks.statistic.HyperStatisticsCollectJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.base.CollectionTypeColumnStats;
 import com.starrocks.statistic.base.ColumnClassifier;
 import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
@@ -69,9 +70,15 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
 
     private static Table table;
 
+    private static Table wideTable;
+
     private static PartitionSampler sampler;
 
+    private static PartitionSampler wideSampler;
+
     private static long pid;
+
+    private static long widePid;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -88,23 +95,39 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
                 "c7 array<int>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table t_wide_stats(k1 INT, " +
+                "c_short varchar(100)," +
+                "c_boundary varchar(512)," +
+                "c_wide varchar(2000)," +
+                "c_wide_a varchar(1500)," +
+                "c_wide_b varchar(3000)," +
+                "c_arr_wide array<varchar(2000)>," +
+                "c_bigint bigint) " +
+                "duplicate key(k1) distributed by hash(k1) buckets 1 " +
+                "properties('replication_num'='1');");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
         pid = table.getPartition("t_struct").getId();
         sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap(), null);
+        wideTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_wide_stats");
+        widePid = wideTable.getPartition("t_wide_stats").getId();
+        wideSampler = PartitionSampler.create(wideTable, List.of(widePid), Maps.newHashMap(), null);
 
         for (Partition partition : ((OlapTable) table).getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
+        }
+        for (Partition partition : ((OlapTable) wideTable).getAllPartitions()) {
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
         }
     }
 
     @Test
     public void generateComplexTypeColumnTask() {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
-        List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
+        List<Type> columnTypes = table.getColumns().stream().map(c -> c.getType()).collect(Collectors.toList());
 
-        List<HyperQueryJob> job =
-                HyperQueryJob.createFullQueryJobs(connectContext, db, table, columnNames, columnTypes, List.of(pid), 1, false);
+        List<HyperQueryJob> job = HyperQueryJob.createFullQueryJobs(1L, connectContext, db, table, columnNames,
+                columnTypes, List.of(pid), 1, false);
         Assertions.assertEquals(2, job.size());
         Assertions.assertTrue(job.get(1) instanceof ConstQueryJob);
     }
@@ -112,7 +135,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     @Test
     public void generatePrimitiveTypeColumnTask() {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
-        List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
+        List<Type> columnTypes = table.getColumns().stream().map(c -> c.getType()).collect(Collectors.toList());
 
         ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false);
         ColumnStats columnStat = cc.getColumnStats().stream().filter(c -> c instanceof PrimitiveTypeColumnStats)
@@ -157,6 +180,37 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         return Pair.create(columnNames, columnTypes);
     }
 
+    private Pair<List<String>, List<Type>> initWideColumn(List<String> cols) {
+        List<String> columnNames = Lists.newArrayList();
+        List<Type> columnTypes = Lists.newArrayList();
+        for (String col : cols) {
+            Column c = wideTable.getColumn(col);
+            columnNames.add(c.getName());
+            columnTypes.add(c.getType());
+        }
+        return Pair.create(columnNames, columnTypes);
+    }
+
+    private SampleQueryJob getSampleQueryJob(List<String> cols) {
+        Pair<List<String>, List<Type>> pair = initWideColumn(cols);
+        return HyperQueryJob.createSampleQueryJobs(1L, connectContext, db, wideTable, pair.first,
+                        pair.second, List.of(widePid), 1, wideSampler, false).stream()
+                .filter(SampleQueryJob.class::isInstance)
+                .map(SampleQueryJob.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing SampleQueryJob"));
+    }
+
+    private FullQueryJob getFullQueryJob(List<String> cols) {
+        Pair<List<String>, List<Type>> pair = initWideColumn(cols);
+        return HyperQueryJob.createFullQueryJobs(1L, connectContext, db, wideTable, pair.first,
+                        pair.second, List.of(widePid), 1, false).stream()
+                .filter(FullQueryJob.class::isInstance)
+                .map(FullQueryJob.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing FullQueryJob"));
+    }
+
     @Test
     public void testConstQueryJobs() {
         new MockUp<StmtExecutor>() {
@@ -184,7 +238,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     public void testFullJobs() {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
+        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(1L, connectContext, db, table, pair.first,
                 pair.second, List.of(pid), 1, false);
 
         Assertions.assertEquals(1, jobs.size());
@@ -207,7 +261,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
             }
         };
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(1L, connectContext, db, table, pair.first,
                 pair.second, List.of(pid), 1, sampler, false);
 
         Assertions.assertEquals(2, jobs.size());
@@ -230,7 +284,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     public void testArrayNDV() {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c7"));
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
+        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(1L, connectContext, db, table, pair.first,
                 pair.second, List.of(pid), 1, true);
 
         Assertions.assertEquals(1, jobs.size());
@@ -255,7 +309,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
             }
         };
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, columnNames,
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(1L, connectContext, db, table, columnNames,
                 columnTypes, List.of(pid), 1, sampler, false);
 
         Assertions.assertEquals(1, jobs.size());
@@ -297,13 +351,392 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
             }
         };
 
-        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(1L, connectContext, db, table, pair.first,
                 pair.second, List.of(pid), 1, sampler, false);
         long startTime = connectContext.getStartTime();
         for (HyperQueryJob job : jobs) {
             job.queryStatistics();
             Assertions.assertNotEquals(startTime, connectContext.getStartTime());
         }
+    }
+
+    @Test
+    public void testKillAnalyzeCancelHyperQueryJobEarly() {
+        long analyzeId = 12345L;
+
+        ConnectContext statsCtx = StatisticUtils.buildConnectContext();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeId, statsCtx);
+
+        try {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().killConnection(analyzeId);
+
+            Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
+            List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(
+                    analyzeId, statsCtx, db, table, pair.first, pair.second, List.of(pid), 1, false);
+
+            RuntimeException ex = Assertions.assertThrows(RuntimeException.class, () -> jobs.get(0).queryStatistics());
+            Assertions.assertTrue(ex.getMessage().contains("USER_CANCEL"), ex.getMessage());
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(analyzeId, false);
+        }
+    }
+
+    @Test
+    public void testSampleJobsWideStringColumnSplit() {
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        SampleQueryJob job = getSampleQueryJob(List.of("c_short", "c_wide"));
+
+        long original = Config.statistics_large_string_column_merge_threshold;
+        try {
+            Config.statistics_large_string_column_merge_threshold = 500;
+            List<String> sqls = job.buildQuerySQL();
+            // Expect 2 SQLs: 1 for the wide column alone, 1 for the narrow column.
+            Assertions.assertEquals(2, sqls.size());
+
+            String wideSql = sqls.stream().filter(s -> s.contains("'c_wide'")).findFirst()
+                    .orElseThrow(() -> new AssertionError("missing SQL for wide column"));
+            Assertions.assertFalse(wideSql.contains("'c_short'"),
+                    "wide-column SQL must not contain c_short: " + wideSql);
+            List<StatementBase> wideStmt = SqlParser.parse(wideSql, connectContext.getSessionVariable());
+            Assertions.assertTrue(wideStmt.get(0) instanceof QueryStatement);
+
+            String narrowSql = sqls.stream().filter(s -> s.contains("'c_short'")).findFirst()
+                    .orElseThrow(() -> new AssertionError("missing SQL for narrow column"));
+            Assertions.assertFalse(narrowSql.contains("'c_wide'"),
+                    "narrow-column SQL must not contain c_wide: " + narrowSql);
+            List<StatementBase> narrowStmt = SqlParser.parse(narrowSql, connectContext.getSessionVariable());
+            Assertions.assertTrue(narrowStmt.get(0) instanceof QueryStatement);
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = original;
+        }
+    }
+
+    @Test
+    public void testSampleJobsMultipleWideColumnsEachOwnSql() {
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        SampleQueryJob job = getSampleQueryJob(List.of("c_short", "c_wide_a", "c_wide_b"));
+
+        long original = Config.statistics_large_string_column_merge_threshold;
+        int origParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 500;
+            // Bump parallelism to 3 so the narrow column wouldn't be split by partition() alone.
+            connectContext.getSessionVariable().setStatisticCollectParallelism(3);
+
+            List<String> sqls = job.buildQuerySQL();
+            // 2 SQLs for the wide columns (one each) + 1 SQL for the narrow column = 3 total.
+            Assertions.assertEquals(3, sqls.size(),
+                    "wide columns each own SQL, narrow ones batched: " + sqls);
+
+            // Each wide column appears in exactly one SQL and that SQL contains no other column.
+            long wideASqls = sqls.stream().filter(s -> s.contains("'c_wide_a'")).count();
+            long wideBSqls = sqls.stream().filter(s -> s.contains("'c_wide_b'")).count();
+            Assertions.assertEquals(1, wideASqls, "c_wide_a should appear in exactly 1 SQL");
+            Assertions.assertEquals(1, wideBSqls, "c_wide_b should appear in exactly 1 SQL");
+
+            // The two wide-column SQLs must be different from each other (each isolated).
+            String wideASql = sqls.stream().filter(s -> s.contains("'c_wide_a'")).findFirst().get();
+            String wideBSql = sqls.stream().filter(s -> s.contains("'c_wide_b'")).findFirst().get();
+            Assertions.assertFalse(wideASql.contains("'c_wide_b'"),
+                    "wide column SQLs must not share a SQL");
+            Assertions.assertFalse(wideBSql.contains("'c_wide_a'"),
+                    "wide column SQLs must not share a SQL");
+            Assertions.assertFalse(wideASql.contains("'c_short'"),
+                    "wide column SQL must not contain narrow column");
+
+            // The narrow column should land in its own batched SQL.
+            String narrowSql = sqls.stream().filter(s -> s.contains("'c_short'")).findFirst()
+                    .orElseThrow(() -> new AssertionError("missing SQL for narrow column"));
+            Assertions.assertFalse(narrowSql.contains("'c_wide_a'"));
+            Assertions.assertFalse(narrowSql.contains("'c_wide_b'"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = original;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(origParallel);
+        }
+    }
+
+    @Test
+    public void testSampleJobsWideColumnThresholdDisabled() {
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        SampleQueryJob job = getSampleQueryJob(List.of("c_short", "c_wide"));
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        int originalParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 0;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(2);
+            List<String> sqls = job.buildQuerySQL();
+            // Both columns share the same SQL (no wide-column isolation).
+            Assertions.assertEquals(1, sqls.size());
+            Assertions.assertTrue(sqls.get(0).contains("'c_short'"));
+            Assertions.assertTrue(sqls.get(0).contains("'c_wide'"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(originalParallel);
+        }
+    }
+
+    @Test
+    public void testSampleJobsWideColumnThresholdBoundaryInclusive() {
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        SampleQueryJob job = getSampleQueryJob(List.of("c_short", "c_boundary"));
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        int originalParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 512;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(2);
+            List<String> sqls = job.buildQuerySQL();
+            Assertions.assertEquals(1, sqls.size(),
+                    "boundary length == threshold must batch with narrow, not isolate");
+            Assertions.assertTrue(sqls.get(0).contains("'c_short'"));
+            Assertions.assertTrue(sqls.get(0).contains("'c_boundary'"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(originalParallel);
+        }
+    }
+
+    @Test
+    public void testSampleJobsAllWideNoNormalBatch() {
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        SampleQueryJob job = getSampleQueryJob(List.of("c_wide_a", "c_wide_b"));
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        try {
+            Config.statistics_large_string_column_merge_threshold = 500;
+            List<String> sqls = job.buildQuerySQL();
+            Assertions.assertEquals(2, sqls.size(),
+                    "two wide columns with no narrow column must produce exactly 2 isolated SQLs");
+            for (String sql : sqls) {
+                boolean hasA = sql.contains("'c_wide_a'");
+                boolean hasB = sql.contains("'c_wide_b'");
+                Assertions.assertTrue(hasA ^ hasB,
+                        "each SQL must contain exactly one wide column, never both: " + sql);
+            }
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+        }
+    }
+
+    @Test
+    public void testSampleJobsArrayColumnFallsThroughToNormal() {
+        // ARRAY columns with wide element types are not isolated because only top-level
+        // char-family columns are classified as wide.
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        List<ColumnStats> stats = List.of(
+                new PrimitiveTypeColumnStats("c_short", wideTable.getColumn("c_short").getType()),
+                new CollectionTypeColumnStats("c_arr_wide", wideTable.getColumn("c_arr_wide").getType(), false));
+        SampleQueryJob job = new SampleQueryJob(connectContext, 1L, db, wideTable, stats, List.of(widePid), wideSampler);
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        int originalParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 500;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(2);
+            List<String> sqls = job.buildQuerySQL();
+            Assertions.assertEquals(1, sqls.size(),
+                    "ARRAY column is not isolated; both columns batch into 1 SQL");
+            Assertions.assertTrue(sqls.get(0).contains("'c_short'"));
+            Assertions.assertTrue(sqls.get(0).contains("'c_arr_wide'"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(originalParallel);
+        }
+    }
+
+    @Test
+    public void testSampleJobsBigIntNotTreatedAsWide() {
+        // BIGINT is a ScalarType but not char-family; the `!isCharFamily()` guard in
+        // HyperQueryJob.isWideStringColumn must return false so BIGINT falls into the normal batched path.
+        // SampleQueryJob does not normally receive non-char columns in production (ColumnClassifier
+        // routes them to MetaQueryJob), but the guard is required to keep the optimization safe.
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, widePid, 5000000));
+            }
+        };
+
+        List<ColumnStats> stats = List.of(
+                new PrimitiveTypeColumnStats("c_short", wideTable.getColumn("c_short").getType()),
+                new PrimitiveTypeColumnStats("c_bigint", wideTable.getColumn("c_bigint").getType()));
+        SampleQueryJob job = new SampleQueryJob(connectContext, 1L, db, wideTable, stats, List.of(widePid), wideSampler);
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        int originalParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 500;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(2);
+            List<String> sqls = job.buildQuerySQL();
+            Assertions.assertEquals(1, sqls.size(),
+                    "BIGINT must not trigger wide-column isolation");
+            Assertions.assertTrue(sqls.get(0).contains("'c_short'"));
+            Assertions.assertTrue(sqls.get(0).contains("'c_bigint'"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(originalParallel);
+        }
+    }
+
+    @Test
+    public void testFullJobsWideColumnIsolation() {
+        FullQueryJob job = getFullQueryJob(List.of("c_short", "c_wide"));
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        int originalParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 500;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(2);
+            List<String> sqls = job.buildQuerySQL();
+            // 1 standalone SQL for the wide column + 1 SQL for the normal column.
+            Assertions.assertEquals(2, sqls.size());
+            // The first SQL is the standalone wide-column query (no UNION ALL).
+            Assertions.assertTrue(sqls.get(0).contains("'c_wide'"));
+            Assertions.assertFalse(sqls.get(0).contains("UNION ALL"),
+                    "wide-column SQL must not be merged via UNION ALL");
+            List<StatementBase> wideStmt = SqlParser.parse(sqls.get(0), connectContext.getSessionVariable());
+            Assertions.assertTrue(wideStmt.get(0) instanceof QueryStatement);
+            // The second SQL covers the narrow column.
+            Assertions.assertTrue(sqls.get(1).contains("'c_short'"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(originalParallel);
+        }
+    }
+
+    @Test
+    public void testFullJobsWideColumnThresholdDisabled() {
+        FullQueryJob job = getFullQueryJob(List.of("c_short", "c_wide"));
+
+        long originalThreshold = Config.statistics_large_string_column_merge_threshold;
+        int originalParallel = connectContext.getSessionVariable().getStatisticCollectParallelism();
+        try {
+            Config.statistics_large_string_column_merge_threshold = 0;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(2);
+            List<String> sqls = job.buildQuerySQL();
+            // Both columns share one UNION ALL'd SQL (no isolation).
+            Assertions.assertEquals(1, sqls.size());
+            Assertions.assertTrue(sqls.get(0).contains("'c_short'"));
+            Assertions.assertTrue(sqls.get(0).contains("'c_wide'"));
+            Assertions.assertTrue(sqls.get(0).contains("UNION ALL"));
+        } finally {
+            Config.statistics_large_string_column_merge_threshold = originalThreshold;
+            connectContext.getSessionVariable().setStatisticCollectParallelism(originalParallel);
+        }
+    }
+
+    @Test
+    public void testIsWideStringRejectsNonBaseColumnStats() {
+        // Defensive guard: a ColumnStats subtype that is NOT BaseColumnStats has no concrete
+        // column-type information, so HyperQueryJob.isWideStringColumn must early-return false
+        // rather than throw ClassCastException. Tested directly because this branch cannot reach
+        // the query jobs through the normal ColumnClassifier path.
+        ColumnStats foreign = new ColumnStats() {
+            @Override
+            public long getTypeSize() {
+                return 0;
+            }
+
+            @Override
+            public String getColumnNameStr() {
+                return "c_foreign";
+            }
+
+            @Override
+            public String getQuotedColumnName() {
+                return "'c_foreign'";
+            }
+
+            @Override
+            public String getCombinedMultiColumnKey() {
+                return "";
+            }
+
+            @Override
+            public String getMax() {
+                return "''";
+            }
+
+            @Override
+            public String getMin() {
+                return "''";
+            }
+
+            @Override
+            public String getCollectionSize() {
+                return "0";
+            }
+
+            @Override
+            public String getFullDataSize() {
+                return "0";
+            }
+
+            @Override
+            public String getFullNullCount() {
+                return "0";
+            }
+
+            @Override
+            public String getNDV() {
+                return "0";
+            }
+
+            @Override
+            public String getSampleDateSize(SampleInfo info) {
+                return "0";
+            }
+
+            @Override
+            public String getSampleNullCount(SampleInfo info) {
+                return "0";
+            }
+
+            @Override
+            public String getSampleNDV(SampleInfo info) {
+                return "0";
+            }
+        };
+
+        Assertions.assertFalse(HyperQueryJob.isWideStringColumn(foreign, 500),
+                "non-BaseColumnStats input must never be classified as wide");
     }
 
     @AfterAll

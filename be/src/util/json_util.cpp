@@ -43,7 +43,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

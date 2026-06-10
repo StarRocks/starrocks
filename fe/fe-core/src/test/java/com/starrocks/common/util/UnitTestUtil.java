@@ -35,12 +35,10 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -56,10 +54,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
@@ -153,13 +152,11 @@ public class UnitTestUtil {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         if (tableType == Table.TableType.MATERIALIZED_VIEW) {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             MaterializedView mv = new MaterializedView(tableId, dbId, MATERIALIZED_VIEW_NAME, columns,
                     type, partitionInfo, distributionInfo, mvRefreshScheme);
-            Deencapsulation.setField(mv, "baseIndexId", indexId);
+            Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
             mv.addPartition(partition);
             mv.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
@@ -167,7 +164,7 @@ public class UnitTestUtil {
         } else {
             OlapTable table = new OlapTable(tableId, tableName, columns,
                     type, partitionInfo, distributionInfo);
-            Deencapsulation.setField(table, "baseIndexId", indexId);
+            Deencapsulation.setField(table, "baseIndexMetaId", indexId);
             table.addPartition(partition);
             table.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
@@ -230,14 +227,12 @@ public class UnitTestUtil {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
 
         if (tableType == Table.TableType.MATERIALIZED_VIEW) {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             MaterializedView mv = new MaterializedView(tableId, dbId, tableName, columns,
                     type, partitionInfo, distributionInfo, mvRefreshScheme);
-            Deencapsulation.setField(mv, "baseIndexId", indexId);
+            Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
             mv.addPartition(partition);
             mv.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
@@ -245,7 +240,7 @@ public class UnitTestUtil {
         } else {
             OlapTable table = new OlapTable(tableId, tableName, columns,
                     type, partitionInfo, distributionInfo);
-            Deencapsulation.setField(table, "baseIndexId", indexId);
+            Deencapsulation.setField(table, "baseIndexMetaId", indexId);
             table.addPartition(partition);
             table.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);

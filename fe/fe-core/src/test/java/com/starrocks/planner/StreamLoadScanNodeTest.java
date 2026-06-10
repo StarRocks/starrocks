@@ -35,7 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
@@ -51,12 +50,15 @@ import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -120,7 +122,7 @@ public class StreamLoadScanNodeTest {
         k1.setIsAllowNull(false);
         columns.add(k1);
 
-        Column k2 = new Column("k2", TypeFactory.createVarchar(25));
+        Column k2 = new Column("k2", TypeFactory.createVarcharType(25));
         k2.setIsKey(true);
         k2.setIsAllowNull(true);
         columns.add(k2);
@@ -132,7 +134,7 @@ public class StreamLoadScanNodeTest {
 
         columns.add(v1);
 
-        Column v2 = new Column("v2", TypeFactory.createVarchar(25));
+        Column v2 = new Column("v2", TypeFactory.createVarcharType(25));
         v2.setIsKey(false);
         v2.setAggregationType(AggregateType.REPLACE, false);
         v2.setIsAllowNull(false);
@@ -799,15 +801,34 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+    public void testEnvelopeDebeziumRequiresPrimaryKeyTable() throws StarRocksException {
+        DescriptorTable descTbl = new DescriptorTable();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+
+        TStreamLoadPutRequest request = getBaseRequest();
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setEnvelope(TEnvelopeType.DEBEZIUM);
+
+        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+        new Expectations() {{
+            dstTable.getKeysType();
+            result = KeysType.DUP_KEYS;
+        }};
+        assertThrows(StarRocksException.class, () -> scanNode.init(descTbl),
+                "envelope=debezium is only supported on PRIMARY KEY tables");
+    }
+
+    @Test
     public void testLoadInitColumnsMappingColumnNotExist() {
         assertThrows(DdlException.class, () -> {
             List<Column> columns = Lists.newArrayList();
             columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
-            columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
+            columns.add(new Column("c2", TypeFactory.createVarcharType(10), true, null, false, null, ""));
             Table table = new Table(1L, "table0", TableType.OLAP, columns);
             List<ImportColumnDesc> columnExprs = Lists.newArrayList();
             columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
-            Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
+            Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList(),
+                    false, false);
         });
     }
 }

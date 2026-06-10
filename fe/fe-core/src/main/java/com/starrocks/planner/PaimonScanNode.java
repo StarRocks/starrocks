@@ -22,7 +22,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -243,8 +243,11 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
-        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
-        long splitSize = sv.getConnectorMaxSplitSize();
+        long splitSize = ConnectContext.get().getSessionVariable().getConnectorMaxSplitSize();
+        // Guard against invalid values: 0 or negative
+        if (splitSize <= 0) {
+            splitSize = SessionVariable.DEFAULT_SESSION_VARIABLE.getConnectorMaxSplitSize();
+        }
         long totalSize = rawFile.length();
         long offset = rawFile.offset();
         boolean needSplit = totalSize > splitSize;
@@ -369,7 +372,7 @@ public class PaimonScanNode extends ScanNode {
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 paimonTable.getCatalogName(), paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(),
-                ConnectorMetadatRequestContext.DEFAULT);
+                ConnectorMetadataRequestContext.DEFAULT);
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -419,6 +422,8 @@ public class PaimonScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

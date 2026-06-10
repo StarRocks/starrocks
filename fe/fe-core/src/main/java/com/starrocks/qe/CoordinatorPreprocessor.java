@@ -31,8 +31,10 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
+import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
@@ -85,14 +87,12 @@ public class CoordinatorPreprocessor {
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
     public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
-        workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
         this.connectContext = Preconditions.checkNotNull(context);
         this.jobSpec = jobSpec;
         this.enablePhasedSchedule = enablePhasedSchedule;
         this.executionDAG = ExecutionDAG.build(jobSpec);
-
+        workerProviderFactory = newWorkerProviderFactory();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
@@ -105,13 +105,12 @@ public class CoordinatorPreprocessor {
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context) {
-        workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
         this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
         this.enablePhasedSchedule = false;
         this.executionDAG = ExecutionDAG.build(jobSpec);
+        workerProviderFactory = newWorkerProviderFactory();
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
@@ -149,10 +148,24 @@ public class CoordinatorPreprocessor {
     }
 
     private WorkerProvider.Factory newWorkerProviderFactory() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        boolean skipBlackList = sessionVariable.isSkipBlackList();
+        
         if (RunMode.isSharedDataMode()) {
-            return new DefaultSharedDataWorkerProvider.Factory();
+            BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy =
+                    sessionVariable.getBlacklistBackupRoutingPolicy();
+            if (skipBlackList) {
+                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory(
+                        blacklistBackupRoutingPolicy);
+            } else {
+                return new DefaultSharedDataWorkerProvider.Factory(blacklistBackupRoutingPolicy);
+            }
         } else {
-            return new DefaultWorkerProvider.Factory();
+            if (skipBlackList) {
+                return new SkipBlacklistWorkerProvider.Factory();
+            } else {
+                return new DefaultWorkerProvider.Factory();
+            }
         }
     }
 
@@ -266,6 +279,7 @@ public class CoordinatorPreprocessor {
         validateExecutionDAG();
 
         executionDAG.prepareCaptureVersion(enablePhasedSchedule);
+        executionDAG.preparePreExecutedFragments();
         executionDAG.finalizeDAG();
     }
 
@@ -274,6 +288,18 @@ public class CoordinatorPreprocessor {
         execFragment.getScanRangeAssignment().clear();
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();
+        }
+        // Reset bucket-aware state too. BucketAwareBackendSelector reads/writes
+        // colocatedAssignment.seqToScanRange directly, and its `scanRanges.put(scanId, ...)`
+        // only overwrites entries for buckets that appear in the current incremental batch.
+        // Buckets that were present in a previous batch but absent from the current one keep
+        // their stale scan ranges, so those files get re-emitted to the freshly-reset
+        // instance.node2ScanRanges and BE ends up scanning them once per follow-up batch.
+        // seqToWorkerId must be preserved: a bucket's worker assignment has to remain stable
+        // across batches so the bucket's data keeps landing on the same BE.
+        ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
+        if (colocatedAssignment != null) {
+            colocatedAssignment.getSeqToScanRange().clear();
         }
         fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
     }

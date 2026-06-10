@@ -20,14 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.TableName;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
 import java.util.Map;
@@ -36,7 +33,7 @@ import java.util.Map;
  * Materialized view is performed to materialize the results of query.
  * This clause is used to create a new materialized view for specified tables
  * through a specified query stmt.
- * The differences with CreateMaterializedViewStmt:
+ * The differences with CreateSyncMVStmt:
  * 1. Supports querying materialized view directly and try best to keep the result consistent with querying base tables
  * 2. Supports creating mvs on multi tables
  * 3. partition and distribution desc can be specified for each mv independently.
@@ -46,7 +43,7 @@ import java.util.Map;
  */
 public class CreateMaterializedViewStatement extends DdlStmt {
 
-    private TableName tableName;
+    private TableRef tableRef;
     private final List<ColWithComment> colWithComments;
     private final List<IndexDef> indexDefs;
     private boolean ifNotExists;
@@ -85,10 +82,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
     // the encode row id version deduced by analyzer
     private int encodeRowIdVersion = 0;
-
-    // Maintenance information
-    ExecPlan maintenancePlan;
-    ColumnRefFactory columnRefFactory;
+    // the __ROW_ID__ production strategy deduced by analyzer for incremental MVs;
+    // null when this is not an incremental MV
+    private RowIdStrategy rowIdStrategy = null;
 
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
@@ -113,7 +109,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // partition contains transform function.
     private boolean isRefBaseTablePartitionWithTransform = false;
 
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
+    public CreateMaterializedViewStatement(TableRef tableRef, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
                                            String comment,
@@ -128,7 +124,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            String originalDBName,
                                            NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.colWithComments = colWithComments;
         this.indexDefs = indexDefs;
         this.ifNotExists = ifNotExists;
@@ -144,12 +140,24 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.originalDBName = originalDBName;
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public void setTableName(TableName tableName) {
-        this.tableName = tableName;
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTblName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<ColWithComment> getColWithComments() {
@@ -331,25 +339,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.partitionRefTableExprs = partitionRefTableExprs;
     }
 
-    public ExecPlan getMaintenancePlan() {
-        return maintenancePlan;
-    }
-
-    public ColumnRefFactory getColumnRefFactory() {
-        return columnRefFactory;
-    }
-
     public List<Integer> getQueryOutputIndices() {
         return queryOutputIndices;
     }
 
     public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
         this.queryOutputIndices = queryOutputIndices;
-    }
-
-    public void setMaintenancePlan(ExecPlan maintenancePlan, ColumnRefFactory columnRefFactory) {
-        this.maintenancePlan = maintenancePlan;
-        this.columnRefFactory = columnRefFactory;
     }
 
     public Map<Integer, Column> getGeneratedPartitionCols() {
@@ -385,6 +380,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public int getEncodeRowIdVersion() {
         return encodeRowIdVersion;
+    }
+
+    public void setRowIdStrategy(RowIdStrategy rowIdStrategy) {
+        this.rowIdStrategy = rowIdStrategy;
+    }
+
+    public RowIdStrategy getRowIdStrategy() {
+        return rowIdStrategy;
     }
 
     @Override

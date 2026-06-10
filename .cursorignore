@@ -1,2 +1,17 @@
+# Gradle
+**/.gradle/
 **/.gradle
+**/build/
+**/gradle/wrapper/gradle-wrapper.jar
+**/*.gradle.kts.bak
+
+# Maven
+**/.m2/
 **/.m2
+**/target/
+**/.mvn/wrapper/maven-wrapper.jar
+
+# Other build outputs
+**/out/
+**/.idea/
+**/*.iml

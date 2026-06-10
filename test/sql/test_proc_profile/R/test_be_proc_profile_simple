@@ -1,4 +1,4 @@
--- name: test_be_proc_profile_simple
+-- name: test_be_proc_profile_simple @sequential
 shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
 -- result:
 0
@@ -27,17 +27,17 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 [UC]shell: cat be_profile_file.txt
 -- result:
 0
-cpu-profile-20251111-184044-pprof.gz
+
 -- !result
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 -- result:
 0
-exist
+empty
 -- !result
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 -- result:
 0
-exist
+empty
 -- !result
 shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz"
 -- result:

@@ -30,3 +30,5 @@ set(UDF_FILES
 )
 
 ADD_BE_LIB(Udf ${UDF_FILES})
+
+target_link_libraries(Udf PUBLIC RuntimeEnv Platform)

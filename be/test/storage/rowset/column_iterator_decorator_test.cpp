@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "storage/rowset/series_column_iterator.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

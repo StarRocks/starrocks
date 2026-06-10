@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent rewrite."
 sidebar_position: 30
 ---
 
@@ -88,6 +89,10 @@ StarRocks は、Hive catalog、Iceberg catalog、Hudi catalog、JDBC catalog、P
 ## external catalog ベースのマテリアライズドビューを作成する
 
 external catalog のテーブルにマテリアライズドビューを作成することは、StarRocks の内部テーブルにマテリアライズドビューを作成することと似ています。使用しているデータソースに応じて適切なリフレッシュ戦略を設定し、external catalog ベースのマテリアライズドビューに対してクエリの書き換えを手動で有効にするだけです。
+
+:::note
+外部テーブルのマテリアライズドビューは、**ベーステーブルのデータ変更によってトリガーされる**自動リフレッシュをサポートしていません。**非同期の定期**リフレッシュと手動リフレッシュのみをサポートします。
+:::
 
 ### 適切なリフレッシュ戦略を選択する
 

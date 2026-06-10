@@ -236,7 +236,7 @@ public class DynamicPartitionSchedulerTest extends StarRocksTestBase {
         tbl.getTableProperty().setPartitionTTLNumber(3);
 
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
-        dynamicPartitionScheduler.runAfterCatalogReady();
+        dynamicPartitionScheduler.runAfterLeaseValid();
 
         Assertions.assertEquals(3, tbl.getPartitions().size());
     }

@@ -41,9 +41,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessListPartitionArbiter.class);
 
-    public MVTimelinessListPartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
-        differ = new ListPartitionDiffer(mv, isQueryRewrite);
+    public MVTimelinessListPartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
+        differ = new ListPartitionDiffer(mv, queryRewriteParams);
     }
 
     @Override
@@ -70,6 +70,9 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                     mvTimelinessInfo);
+            if (baseChangedPartitionNames == null) {
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
 
         // collect base table's partition infos

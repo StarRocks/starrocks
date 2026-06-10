@@ -14,7 +14,11 @@
 
 #include "storage/dictionary_cache_manager.h"
 
+#include "base/string/faststring.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "exec/tablet_info.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -57,7 +61,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     std::vector<SlotId> key_slot_ids;
     std::vector<SlotId> value_slot_ids;
     for (int i = 0; i < schema->tuple_desc()->slots().size(); ++i) {
-        const string& name = schema->tuple_desc()->slots()[i]->col_name();
+        const auto name = schema->tuple_desc()->slots()[i]->col_name();
         col_names.emplace_back(name.data(), name.size());
 
         if (i < request->key_size()) {
@@ -76,7 +80,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     DCHECK(dictionary_schema != nullptr);
     std::vector<int> keys(dictionary_schema->fields().size(), 1);
     // remove the nullable attribute if necessary
-    dictionary_schema = ChunkHelper::get_non_nullable_schema(dictionary_schema, &keys);
+    dictionary_schema = ChunkSchemaHelper::get_non_nullable_schema(dictionary_schema, &keys);
 
     std::vector<ColumnId> key_col_ids(request->key_size());
     std::vector<ColumnId> value_col_ids(dictionary_schema->fields().size() - request->key_size());
@@ -86,8 +90,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     SchemaPtr key_schema = std::make_shared<Schema>(dictionary_schema.get(), key_col_ids);
     SchemaPtr value_schema = std::make_shared<Schema>(dictionary_schema.get(), value_col_ids);
 
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(*key_schema.get(), chunk->num_rows());
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(*value_schema.get(), chunk->num_rows());
+    ChunkPtr key_chunk = ChunkFactory::new_chunk(*key_schema.get(), chunk->num_rows());
+    ChunkPtr value_chunk = ChunkFactory::new_chunk(*value_schema.get(), chunk->num_rows());
 
     for (size_t i = 0; i < key_slot_ids.size(); ++i) {
         const auto& key_slot_id = key_slot_ids[i];
@@ -96,7 +100,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
             ori_key_column = ColumnHelper::unpack_and_duplicate_const_column(ori_key_column->size(), ori_key_column);
         }
         if (ori_key_column->is_nullable()) {
-            ori_key_column = ColumnHelper::update_column_nullable(false, ori_key_column, ori_key_column->size());
+            ori_key_column =
+                    ColumnHelper::update_column_nullable(false, std::move(ori_key_column), ori_key_column->size());
         }
         key_chunk->get_column_by_index(i).swap(ori_key_column);
     }
@@ -108,7 +113,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
                     ColumnHelper::unpack_and_duplicate_const_column(ori_value_column->size(), ori_value_column);
         }
         if (ori_value_column->is_nullable()) {
-            ori_value_column = ColumnHelper::update_column_nullable(false, ori_value_column, ori_value_column->size());
+            ori_value_column =
+                    ColumnHelper::update_column_nullable(false, std::move(ori_value_column), ori_value_column->size());
         }
         value_chunk->get_column_by_index(i).swap(ori_value_column);
     }

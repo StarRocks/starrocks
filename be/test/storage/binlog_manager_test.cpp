@@ -16,14 +16,17 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/binlog_test_base.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -37,7 +40,7 @@ public:
         srand(GetCurrentTimeMicros());
         CHECK_OK(fs::remove_all(_binlog_file_dir));
         CHECK_OK(fs::create_directories(_binlog_file_dir));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(_binlog_file_dir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(_binlog_file_dir));
         _next_rowset_uid = 0;
         create_tablet_schema();
     }
@@ -88,10 +91,10 @@ protected:
         int32_t total_rows = 0;
         for (int32_t num_rows : rows_per_segment) {
             std::unique_ptr<SegmentPB> segment;
-            auto chunk = ChunkHelper::new_chunk(_schema, num_rows);
+            auto chunk = ChunkFactory::new_chunk(_schema, num_rows);
             for (int i = total_rows; i < num_rows + total_rows; i++) {
-                auto& cols = chunk->columns();
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+                auto cols = chunk->columns();
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             }
             ASSERT_OK(rowset_writer->flush_chunk(*chunk, segment.get()));
             total_rows += num_rows;
@@ -527,7 +530,7 @@ void BinlogManagerTest::generate_random_binlog(BinlogManager* binlog_manager, Mo
             build_result->metas.push_back(build_binlog_file_meta(file_info));
             std::string file_path = binlog_manager->get_binlog_file_path(file_info->file_id);
             std::shared_ptr<FileSystem> fs;
-            ASSIGN_OR_ABORT(fs, FileSystem::CreateSharedFromString(file_path));
+            ASSIGN_OR_ABORT(fs, FileSystemFactory::CreateSharedFromString(file_path));
             auto st = fs->path_exists(file_path);
             if (st.is_not_found()) {
                 WritableFileOptions write_option;
@@ -657,7 +660,7 @@ void verify_unused_binlog_files(BinlogManager* binlog_manager, std::vector<Binlo
         auto& file_info = binlog_file_infos[index];
         std::string file_path = binlog_manager->get_binlog_file_path(file_info->file_id);
         std::shared_ptr<FileSystem> fs;
-        ASSIGN_OR_ABORT(fs, FileSystem::CreateSharedFromString(file_path));
+        ASSIGN_OR_ABORT(fs, FileSystemFactory::CreateSharedFromString(file_path));
         ASSERT_OK(fs->path_exists(file_path));
     }
     binlog_manager->delete_unused_binlog();
@@ -666,7 +669,7 @@ void verify_unused_binlog_files(BinlogManager* binlog_manager, std::vector<Binlo
         auto& file_info = binlog_file_infos[index];
         std::string file_path = binlog_manager->get_binlog_file_path(file_info->file_id);
         std::shared_ptr<FileSystem> fs;
-        ASSIGN_OR_ABORT(fs, FileSystem::CreateSharedFromString(file_path));
+        ASSIGN_OR_ABORT(fs, FileSystemFactory::CreateSharedFromString(file_path));
         ASSERT_TRUE(fs->path_exists(file_path).is_not_found());
     }
 }

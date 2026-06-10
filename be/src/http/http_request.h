@@ -23,10 +23,9 @@
 #include <map>
 #include <string>
 
-#include "http/http_common.h"
+#include "base/string/string_util.h"
 #include "http/http_headers.h"
 #include "http/http_method.h"
-#include "util/string_util.h"
 
 struct evhttp_request;
 
@@ -52,6 +51,11 @@ public:
     const std::string& raw_path() const { return _raw_path; }
 
     const std::string& header(const std::string& key) const;
+
+    // Set an input request header. Production code populates `_headers` via
+    // `init_from_evhttp()` reading from libevent; this setter lets tests
+    // synthesize headers on an HttpRequest that wasn't fed through libevent.
+    void set_header(const std::string& key, const std::string& value) { _headers[key] = value; }
 
     void add_param(const std::string& key, const std::string& value) { _params.emplace(key, value); }
     const std::string& param(const std::string& key) const;

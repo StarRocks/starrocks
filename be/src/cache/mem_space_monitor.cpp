@@ -14,19 +14,20 @@
 
 #include "cache/mem_space_monitor.h"
 
+#include "base/concurrency/await.h"
+#include "base/gc/gc_helper.h"
+#include "base/statusor.h"
+#include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
-#include "common/config.h"
-#include "runtime/exec_env.h"
+#include "common/config_cache_fwd.h"
+#include "common/thread/thread.h"
 #include "runtime/mem_tracker.h"
-#include "util/await.h"
-#include "util/gc_helper.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
 void MemSpaceMonitor::start() {
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
-    Thread::set_thread_name(_adjust_datacache_thread, "adjust_mem_cache");
+    Thread::set_thread_name(_adjust_datacache_thread, "adj_mem_cache");
 }
 
 void MemSpaceMonitor::stop() {
@@ -77,7 +78,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         if (!config::datacache_enable) {
             continue;
         }
-        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = _process_mem_tracker;
         if (memtracker == nullptr || !memtracker->has_limit()) {
             continue;
         }

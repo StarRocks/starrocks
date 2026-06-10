@@ -16,18 +16,33 @@
 
 #include <utility>
 
+#include "base/coding.h"
+#include "base/container/raw_container.h"
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
-#include "storage/chunk_helper.h"
-#include "util/coding.h"
-#include "util/raw_container.h"
 
 namespace starrocks::serde {
+
+static int64_t extra_columns_max_serialized_size(const ChunkExtraColumnsData& extra_data) {
+    int64_t serialized_size = 0;
+    for (auto& column : extra_data.columns()) {
+        serialized_size += ColumnArraySerde::max_serialized_size(*column, 0);
+    }
+    return serialized_size;
+}
+
+static StatusOr<uint8_t*> serialize_extra_columns(const ChunkExtraColumnsData& extra_data, uint8_t* buff) {
+    for (auto& column : extra_data.columns()) {
+        ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*column, buff));
+    }
+    return buff;
+}
 
 int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
@@ -45,7 +60,7 @@ int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::s
 }
 
 StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
-    StatusOr<ChunkPB> res = serialize_without_meta(chunk, std::move(context));
+    StatusOr<ChunkPB> res = serialize_without_meta(chunk, context);
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
@@ -95,7 +110,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
     auto* chunk_extra_data =
             chunk.get_extra_data() ? dynamic_cast<ChunkExtraColumnsData*>(chunk.get_extra_data().get()) : nullptr;
     if (chunk_extra_data) {
-        max_serialized_size += chunk_extra_data->max_serialized_size(0);
+        max_serialized_size += extra_columns_max_serialized_size(*chunk_extra_data);
     }
     raw::stl_string_resize_uninitialized(serialized_data, max_serialized_size);
     auto* buff = reinterpret_cast<uint8_t*>(serialized_data->data());
@@ -122,7 +137,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
 
     // do serialize extra data
     if (chunk_extra_data) {
-        ASSIGN_OR_RETURN(buff, chunk_extra_data->serialize(buff));
+        ASSIGN_OR_RETURN(buff, serialize_extra_columns(*chunk_extra_data, buff));
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     serialized_data->resize(chunk_pb.serialized_size() + padding_size);
@@ -174,8 +189,9 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
     return chunk;
 }
 
-StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
-    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+StatusOr<Chunk> ProtobufChunkSerde::deserialize_with_schema(const Schema& schema, std::string_view buff) {
+    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* end = cur + buff.size();
 
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
@@ -186,9 +202,9 @@ StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::stri
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
-    ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
+    ASSIGN_OR_RETURN(auto chunk, RuntimeChunkHelper::new_chunk_checked(schema, rows));
     for (auto& column : chunk->columns()) {
-        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
+        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
     }
     return Chunk(std::move(*chunk));
 }
@@ -203,7 +219,8 @@ static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, i
 }
 
 StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
-    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* end = cur + buff.size();
 
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
@@ -222,12 +239,13 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     if (_encode_level.empty()) {
         for (auto& column : columns) {
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
         }
     } else {
         DCHECK(_encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]));
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, columns[i]->as_mutable_raw_ptr(), false,
+                                                                _encode_level[i]));
         }
     }
 
@@ -253,7 +271,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
                     ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
         }
         for (auto& column : extra_columns) {
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
         }
         for (int i = 0; i < extra_columns.size(); ++i) {
             size_t col_num_rows = extra_columns[i]->size();
@@ -304,7 +322,7 @@ StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_d
     }
 
     if (UNLIKELY(column_index != chunk_meta.is_nulls.size())) {
-        return Status::InternalError("build chunk _meta error");
+        return Status::InternalError("build chunk_meta error");
     }
     return std::move(chunk_meta);
 }

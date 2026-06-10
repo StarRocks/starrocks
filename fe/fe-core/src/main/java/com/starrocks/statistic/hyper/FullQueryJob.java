@@ -18,24 +18,37 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.base.ColumnStats;
 import org.apache.velocity.VelocityContext;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class FullQueryJob extends HyperQueryJob {
-    protected FullQueryJob(ConnectContext context, Database db,
+    protected FullQueryJob(ConnectContext context, long analyzeId, Database db,
                            Table table,
                            List<ColumnStats> columnStats,
                            List<Long> partitionIdList) {
-        super(context, db, table, columnStats, partitionIdList);
+        super(context, analyzeId, db, table, columnStats, partitionIdList);
     }
 
     @Override
     protected List<String> buildQuerySQL() {
-        List<String> metaSQL = Lists.newArrayList();
+        int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+
+        // Isolate wide string columns to bound per-query Exchange memory; batch the rest.
+        long threshold = Config.statistics_large_string_column_merge_threshold;
+        Map<Boolean, List<ColumnStats>> partitioned = columnStats.stream()
+                .collect(Collectors.partitioningBy(s -> threshold > 0 && isWideStringColumn(s, threshold)));
+        List<ColumnStats> wideColumns = partitioned.get(true);
+        List<ColumnStats> normalColumns = partitioned.get(false);
+
+        List<String> result = Lists.newArrayList();
+        List<String> normalSQL = Lists.newArrayList();
+
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
@@ -43,22 +56,32 @@ public class FullQueryJob extends HyperQueryJob {
                 continue;
             }
 
-            for (ColumnStats columnStat : columnStats) {
-                VelocityContext context = HyperStatisticSQLs.buildBaseContext(db, table, partition, columnStat);
-                context.put("dataSize", columnStat.getFullDataSize());
-                context.put("countNullFunction", columnStat.getFullNullCount());
-                context.put("hllFunction", columnStat.getNDV());
-                context.put("maxFunction", columnStat.getMax());
-                context.put("minFunction", columnStat.getMin());
-                context.put("collectionSizeFunction", columnStat.getCollectionSize());
-                String sql = HyperStatisticSQLs.build(context, HyperStatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
-                metaSQL.add(sql);
+            // wide columns: one SQL per column, no UNION ALL
+            for (ColumnStats wideCol : wideColumns) {
+                result.add(buildSingleColumnSQL(partition, wideCol));
+            }
+            // normal columns: collect for batched UNION ALL below
+            for (ColumnStats columnStat : normalColumns) {
+                normalSQL.add(buildSingleColumnSQL(partition, columnStat));
             }
         }
 
-        int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> l = Lists.partition(metaSQL, parts);
-        return l.stream().map(sql -> String.join(" UNION ALL ", sql)).collect(Collectors.toList());
+        // batch normal columns by parts and join with UNION ALL
+        for (List<String> batch : Lists.partition(normalSQL, parts)) {
+            result.add(String.join(" UNION ALL ", batch));
+        }
+
+        return result;
     }
 
+    private String buildSingleColumnSQL(Partition partition, ColumnStats columnStat) {
+        VelocityContext ctx = HyperStatisticSQLs.buildBaseContext(db, table, partition, columnStat);
+        ctx.put("dataSize", columnStat.getFullDataSize());
+        ctx.put("countNullFunction", columnStat.getFullNullCount());
+        ctx.put("hllFunction", columnStat.getNDV());
+        ctx.put("maxFunction", columnStat.getMax());
+        ctx.put("minFunction", columnStat.getMin());
+        ctx.put("collectionSizeFunction", columnStat.getCollectionSize());
+        return HyperStatisticSQLs.build(ctx, HyperStatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
+    }
 }

@@ -54,7 +54,7 @@ public class AnalyzeBackupRestoreTest {
         BlobStorage storage = new BlobStorage(brokerName, Maps.newHashMap());
         Repository repo = new Repository(10000, "repo", false, location, storage);
         repo.initRepository();
-        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo);
 
         AnalyzeTestUtil.getStarRocksAssert().withFunction("CREATE FUNCTION Echostring(string) RETURNS string properties" +
                         "(\"symbol\" = \"Echostring\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
@@ -100,6 +100,12 @@ public class AnalyzeBackupRestoreTest {
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON " +
                 "( ALL FUNCTIONS, ALL TABLES, ALL VIEWS, ALL MATERIALIZED VIEWS ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON ( ALL FUNCTIONS ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON ( ALL FUNCTION ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( ALL FUNCTIONS ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP ALL EXTERNAL CATALOGS SNAPSHOT snapshot_label2 TO `repo` " +
                        "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");

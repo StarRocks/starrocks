@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "multi_distinct_sum 返回表达式中去除重复值后的总和，等同于 SUM(DISTINCT expr)。"
 ---
 
 # multi_distinct_sum

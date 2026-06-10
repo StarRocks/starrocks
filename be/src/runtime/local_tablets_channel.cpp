@@ -23,21 +23,30 @@
 #include <utility>
 #include <vector>
 
+#include "base/brpc/disposable_closure.h"
+#include "base/compression/block_compression.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
+#include "base/string/faststring.h"
 #include "column/chunk.h"
-#include "common/closure_guard.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc_helper.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
+#include "common/util/table_metrics.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
+#include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -47,13 +56,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
-#include "util/disposable_closure.h"
-#include "util/failpoint/fail_point.h"
-#include "util/faststring.h"
-#include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -63,16 +65,24 @@ DEFINE_FAIL_POINT(tablets_channel_abort_replica_failure);
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                         MemTracker* mem_tracker, RuntimeProfile* parent_profile)
+                                         MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                         BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                         TableMetricsManager* table_metrics_mgr)
         : TabletsChannel(),
           _load_channel(load_channel),
+          _brpc_stub_cache(brpc_stub_cache),
+          _table_metrics_mgr(table_metrics_mgr),
           _key(key),
           _mem_tracker(mem_tracker),
+          _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
-    std::call_once(once_flag, [] {
-        REGISTER_GAUGE_STARROCKS_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
-    });
+    if (metrics != nullptr) {
+        std::call_once(once_flag, [metrics] {
+            REGISTER_GAUGE_RUNTIME_METRIC(metrics, tablet_writer_count,
+                                          [&]() { return _s_tablet_writer_count.load(); });
+        });
+    }
 
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
     _profile_update_counter = ADD_COUNTER(_profile, "ProfileUpdateCount", TUnit::UNIT);
@@ -152,7 +162,9 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+    if (_table_metrics_mgr != nullptr) {
+        _table_metrics = _table_metrics_mgr->get_table_metrics(_schema->table_id());
+    }
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());
@@ -187,6 +199,35 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                                       PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const {
+    // NOTE: This entrypoint does NOT deduplicate duplicate RPCs (unlike
+    // add_chunk below, which dedups by packet_seq sliding window).
+    // Duplicate tablet_writer_add_segment requests - whether from brpc
+    // framework retries, InternalServiceRecoverableStub reconnects, or
+    // primary-side application retries - are forwarded straight to the
+    // per-tablet DeltaWriter, and the SegmentFlushToken dispatches them
+    // concurrently because CONCURRENT mode is the designed parallelism
+    // for segment replication throughput.
+    //
+    // Downstream code MUST therefore remain correct and thread-safe under
+    // concurrent processing of identical RPCs. The invariants currently
+    // relied on are:
+    //   - DeltaWriter::write_segment creates the segment file with
+    //     MUST_CREATE, so same-seg_id duplicates fail at the disk layer
+    //     and the writer is cancelled (benign abort, no crash).
+    //   - DeltaWriter::close is idempotent: returns OK when already in
+    //     kClosed state.
+    //   - DeltaWriter::commit serialises concurrent callers via a
+    //     std::call_once over the commit body (see delta_writer.cpp).
+    //     The first caller runs the body; concurrent duplicates block
+    //     inside call_once until it finishes and then return the same
+    //     captured Status. The wait-and-return-final-state design is
+    //     required so that duplicate callers (notably
+    //     SegmentFlushTask::run, which unconditionally cancels the
+    //     writer on any non-OK commit status) do not turn a successful
+    //     commit into an aborted one.
+    // If you change any of those invariants - or add a new method that
+    // mutates per-writer state from this path - you must keep the
+    // duplicate-RPC contract intact.
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
@@ -420,7 +461,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             int64_t elapsed_ms = static_cast<int64_t>(watch.elapsed_time() / NANOSECS_PER_MILLIS);
             int64_t left_timeout_ms = std::max<int64_t>(0, request.timeout_ms() - elapsed_ms);
             SecondaryReplicasWaiter waiter(request.id(), _txn_id, request.sink_id(), left_timeout_ms, start_wait_time,
-                                           delta_writers);
+                                           delta_writers, _brpc_stub_cache);
             Status status = waiter.wait();
             if (status.is_time_out()) {
                 break;
@@ -501,16 +542,20 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     if (response->has_execution_time_us()) {
         last_execution_time_us = response->execution_time_us();
     }
+    int64_t last_wait_writer_time_us = response->has_wait_writer_time_us() ? response->wait_writer_time_us() : 0;
     response->set_execution_time_us(last_execution_time_us + watch.elapsed_time() / 1000);
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
     response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+    // Populate wait_writer_time_us for non-lake loads too, accumulating across repeated-chunk
+    // indexes like execution_time, so the sender's per-node breakdown surfaces writer stalls.
+    response->set_wait_writer_time_us(last_wait_writer_time_us + wait_writer_ns / 1000);
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_us);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
-    StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
+    RuntimeMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
@@ -525,11 +570,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     COUNTER_UPDATE(_submit_commit_task_timer, finish_submit_commit_task_ts - finish_submit_write_task_ts);
     COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
-
-    // remove tablets channel and load channel after all things done
-    if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
-    }
 }
 
 Status LocalTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id,
@@ -624,7 +664,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
             continue;
         });
 
-        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(endpoint.host(), endpoint.port());
+        auto stub = _brpc_stub_cache->get_stub(endpoint.host(), endpoint.port());
         if (stub == nullptr) {
             auto msg =
                     fmt::format("Failed to Connect node {} {}:{} failed.", node_id, endpoint.host(), endpoint.port());
@@ -653,13 +693,13 @@ void LocalTabletsChannel::_abort_replica_tablets(
         auto closure = new DisposableClosure<PTabletWriterCancelResult, Context>(
                 {request.id(), _txn_id, endpoint.host(), node_abort_tablet_id_list_str});
         closure->cntl.set_timeout_ms(request.timeout_ms());
-        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        set_ignore_overcrowded_for_load(closure->cntl);
         closure->addSuccessHandler([](const Context& ctx, const PTabletWriterCancelResult& result) {
             VLOG(2) << "Success to cancel secondary replicas, txn_id: " << ctx.txn_id
                     << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
                     << ", tablets: " << ctx.tablets;
         });
-        closure->addFailedHandler([](const Context& ctx, std::string_view rpc_error_msg) {
+        closure->addFailureHandler([](const Context& ctx, std::string_view rpc_error_msg) {
             LOG(ERROR) << "Failed to cancel secondary replicas, txn_id: " << ctx.txn_id
                        << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
                        << ", error: " << rpc_error_msg << ", tablets: " << ctx.tablets;
@@ -766,7 +806,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             GlobalDictsWithVersion<GlobalDictMap> dict;
             dict.dict = std::move(global_dict);
             dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
-            _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
+            _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
         }
     }
 
@@ -820,10 +860,11 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     return Status::OK();
 }
 
-void LocalTabletsChannel::cancel() {
+void LocalTabletsChannel::cancel(const std::string& reason) {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    auto cancel_status = Status::Cancelled(reason.empty() ? "cancel" : reason);
     for (auto& it : _delta_writers) {
-        it.second->cancel(Status::Cancelled("cancel"));
+        it.second->cancel(cancel_status);
     }
 }
 
@@ -1172,7 +1213,6 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
@@ -1190,9 +1230,16 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_SET_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count.load());
     ADD_AND_SET_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns.load());
     ADD_AND_SET_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns.load());
     ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size.load());
-    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size.load());
+    auto* memtable_disk_size_counter = ADD_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES);
+    COUNTER_SET(memtable_disk_size_counter, memtable_stat.flush_disk_size.load());
+    auto* memtable_io_time_counter = ADD_TIMER(profile, "MemtableIOTime");
+    COUNTER_SET(memtable_io_time_counter, memtable_stat.io_time_ns.load());
+    ADD_DERIVED_COUNTER(profile, "MemtableIOSpeed", TUnit::BYTES_PER_SECOND, "",
+                        [memtable_disk_size_counter, memtable_io_time_counter] {
+                            return RuntimeProfile::units_per_second(memtable_disk_size_counter,
+                                                                    memtable_io_time_counter);
+                        });
 }
 
 void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
@@ -1220,7 +1267,6 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_SET_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     auto* segment_flush_token = writer->segment_flush_token();
@@ -1236,20 +1282,24 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
 }
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                               MemTracker* mem_tracker,
-                                                               RuntimeProfile* parent_profile) {
-    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile);
+                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                                               BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
+                                                               TableMetricsManager* table_metrics_mgr) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache,
+                                                 metrics, table_metrics_mgr);
 }
 
 SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms,
-                                                 int64_t eos_time_ms, std::vector<AsyncDeltaWriter*> delta_writers)
+                                                 int64_t eos_time_ms, std::vector<AsyncDeltaWriter*> delta_writers,
+                                                 BrpcStubCache* brpc_stub_cache)
         : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _sink_id(sink_id),
           _timeout_ns(std::max((int64_t)0, timeout_ms) * NANOSECS_PER_MILLIS),
           _delta_writers(std::move(delta_writers)),
           _eos_time_ms(eos_time_ms),
-          _last_get_replica_status_time_ms(eos_time_ms) {}
+          _last_get_replica_status_time_ms(eos_time_ms),
+          _brpc_stub_cache(brpc_stub_cache) {}
 
 SecondaryReplicasWaiter::~SecondaryReplicasWaiter() {
     _release_replica_status_closure();
@@ -1317,7 +1367,7 @@ void SecondaryReplicasWaiter::_try_check_replica_status_on_primary(int unfinishe
 void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet_start_index) {
     auto delta_writer = _delta_writers[unfinished_tablet_start_index];
     auto& primary_replica = delta_writer->writer()->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    auto stub = _brpc_stub_cache->get_stub(primary_replica.host(), primary_replica.port());
     if (stub == nullptr) {
         _replica_status_fail_num += 1;
         _last_get_replica_status_time_ms = MonotonicMillis();
@@ -1329,7 +1379,7 @@ void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet
     _replica_status_closure = new ReusableClosure<PLoadReplicaStatusResult>();
     _replica_status_closure->ref();
     _replica_status_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(_replica_status_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_replica_status_closure->cntl);
     PLoadReplicaStatusRequest request;
     request.mutable_load_id()->set_hi(_load_id.hi());
     request.mutable_load_id()->set_lo(_load_id.lo());
@@ -1429,7 +1479,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     _diagnose_triggered = true;
     auto delta_writer = _delta_writers[unfinished_tablet_start_index];
     auto& primary_replica = delta_writer->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    auto stub = _brpc_stub_cache->get_stub(primary_replica.host(), primary_replica.port());
     if (stub == nullptr) {
         LOG(WARNING) << "failed to get stub to diagnose primary replica, txn_id: " << _txn_id
                      << ", load_id: " << print_id(_load_id) << ", primary_replica: [" << primary_replica.host() << ":"
@@ -1438,7 +1488,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     }
     auto closure = new ReusableClosure<PLoadDiagnoseResult>();
     closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(closure->cntl, load);
+    set_ignore_overcrowded_for_load(closure->cntl);
     PLoadDiagnoseRequest request;
     request.mutable_id()->set_hi(_load_id.hi());
     request.mutable_id()->set_lo(_load_id.lo());

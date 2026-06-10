@@ -19,19 +19,23 @@
 #include <numeric>
 
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
+#include "common/system/cpu_info.h"
 #include "exec/hash_joiner.h"
 #include "exec/join/join_hash_table.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "util/cpu_info.h"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(always_use_partition_join);
 
 class SingleHashJoinProberImpl final : public HashJoinProberImpl {
 public:
@@ -138,6 +142,14 @@ public:
     bool is_empty() const { return _chunks.empty() || _chunks.front()->is_empty(); }
 
     bool not_empty() const { return !is_empty(); }
+
+    size_t accumulate_memory_usage() const {
+        size_t total_memory_usage = 0;
+        for (const auto& chunk : _chunks) {
+            total_memory_usage += chunk->memory_usage();
+        }
+        return total_memory_usage;
+    }
 
 private:
     MemTracker* _tracker;
@@ -262,22 +274,31 @@ Status PartitionedHashJoinProberImpl::push_probe_chunk(RuntimeState* state, Chun
             continue;
         }
 
-        if (_partition_input_channels[i].is_empty()) {
-            _partition_input_channels[i].push(chunk->clone_empty());
+        auto& partition_input_channel = _partition_input_channels[i];
+
+        if (partition_input_channel.is_empty()) {
+            partition_input_channel.push(chunk->clone_empty());
         }
 
-        if (_partition_input_channels[i].back()->num_rows() + size <= state->chunk_size()) {
-            _partition_input_channels[i].back()->append_selective(*chunk, selection.data(), from, size);
+        if (partition_input_channel.back()->num_rows() + size <= state->chunk_size()) {
+            partition_input_channel.append_selective_to_back(*chunk, selection.data(), from, size);
         } else {
-            _partition_input_channels[i].push(chunk->clone_empty());
-            _partition_input_channels[i].back()->append_selective(*chunk, selection.data(), from, size);
+            partition_input_channel.push(chunk->clone_empty());
+            partition_input_channel.append_selective_to_back(*chunk, selection.data(), from, size);
         }
 
-        if (_partition_input_channels[i].is_full()) {
-            _partition_input_channels[i].set_processing(true);
-            RETURN_IF_ERROR(probers[i]->push_probe_chunk(state, _partition_input_channels[i].pull()));
+        if (partition_input_channel.is_full()) {
+            partition_input_channel.set_processing(true);
+            RETURN_IF_ERROR(probers[i]->push_probe_chunk(state, partition_input_channel.pull()));
         }
     }
+#ifndef NDEBUG
+    size_t memory_usage = 0;
+    for (auto& channel : _partition_input_channels) {
+        memory_usage += channel.accumulate_memory_usage();
+    }
+    DCHECK_EQ(memory_usage, _mem_tracker.consumption());
+#endif
 
     return Status::OK();
 }
@@ -342,6 +363,7 @@ void PartitionedHashJoinProberImpl::reset(RuntimeState* runtime_state) {
         prober->reset(runtime_state);
     }
     _partition_input_channels.clear();
+    _mem_tracker.release(_mem_tracker.consumption());
     _all_input_finished = false;
     _remain_partition_idx = 0;
 }
@@ -367,7 +389,9 @@ bool SingleHashJoinBuilder::anti_join_key_column_has_null() const {
     auto& column = _ht.get_key_columns()[0];
     if (column->is_nullable()) {
         const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
-        DCHECK_GT(null_column->size(), 0);
+        if (null_column->empty()) {
+            return false;
+        }
         return null_column->contain_value(1, null_column->size(), 1);
     }
     return false;
@@ -387,7 +411,7 @@ Status SingleHashJoinBuilder::do_append_chunk(RuntimeState* state, const ChunkPt
 
 Status SingleHashJoinBuilder::build(RuntimeState* state) {
     SCOPED_TIMER(_hash_joiner.build_metrics().build_ht_timer);
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state, !_is_sub_partition)));
     _ready = true;
     return Status::OK();
 }
@@ -507,13 +531,8 @@ private:
 
 AdaptivePartitionHashJoinBuilder::AdaptivePartitionHashJoinBuilder(HashJoiner& hash_joiner)
         : HashJoinBuilder(hash_joiner), _cache_miss_factor(_calculate_cache_miss_factor(hash_joiner)) {
-    static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
-    static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
-    const auto& cache_sizes = CpuInfo::get_cache_sizes();
-    _L2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
-    _L3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
-    _L2_cache_size = _L2_cache_size ? _L2_cache_size : DEFAULT_L2_CACHE_SIZE;
-    _L3_cache_size = _L3_cache_size ? _L3_cache_size : DEFAULT_L3_CACHE_SIZE;
+    _L2_cache_size = CpuInfo::get_l2_cache_size();
+    _L3_cache_size = CpuInfo::get_l3_cache_size();
 }
 
 double AdaptivePartitionHashJoinBuilder::_calculate_cache_miss_factor(const HashJoiner& hash_joiner) {
@@ -593,16 +612,21 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_cost_by_bytes<CacheLevel::MEM
 }
 
 bool AdaptivePartitionHashJoinBuilder::_need_partition_join_for_build(size_t ht_num_rows) const {
+    // only use partition join when hash table is not empty
+    if (ht_num_rows == 0) return false;
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, true);
     return (_partition_join_l2_min_rows < ht_num_rows && ht_num_rows <= _partition_join_l2_max_rows) ||
            (_partition_join_l3_min_rows < ht_num_rows && ht_num_rows <= _partition_join_l3_max_rows);
 }
 
 bool AdaptivePartitionHashJoinBuilder::_need_partition_join_for_append(size_t ht_num_rows) const {
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, true);
     return ht_num_rows <= _partition_join_l2_max_rows || ht_num_rows <= _partition_join_l3_max_rows;
 }
 
 void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t hash_table_bytes_per_row,
                                                               size_t hash_table_probing_bytes_per_row) {
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, (void)0);
     if (hash_table_bytes_per_row == _hash_table_bytes_per_row &&
         hash_table_probing_bytes_per_row == _hash_table_probing_bytes_per_row) {
         return; // No need to adjust partition rows.
@@ -950,6 +974,7 @@ Status AdaptivePartitionHashJoinBuilder::build(RuntimeState* state) {
     }
 
     for (auto& builder : _builders) {
+        builder->set_is_sub_partition(_partition_num > 1);
         RETURN_IF_ERROR(builder->build(state));
     }
     _ready = true;

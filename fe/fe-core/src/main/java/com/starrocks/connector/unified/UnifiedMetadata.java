@@ -16,6 +16,7 @@ package com.starrocks.connector.unified;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -25,9 +26,10 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -59,7 +61,7 @@ import static com.starrocks.catalog.Table.TableType.KUDU;
 import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static java.util.Objects.requireNonNull;
 
-public class UnifiedMetadata implements ConnectorMetadata {
+public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMetadata {
     public static final String ICEBERG_TABLE_TYPE_NAME = "table_type";
     public static final String ICEBERG_TABLE_TYPE_VALUE = "iceberg";
     public static final String SPARK_TABLE_PROVIDER_KEY = "spark.sql.sources.provider";
@@ -141,6 +143,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.acquireTvrSnapshot(dbName, table, mvId);
+    }
+
+    @Override
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
                                                          TvrTableSnapshot fromSnapshotExclusive,
                                                          TvrTableSnapshot toSnapshotInclusive) {
@@ -167,7 +175,8 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
         return metadata.listPartitionNames(databaseName, tableName, requestContext);
     }
@@ -207,6 +216,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
                                                     long snapshotId, String serializedPredicate, MetadataTableType type) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
         return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
+    }
+
+    @Override
+    public ConnectorMetadata delegateFor(Table table) {
+        return metadataOfTable(table);
     }
 
     @Override
@@ -284,6 +298,13 @@ public class UnifiedMetadata implements ConnectorMetadata {
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
         metadata.finishSink(dbName, table, commitInfos, branch, extra);
+    }
+
+    @Override
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                           ConnectContext context) {
+        ConnectorMetadata metadata = metadataOfTable(dbName, table);
+        metadata.finishSink(dbName, table, commitInfos, branch, extra, context);
     }
 
     @Override

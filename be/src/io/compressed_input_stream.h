@@ -16,22 +16,22 @@
 
 #include <utility>
 
+#include "base/bit/bit_util.h"
+#include "base/container/raw_container.h"
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
-#include "util/bit_util.h"
-#include "util/raw_container.h"
-#include "util/slice.h"
 
 namespace starrocks {
-class StreamCompression;
+class StreamDecompressor;
 } // namespace starrocks
 
 namespace starrocks::io {
 
 class CompressedInputStream final : public InputStream {
 public:
-    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamCompression> decompressor,
+    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamDecompressor> decompressor,
                           size_t compressed_data_cache_size = 8 * 1024 * 1024LU)
             : _source_stream(std::move(source_stream)),
               _decompressor(std::move(decompressor)),
@@ -45,6 +45,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source_stream->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
 private:
     // Used to store the compressed data read from |_source_stream|.
@@ -77,15 +79,14 @@ private:
     };
 
     std::shared_ptr<InputStream> _source_stream;
-    std::shared_ptr<StreamCompression> _decompressor;
+    std::shared_ptr<StreamDecompressor> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
 };
 
 class CompressedSeekableInputStream final : public SeekableInputStream {
 public:
-    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source)
-            : _source(std::move(std::move(source))) {}
+    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source) : _source(std::move(source)) {}
 
     StatusOr<int64_t> read(void* data, int64_t size) override { return _source->read(data, size); }
 
@@ -94,6 +95,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status seek(int64_t position) override { return Status::NotSupported(""); }
     StatusOr<int64_t> position() override { return Status::NotSupported(""); }

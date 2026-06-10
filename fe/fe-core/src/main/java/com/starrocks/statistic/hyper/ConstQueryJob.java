@@ -30,11 +30,11 @@ import java.util.Map;
 public class ConstQueryJob extends HyperQueryJob {
     private final Map<Long, Long> partitionRowCounts = Maps.newHashMap();
 
-    protected ConstQueryJob(ConnectContext context, Database db,
+    protected ConstQueryJob(ConnectContext context, long analyzeId, Database db,
                             Table table,
                             List<ColumnStats> columnStats,
                             List<Long> partitionIdList) {
-        super(context, db, table, columnStats, partitionIdList);
+        super(context, analyzeId, db, table, columnStats, partitionIdList);
         initPartitionRowCounts();
     }
 

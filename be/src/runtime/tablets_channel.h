@@ -21,13 +21,13 @@
 #include <sstream>
 #include <string>
 
-#include "column/chunk.h"
+#include "base/uid_util.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/ref_counted.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;
@@ -60,10 +60,20 @@ public:
     virtual Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
+    // Re-apply the open request to an already-opened channel for a different
+    // sender. The first sender to arrive runs `open()`/`incremental_open()`;
+    // every subsequent non-incremental open for the same `TabletsChannelKey`
+    // would otherwise silently no-op in `LoadChannel::open`, which is fine
+    // for sender accounting but is NOT fine for per-sender state populated
+    // from open params (notably the lake per-partition coordinator claim).
+    // Override this in subclasses that depend on every sender's open being
+    // observed. Default is no-op so non-lake channels are unaffected.
+    virtual void update_open(const PTabletWriterOpenRequest& params) {}
+
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
-    virtual void cancel() = 0;
+    virtual void cancel(const std::string& reason) = 0;
 
     virtual void abort() = 0;
 

@@ -52,9 +52,9 @@ private:
 private:
     const TBrokerScanRange& _scan_range;
     const uint64_t _max_chunk_size;
-    int _next_range;
-    int _error_counter;
-    bool _status_eof;
+    int _next_range{0};
+    int _error_counter{0};
+    bool _status_eof{false};
     int64_t _last_file_size = 0;
 
     std::unique_ptr<OrcChunkReader> _orc_reader;

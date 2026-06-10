@@ -16,6 +16,7 @@
 
 #include <aws/s3/S3Client.h>
 
+#include "common/http/content_type.h"
 #include "io/output_stream.h"
 
 namespace starrocks::io {
@@ -25,7 +26,8 @@ namespace starrocks::io {
 /// 2. use multi-part upload by default
 class DirectS3OutputStream : public OutputStream {
 public:
-    explicit DirectS3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object);
+    explicit DirectS3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
+                                  std::string content_type = http::ContentType::OCTET_STREAM);
 
     ~DirectS3OutputStream() override = default;
 
@@ -61,6 +63,7 @@ private:
     std::shared_ptr<Aws::S3::S3Client> _client;
     const Aws::String _bucket;
     const Aws::String _object;
+    const Aws::String _content_type;
 
     Aws::String _upload_id;
     std::vector<Aws::String> _etags;

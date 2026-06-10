@@ -33,9 +33,10 @@ import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshProcessorFactory;
 import com.starrocks.scheduler.mv.MVTraceUtils;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -46,6 +47,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
@@ -73,7 +75,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     // used to store the mv task run context
     private MvTaskRunContext mvTaskRunContext;
     // used to store the mv refresh processor
-    private BaseMVRefreshProcessor mvRefreshProcessor;
+    private MVRefreshProcessor mvRefreshProcessor;
     // used to store the old transaction visible wait timeout to be restored after mv refresh task run
     private long oldTransactionVisibleWaitTimeout;
     // metrics entity for the mv
@@ -159,8 +161,9 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         Preconditions.checkNotNull(mvRefreshProcessor);
 
         // get exec plan
+        mvTaskRunContext.getRefreshRuntimeState().reset();
         mvTaskRunContext.setIsExplain(true);
-        BaseMVRefreshProcessor.ProcessExecPlan processExecPlan =
+        MVRefreshProcessor.ProcessExecPlan processExecPlan =
                 mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
         if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
             logger.info("No need to refresh mv: {}, because the materialized view is up to date.", mv.getName());
@@ -178,12 +181,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         final Tracers.Module mvRefreshTraceModule = queryDebugOptions.getTraceModule();
         Tracers.init(mvRefreshTraceMode, mvRefreshTraceModule, true, false);
 
-        final ConnectContext connectContext = context.getCtx();
+        ConnectContext connectContext = context.getCtx();
         // Set query source to MV for materialized view refresh
         connectContext.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.MV);
         final QueryMaterializationContext queryMVContext = new QueryMaterializationContext();
         connectContext.setQueryMVContext(queryMVContext);
-        try {
+            
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(connectContext)) {
             // do refresh
             try (Timer ignored = Tracers.watchScope("MVRefreshDoWholeRefresh")) {
                 // refresh mv
@@ -233,12 +237,33 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     }
 
     /**
+     * Get the trace info for mv refresh for better debugging.
+     * @return current mv refresh trace info about base tables and partitions.
+     */
+    private String getMVRefreshTraceInfo() {
+        try {
+            return MetaFunctions.inspectMVRefreshInfo(db, mv);
+        } catch (Exception e) {
+            logger.warn("failed to inspect mv refresh info for mv: {}", mv.getName(), e);
+        }
+        return "";
+    }
+
+    /**
      * Retry the `doRefreshMaterializedView` method to avoid insert fails in occasional cases.
      */
     private Constants.TaskRunState retryProcessTaskRun(TaskRunContext taskRunContext) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = mvRefreshProcessor.getRetryTimes(taskRunContext.getCtx());
         logger.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
+
+        // record mv refresh trace info for better debugging (only when profile is enabled to avoid expensive call)
+        ConnectContext ctx = taskRunContext.getCtx();
+        if (ctx != null && (ctx.getSessionVariable().isEnableProfile()
+                || ctx.getSessionVariable().isEnableBigQueryProfile())) {
+            String mvRefreshInfo = getMVRefreshTraceInfo();
+            Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
+        }
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
@@ -289,7 +314,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     public Constants.TaskRunState doProcessTaskRun(TaskRunContext taskRunContext,
                                                    MVRefreshExecutor executor) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
-        final BaseMVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
+        mvTaskRunContext.getRefreshRuntimeState().reset();
+        final MVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
         if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
             logger.info("MV {} refresh task skipped, no partitions to refresh", mv.getName());
             long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
@@ -325,6 +351,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        ctx.setMultiStmt(false);
         // Add running query detail for MV refresh
         ctx.setQuerySource(QueryDetail.QuerySource.MV);
 
@@ -332,6 +359,11 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         try {
             executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
+            // StmtExecutor's filter-ratio check sets ctx.getState() to ERR without throwing;
+            // mirror InsertOverwriteJobRunner.executeInsert by rethrowing here.
+            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                throw new DmlException(ctx.getState().getErrorMessage());
+            }
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
             throw e;
@@ -346,7 +378,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return this.mvTaskRunContext;
     }
 
-    public BaseMVRefreshProcessor getMVRefreshProcessor() {
+    public MVRefreshProcessor getMVRefreshProcessor() {
         return this.mvRefreshProcessor;
     }
 

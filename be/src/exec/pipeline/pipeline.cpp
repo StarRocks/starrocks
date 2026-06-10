@@ -14,13 +14,10 @@
 
 #include "exec/pipeline/pipeline.h"
 
-#include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/pipeline/scan/schema_scan_operator.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/pipeline/primitives/event.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -38,7 +35,7 @@ size_t Pipeline::degree_of_parallelism() const {
     return source_operator_factory()->degree_of_parallelism();
 }
 
-void Pipeline::count_down_driver(RuntimeState* state) {
+void Pipeline::on_driver_finished(RuntimeState* state) {
     size_t num_drivers = _drivers.size();
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
@@ -51,85 +48,28 @@ void Pipeline::clear_drivers() {
     _drivers.clear();
 }
 
-Drivers& Pipeline::drivers() {
-    return _drivers;
-}
-
 const Drivers& Pipeline::drivers() const {
     return _drivers;
 }
 
-void Pipeline::instantiate_drivers(RuntimeState* state) {
-    auto* query_ctx = state->query_ctx();
-    auto* fragment_ctx = state->fragment_ctx();
-    auto workgroup = fragment_ctx->workgroup();
-    auto is_stream_pipeline = fragment_ctx->is_stream_pipeline();
-
-    size_t dop = degree_of_parallelism();
-
-    VLOG_ROW << "Pipeline " << to_readable_string() << " parallel=" << dop
-             << " is_stream_pipeline=" << is_stream_pipeline
-             << " fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
-
-    setup_pipeline_profile(state);
-    for (size_t i = 0; i < dop; ++i) {
-        auto&& operators = create_operators(dop, i);
-        DriverPtr driver = nullptr;
-        if (is_stream_pipeline) {
-            driver = std::make_shared<StreamPipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
-                                                            fragment_ctx->next_driver_id());
-
-        } else {
-            driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
-                                                      fragment_ctx->next_driver_id());
-        }
-
-        if (state->enable_event_scheduler()) {
-            driver->assign_observer();
-        }
-
-        setup_drivers_profile(driver);
-        driver->set_workgroup(workgroup);
-        _drivers.emplace_back(std::move(driver));
-    }
-
-    query_ctx->query_trace()->register_drivers(fragment_ctx->fragment_instance_id(), _drivers);
-
-    if (!source_operator_factory()->with_morsels()) {
-        return;
-    }
-
-    auto* morsel_queue_factory = source_operator_factory()->morsel_queue_factory();
-    DCHECK(morsel_queue_factory != nullptr);
-    DCHECK(dop == 1 || dop == morsel_queue_factory->size());
-    for (size_t i = 0; i < dop; ++i) {
-        auto& driver = _drivers[i];
-        driver->set_morsel_queue(morsel_queue_factory->create(i));
-        if (auto* scan_operator = driver->source_scan_operator()) {
-            scan_operator->set_workgroup(workgroup);
-            scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
-            if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
-                scan_operator->set_scan_executor(workgroup->executors()->connector_scan_executor());
-            } else {
-                scan_operator->set_scan_executor(workgroup->executors()->scan_executor());
-            }
-        }
-    }
+Drivers& Pipeline::mutable_drivers() {
+    return _drivers;
 }
 
 void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
     runtime_state->runtime_profile()->add_child(runtime_profile(), true, nullptr);
-}
-
-void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
+    // Set pipeline-level counters once here rather than redundantly in every setup_drivers_profile call.
     runtime_profile()->add_info_string("IsGroupExecution",
                                        _execution_group->is_colocate_exec_group() ? "true" : "false");
-    runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, COUNTER_VALUE(dop_counter));
+}
+
+void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
+    runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
@@ -140,24 +80,6 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
             });
         }
     }
-}
-
-void Pipeline::count_down_epoch_finished_driver(RuntimeState* state) {
-    bool all_drivers_finished = ++_num_epoch_finished_drivers == _drivers.size();
-    if (all_drivers_finished) {
-        _execution_group->count_down_epoch_pipeline(state);
-    }
-}
-
-Status Pipeline::reset_epoch(RuntimeState* state) {
-    _num_epoch_finished_drivers = 0;
-    for (const auto& driver : drivers()) {
-        DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
-        DCHECK(down_cast<pipeline::StreamPipelineDriver*>(driver.get()));
-        auto* stream_driver = down_cast<pipeline::StreamPipelineDriver*>(driver.get());
-        RETURN_IF_ERROR(stream_driver->reset_epoch(state));
-    }
-    return Status::OK();
 }
 
 struct OutputAmplificationAddCalculator {

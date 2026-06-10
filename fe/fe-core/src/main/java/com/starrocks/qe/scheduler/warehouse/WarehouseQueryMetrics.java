@@ -94,13 +94,13 @@ public class WarehouseQueryMetrics {
 
     public List<ScalarOperator> toConstantOperators() {
         List<ScalarOperator> result = Lists.newArrayList();
-        result.add(ConstantOperator.createVarchar(String.valueOf(warehouseId)));
+        result.add(ConstantOperator.createBigint(warehouseId));
         result.add(ConstantOperator.createVarchar(warehouseName));
         result.add(ConstantOperator.createVarchar(DebugUtil.printId(queryId)));
         result.add(ConstantOperator.createVarchar(state.name()));
         result.add(ConstantOperator.createVarchar(String.valueOf(estCostsSlots)));
         result.add(ConstantOperator.createVarchar(String.valueOf(allocateSlots)));
-        result.add(ConstantOperator.createDouble(queuedWaitSeconds));
+        result.add(ConstantOperator.createVarchar(String.valueOf(queuedWaitSeconds)));
         result.add(ConstantOperator.createVarchar(query));
         if (extraMessage.isPresent()) {
             LogicalSlot.ExtraMessage extra = extraMessage.get();

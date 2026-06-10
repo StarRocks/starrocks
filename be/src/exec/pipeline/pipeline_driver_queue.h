@@ -16,42 +16,14 @@
 
 #include <queue>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/utility/factory_method.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "exec/workgroup/work_group_fwd.h"
-#include "util/factory_method.h"
-#include "util/moodycamel/concurrentqueue.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 
 namespace starrocks::pipeline {
-
-class DriverQueue;
-using DriverQueuePtr = std::unique_ptr<DriverQueue>;
-class DriverQueueMetrics;
-
-class DriverQueue {
-public:
-    DriverQueue(DriverQueueMetrics* metrics) : _metrics(metrics) {}
-    virtual ~DriverQueue() = default;
-    virtual void close() = 0;
-
-    virtual void put_back(const DriverRawPtr driver) = 0;
-    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    // *from_executor* means that the executor thread puts the driver back to the queue.
-    virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
-
-    virtual StatusOr<DriverRawPtr> take(const bool block) = 0;
-    virtual void cancel(DriverRawPtr driver) = 0;
-
-    // Update statistics of the driver's workgroup,
-    // when yielding the driver in the executor thread.
-    virtual void update_statistics(const DriverRawPtr driver) = 0;
-
-    virtual size_t size() const = 0;
-    bool empty() const { return size() == 0; }
-
-    virtual bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const = 0;
-
-    DriverQueueMetrics* _metrics;
-};
 
 // SubQuerySharedDriverQueue is used to store the driver waiting to be executed.
 // It guarantees the following characteristics:
@@ -124,7 +96,7 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
-    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
+    static double ratio_of_adjacent_queue();
     static constexpr size_t QUEUE_SIZE = 8;
 
 private:
@@ -136,8 +108,8 @@ private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
     // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2.0s, 3.0s, 4.2s, 5.6s, 7.4s.
     // it will move to next level.
-    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_driver_queue_level_time_slice_base_ns;
-    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
+    const int64_t LEVEL_TIME_SLICE_BASE_NS;
+    const double RATIO_OF_ADJACENT_QUEUE;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
@@ -156,7 +128,8 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
-    WorkGroupDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {}
+    WorkGroupDriverQueue(DriverQueueMetrics* metrics, const workgroup::WorkGroupSchedulePolicy& schedule_policy)
+            : FactoryMethod(metrics), _schedule_policy(schedule_policy) {}
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 
@@ -221,6 +194,7 @@ private:
 
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
+    const workgroup::WorkGroupSchedulePolicy& _schedule_policy;
 
     moodycamel::ConcurrentQueue<DriverRawPtr> _local_queue;
     std::atomic_int32_t _local_queue_cntl{};

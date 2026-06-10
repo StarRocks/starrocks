@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.0 以降の JDBC catalog で、JDBC データソースからデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 4
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -56,7 +58,18 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 | password          | ターゲットデータベースに接続するために使用されるパスワード。 |
 | jdbc_uri          | JDBC ドライバーがターゲットデータベースに接続するために使用する URI。MySQL の場合、URI は `"jdbc:mysql://ip:port"` 形式です。PostgreSQL の場合、URI は `"jdbc:postgresql://ip:port/db_name"` 形式です。詳細は [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) を参照してください。 |
 | driver_url        | JDBC ドライバー JAR パッケージのダウンロード URL。HTTP URL またはファイル URL がサポートされます。例えば、`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` や `file:///home/disk1/postgresql-42.3.3.jar` です。<br />**注意**<br />JDBC ドライバーを FE と BE または CN ノードの同じパスに配置し、`driver_url` をそのパスに設定することもできます。この場合、`file:///<path>/to/the/driver` 形式でなければなりません。 |
-| driver_class      | JDBC ドライバーのクラス名。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
+| driver_class      | JDBC ドライバーのクラス名。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li></ul> |
+| schema_resolver   | (オプション) 使用するスキーマリゾルバーを明示的に指定します。有効な値：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`。ドライバークラス名から自動検出できない非標準の JDBC ドライバーを使用する場合にこのパラメーターを使用します。指定しない場合、StarRocks は `driver_class` パラメーターに基づいて適切なリゾルバーを自動検出します。 |
+
+#### オプションの Oracle プロパティ
+
+`driver_class` が Oracle に設定されている場合、以下のオプションのプロパティを設定できます：
+
+| **パラメータ**                  | **デフォルト** | **説明**                                                                                                      |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| oracle.number.default-scale    | 6           | Oracle の `NUMBER` メタデータに明示的な精度とスケールが指定されていない場合に設定します。有効な範囲：`0`～`38`。             |
+| oracle.temporal.to-datetime    | false       | Oracle の `DATE`、`TIMESTAMP`、および `TIMESTAMP WITH LOCAL TIME ZONE` のマッピングを制御します。この設定が `true` に設定されている場合、これらのデータ型は StarRocks の `DATETIME` 型にマッピングされます。そうでない場合、`DATE` は `DATE` のままとなり、`TIMESTAMP` および `TIMESTAMP WITH LOCAL TIME ZONE` は `VARCHAR(64)` にマッピングされます。 |
+| oracle.timestamptz.to-datetime | false       | Oracle の `TIMESTAMP WITH TIME ZONE` のマッピングを制御します。`true` に設定されている場合、StarRocksの `DATETIME` 型にマッピングされます。それ以外の場合は、 `VARCHAR(64)` にマッピングされます。 |
 
 > **注意**
 >
@@ -100,6 +113,20 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
 );
+-- Oracle (with Oracle-specific optional properties)
+CREATE EXTERNAL CATALOG jdbc2_ext
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521/ORCLPDB1",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver",
+    "oracle.number.default-scale"="6",
+    "oracle.temporal.to-datetime"="true",
+    "oracle.timestamptz.to-datetime"="true"
+);
 -- SQL Server
 CREATE EXTERNAL CATALOG jdbc3
 PROPERTIES
@@ -118,9 +145,21 @@ PROPERTIES
     "type"="jdbc",
     "user"="default",
     "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
-    "driver_url"="file:///path/to/clickhouse-jdbc-0.4.6.jar",
+    "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
     "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
-);    
+);
+-- 非標準ドライバーに schema_resolver を使用
+CREATE EXTERNAL CATALOG jdbc5
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/mydb",
+    "driver_url"="file:///path/to/custom-postgresql-driver.jar",
+    "driver_class"="com.custom.PostgresDriver",
+    "schema_resolver"="postgresql"
+);
 ```
 
 ## JDBC catalog の表示
@@ -173,11 +212,21 @@ DROP Catalog jdbc0;
     USE <catalog_name>.<db_name>;
     ```
 
-3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します。
+3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用します。
 
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
+
+## ネイティブ SQL で JDBC データをクエリする
+
+v4.1 以降、StarRocks は [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) テーブル関数を使用して、データベースネイティブの `SELECT` 文で JDBC データをクエリできます。
+
+ソースデータベース側の Join、事前にフィルタリングしたサブクエリ、またはベンダー固有の SQL 構文など、単一の external table クエリでは表現できない SQL をソースデータベースで実行する必要がある場合に `native_query` を使用できます。StarRocks はパススルークエリの結果を通常のリレーションとして公開するため、StarRocks 側でさらにフィルター、Join、集計、射影を適用できます。
+
+構文、制限事項、例については、[`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) を参照してください。
 
 ## FAQ
 

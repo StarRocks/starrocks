@@ -20,20 +20,27 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <cstring>
 #include <string>
 
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/config_ingest_fwd.h"
+#include "common/system/cpu_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "http/download_action.h"
 #include "http/http_channel.h"
+#include "http/http_common.h"
 #include "http/http_request.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
-#include "util/brpc_stub_cache.h"
-#include "util/cpu_info.h"
 
 class mg_connection;
 
@@ -67,8 +74,13 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
+        auto* platform_env = PlatformEnv::GetInstance();
+        if (platform_env->brpc_stub_cache() == nullptr) {
+            ASSERT_OK(platform_env->init(&_metrics));
+            _owns_platform_env = true;
+        }
+        _env._refresh_service_contexts();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(&_env);
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
@@ -81,12 +93,14 @@ public:
         _env._transaction_mgr = nullptr;
         delete _env._stream_context_mgr;
         _env._stream_context_mgr = nullptr;
-        delete _env._brpc_stub_cache;
-        _env._brpc_stub_cache = nullptr;
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        if (_owns_platform_env) {
+            PlatformEnv::GetInstance()->destroy();
+            _owns_platform_env = false;
+        }
 
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
@@ -96,7 +110,13 @@ public:
 protected:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
+    MetricRegistry _metrics{"transaction_stream_load_action_test"};
+    bool _owns_platform_env = false;
 };
+
+// `need_auth() == false` for both handlers is pinned in handler_required_privilege_test.cpp
+// (BeHandlerNeedAuthTest.transaction_endpoints_skip_framework_auth). This file focuses on
+// the txn dispatch semantics under various auth/label combinations below.
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {
     TransactionManagerAction txn_action(&_env);
@@ -1034,6 +1054,44 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
     ctx->lock.unlock();
 }
 
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "invalid_envelope";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_ENVELOPE, "custom");
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
+}
+
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     TransactionStreamLoadAction action(&_env);
     auto ctx = new StreamLoadContext(&_env);
@@ -1077,6 +1135,60 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     ASSERT_EQ(2, ctx->num_refs());
     ASSERT_TRUE(ctx->lock.try_lock());
     ctx->lock.unlock();
+}
+
+TEST_F(TransactionStreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
+    // Test cases: {label, timeout_header, expected_timeout_ms}
+    struct TestCase {
+        const char* label;
+        const char* timeout_header;
+        int32_t expected_timeout_ms;
+    };
+    TestCase test_cases[] = {
+            {"rpc_timeout_default", nullptr, config::stream_load_thrift_rpc_timeout_ms}, // default timeout
+            {"rpc_timeout_custom", "30", 15000}, // custom timeout: 30s -> 15000ms
+    };
+
+    for (const auto& tc : test_cases) {
+        TransactionManagerAction txn_action(&_env);
+        HttpRequest begin_req(_evhttp_req);
+        begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        begin_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        if (tc.timeout_header != nullptr) {
+            begin_req._headers.emplace(HTTP_TIMEOUT, tc.timeout_header);
+        }
+        begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&begin_req);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        int32_t captured_timeout = -1;
+        SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout",
+                                              [&](void* arg) {
+                                                  auto* request = static_cast<TStreamLoadPutRequest*>(arg);
+                                                  captured_timeout = request->thrift_rpc_timeout_ms;
+                                              });
+
+        TransactionStreamLoadAction action(&_env);
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        action.on_header(&request);
+        action.handle(&request);
+
+        EXPECT_EQ(tc.expected_timeout_ms, captured_timeout);
+    }
 }
 
 } // namespace starrocks

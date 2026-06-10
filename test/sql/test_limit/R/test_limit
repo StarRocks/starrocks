@@ -140,7 +140,7 @@ select count(*) from ( select * from L union all select * from R ) as U;
 -- result:
 7
 -- !result
-function: assert_explain_verbose_contains('with C as (select region, sum(income) as total from t0 group by 1), L as (select total from C limit 3),  R as (select total from C limit 4) select count(*) from ( select * from L union all select * from R ) as U;', '6:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 4\n     cardinality: 4', '10:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 4\n     cardinality: 4')
+function: assert_explain_verbose_contains('with C as (select region, sum(income) as total from t0 group by 1), L as (select total from C limit 3),  R as (select total from C limit 4) select /*+SET_VAR(cbo_cte_reuse_rate=0)*/ count(*) from ( select * from L union all select * from R ) as U;', '6:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 4\n     cardinality: 4', '10:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 4\n     cardinality: 4')
 -- result:
 None
 -- !result
@@ -154,7 +154,7 @@ select count(*) from ( select * from L union all select * from R ) as U;
 -- result:
 7
 -- !result
-function: assert_explain_verbose_contains('with C as (select region, sum(income) as total from t0 group by 1), L as (select total from C limit 3),  R as (select total from C limit 4) select count(*) from ( select * from L union all select * from R ) as U;', '6:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 3\n     cardinality: 3', '10:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 4\n     cardinality: 4')
+function: assert_explain_verbose_contains('with C as (select region, sum(income) as total from t0 group by 1), L as (select total from C limit 3),  R as (select total from C limit 4) select /*+SET_VAR(cbo_cte_reuse_rate=0)*/ count(*) from ( select * from L union all select * from R ) as U;', '6:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 3\n     cardinality: 3', '10:EXCHANGE\n     distribution type: SHUFFLE\n     partition exprs: [1: region, VARCHAR(128), false]\n     limit: 4\n     cardinality: 4')
 -- result:
 None
 -- !result

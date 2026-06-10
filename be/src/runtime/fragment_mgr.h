@@ -41,6 +41,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
@@ -48,12 +50,12 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "http/rest_monitor_iface.h"
 #include "runtime/mem_tracker.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
 class ExecEnv;
 class FragmentExecState;
+class MetricRegistry;
 class TExecPlanFragmentParams;
 class TUniqueId;
 class PlanFragmentExecutor;
@@ -68,7 +70,7 @@ public:
     typedef std::function<void(PlanFragmentExecutor*)> FinishCallback;
     typedef std::function<void(PlanFragmentExecutor*)> StartSuccCallback;
 
-    FragmentMgr(ExecEnv* exec_env);
+    FragmentMgr(ExecEnv* exec_env, MetricRegistry* metrics);
     ~FragmentMgr() override;
 
     // execute one plan fragment
@@ -97,12 +99,13 @@ public:
 
     Status trigger_profile_report(const PTriggerProfileReportRequest* request);
 
-    void report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids);
+    std::vector<TUniqueId> report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids);
 
     void report_fragments_with_same_host(const std::vector<std::shared_ptr<FragmentExecState>>& need_report_exec_states,
                                          std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
                                          std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
-                                         std::vector<int32_t>& cur_batch_report_indexes);
+                                         std::vector<int32_t>& cur_batch_report_indexes,
+                                         std::vector<TUniqueId>& fragment_instance_ids_to_unregister);
 
     // input: TScanOpenParams fragment_instance_id
     // output: selected_columns, query_id parsed from params
@@ -126,7 +129,7 @@ private:
     std::unordered_map<TUniqueId, std::shared_ptr<FragmentExecState>> _fragment_map;
 
     // Cancel thread
-    bool _stop;
+    bool _stop{false};
     std::thread _cancel_thread;
     // every job is a pool
     std::unique_ptr<ThreadPool> _thread_pool;

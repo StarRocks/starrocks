@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use Skew Join V2 in StarRocks to optimize JOIN queries with data skew by broadcasting skew values, improving performance for heavily skewed data."
 ---
 
 # Skew Join V2
@@ -218,6 +219,8 @@ LIMIT 10;
   ジョイン条件における複雑な式のサポートは限定的です。
 - **スキューテーブル**
   Skew Join V2 は、JOIN 操作において大きなテーブルがスキューしているシナリオのみを処理でき、大きなテーブルは左テーブルとして使用されなければなりません。
+- **Join の順序変更**
+  `skew` ヒントを使用すると、オプティマイザが Join の順序を変更するのを防ぎます。SQL で指定された順序で Join が実行され、オプティマイザはヒントを含む Join ノードの左テーブルと右テーブルを入れ替えたり、Join の順序を変更したりしようとはしません。
 
 ## トラブルシューティング
 
@@ -241,4 +244,4 @@ SELECT ... FROM ... JOIN [skew|...] ...;
 - [ Query Planning ](../best_practices/query_tuning/query_planning.md)
 - [ Query Profile Tuning ](../best_practices/query_tuning/query_profile_tuning_recipes.md)
 - [ System Variables ](../sql-reference/System_variable.md)
-- [ JOIN Operations ](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#join)
+- [ JOIN Operations ](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md#join)

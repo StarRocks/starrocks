@@ -1,0 +1,94 @@
+-- name: test_iceberg_partition_evolution_2
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop table if exists test_events;
+-- result:
+-- !result
+CREATE TABLE test_events (
+  event_id BIGINT,
+  user_id  BIGINT,
+  ts       DATETIME,
+  country  STRING
+) PARTITION BY day(ts), country;
+-- result:
+-- !result
+INSERT INTO test_events VALUES
+ (1, 1, '2024-01-01 10:00:00', 'US'),
+ (2, 2, '2024-01-01 11:00:00', 'US'),
+ (3, 3, '2024-01-02 09:00:00', 'CN');
+-- result:
+-- !result
+ALTER TABLE test_events DROP PARTITION COLUMN day(ts);
+-- result:
+-- !result
+ALTER TABLE test_events ADD PARTITION COLUMN month(ts);
+-- result:
+-- !result
+INSERT INTO test_events VALUES
+ (4, 4, '2024-02-01 10:00:00', 'US'),
+ (5, 5, '2024-02-15 12:00:00', 'CN');
+-- result:
+-- !result
+ALTER TABLE test_events DROP PARTITION COLUMN month(ts);
+-- result:
+-- !result
+INSERT INTO test_events VALUES
+ (6, 6, '2024-03-01 08:00:00', 'US'),
+ (7, 7, '2024-03-02 09:00:00', 'CN');
+-- result:
+-- !result
+SELECT * FROM test_events order by event_id;
+-- result:
+1	1	2024-01-01 10:00:00	US
+2	2	2024-01-01 11:00:00	US
+3	3	2024-01-02 09:00:00	CN
+4	4	2024-02-01 10:00:00	US
+5	5	2024-02-15 12:00:00	CN
+6	6	2024-03-01 08:00:00	US
+7	7	2024-03-02 09:00:00	CN
+-- !result
+SELECT country, COUNT(*) AS c FROM test_events GROUP BY country ORDER BY country;
+-- result:
+CN	3
+US	4
+-- !result
+SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
+-- result:
+7
+-- !result
+function: assert_explain_verbose_contains("SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=6/6")
+-- result:
+None
+-- !result
+SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;
+-- result:
+US	2
+-- !result
+function: assert_explain_verbose_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
+-- result:
+None
+-- !result
+function: assert_query_contains("analyze table test_events;", "OK")
+-- result:
+None
+-- !result
+drop table test_events force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

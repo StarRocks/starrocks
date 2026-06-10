@@ -20,10 +20,11 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.Pair;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -74,10 +75,12 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UserAuthOption;
@@ -145,6 +148,8 @@ import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
 public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void> {
+    private static final String MASKED_AUTH_TEXT = "*XXX";
+
     // use options:
     //   addFunctionDbName;
     //   withBackquote;
@@ -189,26 +194,39 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             return sb;
         }
 
+        String authString = authOption.getAuthString();
+        String printedAuthString = shouldHideAuthString(authOption) ? MASKED_AUTH_TEXT : authString;
+
         if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
             sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
-            if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+            if (!Strings.isNullOrEmpty(authString)) {
                 if (authOption.isPasswordPlain()) {
                     sb.append(" BY '");
                 } else {
                     sb.append(" AS '");
                 }
-                sb.append(authOption.getAuthString()).append("'");
+                sb.append(printedAuthString).append("'");
             }
         } else {
-            if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+            if (!Strings.isNullOrEmpty(authString)) {
                 if (authOption.isPasswordPlain()) {
-                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                    sb.append(" IDENTIFIED BY '").append(printedAuthString).append("'");
                 } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(printedAuthString).append("'");
                 }
             }
         }
         return sb;
+    }
+
+    private boolean shouldHideAuthString(UserAuthOption authOption) {
+        if (Strings.isNullOrEmpty(authOption.getAuthString())) {
+            return false;
+        }
+        if (Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+            return true;
+        }
+        return !AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name().equalsIgnoreCase(authOption.getAuthPlugin());
     }
 
     @Override
@@ -348,11 +366,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         StringBuilder sb = new StringBuilder();
         sb.append("SET PROPERTY FOR ").append('\'').append(stmt.getUser()).append('\'');
         int idx = 0;
-        for (Pair<String, String> stringStringPair : stmt.getPropertyPairList()) {
+        for (SetUserPropertyVar property : stmt.getPropertyList()) {
             if (idx != 0) {
                 sb.append(", ");
             }
-            sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
+            sb.append(property.getPropertyKey()).append(" = ").append(property.getPropertyValue());
             idx++;
         }
         return sb.toString();
@@ -381,6 +399,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         }
 
         sb.append(stmt.getMvName());
+        if (stmt.isForceDrop()) {
+            sb.append(" FORCE");
+        }
         return sb.toString();
     }
 
@@ -472,10 +493,12 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         StringBuilder sb = new StringBuilder();
 
         sb.append("EXPORT TABLE ");
-        if (stmt.getTblName() == null) {
+        if (stmt.getTableRef() == null) {
             sb.append("non-exist");
         } else {
-            sb.append(stmt.getTblName().toSql());
+            TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
+                    stmt.getTableName(), stmt.getTableRef().getPos());
+            sb.append(tableName.toSql());
         }
 
         if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
@@ -514,6 +537,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         if (queryRelation.hasWithClause()) {
             sqlBuilder.append("WITH ");
+            if (queryRelation.isHasRecursiveCTE()) {
+                sqlBuilder.append("RECURSIVE ");
+            }
             List<String> cteStrings =
                     queryRelation.getCteRelations().stream().map(this::visit).collect(Collectors.toList());
             sqlBuilder.append(Joiner.on(", ").join(cteStrings));
@@ -550,6 +576,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     .append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
         }
         sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+        if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+            sqlBuilder.append("[materialized] ");
+        } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+            sqlBuilder.append("[not_materialized] ");
+        }
         return sqlBuilder.toString();
     }
 
@@ -965,7 +996,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         } else if (insert.useBlackHoleTableAsTargetTable()) {
             sb.append("blackhole()");
         } else {
-            sb.append(insert.getTableName().toSql());
+            TableRef tableRef = insert.getTableRef();
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            sb.append(tableName.toSql());
         }
         sb.append(" ");
 
@@ -1029,7 +1063,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     public String visitDeleteStatement(DeleteStmt delete, Void context) {
         StringBuilder sb = new StringBuilder();
         sb.append("DELETE FROM ");
-        sb.append(delete.getTableName().toSql());
+        TableRef tableRef = delete.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        sb.append(tableName.toSql());
 
         if (delete.getWherePredicate() != null) {
             sb.append(" WHERE ");
@@ -1176,10 +1213,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     public String visitFunctionCall(FunctionCallExpr node, Void context) {
         FunctionParams fnParams = node.getParams();
         StringBuilder sb = new StringBuilder();
-        if (options.isAddFunctionDbName() && node.getFnName().getDb() != null) {
-            sb.append("`" + node.getFnName().getDb() + "`.");
+        if (options.isAddFunctionDbName() && node.getDbName() != null) {
+            sb.append("`" + node.getDbName() + "`.");
         }
-        String functionName = node.getFnName().getFunction();
+        String functionName = node.getFunctionName();
         sb.append(functionName);
 
         sb.append("(");
@@ -1221,13 +1258,15 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             }
             sb.append(")");
         } else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
-            List<String> p = node.getChildren().stream().map(child -> {
-                String str = visit(child);
-                if (child instanceof SlotRef && node.getIgnoreNulls()) {
+            List<Expr> children = node.getChildren();
+            List<String> p = new ArrayList<>();
+            for (int i = 0; i < children.size(); i++) {
+                String str = visit(children.get(i));
+                if (i == 0 && node.getIgnoreNulls()) {
                     str += " ignore nulls";
                 }
-                return str;
-            }).collect(Collectors.toList());
+                p.add(str);
+            }
             sb.append(Joiner.on(", ").join(p)).append(")");
         } else {
             List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
@@ -1519,6 +1558,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     }
                     strBuilder.append(")");
                 }
+                break;
+            case GROUP_BY_ALL:
+                strBuilder.append("ALL");
                 break;
             default:
                 break;

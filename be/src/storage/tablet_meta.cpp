@@ -37,6 +37,8 @@
 #include <memory>
 #include <sstream>
 
+#include "base/format.h"
+#include "base/uid_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/metadata_util.h"
@@ -47,7 +49,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -694,3 +695,9 @@ bool operator!=(const TabletMeta& a, const TabletMeta& b) {
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::TabletState>::format(const starrocks::TabletState value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::TabletState>>::format(starrocks::enum_to_underlying_type(value),
+                                                                             ctx);
+}

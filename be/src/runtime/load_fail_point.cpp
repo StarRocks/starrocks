@@ -14,10 +14,12 @@
 
 #include "runtime/load_fail_point.h"
 
+#include <fmt/format.h>
+
 #ifdef FIU_ENABLE
+#include "base/uid_util.h"
+#include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
-#include "service/backend_options.h"
-#include "util/uid_util.h"
 #endif
 
 namespace starrocks::load::failpoint {

@@ -23,7 +23,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -37,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -55,8 +55,11 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        return aggOp.checkGroupByCountDistinctWithSkewHint() || (aggOp.checkGroupByCountDistinct() &&
-                context.getSessionVariable().isEnableDistinctColumnBucketization());
+        final var isCountDistinctAndHasSkewHint = aggOp.checkGroupByCountDistinctWithSkewHint();
+        final var isCountDistinct = aggOp.checkGroupByCountDistinct();
+        final var isDistinctColumnBucketizationEnabled = context.getSessionVariable().isEnableDistinctColumnBucketization();
+
+        return isCountDistinctAndHasSkewHint || (isCountDistinct && isDistinctColumnBucketizationEnabled);
     }
 
     private static final GroupByCountDistinctDataSkewEliminateRule INSTANCE =
@@ -64,6 +67,39 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
     public static GroupByCountDistinctDataSkewEliminateRule getInstance() {
         return INSTANCE;
+    }
+
+    // Returns true when `SplitMultiPhaseAggRule` will pick the 4-stage shuffle-by-(g, d) shape
+    // as the sole alternative and the distinct column already has more distinct values than
+    // the number of buckets. In that case the (g, d) shuffle on its own distributes at least
+    // as well as the salt rewrite, so the rewrite is pure overhead.
+    //
+    // When the alternative may be the 3-stage shuffle-by-(g) shape, we keep the
+    // rewrite as a candidate because a hot value in g would otherwise cause severe runtime skew.
+    // The cost model's existing logic decides between them in that case.
+    private boolean shouldSkipRewriteSinceDistinctDistributedWell(OptExpression input, LogicalAggregationOperator aggOp,
+                                                                  ColumnRefOperator distinctColRef, int bucketNum,
+                                                                  OptimizerContext context) {
+        if (input.getGroupExpression() == null) {
+            return false;
+        }
+        final var inputStats = input.getGroupExpression().inputAt(0).getStatistics();
+        if (inputStats == null) {
+            return false;
+        }
+        final var distinctColStat = inputStats.getColumnStatistic(distinctColRef);
+        if (distinctColStat == null || distinctColStat.isUnknown()) {
+            return false;
+        }
+        if (distinctColStat.getDistinctValuesCount() <= bucketNum) {
+            return false;
+        }
+
+        final var groupKeys = Lists.newArrayList(aggOp.getGroupingKeys());
+        groupKeys.add(distinctColRef);
+        final var partitionBys = aggOp.getGroupingKeys();
+
+        return !SplitMultiPhaseAggRule.isThreeStageMoreEfficient(context.getConnectContext(), input, groupKeys, partitionBys);
     }
 
     // compute the type of bucket column, since bucket column introduce extra cost, so we
@@ -111,9 +147,13 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
         // create auxiliary group-by column:
         // cast(murmur_hash3_32(cast(distinct_column as varchar))%bucketNum as NarrowInteger)
-        int bucketNum = context.getSessionVariable().getDistinctColumnBuckets();
-        // bucketNum ranges from [4, 65536]
-        bucketNum = Math.max(4, Math.min(65536, bucketNum));
+        final int bucketNum = Math.max(4, Math.min(65536, context.getSessionVariable().getDistinctColumnBuckets()));
+
+        if (!aggOp.checkGroupByCountDistinctWithSkewHint()
+                && shouldSkipRewriteSinceDistinctDistributedWell(input, aggOp, distinctColRef, bucketNum, context)) {
+            return Lists.newArrayList();
+        }
+
         ScalarOperator bucketCol = createBucketColumn(distinctColRef, bucketNum);
         ColumnRefOperator bucketColRef =
                 context.getColumnRefFactory().create(bucketCol, bucketCol.getType(), distinctColRef.isNullable());
@@ -130,6 +170,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         // projection(groupByColumn, distinctColumn, hash(distinctColumn)%numBuckets as bucket)
         firstAggOp.setProjection(new Projection(colRefMap));
         int stage = 0;
+        final var sharedSkewState = new DataSkewInfo.SharedSkewState();
         // AggSplitRule splits group-by-count-distinct query into 3-stage Agg operators + 1 shuffle, while
         // this Rule splits the query into 4-stage agg operators + 2 shuffle, in good cases of this rule, one extra
         // Agg operator and one extra shuffle operator always make the plan generated by this rule yields a
@@ -139,7 +180,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         // bridged stage-3 and stage-4 also should be neglected.
         // 2. stage-1 operators: would spend significant real cost, so we assigned 1.0.
         // 3. In CostModel: we reward stage-2 operators in good cases and punish bad cases.
-        firstAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 1.0, ++stage));
+        firstAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 1.0, ++stage, sharedSkewState));
 
         // second-stage:
         // select groupByColumn, bucket, multi_distinct_count(distinctColumn) as countPerBucket
@@ -155,7 +196,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
         LogicalAggregationOperator secondAggOp =
                 new LogicalAggregationOperator(AggType.GLOBAL, secondGroupBy, secondStageAggregations);
-        secondAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 1.0, ++stage));
+        secondAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 1.0, ++stage, sharedSkewState));
         secondAggOp.setPartitionByColumns(secondGroupBy);
 
         // third-stage/fourth Agg: select groupByColumn, sum(countPerBucket) from t group by groupByColumn
@@ -164,7 +205,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         thirdAggregations.put(aggColRef, sum);
         LogicalAggregationOperator thirdAggOp =
                 new LogicalAggregationOperator(AggType.LOCAL, Lists.newArrayList(groupBy), thirdAggregations);
-        thirdAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, ++stage));
+        thirdAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, ++stage, sharedSkewState));
 
         // create fourth-stage Agg operator
         LogicalAggregationOperator fourthAggOp = LogicalAggregationOperator.builder().withOperator(thirdAggOp)
@@ -174,7 +215,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
                 .setProjection(aggOp.getProjection())
                 .setPredicate(aggOp.getPredicate())
                 .build();
-        fourthAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, ++stage));
+        fourthAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, ++stage, sharedSkewState));
 
         OptExpression optExpression = child;
         optExpression = OptExpression.create(firstAggOp, optExpression);

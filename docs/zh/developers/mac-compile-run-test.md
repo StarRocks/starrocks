@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在 macOS ARM64（Apple Silicon）上编译、运行、调试和测试 StarRocks。"
 ---
 
 # 基于 macOS ARM64 编译、运行和测试 StarRocks
@@ -28,22 +29,16 @@ xcode-select --install
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-3. 安装必要的 Homebrew 依赖：
-
-```bash
-cd build-mac
-./env_macos.sh
-```
+3. 不再需要单独运行 macOS 环境脚本。下面的第三方依赖构建步骤会安装必要的 Homebrew formula。
 
 ## Mac 编译
 
 ## 编译第三方库
 
-在 macOS 上编译 BE 之前，需要先编译第三方依赖库。进入 `build-mac` 目录并运行：
+在 macOS 上编译 BE 之前，请在仓库根目录编译第三方依赖库：
 
 ```bash
-cd build-mac
-./build_thirdparty.sh
+./thirdparty/build-thirdparty.sh
 ```
 
 ## 编译 FE
@@ -68,29 +63,28 @@ output/fe/
 
 ## 编译 BE
 
-macOS 版本的 BE 编译脚本位于 `build-mac` 目录。
+macOS 上使用仓库根目录的构建脚本编译 BE。
 
 ### 首次编译
 
 ```bash
-cd build-mac
-./build_be.sh
+./build.sh --be
 ```
 
 首次编译会自动完成以下步骤：
 
 1. 检查和配置环境变量
-2. 编译第三方依赖（protobuf、thrift、brpc 等）
-3. 生成代码（Thrift/Protobuf）
+2. 校验第三方依赖（protobuf、thrift、brpc 等）
+3. 生成脚本输出，并由 CMake 生成 BE 的 Thrift/Protobuf 代码
 4. 编译 BE 代码
-5. 安装到 `be/output/` 目录
+5. 安装到 `output/be/` 目录
 
 ### 编译输出
 
 编译完成后，BE 产物位于：
 
 ```
-be/output/
+output/be/
 ├── bin/              # 启动脚本
 ├── conf/             # 配置文件
 ├── lib/              # starrocks_be 二进制文件
@@ -102,19 +96,7 @@ be/output/
 
 ### 配置 FE
 
-修改 `output/fe/conf/fe.conf` 文件：
-
-```properties
-# 网络配置 - 指定 FE 监听的网络范围
-# 根据你的本机网络配置调整
-priority_networks = 10.10.10.0/24;192.168.0.0/16
-
-# 默认副本数设置为 1（单机开发环境）
-default_replication_num = 1
-
-# 重置选举组（编译IP变动影响FE选主）
-bdbje_reset_election_group = true
-```
+本地单节点开发时，请修改 `output/fe/conf/fe.conf`，设置必要的默认配置，例如 `priority_networks`、`default_replication_num`、`bdbje_reset_election_group`。
 
 ### 启动 FE
 
@@ -133,47 +115,19 @@ tail -f output/fe/log/fe.log
 
 ### 配置 BE
 
-修改 `be/output/conf/be.conf` 文件：
-
-```properties
-# 网络配置 - 与 FE 保持一致
-priority_networks = 10.10.10.0/24;192.168.0.0/16
-
-# 禁用 datacache（macOS 暂不支持）
-datacache_enable = false
-
-# 禁用系统指标收集（macOS 部分功能不支持）
-enable_system_metrics = false
-enable_table_metrics = false
-enable_collect_table_metrics = false
-
-# 日志详细模式（调试时使用）
-sys_log_verbose_modules = *
-```
+本地单节点开发时，请修改 `output/be/conf/be.conf`，设置必要的默认配置，例如 `priority_networks`、`datacache_enable`、`enable_system_metrics`、`sys_log_verbose_modules`。
 
 ### 启动 BE
 
-在 macOS 上启动 BE 需要设置一些环境变量：
-
 ```bash
-cd be/output
-
-# 设置环境变量并启动 BE
-export ASAN_OPTIONS=detect_container_overflow=0
-export STARROCKS_HOME=/Users/kks/git/starrocks/be/output
-export PID_DIR=/Users/kks/git/starrocks/be/output/bin
-export UDF_RUNTIME_DIR=/Users/kks/git/starrocks/be/output/lib
-
-# 后台启动 BE
-./lib/starrocks_be &
+cd output/be
+./bin/start_be.sh --daemon
 ```
-
-> **注意**：请将路径 `/Users/kks/git/starrocks` 替换为你实际的 StarRocks 代码路径。
 
 ### 查看 BE 日志
 
 ```bash
-tail -f be/output/log/be.INFO
+tail -f output/be/log/be.INFO
 ```
 
 ### 停止 BE
@@ -423,7 +377,7 @@ macOS 版本编译的实现遵循以下原则：
 
 1. **不影响 Linux 编译**：所有修改通过条件编译隔离
 2. **最小化代码修改**：优先通过配置禁用功能
-3. **集中化管理**：Mac 相关修改集中在 `build-mac/` 目录
+3. **集中化管理**：构建入口保留在仓库根目录，macOS 构建辅助逻辑位于 `build-support/`，Darwin 第三方依赖逻辑位于 `thirdparty/`
 4. **使用标准工具**：依赖 Homebrew 和 LLVM 工具链
 5. **源码编译关键依赖**：确保 ABI 兼容性（protobuf、thrift、brpc）
 
@@ -433,7 +387,7 @@ macOS 版本编译的实现遵循以下原则：
 
 **Q: 编译时报错 "protobuf version mismatch"**
 
-A: 确保使用 `thirdparty/installed/bin/protoc` (版本 3.14.0)，而不是系统或 Homebrew 的 protobuf：
+A: 确保 BE 的 CMake 构建使用 `thirdparty/installed/bin/protoc` (版本 3.14.0)，而不是系统或 Homebrew 的 protobuf：
 
 ```bash
 # 检查 protobuf 版本
@@ -447,7 +401,7 @@ A: 确保使用 `thirdparty/installed/bin/protoc` (版本 3.14.0)，而不是系
 A: 减少并行编译任务数：
 
 ```bash
-./build_be.sh --parallel 4
+./build.sh --be -j 4
 ```
 
 **Q: FE 无法连接 BE**
@@ -462,7 +416,7 @@ A: 检查是否是禁用功能相关的测试（如 HDFS、S3、ORC 等），这
 
 如果你在 macOS 上发现问题或有改进建议：
 
-1. 检查 `build-mac/` 目录中的相关脚本
+1. 检查仓库根目录构建脚本、`build-support/` 中的 macOS 辅助逻辑，以及 `thirdparty/` 中的 Darwin 第三方依赖脚本
 2. 遵循"不影响 Linux 编译"的原则
 3. 使用 `#ifdef __APPLE__` 进行平台相关的代码修改
 4. 提交 Pull Request 并详细说明修改内容

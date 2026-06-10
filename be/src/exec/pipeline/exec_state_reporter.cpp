@@ -19,13 +19,19 @@
 
 #include <memory>
 
-#include "agent/master_info.h"
-#include "runtime/client_cache.h"
-#include "runtime/exec_env.h"
-#include "service/backend_options.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/thrift_rpc_helper.h"
+#include "base/network/network_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
+#include "common/system/backend_options.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/query_context.h"
+#include "gen_cpp/FrontendService.h"
+#include "platform/thrift_rpc_helper.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -56,8 +62,6 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
     DCHECK(profile != nullptr);
-    auto* exec_env = fragment_ctx->runtime_state()->exec_env();
-    DCHECK(exec_env != nullptr);
     params.protocol_version = FrontendServiceVersion::V1;
     params.__set_query_id(fragment_ctx->query_id());
     params.__set_backend_num(runtime_state->be_number());
@@ -67,7 +71,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        runtime_state->update_report_load_status(&params);
+        RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
 
         if (query_ctx->enable_profile()) {
@@ -79,7 +83,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            runtime_state->update_report_load_status(&params);
+            RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         if (query_ctx->enable_profile()) {
@@ -94,8 +98,9 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 
         if (!runtime_state->output_files().empty()) {
             params.__isset.delta_urls = true;
+            const auto master_token = get_master_token();
             for (auto& it : runtime_state->output_files()) {
-                params.delta_urls.push_back(to_http_path(exec_env->token(), it));
+                params.delta_urls.push_back(to_http_path(master_token, it));
             }
         }
         if (runtime_state->num_rows_load_sink() > 0 || runtime_state->num_rows_load_filtered() > 0 ||
@@ -114,9 +119,10 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
-        if (!runtime_state->get_rejected_record_file_path().empty()) {
-            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
-        }
+        // Legacy rejected-record file removed; see
+        // RuntimeStateHelper::append_rejected_record_to_file for the
+        // writer-based replacement. The `rejected_record_path` Thrift
+        // field is kept for wire-compat but is no longer populated.
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();
@@ -152,8 +158,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 }
 
 // including the final status when execution finishes.
-Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
-                                             const TNetworkAddress& fe_addr) {
+Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, const TNetworkAddress& fe_addr) {
     TReportExecStatusResult res;
     Status rpc_status;
 
@@ -170,90 +175,11 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     return rpc_status;
 }
 
-TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryContext* query_ctx,
-                                                                  const std::vector<FragmentContext*>& fragment_ctxs) {
-    TMVMaintenanceTasks params;
-
-    DCHECK(query_ctx);
-    auto* stream_epoch_manager = query_ctx->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-
-    params.__set_task_type(MVTaskType::REPORT_EPOCH);
-    // maintenance_task_info
-    auto task_info = stream_epoch_manager->maintenance_task_info();
-    params.__set_signature(task_info.signature);
-    params.__set_db_name(task_info.db_name);
-    params.__set_mv_name(task_info.mv_name);
-    params.__set_db_id(task_info.db_id);
-    params.__set_mv_id(task_info.mv_id);
-    params.__set_job_id(task_info.job_id);
-    params.__set_mv_id(task_info.mv_id);
-    params.__set_task_id(task_info.task_id);
-    params.__set_query_id(query_ctx->query_id());
-
-    // report_epoch
-    TMVReportEpochTask report_epoch;
-    auto& epoch_info = stream_epoch_manager->epoch_info();
-    TMVEpoch t_epoch;
-    t_epoch.__set_txn_id(epoch_info.txn_id);
-    t_epoch.__set_epoch_id(epoch_info.epoch_id);
-    report_epoch.__set_epoch(t_epoch);
-
-    // commit_infos/fail_infos
-    std::vector<TTabletCommitInfo> total_commit_infos;
-    std::vector<TTabletFailInfo> total_failed_infos;
-    for (auto& fragment_ctx : fragment_ctxs) {
-        auto* runtime_state = fragment_ctx->runtime_state();
-        DCHECK(runtime_state != nullptr);
-        auto commit_infos = runtime_state->tablet_commit_infos();
-        auto failed_infos = runtime_state->tablet_fail_infos();
-        total_commit_infos.insert(total_commit_infos.end(), commit_infos.begin(), commit_infos.end());
-        total_failed_infos.insert(total_failed_infos.end(), failed_infos.begin(), failed_infos.end());
-    }
-    report_epoch.__set_txn_commit_info(total_commit_infos);
-    report_epoch.__set_txn_fail_info(total_failed_infos);
-
-    // binlog_consume_state
-    std::map<TUniqueId, std::map<TPlanNodeId, std::vector<TScanRange>>> binlog_consume_states;
-    auto& fragment_id_to_node_id_scan_ranges = stream_epoch_manager->fragment_id_to_node_id_scan_ranges();
-    DCHECK_EQ(fragment_id_to_node_id_scan_ranges.size(), fragment_ctxs.size());
-    for (auto& [fragment_instance_id, node_id_to_scan_ranges] : fragment_id_to_node_id_scan_ranges) {
-        std::map<TPlanNodeId, std::vector<TScanRange>> node_id_scan_ranges;
-        for (auto& [scan_node_id, scan_ranges] : node_id_to_scan_ranges) {
-            for (auto& [tablet_id, scan_range] : scan_ranges) {
-                TScanRange t_scan_range;
-                t_scan_range.binlog_scan_range.offset.tablet_id = scan_range.tablet_id;
-                t_scan_range.binlog_scan_range.offset.version = scan_range.tablet_version;
-                t_scan_range.binlog_scan_range.offset.lsn = scan_range.lsn;
-                node_id_scan_ranges[scan_node_id].push_back(t_scan_range);
-            }
-        }
-        binlog_consume_states[fragment_instance_id] = node_id_scan_ranges;
-    }
-    report_epoch.__set_binlog_consume_state(binlog_consume_states);
-    params.__set_report_epoch(report_epoch);
-
-    return params;
-}
-
-// including the final status when execution finishes.
-Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
-                                       const TNetworkAddress& fe_addr) {
-    Status fe_status;
-    TMVReportEpochResponse res;
-    Status rpc_status;
-
-    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
-            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->mvReport(res, params); },
-            config::thrift_rpc_timeout_ms);
-
-    return rpc_status;
-}
-
 ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics) {
-    auto status = ThreadPoolBuilder("exec_state_report") // exec state reporter
+    int exec_state_report_threads = std::max(1, config::exec_state_report_max_threads);
+    auto status = ThreadPoolBuilder("exec_st_report") // exec state reporter
                           .set_min_threads(1)
-                          .set_max_threads(2)
+                          .set_max_threads(exec_state_report_threads)
                           .set_max_queue_size(1000)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                           .set_cpuids(cpuids)
@@ -262,9 +188,10 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateRep
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
 
-    status = ThreadPoolBuilder("priority_exec_state_report") // priority exec state reporter with infinite queue
+    int priority_exec_state_report_threads = std::max(1, config::priority_exec_state_report_max_threads);
+    status = ThreadPoolBuilder("prio_st_report") // priority exec state reporter with infinite queue
                      .set_min_threads(1)
-                     .set_max_threads(2)
+                     .set_max_threads(priority_exec_state_report_threads)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                      .set_cpuids(cpuids)
                      .build(&_priority_thread_pool);
@@ -294,6 +221,14 @@ void ExecStateReporter::submit(std::function<void()>&& report_task, bool priorit
 void ExecStateReporter::bind_cpus(const CpuUtil::CpuIds& cpuids) const {
     _thread_pool->bind_cpus(cpuids, {});
     _priority_thread_pool->bind_cpus(cpuids, {});
+}
+
+Status ExecStateReporter::update_max_threads(int max_threads) {
+    return _thread_pool->update_max_threads(std::max(1, max_threads));
+}
+
+Status ExecStateReporter::update_priority_max_threads(int max_threads) {
+    return _priority_thread_pool->update_max_threads(std::max(1, max_threads));
 }
 
 } // namespace starrocks::pipeline

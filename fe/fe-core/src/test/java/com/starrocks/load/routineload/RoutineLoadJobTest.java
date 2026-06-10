@@ -40,10 +40,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
@@ -58,7 +60,6 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -124,7 +125,7 @@ public class RoutineLoadJobTest {
         String txnStatusChangeReasonString = TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
@@ -184,7 +185,7 @@ public class RoutineLoadJobTest {
         TableMetricsEntity entity =
                 TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
         long prevValue = entity.counterRoutineLoadAbortedTasksTotal.getValue();
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
@@ -193,7 +194,7 @@ public class RoutineLoadJobTest {
         Assertions.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
 
         routineLoadTaskInfoList.clear();
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
         Assertions.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assertions.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
     }
@@ -252,7 +253,7 @@ public class RoutineLoadJobTest {
         TableMetricsEntity entity =
                 TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
         long prevValue = entity.counterRoutineLoadCommittedTasksTotal.getValue();
-        routineLoadJob.afterCommitted(transactionState, true);
+        routineLoadJob.afterCommitted(transactionState);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
@@ -468,6 +469,348 @@ public class RoutineLoadJobTest {
         routineLoadJob.update();
 
         Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaPartitionsContainsAllShrink(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 12L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) throws StarRocksException {
+                return Lists.newArrayList(1, 2);
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(111L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Lists.newArrayList(1, 2, 3));
+        routineLoadJob.update();
+
+        // shrink: currentKafkaPartitions = [1,2,3] containsAll [1,2] && size > 2 -> reschedule with [1,2]
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList(1, 2),
+                Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions"));
+    }
+
+    @Test
+    public void testUpdateKafkaFetchErrorPauses(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 13L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) throws StarRocksException {
+                throw new StarRocksException("kafka broker unreachable");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(112L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assertions.assertEquals(InternalErrorCode.PARTITIONS_ERR, reason.getCode());
+        Assertions.assertTrue(reason.getMsg().contains("kafka broker unreachable"), reason.getMsg());
+    }
+
+    @Test
+    public void testUpdateKafkaPausedAutoSchedule(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 14L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<ScheduleRule>() {
+            @Mock
+            public boolean isNeedAutoSchedule(RoutineLoadJob job) {
+                return true;
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(113L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaPausedNoAutoSchedule(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 15L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<ScheduleRule>() {
+            @Mock
+            public boolean isNeedAutoSchedule(RoutineLoadJob job) {
+                return false;
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(114L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        // PAUSED with isNeedAutoSchedule=false -> state stays PAUSED
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaCustomPartitions(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 16L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(115L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        Deencapsulation.setField(routineLoadJob, "customKafkaPartitions", Lists.newArrayList(5, 6, 7));
+        routineLoadJob.update();
+
+        // customKafkaPartitions short-circuits the fetch; currentKafkaPartitions becomes customKafkaPartitions,
+        // state stays RUNNING (no reschedule triggered).
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList(5, 6, 7),
+                Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions"));
+    }
+
+    @Test
+    public void testUpdateKafkaStoppedSnapshotIsNull(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 17L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(116L, "test", dbId, 22L, "brokerList", "topic");
+        // STOPPED is a final state - takeFetchSnapshot returns null, refreshPartitionsIfNeeded returns early.
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.STOPPED);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdatePulsarPartitionsChanged(@Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        long dbId = 18L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      ComputeResource computeResource) throws StarRocksException {
+                return Lists.newArrayList("p1", "p2", "p3");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(211L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2", "p3"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
+    }
+
+    @Test
+    public void testUpdatePulsarFetchErrorPauses(@Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        long dbId = 19L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      ComputeResource computeResource) throws StarRocksException {
+                throw new StarRocksException("pulsar service unreachable");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(212L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assertions.assertEquals(InternalErrorCode.PARTITIONS_ERR, reason.getCode());
+        Assertions.assertTrue(reason.getMsg().contains("pulsar service unreachable"), reason.getMsg());
+    }
+
+    @Test
+    public void testUpdatePulsarPausedAutoSchedule(@Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        long dbId = 20L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<ScheduleRule>() {
+            @Mock
+            public boolean isNeedAutoSchedule(RoutineLoadJob job) {
+                return true;
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(213L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdatePulsarCustomPartitions(@Injectable PulsarProgress pulsarProgress) throws StarRocksException {
+        long dbId = 21L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(214L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        Deencapsulation.setField(routineLoadJob, "customPulsarPartitions", Lists.newArrayList("p5", "p6"));
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p5", "p6"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
+    }
+
+    @Test
+    public void testUpdateKafkaStaleFetchDiscarded(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+        long dbId = 30L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        // Hold a reference the mock can mutate to simulate a concurrent ALTER that bumps
+        // dataSourceConfigVersion while the fetch is in flight.
+        final RoutineLoadJob[] jobRef = new RoutineLoadJob[1];
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) throws StarRocksException {
+                long v = (Long) Deencapsulation.getField(jobRef[0], "dataSourceConfigVersion");
+                Deencapsulation.setField(jobRef[0], "dataSourceConfigVersion", v + 1);
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(117L, "test", dbId, 22L, "brokerList", "topic");
+        jobRef[0] = routineLoadJob;
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        // Snapshot captured version 0; mock bumped to 1 mid-fetch; applyFetchResult sees
+        // version mismatch and discards. Job stays RUNNING with empty currentKafkaPartitions.
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        List<Integer> current = Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions");
+        Assertions.assertTrue(current.isEmpty(), "currentKafkaPartitions should not be updated when configVersion changes");
+    }
+
+    @Test
+    public void testUpdatePulsarStaleFetchDiscarded(@Injectable PulsarProgress pulsarProgress)
+            throws StarRocksException {
+        long dbId = 31L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        final RoutineLoadJob[] jobRef = new RoutineLoadJob[1];
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      ComputeResource computeResource) throws StarRocksException {
+                long v = (Long) Deencapsulation.getField(jobRef[0], "dataSourceConfigVersion");
+                Deencapsulation.setField(jobRef[0], "dataSourceConfigVersion", v + 1);
+                return Lists.newArrayList("p1", "p2", "p3");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(216L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        jobRef[0] = routineLoadJob;
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        List<String> current = Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions");
+        Assertions.assertTrue(current.isEmpty(),
+                "currentPulsarPartitions should not be updated when configVersion changes");
+    }
+
+    @Test
+    public void testUpdatePulsarPartitionsContainsAllShrink(@Injectable PulsarProgress pulsarProgress)
+            throws StarRocksException {
+        long dbId = 22L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      ComputeResource computeResource) throws StarRocksException {
+                return Lists.newArrayList("p1", "p2");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(215L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        Deencapsulation.setField(routineLoadJob, "currentPulsarPartitions", Lists.newArrayList("p1", "p2", "p3"));
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
     }
 
     @Test
@@ -704,7 +1047,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY ';'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
@@ -714,7 +1057,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY '\n'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
@@ -725,7 +1068,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`, `b`, `c`=1)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1) " +
@@ -737,7 +1080,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "TEMPORARY PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -750,7 +1093,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 1", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -764,7 +1107,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY '\t'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -778,7 +1121,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY 'a'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -792,7 +1135,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -805,7 +1148,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         " PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -819,7 +1162,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -833,7 +1176,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5 and b like 'c1%' and c between 1 and 100 and substring(d,1,5) = 'cefd' ", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -844,6 +1187,176 @@ public class RoutineLoadJobTest {
                 "AND (substring(`d`, 1, 5) = 'cefd') " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+    }
+
+    @Test
+    public void testMergeLoadDescToOriginStatementWithReservedKeywordTable() throws Exception {
+        // The table name "order" is a reserved keyword. getTableName() returns it without
+        // backquotes, so the regenerated statement must add backquotes itself; otherwise the
+        // persisted SQL fails to be re-parsed on FE restart and routineLoadDesc becomes null.
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.2:10000", "topic") {
+            @Override
+            public String getTableName() {
+                return "order";
+            }
+        };
+        String originStmt = "CREATE ROUTINE LOAD job ON `order` " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
+
+        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR job COLUMNS(`a`, `b`, `c` = 1)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+
+        // The regenerated statement must keep the reserved-keyword table name backquoted.
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `order` " +
+                "COLUMNS(`a`, `b`, `c` = 1) " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // Re-parsing the persisted statement must succeed (this is what happens on FE restart).
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed);
+    }
+
+    @Test
+    public void testMergeLoadDescToOriginStatementWithBackquoteInTableName() throws Exception {
+        // A table name that itself contains a backquote must have the embedded backquote doubled
+        // (ta`ble -> `ta``ble`), otherwise the regenerated statement is malformed and cannot be
+        // re-parsed on FE restart. Naive string concatenation (`%s`) would produce `ta`ble`, which
+        // is unparseable.
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.2:10000", "topic") {
+            @Override
+            public String getTableName() {
+                return "ta`ble";
+            }
+        };
+        String originStmt = "CREATE ROUTINE LOAD `job` ON `ta``ble` " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
+
+        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR job COLUMNS(`a`, `b`, `c` = 1)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+
+        // The embedded backquote must be escaped (doubled) in the regenerated statement.
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `ta``ble` " +
+                "COLUMNS(`a`, `b`, `c` = 1) " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // Re-parsing the persisted statement must succeed: `ta``ble` is a single valid
+        // BACKQUOTED_IDENTIFIER token, so getLoadDesc() parses it and routineLoadDesc is preserved.
+        // Naive concatenation (`ta`ble`) would instead be a parse error, dropping routineLoadDesc.
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed);
+    }
+
+    @Test
+    public void testAfterAbortedNonRetryableAttachment(@Injectable TransactionState transactionState,
+                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+            throws StarRocksException {
+
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+        routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        long txnId = 1L;
+
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
+        Deencapsulation.setField(attachment, "nonRetryable", true);
+
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                routineLoadTaskInfo.getTxnId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+            }
+        };
+
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        // non-retryable attachment should cause pause even with unrecognized reason
+        String txnStatusChangeReasonString = "primary key size exceed the limit";
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testAfterAbortedRetryableAttachment(@Mocked RoutineLoadMgr routineLoadMgr,
+                                                     @Injectable TransactionState transactionState,
+                                                     @Injectable KafkaTaskInfo routineLoadTaskInfo)
+            throws StarRocksException {
+
+        Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+        routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        long txnId = 1L;
+
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
+        Deencapsulation.setField(attachment, "nonRetryable", false);
+        TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+        tKafkaRLTaskProgress.partitionCmtOffset = Maps.newHashMap();
+        KafkaProgress kafkaProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+        Deencapsulation.setField(attachment, "progress", kafkaProgress);
+
+        KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                routineLoadTaskInfo.getTxnId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                routineLoadTaskInfo.getPartitions();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                routineLoadTaskInfo.getId();
+                minTimes = 0;
+                result = UUIDUtil.genUUID();
+                routineLoadMgr.getJob(anyLong);
+                minTimes = 0;
+                result = routineLoadJob;
+            }
+        };
+
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        // retryable attachment should keep job running
+        String txnStatusChangeReasonString = "some transient error";
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+        Deencapsulation.setField(routineLoadJob, "progress", currentProgress);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
     }
 
     @Test
@@ -893,7 +1406,7 @@ public class RoutineLoadJobTest {
             RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-            routineLoadJob.afterAborted(transactionState, true,
+            routineLoadJob.afterAborted(transactionState,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
             Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
@@ -908,12 +1421,24 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
             ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
                     .put("pause_on_fatal_parse_error", "true");
-            routineLoadJob.afterAborted(transactionState, true,
+            routineLoadJob.afterAborted(transactionState,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
             String errorMsg =
                     "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
             Assertions.assertEquals(errorMsg, routineLoadJob.getPauseReason());
         }
+    }
+
+    @Test
+    public void testRoutineLoadEnvelope() throws StarRocksException {
+        Map<String, String> jobProperties = Maps.newHashMap();
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
+        jobProperties.put(CreateRoutineLoadStmt.ENVELOPE, CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "jobProperties", jobProperties);
+
+        Assertions.assertEquals(CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM, routineLoadJob.getEnvelope());
     }
 }

@@ -1,0 +1,22 @@
+-- name: test_virtual_column_row_id
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+select count(distinct _tablet_id_) from t0;
+select count(distinct _segment_id_) from t0;
+select count(distinct _tablet_id_, _segment_id_, _row_id_) from t0;
+select count(distinct _row_id_) = count(distinct c0) from t0;
+select count(c0) FROM t0 WHERE _row_id_ <= 1000;
+select count(distinct _row_id_) FROM t0 WHERE _row_id_ <= 1000;

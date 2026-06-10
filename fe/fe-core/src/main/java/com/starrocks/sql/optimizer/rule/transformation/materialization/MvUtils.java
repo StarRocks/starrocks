@@ -156,14 +156,17 @@ public class MvUtils {
         if (tablesToCheck.isEmpty()) {
             return Sets.newTreeSet();
         }
-        SortedSet<MaterializedViewWrapper> mvs = Sets.newTreeSet();
-        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
-        return mvs;
+        Map<MaterializedView, Integer> mvToLevel = Maps.newHashMap();
+        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvToLevel);
+        return mvToLevel.entrySet().stream()
+                .map(e -> MaterializedViewWrapper.create(e.getKey(), e.getValue()))
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet()));
     }
 
     public static void getRelatedMvs(ConnectContext connectContext,
                                      int maxLevel, int currentLevel,
-                                     Set<Table> tablesToCheck, Set<MaterializedViewWrapper> mvs) {
+                                     Set<Table> tablesToCheck,
+                                     Map<MaterializedView, Integer> mvs) {
         if (currentLevel >= maxLevel) {
             logMVPrepare("Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
@@ -197,7 +200,12 @@ public class MvUtils {
                 continue;
             }
             newMvs.add(table);
-            mvs.add(MaterializedViewWrapper.create((MaterializedView) table, currentLevel));
+            MaterializedView curMV = (MaterializedView) table;
+            Integer curLevel = mvs.get(curMV);
+            // update to higher level if a mv is found again
+            if (curLevel == null || curLevel < currentLevel) {
+                mvs.put((MaterializedView) table, currentLevel);
+            }
         }
         getRelatedMvs(connectContext, maxLevel, currentLevel + 1, newMvs, mvs);
     }
@@ -1472,8 +1480,8 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        try {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1489,9 +1497,9 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        try {
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+                    .getTableWithIdentifier(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1508,7 +1516,9 @@ public class MvUtils {
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(new ConnectContext(), baseTableInfo);
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(scope.getContext(), baseTableInfo);
+        }
     }
 
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
@@ -1525,7 +1535,7 @@ public class MvUtils {
             return false;
         }
         return expr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+                && ((FunctionCallExpr) expr).getFunctionName().equalsIgnoreCase(expectFuncName);
     }
 
     public static boolean isStr2Date(Expr expr) {

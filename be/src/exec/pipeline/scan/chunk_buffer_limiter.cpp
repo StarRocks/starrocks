@@ -22,6 +22,10 @@ namespace starrocks::pipeline {
 
 void DynamicChunkBufferLimiter::update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows,
                                                      size_t max_chunk_rows) {
+    if (max_chunk_rows == 0) {
+        return;
+    }
+
     std::lock_guard<std::mutex> lock(_mutex);
 
     _sum_row_bytes += added_sum_row_bytes;

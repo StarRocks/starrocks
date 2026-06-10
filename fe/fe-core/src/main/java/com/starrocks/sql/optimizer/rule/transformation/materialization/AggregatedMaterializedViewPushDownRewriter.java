@@ -99,15 +99,19 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) optExpression.getOp();
         ColumnRefSet inputCols = optExpression.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
         ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
+        // agg function's used columns
+        aggOperator.getAggregations().values().forEach(agg -> usedCols.union(agg.getUsedColumns()));
+        // aggregate's having
         if (aggOperator.getPredicate() != null) {
             usedCols.union(aggOperator.getPredicate().getUsedColumns());
         }
+        // aggregate's projection
         if (aggOperator.getProjection() != null) {
             usedCols.union(aggOperator.getProjection().getUsedColumns());
         }
         // except aggregate's column refs
         usedCols.except(aggOperator.getAggregations().keySet());
-        return checkInputCols(inputCols, usedCols);
+        return checkInputCols(inputCols, usedCols, "with aggregate operator");
     }
 
     private boolean checkJoinOpt(OptExpression optExpression) {
@@ -126,13 +130,18 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         if (joinOperator.getProjection() != null) {
             usedCols.union(joinOperator.getProjection().getUsedColumns());
         }
-        return checkInputCols(inputCols, usedCols);
+        return checkInputCols(inputCols, usedCols, "with join operator");
     }
 
-    private boolean checkInputCols(ColumnRefSet inputCols, ColumnRefSet usedCols) {
+    private boolean checkInputCols(ColumnRefSet inputCols, ColumnRefSet usedCols, String extraInfo) {
         ColumnRefSet missedCols = usedCols.clone();
         missedCols.except(inputCols);
-        return missedCols.isEmpty();
+        if (!missedCols.isEmpty()) {
+            logMVRewrite(mvRewriteContext, "Aggregate join pushdown rewrite failed {}, missed cols: {}",
+                    extraInfo, missedCols);
+            return false;
+        }
+        return true;
     }
 
     private class PreVisitor extends OptExpressionVisitor<AggregatePushDownContext, AggregatePushDownContext> {
@@ -274,7 +283,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             }
             OptExpression childOpt = rewriteInfo.getOp().get();
 
-            final Map<ColumnRefOperator, ColumnRefOperator> remapping = rewriteInfo.getRemappingUnChecked().get().getRemapping();
+            final Map<ColumnRefOperator, ScalarOperator> remapping = rewriteInfo.getRemappingUnChecked().get().getRemapping();
             optExpression = getPushDownRollupFinalAggregateOpt(mvRewriteContext, rewriteInfo.getCtx(),
                     remapping, optExpression, List.of(childOpt));
             if (!checkAggOpt(optExpression)) {
@@ -325,6 +334,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                 newJoinOperator.setProjection(newProjection);
             }
             OptExpression newOptExpression = OptExpression.create(newJoinOperator, newChild0, newChild1);
+
             if (!checkJoinOpt(newOptExpression)) {
                 logMVRewrite(mvRewriteContext, "Join node is invalid after agg push down");
                 return AggRewriteInfo.NOT_REWRITE;
@@ -439,22 +449,21 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             }
 
             // build group bys
-            List<ColumnRefOperator> groupBys = ctx.groupBys.values().stream()
+            List<ColumnRefOperator> groupByUsedColRefs = ctx.groupBys.values().stream()
                     .map(ScalarOperator::getUsedColumns)
                     .flatMap(colSet -> colSet.getStream().map(queryColumnRefFactory::getColumnRef)).distinct()
                     .collect(Collectors.toList());
-
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
-            if (!scanOutputColRefSet.containsAll(new ColumnRefSet(groupBys))) {
+            if (!scanOutputColRefSet.containsAll(new ColumnRefSet(groupByUsedColRefs))) {
                 logMVRewrite(mvRewriteContext, "Scan node's output columns {} not contains group bys {}",
-                        scanOutputColRefSet, groupBys);
+                        scanOutputColRefSet, groupByUsedColRefs);
                 return AggRewriteInfo.NOT_REWRITE;
             }
 
             // New agg function to new generated column ref
             Map<CallOperator, ColumnRefOperator> uniqueAggregations = Maps.newHashMap();
-            Map<ColumnRefOperator, ColumnRefOperator> remapping = Maps.newHashMap();
+            Map<ColumnRefOperator, ScalarOperator> remapping = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : ctx.aggregations.entrySet()) {
                 ColumnRefOperator aggColRef = entry.getKey();
                 CallOperator aggCall = entry.getValue();
@@ -477,21 +486,30 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                 remapping.put(aggColRef, newColRef);
                 ctx.aggColRefToPushDownAggMap.put(aggColRef, aggCall);
             }
+            // construct a new aggregation operator to ensure mv rewrite's column ref mpaing is as expected.
             Map<ColumnRefOperator, CallOperator> newAggregations = uniqueAggregations.entrySet().stream()
                             .map(e -> Maps.immutableEntry(e.getValue(), e.getKey()))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            List<ColumnRefOperator> newGroupByColRefs = new ArrayList<>();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> e : ctx.groupBys.entrySet()) {
+                // generate a new column ref for group by
+                ColumnRefOperator groupByColRef = e.getKey();
+                newGroupByColRefs.add(groupByColRef);
+                remapping.put(groupByColRef, e.getValue());
+            }
+            // no add projection here since mv rewrite will generate projection which contains aggregate and group bys itself.
             LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
                     .setAggregations(newAggregations)
                     .setType(AggType.GLOBAL)
-                    .setGroupingKeys(groupBys)
-                    .setPartitionByColumns(groupBys)
+                    .setGroupingKeys(newGroupByColRefs)
+                    .setPartitionByColumns(newGroupByColRefs)
                     .build();
-            OptExpression optAggOp = OptExpression.create(newAggOp, optExpression);
+            OptExpression aggPushDownOptExpression = OptExpression.create(newAggOp, optExpression);
             // derive logical property for newly created agg node
-            MvUtils.deriveLogicalProperty(optAggOp);
+            MvUtils.deriveLogicalProperty(aggPushDownOptExpression);
 
             // rewrite by mv.
-            OptExpression rewritten = doRewritePushDownAgg(mvRewriteContext, ctx, optAggOp, rule);
+            OptExpression rewritten = doRewritePushDownAgg(mvRewriteContext, ctx, aggPushDownOptExpression, rule);
             if (rewritten == null) {
                 logMVRewrite(mvRewriteContext,
                         "Rewrite table " + scanOp.getTable().getTableIdentifier() + " scan node by mv failed");
@@ -510,9 +528,12 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             // rewrite.If mv1 is used for mv rewrite, the mv rewrite's result is:
             // select bitmap_union(to_bitmap(a) from t1.a group by b, not: bitmap_union_count(bitmap_union(to_bitmap(a)))!
             // and a final agg function into `AggregatePushDownContext` to be used in the final stage.
-            for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : remapping.entrySet()) {
-                ColumnRefOperator newAggColRef = e.getValue();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> e : remapping.entrySet()) {
+                if (!ctx.aggregations.containsKey(e.getKey())) {
+                    continue;
+                }
                 CallOperator aggCall = ctx.aggregations.get(e.getKey());
+                ColumnRefOperator newAggColRef = (ColumnRefOperator) e.getValue();
                 if (ctx.isRewrittenByEquivalent(aggCall)) {
                     CallOperator partialFn = ctx.aggToPartialAggMap.get(aggCall);
                     ColumnRefOperator realPartialColRef = new ColumnRefOperator(newAggColRef.getId(), partialFn.getType(),
@@ -555,23 +576,28 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                                                                            AggColumnRefRemapping aggColumnRefRemapping,
                                                                            Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
             Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
-
             // Add into new generated push down aggregate column refs into new projection, otherwise the upstream final aggregate
             // cannot ref the push down aggregate column refs as argument.
-            for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : aggColumnRefRemapping.getRemapping().entrySet()) {
-                newColumnRefMap.put(e.getValue(), e.getValue());
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> e : aggColumnRefRemapping.getRemapping().entrySet()) {
+                if (ctx.aggregations.containsKey(e.getKey())) {
+                    newColumnRefMap.put((ColumnRefOperator) e.getValue(), e.getValue());
+                }
+                // group by keys are rewritten with original column ref, use original column ref to avoid visiting original exprs
+                if (ctx.groupBys.containsKey(e.getKey())) {
+                    newColumnRefMap.put(e.getKey(), e.getKey());
+                }
             }
-
             // Remove original aggregate column ref from column ref map
             final ColumnRefSet aggColumnRefSet = getReferencedColumnRef(new ArrayList<>(ctx.aggregations.values()));
             final ColumnRefSet groupColumnRefSet = getReferencedColumnRef(new ArrayList<>(ctx.groupBys.values()));
             aggColumnRefSet.except(groupColumnRefSet);
             if (columnRefMap != null) {
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> e : columnRefMap.entrySet()) {
-                    if (aggColumnRefSet.contains(e.getKey())) {
-                        continue;
+                    if (aggColumnRefSet.contains(e.getKey()) || newColumnRefMap.containsKey(e.getKey())) {
+                        // do nothing
+                    } else {
+                        newColumnRefMap.put(e.getKey(), e.getValue());
                     }
-                    newColumnRefMap.put(e.getKey(), e.getValue());
                 }
             }
             return newColumnRefMap;

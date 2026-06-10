@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 public class JournalObserver implements Comparable<JournalObserver> {
     private static final Logger LOG = LogManager.getLogger(JournalObserver.class);
@@ -51,11 +52,17 @@ public class JournalObserver implements Comparable<JournalObserver> {
     private Long id;
     private Long targetJournalVersion;
     private CountDownLatch latch;
+    private LongSupplier replayedJournalIdSupplier;
 
     public JournalObserver(Long targetJournalVersion) {
+        this(targetJournalVersion, () -> GlobalStateMgr.getCurrentState().getReplayedJournalId());
+    }
+
+    public JournalObserver(Long targetJournalVersion, LongSupplier replayedJournalIdSupplier) {
         this.id = idGen.getAndIncrement();
         this.targetJournalVersion = targetJournalVersion;
         this.latch = new CountDownLatch(1);
+        this.replayedJournalIdSupplier = replayedJournalIdSupplier;
     }
 
     public void update() {
@@ -83,7 +90,7 @@ public class JournalObserver implements Comparable<JournalObserver> {
             boolean ok = false;
             do {
                 // check if the replayed journal version is already larger than the expected version
-                long replayedJournalId = GlobalStateMgr.getCurrentState().getReplayedJournalId();
+                long replayedJournalId = replayedJournalIdSupplier.getAsLong();
                 if (replayedJournalId >= targetJournalVersion || timeoutMs <= 0) {
                     LOG.debug("the replayed journal version {} already large than expected version: {}",
                             replayedJournalId, targetJournalVersion);

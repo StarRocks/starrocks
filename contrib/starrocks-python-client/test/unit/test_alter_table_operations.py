@@ -118,3 +118,50 @@ class TestPropertiesOrderPreservation:
         keys = list(ddl.properties.keys())
         expected_keys = ["replication_num", "storage_medium", "dynamic_partition.enable"]
         assert keys == expected_keys
+
+class TestAlembicToDiffTuple:
+    """Test to_diff_tuple implementations for Alembic autogenerate diffs."""
+
+    def test_alter_table_operations_diff_tuple(self):
+        """Test that AlterTable operations correctly return a diff tuple instead of raising NotImplementedError."""
+        from starrocks.alembic.ops import (
+            AlterTablePropertiesOp,
+            AlterTableEngineOp,
+            AlterTableKeyOp,
+            AlterTablePartitionOp,
+            AlterTableDistributionOp,
+            AlterTableOrderOp
+        )
+
+        prop_op = AlterTablePropertiesOp("tbl", {"bloom_filter_columns": "c1"}, schema="sch")
+        assert prop_op.to_diff_tuple() == ("alter_table_properties", "sch", "tbl", {"bloom_filter_columns": "c1"})
+
+        engine_op = AlterTableEngineOp("tbl", "OLAP", schema="sch")
+        assert engine_op.to_diff_tuple() == ("alter_table_engine", "sch", "tbl", "OLAP")
+
+        key_op = AlterTableKeyOp("tbl", "PRIMARY KEY", "id", schema="sch")
+        assert key_op.to_diff_tuple() == ("alter_table_key", "sch", "tbl", "PRIMARY KEY", "id")
+
+        part_op = AlterTablePartitionOp("tbl", "RANGE(dt)", schema="sch")
+        assert part_op.to_diff_tuple() == ("alter_table_partition", "sch", "tbl", "RANGE(dt)")
+
+        dist_op = AlterTableDistributionOp("tbl", "HASH(id)", buckets=10, schema="sch")
+        assert dist_op.to_diff_tuple() == ("alter_table_distribution", "sch", "tbl", "HASH(id)", 10)
+
+        order_op = AlterTableOrderOp("tbl", "dt", schema="sch")
+        assert order_op.to_diff_tuple() == ("alter_table_order", "sch", "tbl", "dt")
+
+    def test_view_operations_diff_tuple(self):
+        """Test that View/MV operations correctly return a diff tuple."""
+        from starrocks.alembic.ops import (
+            AlterViewOp, CreateViewOp, DropViewOp,
+            AlterMaterializedViewOp, CreateMaterializedViewOp, DropMaterializedViewOp
+        )
+
+        assert AlterViewOp("v1", "SELECT 1", schema="s1").to_diff_tuple() == ("alter_view", "s1", "v1")
+        assert CreateViewOp("v1", "SELECT 1", schema="s1").to_diff_tuple() == ("create_view", "s1", "v1")
+        assert DropViewOp("v1", schema="s1").to_diff_tuple() == ("drop_view", "s1", "v1")
+
+        assert AlterMaterializedViewOp("mv1", schema="s1").to_diff_tuple() == ("alter_materialized_view", "s1", "mv1")
+        assert CreateMaterializedViewOp("mv1", "SELECT 1", schema="s1").to_diff_tuple() == ("create_materialized_view", "s1", "mv1")
+        assert DropMaterializedViewOp("mv1", schema="s1").to_diff_tuple() == ("drop_materialized_view", "s1", "mv1")

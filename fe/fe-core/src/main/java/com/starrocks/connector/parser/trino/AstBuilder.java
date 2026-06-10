@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
@@ -37,7 +36,6 @@ import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -49,6 +47,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -180,6 +179,7 @@ import io.trino.sql.tree.NotExpression;
 import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Offset;
+import io.trino.sql.tree.Property;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
@@ -324,32 +324,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExplain(Explain node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-
         Optional<ExplainType> explainType = node.getOptions().stream().filter(option -> option instanceof ExplainType).
                 map(type -> (ExplainType) type).findFirst();
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (explainType.isPresent()) {
             ExplainType.Type type = explainType.get().getType();
             if (type == ExplainType.Type.LOGICAL) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
+                explainLevel = StatementBase.ExplainLevel.LOGICAL;
             } else if (type == ExplainType.Type.DISTRIBUTED) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
+                explainLevel = StatementBase.ExplainLevel.VERBOSE;
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
-            } else {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+                explainLevel = StatementBase.ExplainLevel.COSTS;
             }
-        } else {
-            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
         }
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), explainLevel);
     }
 
     @Override
     protected ParseNode visitExplainAnalyze(ExplainAnalyze node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-        queryStatement.setIsExplain(true, StatementBase.ExplainLevel.ANALYZE);
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), StatementBase.ExplainLevel.ANALYZE);
+    }
+
+    private StatementBase applyExplain(StatementBase statement, StatementBase.ExplainLevel explainLevel) {
+        if (statement instanceof QueryStatement) {
+            statement.setIsExplain(true, explainLevel);
+            return statement;
+        }
+        if (statement instanceof InsertStmt) {
+            ((InsertStmt) statement).getQueryStatement().setIsExplain(true, explainLevel);
+            return statement;
+        }
+        throw trinoParserUnsupportedException(String.format("Unsupported statement [%s] for EXPLAIN",
+                statement.getClass().getSimpleName()));
     }
 
     @Override
@@ -387,7 +393,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 RelationId.of(queryStatement.getQueryRelation()).hashCode(),
                 node.getName().getValue().toLowerCase(),
                 getColumnNames(node.getColumnNames()),
-                queryStatement);
+                queryStatement,
+                false,
+                true);
     }
 
     public List<String> getColumnNames(Optional<List<Identifier>> columnNames) {
@@ -499,8 +507,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 if (!arg.getChildren().isEmpty()) {
                     // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
                     Expr firstArrayElement = arg.getChildren().get(0);
-                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFnName().
-                            getFunction().equalsIgnoreCase("row")) {
+                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFunctionName().
+                            equalsIgnoreCase("row")) {
                         List<List<Expr>> items = new ArrayList<>();
                         for (Expr row : arg.getChildren()) {
                             int rowIndex = 0;
@@ -1081,9 +1089,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
-        FunctionName fnName = FunctionName.createFnName("coalesce");
-
-        return new FunctionCallExpr(fnName, new FunctionParams(false, children));
+        return new FunctionCallExpr("coalesce", new FunctionParams(false, children));
     }
 
     @Override
@@ -1109,22 +1115,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitArithmeticBinary(ArithmeticBinaryExpression node, ParseTreeContext context) {
         Expr left = (Expr) visit(node.getLeft(), context);
         Expr right = (Expr) visit(node.getRight(), context);
+        ArithmeticExpr.Operator operator = BINARY_OPERATOR_MAP.get(node.getOperator());
 
         if (left instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
-            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
+            com.starrocks.sql.ast.expression.IntervalLiteral interval = (com.starrocks.sql.ast.expression.IntervalLiteral) left;
+            if (operator.isMultiplyOrDivide()) {
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, value, right);
+                return new com.starrocks.sql.ast.expression.IntervalLiteral(arithmetic, interval.getUnitIdentifier());
+            }
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(operator, right,
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getValue(),
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getUnitIdentifier().getDescription(),
                     true));
         }
 
         if (right instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
-            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
+            com.starrocks.sql.ast.expression.IntervalLiteral interval = (com.starrocks.sql.ast.expression.IntervalLiteral) right;
+            if (operator.isMultiplyOrDivide()) {
+                if (operator == ArithmeticExpr.Operator.DIVIDE) {
+                    throw new ParsingException("Do not support expr divide IntervalLiteral syntax");
+                }
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, left, value);
+                return new com.starrocks.sql.ast.expression.IntervalLiteral(arithmetic, interval.getUnitIdentifier());
+            }
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(operator, left,
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getValue(),
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getUnitIdentifier().getDescription(),
                     false));
         }
 
-        return new ArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left, right);
+        return new ArithmeticExpr(operator, left, right);
     }
 
     @Override
@@ -1324,24 +1346,59 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String tableName = parts.get(parts.size() - 1);
         List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
                 map(Identifier::getValue).collect(Collectors.toList()) : null;
-        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+        QualifiedName qualifiedName = convertQualifiedName(node.getTarget());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new InsertStmt(tableRef, null,
                 tableName.concat(UUID.randomUUID().toString()), columnAliases,
                 (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
+    }
+
+    @Override
+    protected ParseNode visitProperty(Property node, ParseTreeContext context) {
+        String key = node.getName().getValue();
+        if (node.isSetToDefault()) {
+            // StarRocks' property map has no representation for "unset/use default"
+            // distinct from the empty string. Reject explicitly so callers don't get
+            // silently coerced to "" and bypass connector defaults.
+            throw trinoParserUnsupportedException(String.format(
+                    "SET DEFAULT is not supported for property [%s]; omit the property to use the default",
+                    key));
+        }
+        Expression valueExpr = node.getNonDefaultValue();
+        String value;
+        if (valueExpr instanceof StringLiteral) {
+            value = ((StringLiteral) valueExpr).getValue();
+        } else if (valueExpr instanceof Identifier) {
+            value = ((Identifier) valueExpr).getValue();
+        } else if (valueExpr instanceof LongLiteral) {
+            value = Long.toString(((LongLiteral) valueExpr).getValue());
+        } else if (valueExpr instanceof BooleanLiteral) {
+            value = Boolean.toString(((BooleanLiteral) valueExpr).getValue());
+        } else if (valueExpr instanceof DoubleLiteral) {
+            value = Double.toString(((DoubleLiteral) valueExpr).getValue());
+        } else {
+            throw trinoParserUnsupportedException(String.format(
+                    "Unsupported property value expression [%s] for property [%s]", valueExpr, key));
+        }
+        return new com.starrocks.sql.ast.Property(key, value);
     }
 
     @Override
     protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
         Map<String, String> properties = new HashMap<>();
         if (node.getProperties() != null) {
-            List<Property> propertyList = visit(node.getProperties(), context, Property.class);
-            for (Property property : propertyList) {
+            List<com.starrocks.sql.ast.Property> propertyList =
+                    visit(node.getProperties(), context, com.starrocks.sql.ast.Property.class);
+            for (com.starrocks.sql.ast.Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
         }
 
+        QualifiedName qualifiedName = convertQualifiedName(node.getName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         CreateTableStmt createTableStmt = new CreateTableStmt(node.isNotExists(),
                 false,
-                qualifiedNameToTableName(convertQualifiedName(node.getName())),
+                tableRef,
                 null,
                 "",
                 null,
@@ -1360,8 +1417,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
         boolean ifExists = node.isExists();
-        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
-        return new DropTableStmt(ifExists, tableName, false, true);
+        QualifiedName qualifiedName = convertQualifiedName(node.getTableName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new DropTableStmt(ifExists, tableRef, false, true);
     }
 
     public Type getType(DataType dataType) {

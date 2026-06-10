@@ -14,6 +14,9 @@
 
 #include <runtime/lake_snapshot_loader.h>
 
+#include "base/container/raw_container.h"
+#include "base/network/network_util.h"
+#include "common/config_rpc_client_fwd.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -22,8 +25,6 @@
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
-#include "util/network_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 LakeSnapshotLoader::LakeSnapshotLoader(ExecEnv* env) : _env(env) {}
@@ -160,7 +161,8 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
     // 2. get broker client
     std::unique_ptr<BrokerServiceConnection> client;
     Status status = Status::OK();
-    client = std::make_unique<BrokerServiceConnection>(_env->broker_client_cache(), address, 10000, &status);
+    client = std::make_unique<BrokerServiceConnection>(_env->rpc_services().broker_client_cache, address, 10000,
+                                                       &status);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
@@ -191,7 +193,8 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         auto tablet_metadata = tablet->get_metadata(snapshot.version());
         for (const auto& rowset : (*tablet_metadata)->rowsets()) {
-            for (const std::string& segment : rowset.segments()) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                const auto& segment = segment_meta.filename();
                 file_locations[segment] = tablet->segment_location(segment);
             }
         }
@@ -259,7 +262,8 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
     // 1. Get broker client
     std::unique_ptr<BrokerServiceConnection> client;
     std::vector<TNetworkAddress> broker_addrs;
-    client = std::make_unique<BrokerServiceConnection>(_env->broker_client_cache(), address, 10000, &status);
+    client = std::make_unique<BrokerServiceConnection>(_env->rpc_services().broker_client_cache, address, 10000,
+                                                       &status);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "

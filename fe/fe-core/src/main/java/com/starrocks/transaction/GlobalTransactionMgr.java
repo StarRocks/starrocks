@@ -140,6 +140,30 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         explicitTxnStateMap.put(txnId, explicitTxnState);
     }
 
+    /**
+     * Check if a label is already used in any database's transaction.
+     * This method is used to validate label uniqueness before starting an explicit transaction.
+     *
+     * @param label the label to check
+     * @throws LabelAlreadyUsedException if the label is already used by another non-aborted transaction
+     */
+    public void checkLabelUsedInAnyDatabase(String label) throws LabelAlreadyUsedException {
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            TransactionState txnState = dbTransactionMgr.getLabelTransactionState(label);
+            if (txnState != null && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {
+                throw new LabelAlreadyUsedException(label, txnState.getTransactionStatus());
+            }
+        }
+        // Also check explicit transaction states
+        for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
+            TransactionState txnState = explicitTxnState.getTransactionState();
+            if (txnState != null && label.equals(txnState.getLabel())
+                    && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {
+                throw new LabelAlreadyUsedException(label, txnState.getTransactionStatus());
+            }
+        }
+    }
+
     public ExplicitTxnState getExplicitTxnState(long txnId) {
         return explicitTxnStateMap.get(txnId);
     }
@@ -536,6 +560,52 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         dbTransactionMgr.abortTransaction(label, reason);
     }
 
+    /**
+     * Mark a COMMITTED but publish-stuck transaction as a no-op publish. See
+     * {@link DatabaseTransactionMgr#markCommittedTransactionAsNoOpPublish(long, String)}
+     * for full semantics and constraints (operator-only, requires
+     * file_bundling=true, load + compaction txns only in phase 1).
+     *
+     * <p>This entry locates the owning db by scanning all per-db txn managers,
+     * so the caller only needs the global txn id.
+     */
+    public void markCommittedTransactionAsNoOpPublish(long transactionId, String reason)
+            throws StarRocksException {
+        if (!Config.enable_admin_skip_committed_txn) {
+            throw new StarRocksException(
+                    "ADMIN SKIP COMMITTED TRANSACTION is disabled. "
+                            + "Set FE config enable_admin_skip_committed_txn=true to enable it. "
+                            + "This is an operator-only escape hatch that discards transaction data; "
+                            + "disable it again immediately after recovery.");
+        }
+        DatabaseTransactionMgr owningMgr = null;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            // getTransactionState() returns null for "txn not in this DB" — that case
+            // is handled naturally by the null-check below. The try/catch here is
+            // narrowed to actual runtime exceptions and logs them so a buggy per-db
+            // mgr can't silently mask the txn id we're looking for as "not found"
+            // without leaving any trace.
+            TransactionState state = null;
+            try {
+                state = dbTransactionMgr.getTransactionState(transactionId);
+            } catch (RuntimeException e) {
+                LOG.warn("ADMIN SKIP COMMITTED TRANSACTION: per-db txn lookup for txn {} on db {} "
+                        + "threw unexpected exception; skipping", transactionId,
+                        dbTransactionMgr.getDbId(), e);
+            }
+            if (state != null) {
+                owningMgr = dbTransactionMgr;
+                break;
+            }
+        }
+        if (owningMgr == null) {
+            throw new StarRocksException(
+                    "transaction " + transactionId + " not found in any database; "
+                            + "it may have been finished or never existed");
+        }
+        owningMgr.markCommittedTransactionAsNoOpPublish(transactionId, reason);
+    }
+
     public TransactionStateSnapshot getTxnState(Database db, long transactionId) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
         return dbTransactionMgr.getTxnState(transactionId);
@@ -596,33 +666,48 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @param errorReplicaIds
      * @return
      */
-    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, 0L);
-    }
-
-    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+    public TransactionState finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds)
             throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, lockTimeoutMs);
+        return dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, 0L);
     }
 
-    public void finishTransactionBatch(long dbId, TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)
+    public TransactionState finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds,
+                                              long lockTimeoutMs)
             throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
+        return dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, lockTimeoutMs);
     }
 
-    public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws
+    public TransactionStateBatch finishTransactionBatch(long dbId, TransactionStateBatch stateBatch,
+                                                        Set<Long> errorReplicaIds)
+            throws StarRocksException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        return dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
+    }
+
+    public TransactionState finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws
             StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnState.getDbId());
-        dbTransactionMgr.finishTransactionNew(txnState, publishErrorReplicas);
+        return dbTransactionMgr.finishTransactionNew(txnState, publishErrorReplicas);
     }
 
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas,
                                   Set<Long> unfinishedBackends) throws StarRocksException {
+        try {
+            return canTxnFinished(txn, errReplicas, unfinishedBackends, 0L);
+        } catch (LockTimeoutException exception) {
+            // Should not happen, since lockTimeoutMs=0
+            LOG.warn("canTxnFinished failed due to lock timeout, but lock timeout is set to 0, so just return false",
+                    exception);
+            return false;
+        }
+    }
+
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends,
+                                  long lockTimeoutMs) throws StarRocksException, LockTimeoutException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txn.getDbId());
-        return dbTransactionMgr.canTxnFinished(txn, errReplicas, unfinishedBackends);
+        return dbTransactionMgr.canTxnFinished(txn, errReplicas, unfinishedBackends, lockTimeoutMs);
     }
 
     /**
@@ -657,6 +742,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.abortTimeoutTxns(currentMillis);
         }
+        // Clean up orphaned explicit transaction states:
+        // 1. txnState == null: orphaned entry (e.g., state lost after FE leader switch)
+        // 2. txnState != null && isTimeout: BEGIN executed but no DML followed, timed out
+        explicitTxnStateMap.entrySet().removeIf(entry -> {
+            TransactionState txnState = entry.getValue().getTransactionState();
+            return txnState == null || txnState.isTimeout(currentMillis);
+        });
     }
 
     public void removeExpiredTxns() {
@@ -923,19 +1015,11 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> txnSamples = new ArrayList<>();
-        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
-            List<Object> samples = mgr.getSamplesForMemoryTracker();
-            if (samples.size() > 0) {
-                txnSamples.addAll(samples);
-                break;
-            }
+    public long estimateSize() {
+        long size = 0;
+        for (DatabaseTransactionMgr dbTxnMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            size += dbTxnMgr.estimateSize();
         }
-
-        List<Object> callbackSamples = callbackFactory.getSamplesForMemoryTracker();
-
-        return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
-                Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
+        return size;
     }
 }

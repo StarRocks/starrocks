@@ -20,9 +20,17 @@
 
 #include <fstream>
 
-#include "common/config.h"
+#include "base/bthreads/util.h"
+#include "base/failpoint/fail_point.h"
+#include "base/path/filesystem_util.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "platform/store_path.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -30,20 +38,16 @@
 #include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/options.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/bthreads/util.h"
-#include "util/failpoint/fail_point.h"
-#include "util/filesystem_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
 // NOLINTNEXTLINE
 #include "script/script.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 
 namespace starrocks {
 
@@ -328,6 +332,193 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_compaction_strategy) {
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
     EXPECT_EQ(CompactionStrategyPB::REAL_TIME, metadata->compaction_strategy());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_range) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    // Set tablet range with lower and upper bounds
+    TTabletRange range;
+    TTuple lower_bound;
+    TVariant lower_val1;
+    TTypeDesc type_desc_int;
+    type_desc_int.types.resize(1);
+    type_desc_int.types[0].type = TTypeNodeType::SCALAR;
+    type_desc_int.types[0].scalar_type.type = TPrimitiveType::INT;
+    type_desc_int.types[0].__isset.scalar_type = true;
+    type_desc_int.__isset.types = true;
+    lower_val1.__set_type(type_desc_int);
+    lower_val1.__set_value("100");
+    lower_val1.__set_variant_type(TVariantType::NORMAL_VALUE);
+    lower_bound.values.push_back(lower_val1);
+
+    TVariant lower_val2;
+    TTypeDesc type_desc_varchar;
+    type_desc_varchar.types.resize(1);
+    type_desc_varchar.types[0].type = TTypeNodeType::SCALAR;
+    type_desc_varchar.types[0].scalar_type.type = TPrimitiveType::VARCHAR;
+    type_desc_varchar.types[0].scalar_type.len = 10;
+    type_desc_varchar.types[0].__isset.scalar_type = true;
+    type_desc_varchar.__isset.types = true;
+    lower_val2.__set_type(type_desc_varchar);
+    lower_val2.__set_value("abc");
+    lower_val2.__set_variant_type(TVariantType::NORMAL_VALUE);
+    lower_bound.values.push_back(lower_val2);
+
+    TTuple upper_bound;
+    TVariant upper_val1;
+    upper_val1.__set_type(type_desc_int);
+    upper_val1.__set_value("200");
+    upper_val1.__set_variant_type(TVariantType::NORMAL_VALUE);
+    upper_bound.values.push_back(upper_val1);
+
+    TVariant upper_val2;
+    upper_val2.__set_type(type_desc_varchar);
+    upper_val2.__set_value("xyz");
+    upper_val2.__set_variant_type(TVariantType::NORMAL_VALUE);
+    upper_bound.values.push_back(upper_val2);
+
+    range.__set_lower_bound(lower_bound);
+    range.__set_upper_bound(upper_bound);
+    range.__set_lower_bound_included(true);
+    range.__set_upper_bound_included(false);
+    req.__set_range(range);
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+
+    // Verify range is set correctly
+    EXPECT_TRUE(metadata->has_range());
+    const auto& pb_range = metadata->range();
+    EXPECT_TRUE(pb_range.has_lower_bound());
+    EXPECT_EQ(2, pb_range.lower_bound().values_size());
+    EXPECT_EQ("100", pb_range.lower_bound().values(0).value());
+    EXPECT_EQ("abc", pb_range.lower_bound().values(1).value());
+
+    EXPECT_TRUE(pb_range.has_upper_bound());
+    EXPECT_EQ(2, pb_range.upper_bound().values_size());
+    EXPECT_EQ("200", pb_range.upper_bound().values(0).value());
+    EXPECT_EQ("xyz", pb_range.upper_bound().values(1).value());
+
+    EXPECT_TRUE(pb_range.has_lower_bound_included());
+    EXPECT_TRUE(pb_range.lower_bound_included());
+    EXPECT_TRUE(pb_range.has_upper_bound_included());
+    EXPECT_FALSE(pb_range.upper_bound_included());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    // Set tablet range with NULL values
+    TTabletRange range;
+    TTuple lower_bound;
+    TVariant null_val;
+    TTypeDesc type_desc;
+    type_desc.types.resize(1);
+    type_desc.types[0].type = TTypeNodeType::SCALAR;
+    type_desc.types[0].scalar_type.type = TPrimitiveType::INT;
+    type_desc.types[0].__isset.scalar_type = true;
+    type_desc.__isset.types = true;
+    null_val.__set_type(type_desc);
+    null_val.__set_variant_type(TVariantType::NULL_VALUE);
+    lower_bound.values.push_back(null_val);
+    range.__set_lower_bound(lower_bound);
+    req.__set_range(range);
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+
+    // Verify range with NULL value
+    EXPECT_TRUE(metadata->has_range());
+    const auto& pb_range = metadata->range();
+    EXPECT_TRUE(pb_range.has_lower_bound());
+    EXPECT_EQ(1, pb_range.lower_bound().values_size());
+    EXPECT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
+}
+
+// MINIMUM/MAXIMUM variants should be rejected — FE must map them to NULL_VALUE.
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_rejects_min_max) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    TTabletRange range;
+    TTuple lower_bound;
+    TVariant min_val;
+    TTypeDesc type_desc;
+    type_desc.types.resize(1);
+    type_desc.types[0].type = TTypeNodeType::SCALAR;
+    type_desc.types[0].scalar_type.type = TPrimitiveType::BIGINT;
+    type_desc.types[0].__isset.scalar_type = true;
+    type_desc.__isset.types = true;
+    min_val.__set_type(type_desc);
+    min_val.__set_variant_type(TVariantType::MINIMUM);
+    lower_bound.values.push_back(min_val);
+    range.__set_lower_bound(lower_bound);
+    req.__set_range(range);
+
+    auto status = _tablet_manager->create_tablet(req);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_invalid_argument());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
+    // Test backward compatibility: create tablet without range
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    // Explicitly not setting range
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+
+    // Verify no range is set
+    EXPECT_FALSE(metadata->has_range());
 }
 
 // NOLINTNEXTLINE
@@ -880,7 +1071,92 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
 }
 
-TEST_F(LakeTabletManagerTest, get_tablet_metadata) {}
+TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
+    // Create a corrupted bundle metadata file with bundle_metadata_size = 0
+    std::string serialized_string;
+    serialized_string.resize(sizeof(uint64_t));
+    // Set bundle_metadata_size to 0 in the footer
+    encode_fixed64_le((uint8_t*)serialized_string.data(), 0);
+
+    auto res = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("test_path", serialized_string);
+    EXPECT_FALSE(res.ok());
+    EXPECT_TRUE(res.status().is_corruption());
+}
+
+TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {
+    // First, create a valid bundle metadata to get the file path
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletSchemaPB schema_pb;
+    {
+        schema_pb.set_id(10);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_rows_per_row_block(65535);
+        auto c0 = schema_pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+
+    starrocks::TabletMetadataPB metadata1;
+    {
+        metadata1.set_id(tablet_id);
+        metadata1.set_version(2);
+        metadata1.mutable_schema()->CopyFrom(schema_pb);
+        auto& item1 = (*metadata1.mutable_historical_schemas())[10];
+        item1.CopyFrom(schema_pb);
+    }
+
+    metadatas.emplace(tablet_id, metadata1);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    // Read the bundle file and corrupt it
+    auto bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, 2);
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto content, read_file->read_all());
+
+    // Corrupt the tablet metadata portion by replacing with invalid data
+    // Keep the bundle metadata at the end intact, but corrupt the tablet data
+    // Replace the first part (tablet metadata) with garbage
+    for (size_t i = 0; i < 5; i++) {
+        content[i] = static_cast<char>(0xFF);
+    }
+
+    // Write the corrupted content back
+    ASSERT_OK(fs->delete_file(bundle_path));
+    ASSIGN_OR_ABORT(auto write_file, fs->new_writable_file(bundle_path));
+    ASSERT_OK(write_file->append(content));
+    ASSERT_OK(write_file->close());
+
+    // Clear cache to force reload from disk
+    _tablet_manager->metacache()->prune();
+
+    // Use sync point to mock corrupted_tablet_meta_handler
+    SyncPoint::GetInstance()->EnableProcessing();
+    bool handler_called = false;
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        handler_called = true;
+        // Return OK to allow the code to continue, but the parse will still fail
+        *(Status*)arg = Status::OK();
+    });
+
+    // Try to get metadata - should fail with corruption error
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+
+    // Should fail due to parse error
+    EXPECT_FALSE(res.ok());
+    EXPECT_TRUE(res.status().is_corruption());
+    EXPECT_TRUE(handler_called) << "corrupted_tablet_meta_handler should have been called";
+}
 
 namespace {
 class PartitionedLocationProvider : public lake::LocationProvider {
@@ -976,6 +1252,73 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     }
 }
 
+// Bundle-format segments let multiple rowsets point at the same physical file at disjoint
+// byte ranges. Keying the segment cache on path alone would return the first-loaded slice to
+// every later caller, silently replacing their data. The key must include the bundle offset.
+TEST_F(LakeTabletManagerTest, segment_cache_key_distinguishes_bundle_slices) {
+    FileInfo plain{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice0{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice1{.path = "oss://bucket/data/abc.dat"};
+    slice0.bundle_file_offset = 0;
+    slice1.bundle_file_offset = 10704;
+
+    const auto plain_key = plain.cache_key();
+    const auto slice0_key = slice0.cache_key();
+    const auto slice1_key = slice1.cache_key();
+
+    // offset absent or zero collapses to the legacy path-only key so the cache layout for
+    // non-bundled segments is unchanged.
+    EXPECT_EQ(plain.path, plain_key);
+    EXPECT_EQ(plain_key, slice0_key);
+
+    // A non-zero bundle offset must fork off its own key; otherwise slice1 would collide with
+    // slice0 and receive slice0's Segment on cache hit.
+    EXPECT_NE(plain_key, slice1_key);
+    EXPECT_THAT(slice1_key, testing::HasSubstr("#10704"));
+}
+
+TEST_F(LakeTabletManagerTest, load_segment_returns_distinct_slices_for_same_path) {
+    // Construct a real file that encodes two back-to-back segments (a common shape produced
+    // by cross-boundary UPSERTs written through BundleWritableFile). We cannot call the full
+    // load_segment+open() path here without a SegmentWriter scaffold — Segment::open parses the
+    // bundle slice's footer — so the cheapest correctness check is that load_segment routes
+    // two different bundle offsets to distinct metacache entries. That is the specific
+    // invariant the cache-key fix protects.
+    const std::string path = _location_provider->segment_location(1, "segment_slice_test.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
+    const std::string payload_a(1024, 'A');
+    const std::string payload_b(2048, 'B');
+    {
+        WritableFileOptions opts;
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(opts, path));
+        ASSERT_OK(of->append(payload_a));
+        ASSERT_OK(of->append(payload_b));
+        ASSERT_OK(of->close());
+    }
+
+    FileInfo info_a{.path = path};
+    info_a.size = payload_a.size();
+    info_a.bundle_file_offset = 0;
+
+    FileInfo info_b{.path = path};
+    info_b.size = payload_b.size();
+    info_b.bundle_file_offset = static_cast<int64_t>(payload_a.size());
+
+    const auto key_a = info_a.cache_key();
+    const auto key_b = info_b.cache_key();
+    ASSERT_NE(key_a, key_b);
+
+    // Seed the metacache with a marker for key_a, prove a lookup by key_b does NOT find it.
+    // This mirrors the failure mode pre-fix: lookup by path-only would collide.
+    auto marker = std::make_shared<Segment>(fs, info_a, /*segment_id*/ 0, nullptr, _tablet_manager);
+    auto cached = _tablet_manager->metacache()->cache_segment_if_absent(key_a, marker);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_a).get(), marker.get());
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_b), nullptr);
+
+    ASSERT_OK(fs->delete_file(path));
+}
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -1017,13 +1360,13 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     shard_info.id = tablet_id;
     shard_info.properties.emplace("indexId", std::to_string(schema_id));
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
-    g_worker.reset(new MockStarOSWorker());
-    DeferOp op([origin_worker] { g_worker = origin_worker; });
+    // Preserve original worker value, and reset it to our mocked worker.
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
 
     // set mock function excepted call
-    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(g_worker.get());
+    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
     EXPECT_CALL(*worker, _fetch_shard_info_from_remote(tablet_id)).WillOnce(::testing::Return(shard_info));
 
     // fire the testing
@@ -1044,13 +1387,103 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
-    g_worker.reset(new MockStarOSWorker());
-    DeferOp op([origin_worker] { g_worker = origin_worker; });
+    // Preserve original worker value, and reset it to our mocked worker.
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
 
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+}
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size_with_cached_metadata) {
+    auto tablet_id = next_id();
+
+    // Put a tablet metadata with known data_size into the cache
+    starrocks::TabletMetadata metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    auto* rowset1 = metadata.add_rowsets();
+    rowset1->set_id(1);
+    rowset1->set_data_size(500);
+    rowset1->set_num_rows(10);
+    auto* rowset2 = metadata.add_rowsets();
+    rowset2->set_id(2);
+    rowset2->set_data_size(300);
+    rowset2->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    // First call to add_in_writing_data_size should pick up the cached
+    // metadata data_size (500 + 300 = 800) as the base, rather than
+    // triggering list_tablet_metadata (object storage LIST).
+    auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+    EXPECT_EQ(result, 900); // base_size(800) + size(100)
+
+    // Subsequent call should just accumulate
+    result = _tablet_manager->add_in_writing_data_size(tablet_id, 200);
+    EXPECT_EQ(result, 1100); // 900 + 200
+
+    // in_writing_data_size should return the same accumulated value
+    EXPECT_EQ(_tablet_manager->in_writing_data_size(tablet_id), 1100);
+}
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size_without_cached_metadata) {
+    auto tablet_id = next_id();
+    // No metadata exists for this tablet_id.
+    auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+    EXPECT_EQ(result, 100);
+}
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size_cache_miss_fallback_list_configurable) {
+    auto make_meta = [&](int64_t tablet_id) {
+        starrocks::TabletMetadata metadata;
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+        auto* rowset1 = metadata.add_rowsets();
+        rowset1->set_id(1);
+        rowset1->set_data_size(500);
+        rowset1->set_num_rows(10);
+        auto* rowset2 = metadata.add_rowsets();
+        rowset2->set_id(2);
+        rowset2->set_data_size(300);
+        rowset2->set_num_rows(5);
+        return metadata;
+    };
+
+    auto put_meta_without_latest_cache = [&](const TabletMetadata& metadata) {
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TabletManager::skip_cache_latest_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::skip_cache_latest_metadata",
+                                              [](void* arg) { *(bool*)arg = true; });
+        EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+        _tablet_manager->metacache()->prune();
+    };
+
+    bool old = config::allow_list_object_for_random_bucketing_on_cache_miss;
+    DeferOp config_guard([old] { config::allow_list_object_for_random_bucketing_on_cache_miss = old; });
+
+    // cache miss + LIST fallback enabled -> list metadata and recover base_size from meta files.
+    {
+        auto tablet_id = next_id();
+        auto metadata = make_meta(tablet_id);
+        put_meta_without_latest_cache(metadata);
+        config::allow_list_object_for_random_bucketing_on_cache_miss = true;
+        auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+        EXPECT_EQ(result, 900);
+    }
+
+    // cache miss + LIST fallback disabled -> skip LIST, base_size stays 0.
+    {
+        auto tablet_id = next_id();
+        auto metadata = make_meta(tablet_id);
+        put_meta_without_latest_cache(metadata);
+        config::allow_list_object_for_random_bucketing_on_cache_miss = false;
+        auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+        EXPECT_EQ(result, 100);
+    }
 }
 
 TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
@@ -1134,6 +1567,12 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
 }
 
 TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
+    auto old_capture_tablet_and_rowsets_config = config::experimental_enable_lake_capture_tablet_and_rowsets;
+    DeferOp defer([old_capture_tablet_and_rowsets_config]() {
+        config::experimental_enable_lake_capture_tablet_and_rowsets = old_capture_tablet_and_rowsets_config;
+    });
+    config::experimental_enable_lake_capture_tablet_and_rowsets = true;
+
     starrocks::TabletMetadata metadata;
     auto schema = metadata.mutable_schema();
     schema->set_id(1);
@@ -1185,6 +1624,101 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
         auto& [tablet, rowsets] = res.value();
         ASSERT_EQ(1, rowsets.size());
     }
+}
+
+TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets_capture_delta_versions_disabled) {
+    auto old_capture_tablet_and_rowsets_config = config::experimental_enable_lake_capture_tablet_and_rowsets;
+    DeferOp defer([old_capture_tablet_and_rowsets_config]() {
+        config::experimental_enable_lake_capture_tablet_and_rowsets = old_capture_tablet_and_rowsets_config;
+    });
+    config::experimental_enable_lake_capture_tablet_and_rowsets = false;
+
+    starrocks::TabletMetadata metadata;
+    auto schema = metadata.mutable_schema();
+    schema->set_id(1);
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(1);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    metadata.set_version(2);
+    auto rowset_meta_pb2 = metadata.add_rowsets();
+    rowset_meta_pb2->set_id(2);
+    rowset_meta_pb2->set_overlapped(false);
+    rowset_meta_pb2->set_data_size(1024);
+    rowset_meta_pb2->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    metadata.set_version(3);
+    auto rowset_meta_pb3 = metadata.add_rowsets();
+    rowset_meta_pb3->set_id(3);
+    rowset_meta_pb3->set_overlapped(false);
+    rowset_meta_pb3->set_data_size(1024);
+    rowset_meta_pb3->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 1, 3);
+        EXPECT_TRUE(res.status().is_not_supported());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 2, 3);
+        EXPECT_TRUE(res.status().is_not_supported());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 0, 3);
+        EXPECT_TRUE(res.status().is_not_supported());
+    }
+}
+
+// Verify that pick_local_anchor_tablet_id prefers a tablet id that this worker owns.
+// In file-bundling mode the aggregator derives bundle/txn-log paths from a single
+// tablet id of the batch; using a remote tablet id forces the staros worker to fetch
+// shard info via RPC, so the helper must skip non-local ids and pick a local one.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_skips_non_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: tablets 100 and 101 are NOT on this worker; 102 is.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        if (p->first == 100 || p->first == 101) {
+            *(p->second) = false;
+        }
+    });
+
+    std::vector<int64_t> candidates{100, 101, 102, 103};
+    EXPECT_EQ(102, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_falls_back_to_first_when_none_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: no tablet is on this worker.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        *(p->second) = false;
+    });
+
+    std::vector<int64_t> candidates{200, 201, 202};
+    // No local tablet available → the helper must still return a usable id (the first).
+    EXPECT_EQ(200, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all_local) {
+    // Without any sync-point override, is_tablet_in_worker returns true by default in
+    // unit tests (the StarOS worker is null), so the first candidate is picked immediately.
+    std::vector<int64_t> candidates{300, 301, 302};
+    EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
 }
 
 #endif // USE_STAROS

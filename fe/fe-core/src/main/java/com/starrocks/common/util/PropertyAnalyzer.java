@@ -43,14 +43,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
@@ -78,6 +76,8 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -102,7 +102,6 @@ import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -158,6 +157,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION = "light_weight_tablet_creation";
+
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
@@ -211,6 +212,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
+    public static final String PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER = "load_initial_open_partition_number";
+
+    // default: same as cluster query_timeout
+    public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
 
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";
@@ -232,6 +237,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
+
+    // Only used in `INSERT INTO target_table SELECT ... FROM files()`.
+    // When set to true, pushes down the target table schema to files() for schema inference.
+    public static final String PROPERTIES_ENABLE_PUSH_DOWN_SCHEMA = "enable_push_down_schema";
 
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
@@ -259,6 +268,12 @@ public class PropertyAnalyzer {
     // fast schema evolution
     public static final String PROPERTIES_USE_FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+ 
+    /**
+     * Configuration for the v2 implementation of fast schema evolution for cloud-native table.
+     * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
+     */
+    public static final String PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2 = "cloud_native_fast_schema_evolution_v2";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -266,9 +281,23 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
-    public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
+    // Maximum number of parallel compaction subtasks per tablet
+    // 0 means disable parallel compaction, positive value enables it
+    public static final String PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL = "lake_compaction_max_parallel";
+
+    public static final String PROPERTIES_TABLET_RESHARD_TARGET_SIZE = "tablet_reshard_target_size";
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
+
+    // For admin repair cloud native table
+    // Enforces consistent version across all tablets in a physical partition
+    public static final String PROPERTIES_ENFORCE_CONSISTENT_VERSION = "enforce_consistent_version";
+    // Allows empty tablet recovery of tablets with no valid metadata
+    public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
+    // If true, just return the repair plan without executing it
+    public static final String PROPERTIES_DRY_RUN = "dry_run";
+    // Show at most `limit` missing data files per tablet
+    public static final String PROPERTIES_MAX_MISSING_DATA_FILES_TO_SHOW = "max_missing_data_files_to_show";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -362,7 +391,11 @@ public class PropertyAnalyzer {
 
         } else if (hasCoolDownTTL) {
             if (!hasMedium) {
-                throw new AnalysisException("Invalid data property. storage medium property is not found");
+                if (inferredDataProperty != null && Config.tablet_sched_storage_cooldown_second > 0) {
+                    storageMedium = inferredDataProperty.getStorageMedium();
+                } else {
+                    throw new AnalysisException("Invalid data property. storage medium property is not found");
+                }
             }
             if (storageMedium == TStorageMedium.HDD) {
                 throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
@@ -447,6 +480,25 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static int analyzeLoadInitialOpenPartitionNumber(Map<String, String> properties, boolean removeProperties) {
+        int value = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            try {
+                value = Integer.parseInt(properties.get(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new SemanticException(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + e.getMessage());
+            }
+            if (value < 0) {
+                throw new SemanticException("Illegal " + PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + value
+                        + ". Use 0 to open all partitions, or a positive integer to open the latest N partitions.");
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+            }
+        }
+        return value;
     }
 
     public static String analyzePartitionRetentionCondition(Database db,
@@ -693,14 +745,18 @@ public class PropertyAnalyzer {
         String refreshMode = null;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
+            MaterializedView.RefreshMode parsed;
             try {
-                MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode + ". Only " +
-                        EnumUtils.getEnumList(MaterializedView.RefreshMode.class).stream()
-                                .map(MaterializedView.RefreshMode::name)
-                                .collect(Collectors.joining(", ")) +
-                        " are supported.");
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            // AUTO is intentionally not exposed to users; the implementation is preserved
+            // internally for future revival.
+            if (parsed == MaterializedView.RefreshMode.AUTO) {
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
             }
             properties.remove(PROPERTIES_MV_REFRESH_MODE);
         }
@@ -1094,6 +1150,23 @@ public class PropertyAnalyzer {
         return defaultVal;
     }
 
+    /**
+     * Looks up {@code property} in {@code properties}, parses its value as a strict boolean
+     * (throws {@link SemanticException} for any value other than "true"/"false"), removes the
+     * key from the map, and returns the result. Returns {@code defaultValue} if the key is absent.
+     */
+    public static boolean analyzeBooleanPropStrictly(Map<String, String> properties,
+            String property, boolean defaultValue) throws SemanticException {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.remove(property);
+        if (value == null) {
+            return defaultValue;
+        }
+        return parseBooleanStrictly(property, value);
+    }
+
     public static boolean analyzeEnablePersistentIndex(Map<String, String> properties) {
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
             String val = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
@@ -1337,6 +1410,37 @@ public class PropertyAnalyzer {
         return val;
     }
 
+    /**
+     * Analyze table_query_timeout property.
+     * @param properties table properties
+     * @return table query timeout in seconds, -1 means use cluster query_timeout
+     * @throws AnalysisException if the value is invalid
+     */
+    public static int analyzeTableQueryTimeout(Map<String, String> properties)
+            throws AnalysisException {
+        if (properties == null || !properties.containsKey(PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            return -1;
+        }
+        String tableQueryTimeoutStr = properties.get(PROPERTIES_TABLE_QUERY_TIMEOUT);
+        properties.remove(PROPERTIES_TABLE_QUERY_TIMEOUT);
+        int tableQueryTimeout;
+        try {
+            tableQueryTimeout = Integer.parseInt(tableQueryTimeoutStr);
+            // -1 means unset table_query_timeout and fallback to default behavior (cluster/session timeout).
+            if (tableQueryTimeout == -1) {
+                return -1;
+            }
+            if (tableQueryTimeout <= 0) {
+                throw new AnalysisException("Property " + PROPERTIES_TABLE_QUERY_TIMEOUT
+                        + " must be greater than 0, or -1 to reset to default, got: " + tableQueryTimeoutStr);
+            }
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("Property " + PROPERTIES_TABLE_QUERY_TIMEOUT
+                    + " must be a valid integer, got: " + tableQueryTimeoutStr);
+        }
+        return tableQueryTimeout;
+    }
+
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
@@ -1345,6 +1449,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
             if (Strings.isNullOrEmpty(constraintDescs)) {
+                properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
                 return uniqueConstraints;
             }
 
@@ -1431,7 +1536,7 @@ public class PropertyAnalyzer {
         if (parentTable.isNativeTableOrMaterializedView()) {
             OlapTable parentOlapTable = (OlapTable) parentTable;
             parentTableKeyType =
-                    parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
+                    parentOlapTable.getIndexMetaByMetaId(parentOlapTable.getBaseIndexMetaId()).getKeysType();
         }
 
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
@@ -1478,6 +1583,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
             if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
+                properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
                 return foreignKeyConstraints;
             }
 
@@ -1573,6 +1679,10 @@ public class PropertyAnalyzer {
         }
     }
 
+    public static boolean analyzeDataCacheEnable(Map<String, String> properties) throws AnalysisException {
+        return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
+    }
+
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
         if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
             String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
@@ -1604,22 +1714,45 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    public static long analyzeDynamicTabletSplitSize(Map<String, String> properties, boolean removeProperties)
+    // Analyze lake_compaction_max_parallel table property.
+    // Returns the max parallel value (default from Config.lake_compaction_max_parallel_default;
+    // 0 means parallel lake compaction is disabled).
+    public static int analyzeLakeCompactionMaxParallel(Map<String, String> properties) throws AnalysisException {
+        int defaultValue = Config.lake_compaction_max_parallel_default;
+        if (properties != null && properties.containsKey(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            String value = properties.get(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            properties.remove(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            try {
+                int maxParallel = Integer.parseInt(value);
+                if (maxParallel < 0) {
+                    throw new AnalysisException("Invalid lake_compaction_max_parallel value: " + value +
+                            ". Value must be non-negative.");
+                }
+                return maxParallel;
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid lake_compaction_max_parallel value: " + value +
+                        ". Value must be an integer.");
+            }
+        }
+        return defaultValue;
+    }
+
+    public static long analyzeTabletReshardTargetSize(Map<String, String> properties, boolean removeProperties)
             throws AnalysisException {
-        long dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+        long tabletReshardTargetSize = Config.tablet_reshard_target_size;
         if (properties != null) {
-            String value = removeProperties ? properties.remove(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE)
-                    : properties.get(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
+            String value = removeProperties ? properties.remove(PROPERTIES_TABLET_RESHARD_TARGET_SIZE)
+                    : properties.get(PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
             if (value != null) {
                 try {
-                    dynamicTabletSplitSize = Long.parseLong(value);
+                    tabletReshardTargetSize = Long.parseLong(value);
                 } catch (Exception e) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
-                            PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, value, "a positive integer");
+                            PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value, "a positive integer");
                 }
             }
         }
-        return dynamicTabletSplitSize;
+        return tabletReshardTargetSize;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
@@ -1656,6 +1789,8 @@ public class PropertyAnalyzer {
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                 if (FeConstants.isReplayFromQueryDump) {
+                    // still call analyzeReplicationNum to check the validity of replication_num
+                    PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
                     replicationNum = 1;
                 } else {
                     replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
@@ -1849,7 +1984,7 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(": random distribution does not support 'colocate_with'");
                 }
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
-                        db, materializedView, colocateGroup, false /* expectLakeTable */);
+                        db, materializedView, colocateGroup, false /* afterTabletCreation */);
             }
 
             // enable_query_rewrite
@@ -1938,7 +2073,7 @@ public class PropertyAnalyzer {
             }
         } catch (AnalysisException e) {
             if (FeConstants.isReplayFromQueryDump) {
-                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: " + e.getMessage());
             } else {
                 if (materializedView.isCloudNativeMaterializedView()) {
                     GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
@@ -1947,6 +2082,25 @@ public class PropertyAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
             }
         }
+    }
+
+    public static boolean analyzeCloudNativeFastSchemaEvolutionV2(Table.TableType tableType,
+            Map<String, String> properties, boolean removeFromProperties) throws SemanticException {
+        if (tableType != Table.TableType.CLOUD_NATIVE) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    String.format("Property %s only supports cloud-native tables, but table type is %s",
+                            PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, tableType.name()));
+        }
+        boolean cloudNativeFastSchemaEvolutionV2 = true;
+        String value = properties.get(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2);
+        if (value != null) {
+            cloudNativeFastSchemaEvolutionV2 = parseBooleanStrictly(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                    value);
+        }
+        if (removeFromProperties) {
+            properties.remove(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2);
+        }
+        return cloudNativeFastSchemaEvolutionV2;
     }
 
     @NotNull
@@ -2025,13 +2179,16 @@ public class PropertyAnalyzer {
         return sb.toString();
     }
 
-    public static boolean parseBoolean(String value) {
-        if (value.equalsIgnoreCase("true")) {
-            return true;
+    public static boolean parseBooleanStrictly(String property, String value) throws SemanticException {
+        boolean ret = false;
+        if ("true".equalsIgnoreCase(value)) {
+            ret = true;
+        } else if ("false".equalsIgnoreCase(value)) {
+            ret = false;
+        } else {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, property, value, "'true' or 'false'");
         }
-        if (value.equalsIgnoreCase("false")) {
-            return false;
-        }
-        throw new IllegalArgumentException("Illegal boolean value: " + value);
+        return ret;
     }
+
 }

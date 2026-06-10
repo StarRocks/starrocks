@@ -1,0 +1,13 @@
+{
+  "example_waiver": {
+    "path": "gensrc/proto/sample.proto",
+    "container_or_method": "SamplePB",
+    "field_number": 7,
+    "field_name": "retired_name",
+    "rule": "field_deleted",
+    "base_signature": "optional string retired_name = 7",
+    "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
+    "owner": "engprod"
+  },
+  "waivers": []
+}

@@ -37,18 +37,19 @@
 #include <climits>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string_view>
 
+#include "base/uid_util.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
 class ExecEnv;
+class MetricRegistry;
 class Status;
 class StreamLoadContext;
 class TRoutineLoadTask;
@@ -65,7 +66,7 @@ public:
 
     ~RoutineLoadTaskExecutor() noexcept = default;
 
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr);
     void stop();
 
     // submit a routine load task

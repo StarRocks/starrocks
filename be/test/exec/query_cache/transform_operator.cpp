@@ -58,8 +58,8 @@ Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& c
     DCHECK(_cur_chunk == nullptr);
     DCHECK(chunk != nullptr && !chunk->is_empty());
     DCHECK(chunk->num_columns() == 1);
-    auto column = chunk->get_column_by_slot_id(SlotId(1));
-    auto* col = dynamic_cast<DoubleColumn*>(column.get());
+    auto* column = chunk->get_column_raw_ptr_by_slot_id(SlotId(1));
+    auto* col = dynamic_cast<DoubleColumn*>(column);
     DCHECK(col != nullptr);
     auto num_rows = col->size();
     auto& data = col->get_data();

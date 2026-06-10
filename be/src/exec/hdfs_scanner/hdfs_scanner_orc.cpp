@@ -16,21 +16,24 @@
 
 #include <utility>
 
+#include "base/simd/simd.h"
+#include "base/time/timezone_utils.h"
+#include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
-#include "exec/exec_node.h"
+#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
 #include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
-#include "simd/simd.h"
-#include "storage/chunk_helper.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/timezone_utils.h"
+#include "runtime/chunk_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -113,8 +116,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
     const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.min_max_tuple_desc;
-    ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
-    ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    ChunkPtr min_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    ChunkPtr max_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
         const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
@@ -129,8 +132,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 return false;
             }
             const orc::proto::ColumnStatistics& stats = row_idx_iter->second.entry(rowGroupIdx).statistics();
-            ColumnPtr min_col = min_chunk->columns()[i];
-            ColumnPtr max_col = max_chunk->columns()[i];
+            auto* min_col = min_chunk->get_column_raw_ptr_by_index(i);
+            auto* max_col = max_chunk->get_column_raw_ptr_by_index(i);
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
             Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
@@ -152,17 +155,17 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             }
             // not found in partition columns.
             if (part_idx == part_size) {
-                min_chunk->columns()[i]->append_nulls(1);
-                max_chunk->columns()[i]->append_nulls(1);
+                min_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
+                max_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
             } else {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
                 ColumnPtr data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
-                    min_chunk->columns()[i]->append_nulls(1);
-                    max_chunk->columns()[i]->append_nulls(1);
+                    min_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
+                    max_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
                 } else {
-                    min_chunk->columns()[i]->append(*data_column, 0, 1);
-                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                    min_chunk->get_column_raw_ptr_by_index(i)->append(*data_column, 0, 1);
+                    max_chunk->get_column_raw_ptr_by_index(i)->append(*data_column, 0, 1);
                 }
             }
         }
@@ -239,8 +242,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         ColumnPtr column_ptr = ColumnHelper::create_column(slot_desc->type(), true);
         dict_value_chunk->append_column(column_ptr, slot_id);
 
-        auto* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
-        auto* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        auto* nullable_column = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
+        auto* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column_raw_ptr());
 
         // copy dict and offset to column.
         Bytes& bytes = dict_value_column->get_bytes();
@@ -282,7 +285,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // first (dict_size) th items are all not-null
-        nullable_column->null_column()->append_default(dict_size);
+        nullable_column->null_column_raw_ptr()->append_default(dict_size);
         // and last one is null.
         nullable_column->append_default();
         DCHECK(nullable_column->size() == (dict_size + 1));
@@ -300,8 +303,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        Status status = ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(),
-                                                 filter_ptr);
+        Status status = ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id),
+                                                                dict_value_chunk.get(), filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
             _dict_filter_eval_cache.erase(slot_id);
@@ -383,10 +386,11 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
     }
     // we need to start tiny stripe optimization if all stripe's size smaller than config::orc_tiny_stripe_threshold_size
     if (tiny_stripe_read) {
-        std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+        std::vector<SharedBufferedInputStream::IORange> io_ranges{};
         std::vector<DiskRange> merged_disk_ranges{};
         DiskRangeHelper::merge_adjacent_disk_ranges(stripes, config::io_coalesce_read_max_distance_size,
                                                     config::orc_tiny_stripe_threshold_size, merged_disk_ranges);
+        io_ranges.reserve(merged_disk_ranges.size());
         for (const auto& disk_range : merged_disk_ranges) {
             io_ranges.emplace_back(disk_range.offset(), disk_range.length());
         }
@@ -487,7 +491,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
         auto datacache_options = _scanner_params.datacache_options;
-        bool use_file_metacache = false;
+        bool footer_from_cache = false;
         string metacache_key;
         PageCacheHandle footer_cache_handle;
 #ifdef WITH_STARCACHE
@@ -498,38 +502,28 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         if (_scanner_ctx.split_context != nullptr) {
             auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));
-            // use split context's footer, no need to write this footer to cache, 
-            use_file_metacache = true;
+            footer_from_cache = true;
         } else if (_cache != nullptr) {
-            SCOPED_RAW_TIMER(&_app_stats.footer_cache_read_ns);
-            // try read serialized footer(FileTail) from cache
             metacache_key = get_file_cache_key(CacheType::META, _file->filename(), datacache_options.modification_time,
                                                _file->get_size().value());
-            bool ret = _cache->lookup(metacache_key, &footer_cache_handle);
-            if (ret) {
-                string serialized_footer = *(reinterpret_cast<const string*>(footer_cache_handle.data()));
-                options.setSerializedFileTail(serialized_footer);
+            SCOPED_RAW_TIMER(&_app_stats.footer_cache_read_ns);
+            if (_cache->lookup(metacache_key, &footer_cache_handle)) {
+                options.setSerializedFileTail(*(reinterpret_cast<const string*>(footer_cache_handle.data())));
                 _app_stats.footer_cache_read_count += 1;
-                use_file_metacache = true;
+                footer_from_cache = true;
             }
         }
         reader = orc::createReader(std::move(_input_stream), options);
-        // write serialized footer(FileTail) to cache on miss
-        if (!use_file_metacache && _cache != nullptr) {
+        if (!footer_from_cache && _cache != nullptr) {
             string serialized_tail = reader->getSerializedFileTail();
             int64_t serialized_tail_size = serialized_tail.length();
             if (serialized_tail_size > 0) {
-                // Generate cache key if not already set
-                if (metacache_key.empty()) {
-                    metacache_key = get_file_cache_key(CacheType::META, _file->filename(),
-                                                       datacache_options.modification_time, _file->get_size().value());
-                }
                 auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (string*)value; };
-                MemCacheWriteOptions options;
-                options.evict_probability = datacache_options.datacache_evict_probability;
-                auto capture = std::make_unique<string>(serialized_tail);
+                MemCacheWriteOptions write_options;
+                write_options.evict_probability = datacache_options.datacache_evict_probability;
+                auto capture = std::make_unique<string>(std::move(serialized_tail));
                 Status st = _cache->insert(metacache_key, (void*)(capture.get()), serialized_tail_size, deleter,
-                                           options, &footer_cache_handle);
+                                           write_options, &footer_cache_handle);
                 if (st.ok()) {
                     _app_stats.footer_cache_write_bytes += serialized_tail_size;
                     _app_stats.footer_cache_write_count += 1;
@@ -669,7 +663,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
             {
                 SCOPED_RAW_TIMER(&_app_stats.build_rowid_filter_ns);
-                ASSIGN_OR_RETURN(row_delete_filter, _orc_reader->get_row_delete_filter(_skip_rows_ctx));
+                ASSIGN_OR_RETURN(auto status, _orc_reader->get_row_delete_filter(_skip_rows_ctx));
+                row_delete_filter = std::move(status);
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
@@ -711,8 +706,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
                     }
-                    ASSIGN_OR_RETURN(rows_read,
-                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
+                    ASSIGN_OR_RETURN(rows_read, ChunkPredicateEvaluator::eval_conjuncts_into_filter(it.second, ck.get(),
+                                                                                                    &_chunk_filter));
                     if (rows_read == 0) {
                         // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
                         ck->set_num_rows(0);

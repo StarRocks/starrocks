@@ -177,7 +177,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
 
-            List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+            List<MaterializedIndex> allIndices = txnState.getPartitionLoadedIndexesWithoutLock(table.getId(), partition);
             int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partition.getParentId(), table.writeQuorum());
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {

@@ -264,6 +264,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableD = null;
     public TestTables.TestTable mockedNativeTableE = null;
     public TestTables.TestTable mockedNativeTableF = null;
+    public TestTables.TestTable mockedNativeTableFV2 = null;
     public TestTables.TestTable mockedNativeTableG = null;
     public TestTables.TestTable mockedNativeTableH = null;
     public TestTables.TestTable mockedNativeTableI = null;
@@ -286,6 +287,7 @@ public class TableTestBase {
         this.mockedNativeTableD = create(SCHEMA_D, SPEC_D_5, "td", 1);
         this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
         this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
+        this.mockedNativeTableFV2 = create(SCHEMA_F, SPEC_F, "tfv2", 2);
         this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
         this.mockedNativeTableH = create(SCHEMA_H, PartitionSpec.unpartitioned(), "th", 1);
         this.mockedNativeTableI = create(SCHEMA_F, SPEC_F_1, "ti", 1);

@@ -34,17 +34,19 @@ import static com.starrocks.statistic.StatsConstants.COLUMN_ID_SEPARATOR;
 
 public abstract class MultiColumnQueryJob extends HyperQueryJob {
 
-    public MultiColumnQueryJob(ConnectContext context, Database db, Table table, List<ColumnStats> columnStats) {
-        super(context, db, table, columnStats, null);
+    public MultiColumnQueryJob(ConnectContext context, long analyzeId, Database db, Table table, List<ColumnStats> columnStats) {
+        super(context, analyzeId, db, table, columnStats, null);
     }
 
     protected abstract String buildStatisticsQuery();
 
     @Override
     public void queryStatistics() {
+        checkCancelled();
         String sql = buildStatisticsQuery();
         List<TStatisticData> dataList = executeStatisticsQuery(sql, context);
         for (TStatisticData data : dataList) {
+            checkCancelled();
             String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
             sqlBuffer.add(createInsertValueSQL(data, tableName));
             rowsBuffer.add(createInsertValueExpr(data, tableName));

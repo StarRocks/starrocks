@@ -19,26 +19,27 @@
 #include <limits>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
-#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/miscs.h"
-#include "simd/simd.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
-#include "storage/range.h"
+#include "storage/column_predicate_inverted_index_fallback.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -321,6 +322,15 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
+
+    if (PredicateType::kGinFallback == pred->type()) {
+        const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);
+        if (fallback_pred->get_bitmap().isEmpty()) {
+            return fallback_pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
+        }
+        return RewriteStatus::UNCHANGED;
+    }
+
     if (PredicateType::kPlaceHolder == pred->type()) {
         return RewriteStatus::ALWAYS_TRUE;
     }

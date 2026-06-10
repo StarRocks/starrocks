@@ -16,7 +16,6 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -25,6 +24,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
 
@@ -48,6 +48,16 @@ public class LakeTableTestHelper {
             invertedIndex.addTablet(id, tabletMeta);
             index.addTablet(new LakeTablet(id), tabletMeta);
         }
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p0", index, null);
+        LakeTable table = new LakeTable(
+                tableId, "t0",
+                Lists.newArrayList(new Column("c0", IntegerType.BIGINT)),
+                KeysType.DUP_KEYS, null, null);
+        table.addPartition(partition);
+        return table;
+    }
+
+    LakeTable buildLakeTableWithIndex(MaterializedIndex index) {
         Partition partition = new Partition(partitionId, physicalPartitionId, "p0", index, null);
         LakeTable table = new LakeTable(
                 tableId, "t0",

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Insert Into は一度に1行ずつデータを挿入するのではなく、バッチ挿入を推奨し、タイムアウト設定の調整方法を説明します。"
 ---
 
 # Insert Into
@@ -21,3 +22,7 @@ OLAP にデータを一つずつ挿入することは推奨されません。通
 ## 大量のデータをロードするために INSERT INTO SELECT コマンドを実行すると "execute timeout" エラーが発生する
 
 デフォルトでは、クエリのタイムアウト時間は 14400 秒です。この時間を延長するために変数 `insert_timeout` を設定できます。単位は秒です。
+
+## INSERT INTO SELECT が "Reach limit of connections" を返すのはなぜですか？
+
+ユーザー接続制限に達したためです。ユーザープロパティ `max_user_connections` の値を増やします。

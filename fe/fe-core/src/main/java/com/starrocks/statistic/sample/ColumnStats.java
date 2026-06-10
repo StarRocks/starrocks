@@ -36,7 +36,7 @@ public abstract class ColumnStats {
 
     public abstract String getRowCount();
 
-    public abstract String getDateSize();
+    public abstract String getDataSize();
 
     public abstract String getNullCount();
 

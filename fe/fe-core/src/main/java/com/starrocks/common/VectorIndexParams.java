@@ -70,7 +70,17 @@ public class VectorIndexParams {
         },
 
         // Threshold of row number to build index file
-        INDEX_BUILD_THRESHOLD
+        INDEX_BUILD_THRESHOLD,
+
+        // Index build mode: "sync" (default, build during write) or "async" (build asynchronously by scheduler)
+        INDEX_BUILD_MODE {
+            @Override
+            public void check(String value) {
+                if (!StringUtils.equalsIgnoreCase(value, "sync") && !StringUtils.equalsIgnoreCase(value, "async")) {
+                    throw new SemanticException("Value of `index_build_mode` must be `sync` or `async`");
+                }
+            }
+        }
     }
 
     public enum VectorIndexType {
@@ -84,6 +94,16 @@ public class VectorIndexParams {
     public enum MetricsType {
         COSINE_SIMILARITY,
         L2_DISTANCE,
+    }
+
+    // Quantizer kinds the HNSW index supports. Keep the names in sync with the
+    // tenann ScalarQuantizerType enum and the BE convert_to_quantizer_type()
+    // dispatch (lowercase wire format).
+    public enum QuantizerType {
+        FLAT,
+        SQ4,
+        SQ8,
+        PQ
     }
 
     public enum IndexParamsKey implements ParamsKey {
@@ -141,6 +161,48 @@ public class VectorIndexParams {
             @Override
             public void check(String value) {
                 validateInteger(value, "M_IVFPQ", 1);
+            }
+        },
+
+        // Quantizer applied on top of HNSW. Default is "flat" (no quantization,
+        // equivalent to pre-existing HNSWFlat behavior). SQ4/SQ8 trade recall
+        // for memory via scalar quantization. PQ requires M_PQ (and optionally
+        // NBITS_PQ); see VectorIndexParams for cross-field constraints that
+        // live in IndexAnalyzer.
+        QUANTIZER(VectorIndexType.HNSW) {
+            private final Set<String> allowed = Arrays.stream(QuantizerType.values())
+                    .map(q -> q.name().toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+
+            @Override
+            public void check(String value) {
+                if (!allowed.contains(value.toLowerCase(Locale.ROOT))) {
+                    throw new SemanticException(
+                            String.format("Value of `QUANTIZER` must be in %s", allowed));
+                }
+            }
+        },
+
+        // Number of PQ sub-quantizers. Required when QUANTIZER=pq. Must divide DIM;
+        // that cross-field check is enforced in IndexAnalyzer.
+        M_PQ(VectorIndexType.HNSW) {
+            @Override
+            public void check(String value) {
+                validateInteger(value, "M_PQ", 1);
+            }
+        },
+
+        // Bits per PQ sub-quantizer code. faiss supports [4, 16]; default 8.
+        NBITS_PQ(VectorIndexType.HNSW) {
+            @Override
+            public void check(String value) {
+                try {
+                    int num = Integer.parseInt(value);
+                    if (num < 4 || num > 16) {
+                        throw new SemanticException("Value of `NBITS_PQ` must be in [4, 16]");
+                    }
+                } catch (NumberFormatException e) {
+                    throw new SemanticException("Value of `NBITS_PQ` must be an integer");
+                }
             }
         };
 

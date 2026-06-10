@@ -61,7 +61,8 @@ public:
     static Status create(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index,
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
 
-    Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator) override;
+    Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator,
+                        const IndexReadOptions& index_opt) override;
 };
 
 class FullTextCLuceneInvertedReader : public CLuceneInvertedReader {
@@ -72,10 +73,11 @@ public:
         lucene::search::BooleanQuery::setMaxClauseCount(INT_MAX);
     }
 
-    Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
+    Status query(OlapReaderStatistics* stats, const std::string_view column_name, const void* query_value,
                  InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
 
-    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override;
+    Status query_null(OlapReaderStatistics* stats, const std::string_view column_name,
+                      roaring::Roaring* bit_map) override;
 
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 

@@ -30,7 +30,6 @@ import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
@@ -46,6 +45,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
@@ -131,6 +131,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -175,13 +176,15 @@ public class ExpressionAnalyzer {
 
     private boolean isArrayHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ANY_MATCH) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ALL_MATCH) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
+            if (((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_MAP) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ANY_MATCH) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ALL_MATCH) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORTBY) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORT) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORT_LAMBDA)) {
                 return true;
-            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
+            } else if (((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
                 ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
                 return true;
@@ -192,10 +195,10 @@ public class ExpressionAnalyzer {
 
     private boolean isMapHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_KEYS) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+            if (((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.MAP_FILTER) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.TRANSFORM_VALUES) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.TRANSFORM_KEYS) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.MAP_APPLY)) {
                 return true;
             }
         }
@@ -212,7 +215,7 @@ public class ExpressionAnalyzer {
         if (!(functionCallExpr.getChild(0) instanceof LambdaFunctionExpr)) {
             return;
         }
-        switch (functionCallExpr.getFnName().getFunction()) {
+        switch (functionCallExpr.getFunctionName()) {
             case FunctionSet.ARRAY_FILTER: {
                 // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
                 FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
@@ -248,6 +251,22 @@ public class ExpressionAnalyzer {
                 visitor.visit(arrayMap, scope);
                 break;
             }
+            case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA: {
+                // Check if this is array_sort with lambda comparator
+                // array_sort(arr, (x, y) -> ...) or array_sort(arr, lambda_expr)
+                if (functionCallExpr.getChildren().size() == 2 &&
+                        functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+                    // Convert to array_sort_lambda for lambda version
+                    functionCallExpr.resetFnName(functionCallExpr.getDbName(), FunctionSet.ARRAY_SORT_LAMBDA);
+                    Expr lambdaExpr = functionCallExpr.getChild(0);
+                    Expr arrayExpr = functionCallExpr.getChild(1);
+                    functionCallExpr.setChild(0, arrayExpr);
+                    functionCallExpr.setChild(1, lambdaExpr);
+                }
+                // If not lambda version, leave it as regular array_sort (no rewriting)
+                break;
+            }
             case FunctionSet.MAP_FILTER:
                 // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
                 FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
@@ -269,13 +288,14 @@ public class ExpressionAnalyzer {
         if (!isHighOrderFunction(expression)) {
             String funcName = "";
             if (expression instanceof FunctionCallExpr) {
-                funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
+                funcName = ((FunctionCallExpr) expression).getFunctionName();
             } else {
                 funcName = expression.toString();
             }
             throw new SemanticException(funcName + " can't use lambda functions, " +
                     "as it is not a supported high-order function");
         }
+
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
         if (expression.getChild(childSize - 1) instanceof LambdaFunctionExpr) {
@@ -286,29 +306,58 @@ public class ExpressionAnalyzer {
             expression.setChild(0, last);
         }
         if (isArrayHighOrderFunction(expression)) {
-            // the first child is lambdaFunction, following input arrays
-            for (int i = 1; i < childSize; ++i) {
-                Expr expr = expression.getChild(i);
-                bottomUpAnalyze(visitor, expr, scope);
-            }
-            // putting lambda inputs should after analyze
-            for (int i = 1; i < childSize; ++i) {
-                Expr expr = expression.getChild(i);
-                if (expr instanceof NullLiteral) {
-                    expr.setType(ArrayType.ARRAY_INT); // Let it have item type.
+
+            boolean isArraySortLambda = Optional.ofNullable(((FunctionCallExpr) expression).getFunctionName())
+                    .map(fn -> fn.equals(FunctionSet.ARRAY_SORT) || fn.equals(FunctionSet.ARRAY_SORT_LAMBDA))
+                    .orElse(false);
+            if (isArraySortLambda) {
+                if (expression.getChildren().size() != 2) {
+                    throw new SemanticException(
+                            "array_sort is not well-formed, it should be array_sort(array, (x,y)->expr(x,y)");
                 }
-                if (!expr.getType().isArrayType()) {
-                    throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays, " +
-                            "but real type is " + expr.getType().toSql());
+                Expr lambdaExpr = expression.getChild(0);
+                if (!(lambdaExpr instanceof LambdaFunctionExpr) || lambdaExpr.getChildren().size() != 3) {
+                    throw new SemanticException("lambda in array_sort should be a binary function");
                 }
-                Type itemType = ((ArrayType) expr.getType()).getItemType();
-                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+                Expr arrayExpr = expression.getChild(1);
+                bottomUpAnalyze(visitor, arrayExpr, scope);
+                if (arrayExpr instanceof NullLiteral) {
+                    arrayExpr.setType(ArrayType.ARRAY_INT);
+                }
+                if (!arrayExpr.getType().isArrayType()) {
+                    throw new SemanticException("The 1st parameter (" + arrayExpr +
+                            ") of array_sort_lambda should be arrays, but real type is " + arrayExpr.getType().toSql());
+                }
+
+                Type itemType = ((ArrayType) arrayExpr.getType()).getItemType();
+                scope.putLambdaInput(new PlaceHolderExpr(-1, arrayExpr.isNullable(), itemType));
+                scope.putLambdaInput(new PlaceHolderExpr(-1, arrayExpr.isNullable(), itemType));
+            } else {
+                // the first child is lambdaFunction, following input arrays
+                for (int i = 1; i < childSize; ++i) {
+                    Expr expr = expression.getChild(i);
+                    bottomUpAnalyze(visitor, expr, scope);
+                }
+
+                // putting lambda inputs should after analyze
+                for (int i = 1; i < childSize; ++i) {
+                    Expr expr = expression.getChild(i);
+                    if (expr instanceof NullLiteral) {
+                        expr.setType(ArrayType.ARRAY_INT); // Let it have item type.
+                    }
+                    if (!expr.getType().isArrayType()) {
+                        throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays, " +
+                                "but real type is " + expr.getType().toSql());
+                    }
+                    Type itemType = ((ArrayType) expr.getType()).getItemType();
+                    scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+                }
             }
         } else {
             Preconditions.checkState(expression instanceof FunctionCallExpr);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
             // map_apply(func, map)
-            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+            if (functionCallExpr.getFunctionName().equals(FunctionSet.MAP_APPLY)) {
                 if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
                     throw new SemanticException("Map lambda function (" +
                             ExprToSql.toSql(expression.getChild(0)) + ") should be like (k,v) -> (f(k),f(v))",
@@ -341,18 +390,18 @@ public class ExpressionAnalyzer {
             scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
             scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
             // lambda functions should be rewritten before visited
-            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER)) ||
-                    functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES)) {
+            if ((functionCallExpr.getFunctionName().equals(FunctionSet.MAP_FILTER)) ||
+                    functionCallExpr.getFunctionName().equals(FunctionSet.TRANSFORM_VALUES)) {
                 // (k,v) -> expr => (k,v) -> (k,expr)
                 Expr lambdaFunc = functionCallExpr.getChild(0);
                 LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(1);
                 Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
                 lambdaFunc.setChild(0, new MapExpr(AnyMapType.ANY_MAP, Lists.newArrayList(slotRef,
                         lambdaFunc.getChild(0))));
-                if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES)) {
+                if (functionCallExpr.getFunctionName().equals(FunctionSet.TRANSFORM_VALUES)) {
                     functionCallExpr.resetFnName("", FunctionSet.MAP_APPLY);
                 }
-            } else if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_KEYS))) {
+            } else if ((functionCallExpr.getFunctionName().equals(FunctionSet.TRANSFORM_KEYS))) {
                 // (k,v) -> expr => (k,v) -> (expr, v)
                 Expr lambdaFunc = functionCallExpr.getChild(0);
                 LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(2);
@@ -503,14 +552,35 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitMapExpr(MapExpr node, Scope scope) {
             if (!node.getChildren().isEmpty()) {
-                Type originalType = node.getType();
-                if (originalType == AnyMapType.ANY_MAP) {
-                    Type keyType = getKeyCommonType(node);
-                    if (!keyType.isValidMapKeyType()) {
-                        throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
+                try {
+                    Type originalType = node.getType();
+                    Type keyType;
+                    Type valueType;
+                    if (originalType == AnyMapType.ANY_MAP) {
+                        keyType = getKeyCommonType(node);
+                        if (!keyType.isValidMapKeyType()) {
+                            throw new SemanticException("Map key doesn't support type: " + keyType, node.getPos());
+                        }
+                        valueType = getValueCommonType(node);
+                    } else {
+                        MapType mapType = (MapType) originalType;
+                        keyType = mapType.getKeyType();
+                        valueType = mapType.getValueType();
                     }
-                    Type valueType = getValueCommonType(node);
+
+                    for (int i = 0; i < node.getChildren().size(); i++) {
+                        Type desired = (i % 2 == 0) ? keyType : valueType;
+                        Expr child = node.getChildren().get(i);
+                        if (!child.getType().matchesType(desired)) {
+                            ExprCastFunction.castChild(node, desired, i);
+                        }
+                    }
+
                     node.setType(new MapType(keyType, valueType));
+                } catch (SemanticException e) {
+                    throw e;
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
                 }
             } else {
                 node.setType(new MapType(NullType.NULL, NullType.NULL));
@@ -942,8 +1012,9 @@ public class ExpressionAnalyzer {
             } else {
                 castType = cast.getTargetTypeDef().getType();
             }
-            if (!TypeManager.canCastTo(cast.getChild(0).getType(), castType)) {
-                throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
+            Type fromType = cast.getChild(0).getType();
+            if (!TypeManager.canCastTo(fromType, castType)) {
+                throw new SemanticException("Invalid type cast from " + fromType.toSql() + " to "
                         + castType.toSql() + " in sql `" +
                         AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`",
                         cast.getPos());
@@ -959,17 +1030,156 @@ public class ExpressionAnalyzer {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
-            String fnName = node.getFnName().getFunction();
+            String fnName = node.getFunctionName();
 
+            if (fnName.equalsIgnoreCase("date_part")) {
+                if (node.getChildren().size() != 2) {
+                    throw new SemanticException("DATE_PART requires 2 arguments: DATE_PART('unit', date_expr)");
+                }
+
+                Expr unitExpr = node.getChild(0);
+                Expr dateExpr = node.getChild(1);
+
+                if (!(unitExpr instanceof StringLiteral)) {
+                    throw new SemanticException("The first argument of DATE_PART must be a constant string " + 
+                            "literal, e.g., 'year'");
+                }
+
+                String unit = ((StringLiteral) unitExpr).getStringValue().toLowerCase();
+                String targetFunction = "";
+
+                switch (unit) {
+                    case "year":
+                    case "yy":
+                    case "yyyy":
+                        targetFunction = "year";
+                        break;
+                    case "quarter":
+                    case "qq":
+                    case "q":
+                        targetFunction = "quarter";
+                        break;
+                    case "month":
+                    case "mm":
+                    case "m":
+                        targetFunction = "month";
+                        break;
+                    case "day":
+                    case "dd":
+                    case "d":
+                        targetFunction = "day";
+                        break;
+                    case "hour":
+                    case "hh":
+                        targetFunction = "hour";
+                        break;
+                    case "minute":
+                    case "mi":
+                    case "n":
+                        targetFunction = "minute";
+                        break;
+                    case "second":
+                    case "ss":
+                    case "s":
+                        targetFunction = "second";
+                        break;
+                    case "dow": 
+                        targetFunction = "dayofweek";
+                        break;
+                    case "doy":
+                        targetFunction = "dayofyear";
+                        break;
+                    case "week":
+                    case "wk":
+                    case "ww":
+                        targetFunction = "week_iso";
+                        break;
+                    default:
+                        throw new SemanticException("Unsupported unit for DATE_PART: " + unit);
+                }
+
+                node.resetFnName("", targetFunction);
+                node.clearChildren();
+                node.addChild(dateExpr);
+
+                return visitFunctionCall(node, scope);
+            }
+ 
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
+
+            // Handle named arguments reordering before function lookup
+            List<String> exprsNames = node.getParams().getExprsNames();
+            if (exprsNames != null && !exprsNames.isEmpty()) {
+                // Named arguments are used - we need to find the function first, then reorder
+                Function fn = FunctionAnalyzer.getAnalyzedFunctionForNamedArgs(session, node, argumentTypes, exprsNames);
+                if (fn == null) {
+                    // Try to provide a more user-friendly error message
+                    FunctionAnalyzer.throwFriendlyNamedArgError(fnName, argumentTypes, exprsNames);
+                    // Fallback to generic error if no specific error was thrown
+                    String msg = String.format("No matching function with signature: %s(%s)",
+                            fnName, FunctionAnalyzer.getNamedArgStr(node.getParams()));
+                    throw new SemanticException(msg, node.getPos());
+                }
+
+                // This prevents confusing IllegalStateException when duplicate parameters exist.
+                // validateNamedArgumentsStructure checks: duplicates, unknown params, missing required params
+                FunctionAnalyzer.validateNamedArgumentsStructure(fnName, fn, exprsNames);
+
+                // Reorder arguments according to function definition
+                FunctionAnalyzer.reorderNamedArgAndAppendDefaults(node.getParams(), fn);
+
+                // Update children to match reordered params
+                node.clearChildren();
+                node.addChildren(node.getParams().exprs());
+
+                // Re-analyze children after reordering (includes default values)
+                for (Expr child : node.getChildren()) {
+                    if (!child.isAnalyzed()) {
+                        visit(child, scope);
+                    }
+                }
+
+                // Validate NULL constraints AFTER reordering
+                // This must be after reordering because it depends on parameter positions
+                FunctionAnalyzer.validateNullConstraints(fnName, fn, node);
+
+                node.setFn(fn);
+                node.setType(fn.getReturnType());
+                FunctionAnalyzer.analyze(node);
+                return null;
+            }
+
             // get function by function expression and argument types
             Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
             if (fn == null) {
+                // Try to find a function with named arguments that can accept positional arguments
+                fn = FunctionAnalyzer.getAnalyzedFunctionForPositionalCallWithNamedArgs(
+                        session, fnName, argumentTypes);
+                if (fn != null) {
+                    // Append default values for remaining parameters
+                    FunctionAnalyzer.appendDefaultsForPositionalArgs(node.getParams(), fn);
+                    // Update children to match the expanded params
+                    node.clearChildren();
+                    node.addChildren(node.getParams().exprs());
+                    // Re-analyze new children (default values)
+                    for (Expr child : node.getChildren()) {
+                        if (!child.isAnalyzed()) {
+                            visit(child, scope);
+                        }
+                    }
+                    node.setFn(fn);
+                    node.setType(fn.getReturnType());
+                    FunctionAnalyzer.analyze(node);
+                    return null;
+                }
+                // Try to provide a more user-friendly error message for positional calls
+                FunctionAnalyzer.throwFriendlyPositionalArgError(fnName, argumentTypes);
+                // Fallback to generic error if no specific error was thrown
                 String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
@@ -1344,7 +1554,7 @@ public class ExpressionAnalyzer {
 
             Type[] childTypes = new Type[1];
             childTypes[0] = IntegerType.BIGINT;
-            Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
             node.setFn(fn);
@@ -1441,6 +1651,9 @@ public class ExpressionAnalyzer {
             }
             node.getPartitionExprs().forEach(e -> visit(e, context));
             node.getOrderByElements().stream().map(OrderByElement::getExpr).forEach(e -> visit(e, context));
+            if (node.getSkewColumn() != null) {
+                visit(node.getSkewColumn(), context);
+            }
             verifyAnalyticExpression(node);
             return null;
         }
@@ -1499,6 +1712,9 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(VarcharType.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE)) {
+                node.setType(VarcharType.VARCHAR);
+                node.setStrValue(session.getCurrentWarehouseName());
             } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
                 node.setType(VarcharType.VARCHAR);
                 node.setStrValue(session.getSessionId().toString());
@@ -1776,7 +1992,7 @@ public class ExpressionAnalyzer {
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
                     session, dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
-                throw new SemanticException("dict table %s is not found", table.getName());
+                throw new SemanticException("dict table %s is not found", dictionary.getQueryableObject());
             }
 
             List<Column> schema = table.getFullSchema();

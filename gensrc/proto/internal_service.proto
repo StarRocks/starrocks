@@ -135,6 +135,9 @@ message PTransmitRuntimeFilterParams {
     optional bool is_skew_broadcast_join = 12;
     optional PTypeDesc columnType = 13;
     optional int32 skew_shuffle_filter_id = 14;
+
+    optional int32 transmit_timeout_ms = 15;
+    optional int64 transmit_via_http_min_size = 16;
 };
 
 message PTransmitRuntimeFilterResult {
@@ -169,6 +172,23 @@ message PTabletWriterOpenRequest {
         optional bool write_txn_log = 1;
         optional bool enable_data_file_bundling = 2;
         optional bool is_multi_statements_txn = 3;
+        // FE-controlled, transaction-level switch for combined_txn_log collection.
+        //
+        // When true, the CN elects one coordinator per partition (the smallest
+        // sender_id among those that declared tablets of that partition via
+        // (incremental_)open) and routes that partition's txn logs to the elected
+        // coordinator at close time. The claim set is derived from the per-tablet
+        // partition_id already carried by PTabletWithPartition — no extra payload.
+        //
+        // When false or unset, the legacy "sender_id == 0 collects all logs" rule
+        // applies. FE only sets this to true when it can be sure every target CN
+        // supports the mode (rolling-upgrade interlock: FE is always upgraded
+        // after BE, so by the time FE emits `true`, all BEs have the fix).
+        //
+        // This avoids the silent txn log loss on incremental-only channels where
+        // sender 0 is not present (the driver with _sender_id==0 never routed a
+        // row that triggered `_incremental_open_node_channel` onto this CN).
+        optional bool enable_per_partition_coordinator = 4;
     };
 
     required PUniqueId id = 1;
@@ -280,6 +300,9 @@ message PTabletWriterAddBatchResult {
     repeated int64 immutable_partition_ids = 8;
     optional bytes load_channel_profile = 9;
     optional LakeTabletData lake_tablet_data = 10;
+    // Time the server-side add_chunk handler spent blocked in count_down_latch.wait(),
+    // i.e. waiting for the async delta-writer write()/finish() callbacks to complete.
+    optional int64 wait_writer_time_us = 11;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -433,6 +456,8 @@ message PExecPlanFragmentResult {
 };
 
 message PExecBatchPlanFragmentsRequest {
+     // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
 };
 
 message PExecBatchPlanFragmentsResult {
@@ -453,6 +478,10 @@ message PCancelPlanFragmentRequest {
     optional PPlanFragmentCancelReason cancel_reason = 2;
     optional bool is_pipeline = 10;
     optional PUniqueId query_id = 11;
+    // Detailed error message when cancel_reason is INTERNAL_ERROR
+    // This allows propagating the actual error (e.g., "exceed big query cpu limit")
+    // instead of just "InternalError"
+    optional string error_message = 12;
 };
 
 message PCancelPlanFragmentResult {
@@ -741,6 +770,34 @@ message PUpdateTransactionStateResponse {
     repeated StatusPB results = 1;
 }
 
+message PColumn {
+    optional int32 slot_id = 1;
+    optional int64 data_size = 2;
+    optional bytes data = 3;
+}
+
+message PLookUpRequest {
+    optional PUniqueId query_id = 1;
+    optional int32 lookup_node_id = 2;
+    optional int32 request_tuple_id = 3;
+    repeated PColumn request_columns = 4;
+    repeated PSlotDescriptor lookup_slots = 5;
+}
+
+message PLookUpResponse {
+    optional StatusPB status = 1;
+    repeated PColumn columns = 2;
+}
+
+message PLookUpCloseRequest {
+    optional PUniqueId query_id = 1;
+    optional int32 lookup_node_id = 2;
+}
+
+message PLookUpCloseResponse {
+    optional StatusPB status = 1;
+}
+
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
@@ -791,4 +848,6 @@ service PInternalService {
     rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
+    rpc lookup(PLookUpRequest) returns (PLookUpResponse);
+    rpc lookup_close(PLookUpCloseRequest) returns (PLookUpCloseResponse);
 };

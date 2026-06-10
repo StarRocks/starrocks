@@ -38,50 +38,55 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <memory_resource>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
-#include "cache/datacache_utils.h"
-#include "cache/disk_cache/block_cache.h"
+#include "base/debug/debug_action.h"
+#include "base/uid_util.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
-#include "common/object_pool.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/FrontendService.h"
+#include "common/logging.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/global_dict/parser.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/mem_pool.h"
+#include "runtime/arena_allocator.h"
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
-#include "util/debug_action.h"
-#include "util/logging.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
+#include "runtime/query_context_lifetime.h"
 
 namespace starrocks {
 
 class DescriptorTbl;
 class ObjectPool;
 class Status;
-class ExecEnv;
 class Expr;
 class DateTimeValue;
+class MemPool;
 class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
+class RuntimeProfile;
 class RuntimeFilterPort;
+class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
+class FragmentDictState;
+class RuntimeStateHelper;
+class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
-}
+class QueryRuntimeState;
+class FragmentRuntimeState;
+class FragmentContext;
+} // namespace pipeline
 
 #define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
     spill_option.has_value() ? spill_option->var : query_option.var
@@ -94,9 +99,18 @@ class RuntimeState {
 public:
     // for ut only
     RuntimeState();
+    RuntimeState(const RuntimeState&) = delete;
+    // for ut only
+    RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
 
     RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -104,6 +118,7 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env);
     explicit RuntimeState(ExecEnv* exec_env);
 
     // Empty d'tor to avoid issues with std::unique_ptr.
@@ -123,11 +138,24 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
-    ObjectPool* global_obj_pool() const;
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    const pipeline::QueryContext* query_ctx() const { return _query_ctx; }
+    void set_query_runtime_state(pipeline::QueryRuntimeState* query_runtime_state) {
+        _query_runtime_state = query_runtime_state;
+    }
+    pipeline::QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
+    const pipeline::QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
+    void set_fragment_runtime_state(pipeline::FragmentRuntimeState* fragment_runtime_state) {
+        _fragment_runtime_state = fragment_runtime_state;
+    }
+    pipeline::FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
+    const pipeline::FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
+    void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
+    QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) { _fragment_ctx = fragment_ctx; }
+    const pipeline::FragmentContext* fragment_ctx() const { return _fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
@@ -142,16 +170,38 @@ public:
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
     ExecEnv* exec_env() { return _exec_env; }
+    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
+
+    // Fragment-level shared MemPool for placement-new allocations.
+    // Owned by RuntimeState so it outlives all PipelineDrivers.
+    MemPool* fragment_mem_pool() { return _fragment_mem_pool.get(); }
+
+    // PMR memory resource backed by the fragment MemPool.
+    std::pmr::memory_resource* mem_resource() { return _mem_resource.get(); }
+
+    // Create the fragment-level MemPool. Called once during fragment preparation.
+    void init_fragment_mem_pool();
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
     void set_query_mem_tracker(const std::shared_ptr<MemTracker>& query_mem_tracker) {
         _query_mem_tracker = query_mem_tracker;
     }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
+    RuntimeFilterPort* runtime_filter_port() {
+        DCHECK(_runtime_filter_port != nullptr);
+        return _runtime_filter_port;
+    }
+    RuntimeFilterRegistry* runtime_filter_registry() {
+        DCHECK(_runtime_filter_registry != nullptr);
+        return _runtime_filter_registry;
+    }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
@@ -230,28 +280,44 @@ public:
 
     const std::string& db() const { return _db; }
 
+    // Target table name of the current load. Populated by OlapTableSink on
+    // init so RejectedRecordWriter can stamp rows with the correct
+    // (target_database, target_table) pair. Scanner-phase rejections
+    // inherit whatever the sink set earlier in the fragment's init
+    // sequence; if no sink ran first (rare) this stays empty and the
+    // writer records an empty string, which the FE side treats the
+    // same as NULL.
+    void set_table_name(const std::string& table_name) { _table_name = table_name; }
+
+    const std::string& table_name() const { return _table_name; }
+
     void set_load_label(const std::string& label) { _load_label = label; }
 
     const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
-    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
-
-    // is_summary is true, means we are going to write the summary line
-    void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
+    // Lazily-constructed per-fragment writer that persists rejected rows as
+    // JSON Lines for the sync daemon to ship to
+    // `_statistics_.rejected_records`. Returns nullptr when the writer has
+    // not been created; callers should go through
+    // `RuntimeStateHelper::rejected_record_writer(state)` which handles
+    // lazy construction under lock.
+    RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
-
-    Status create_rejected_record_file();
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
 
-    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                        const std::string& source);
+    // Single accounting point for rejected-row counting, bumped from
+    // inside `RejectedRecordWriter::append_serialized`. All entry paths
+    // that eventually reach the writer (legacy helper, ORC capture,
+    // Parquet ArrowConvertContext) share this counter so the per-load
+    // cap in `log_rejected_record_num` fires symmetrically.
+    void note_rejected_record() { _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed); }
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -281,18 +347,6 @@ public:
 
     void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
 
-    void update_report_load_status(TReportExecStatusParams* load_params) {
-        load_params->__set_loaded_rows(num_rows_load_sink());
-        load_params->__set_sink_load_bytes(num_bytes_load_sink());
-        load_params->__set_source_load_rows(num_rows_load_from_source());
-        load_params->__set_source_load_bytes(num_bytes_load_from_source());
-        load_params->__set_filtered_rows(num_rows_load_filtered());
-        load_params->__set_unselected_rows(num_rows_load_unselected());
-        load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
-        // Update datacache load metrics
-        update_load_datacache_metrics(load_params);
-    }
-
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
         _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
     }
@@ -312,10 +366,6 @@ public:
     void update_num_datacache_count(const int64_t count) {
         _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
     }
-
-    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const;
-
-    std::atomic_int64_t* mutable_total_spill_bytes();
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -338,13 +388,7 @@ public:
 
     bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
     bool enable_spill_partitionwise_agg() const { return enable_agg_spill() && spill_partitionwise_agg(); }
-    int spill_partitionwise_agg_partition_num() const {
-        if (_spill_options->spill_partitionwise_agg_partition_num <= 0) {
-            return config::spill_init_partition;
-        } else {
-            return std::max(std::min(_spill_options->spill_partitionwise_agg_partition_num, 256), 4);
-        }
-    }
+    int spill_partitionwise_agg_partition_num() const;
     bool enable_spill_partitionwise_agg_skew_elimination() const {
         return enable_agg_spill() && spill_partitionwise_agg_skew_elimination();
     }
@@ -365,6 +409,33 @@ public:
     bool enable_full_sort_use_german_string() const {
         return _query_options.__isset.enable_full_sort_use_german_string &&
                _query_options.enable_full_sort_use_german_string;
+    }
+
+    bool http_request_ssl_verification_required() const {
+        return _query_options.__isset.http_request_ssl_verification_required &&
+               _query_options.http_request_ssl_verification_required;
+    }
+
+    int32_t http_request_security_level() const {
+        return _query_options.__isset.http_request_security_level ? _query_options.http_request_security_level
+                                                                  : 3; // default: RESTRICTED
+    }
+
+    const std::string& http_request_ip_allowlist() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_ip_allowlist ? _query_options.http_request_ip_allowlist : empty;
+    }
+
+    const std::string& http_request_host_allowlist_regexp() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist_regexp
+                       ? _query_options.http_request_host_allowlist_regexp
+                       : empty;
+    }
+
+    bool http_request_allow_private_in_allowlist() const {
+        return _query_options.__isset.http_request_allow_private_in_allowlist &&
+               _query_options.http_request_allow_private_in_allowlist;
     }
 
     int32_t spill_mem_table_size() const {
@@ -419,6 +490,10 @@ public:
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
     }
 
+    bool error_for_division_by_zero() const {
+        return _query_options.__isset.error_for_division_by_zero && _query_options.error_for_division_by_zero;
+    }
+
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
@@ -468,7 +543,7 @@ public:
 
     void append_tablet_fail_infos(const TTabletFailInfo& fail_info) {
         std::lock_guard<std::mutex> l(_tablet_infos_lock);
-        _tablet_fail_infos.emplace_back(std::move(fail_info));
+        _tablet_fail_infos.emplace_back(fail_info);
     }
 
     std::vector<TSinkCommitInfo>& sink_commit_infos() {
@@ -478,38 +553,24 @@ public:
 
     void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
         std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
-        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
+        _sink_commit_infos.emplace_back(sink_commit_info);
     }
 
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const GlobalDictMaps& get_query_global_dict_map() const;
-    // for query global dict
-    GlobalDictMaps* mutable_query_global_dict_map();
-
-    const GlobalDictMaps& get_load_global_dict_map() const;
-
-    DictOptimizeParser* mutable_dict_optimize_parser();
-
-    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
-
-    using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
-
-    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
+    void set_fragment_dict_state(FragmentDictState* ptr) { _fragment_dict_state = ptr; }
+    FragmentDictState* fragment_dict_state() { return _fragment_dict_state; }
+    const FragmentDictState* fragment_dict_state() const { return _fragment_dict_state; }
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
+    void set_arrow_flight_sql_version(int version) { this->_arrow_flight_sql_version = version; }
+    int arrow_flight_sql_version() const { return this->_arrow_flight_sql_version; }
 
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
-
-    std::shared_ptr<QueryStatisticsRecvr> query_recv();
-
-    Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
@@ -525,8 +586,6 @@ public:
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
-
-    bool is_jit_enabled() const;
 
     bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
 
@@ -577,20 +636,21 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool enable_global_late_materialization() const {
+        return _query_options.__isset.enable_global_late_materialization &&
+               _query_options.enable_global_late_materialization;
+    }
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
     bool fragment_prepared() const { return _fragment_prepared; }
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class RuntimeStateHelper;
+
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-               const TQueryGlobals& query_globals, ExecEnv* exec_env);
-
-    Status create_error_log_file();
-
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                              phmap::flat_hash_map<uint32_t, int64_t>* version);
+               const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -599,14 +659,25 @@ private:
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;
+    int _arrow_flight_sql_version = 0;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
     std::mutex _error_log_lock;
 
+    // Guards lazy construction of `_rejected_record_writer`. Used to be
+    // named after the legacy tab-delimited file it guarded; the file is
+    // gone but the mutex keeps the historical name so call sites remain
+    // stable across the deletion.
     std::mutex _rejected_record_lock;
-    std::string _rejected_record_file_path;
-    std::unique_ptr<std::ofstream> _rejected_record_file;
+    // Writer. Lazily constructed by RuntimeStateHelper on first
+    // append so enabled-but-never-triggered loads pay no allocation cost.
+    // Held via shared_ptr so this header does not need RejectedRecordWriter's
+    // complete type for destruction. Letting unique_ptr destruct here would
+    // force runtime_state.cpp (RuntimeCore layer) to include the writer
+    // header, which lives in the higher Runtime layer and breaks the module
+    // boundary check.
+    std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;
@@ -620,6 +691,8 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
+    const QueryExecutionServices* _query_execution_services = nullptr;
+    QueryContextLifetimeWeakPtr _query_ctx_lifetime;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
@@ -629,12 +702,23 @@ private:
     // Memory usage of this fragment instance
     std::shared_ptr<MemTracker> _instance_mem_tracker;
 
+    // Fragment-level memory pool for placement-new allocation of query objects
+    // (ExecNodes, Descriptors, etc.).  Declared BEFORE _obj_pool so that it is
+    // destroyed AFTER _obj_pool (C++ reverse member destruction order).  This
+    // guarantees ObjectPool calls destructors before MemPool memory is freed.
+    //
+    // Owned here (not in FragmentContext) because RuntimeState is ref-counted
+    // via shared_ptr and PipelineDrivers can outlive FragmentContext.
+    std::unique_ptr<MemPool> _fragment_mem_pool;
+    // PMR adapter — nullptr when _fragment_mem_pool is null.
+    std::unique_ptr<MemPoolResource> _mem_resource;
+
     std::shared_ptr<ObjectPool> _obj_pool;
 
     // if true, execution should stop with a CANCELLED status
     std::atomic<bool> _is_cancelled{false};
 
-    int _per_fragment_instance_idx;
+    int _per_fragment_instance_idx = 0;
     int _num_per_fragment_instances = 0;
 
     // used as send id
@@ -690,6 +774,7 @@ private:
     int64_t _txn_id = 0;
     std::string _load_label;
     std::string _db;
+    std::string _table_name;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
@@ -700,17 +785,14 @@ private:
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
 
-    // prohibit copies
-    RuntimeState(const RuntimeState&) = delete;
-
     RuntimeFilterPort* _runtime_filter_port = nullptr;
+    RuntimeFilterRegistry* _runtime_filter_registry = nullptr;
 
-    GlobalDictMaps _query_global_dicts;
-    GlobalDictMaps _load_global_dicts;
-    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
-    DictOptimizeParser _dict_optimize_parser;
+    FragmentDictState* _fragment_dict_state = nullptr;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+    pipeline::QueryRuntimeState* _query_runtime_state = nullptr;
+    pipeline::FragmentRuntimeState* _fragment_runtime_state = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
@@ -727,12 +809,12 @@ private:
     bool _fragment_prepared = false;
 };
 
-#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
-    do {                                                                                    \
-        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
-        if (tracker != nullptr) {                                                           \
-            return Status::MemoryLimitExceeded(tracker->err_msg(msg, state));               \
-        }                                                                                   \
+#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                                    \
+    do {                                                                                                        \
+        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker();                     \
+        if (tracker != nullptr) {                                                                               \
+            return Status::MemoryLimitExceeded(tracker->err_msg(msg, print_id(state->fragment_instance_id()))); \
+        }                                                                                                       \
     } while (false)
 
 #define RETURN_IF_CANCELLED(state)                                                       \

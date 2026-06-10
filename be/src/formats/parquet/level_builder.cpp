@@ -16,21 +16,30 @@
 
 #include <fmt/core.h>
 
+#include <limits>
 #include <string>
 #include <utility>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#include "base/simd/rle_simd.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
+#include "column/variant_column.h"
 #include "common/compiler_util.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
-#include "util/defer_op.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -39,7 +48,7 @@ inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
+    auto null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->immutable_data().data();
     return raw_column;
 }
@@ -154,6 +163,9 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
     case TYPE_JSON: {
         return _write_json_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
+    case TYPE_VARIANT: {
+        return _write_variant_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+    }
     default: {
         return Status::NotSupported(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
@@ -220,8 +232,29 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
         auto values = new target_type[col->size()];
         DeferOp defer([&] { delete[] values; });
 
-        for (size_t i = 0; i < col->size(); i++) {
-            values[i] = static_cast<target_type>(data_col[i]);
+        // SIMD widening for the two common parquet-int cases; rle_simd takes int32
+        // counts, so fall back to scalar when col_size doesn't fit.
+        const size_t col_size = col->size();
+        if constexpr (std::is_same_v<source_type, int8_t> && std::is_same_v<target_type, int32_t>) {
+            if (col_size <= static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                simd_widen_int8_to_int32(values, data_col, static_cast<int32_t>(col_size));
+            } else {
+                for (size_t i = 0; i < col_size; i++) {
+                    values[i] = static_cast<target_type>(data_col[i]);
+                }
+            }
+        } else if constexpr (std::is_same_v<source_type, int16_t> && std::is_same_v<target_type, int32_t>) {
+            if (col_size <= static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                simd_widen_int16_to_int32(values, data_col, static_cast<int32_t>(col_size));
+            } else {
+                for (size_t i = 0; i < col_size; i++) {
+                    values[i] = static_cast<target_type>(data_col[i]);
+                }
+            }
+        } else {
+            for (size_t i = 0; i < col_size; i++) {
+                values[i] = static_cast<target_type>(data_col[i]);
+            }
         }
 
         write_leaf_callback(LevelBuilderResult{
@@ -392,7 +425,7 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
     const auto* data_col = down_cast<const RunTimeColumnType<lt>*>(ColumnHelper::get_data_column(col.get()));
     const auto* null_col = get_raw_null_column(col);
     const auto& vo = data_col->get_offset();
-    const auto& vb = data_col->get_bytes();
+    auto vb = data_col->get_immutable_bytes();
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
@@ -602,7 +635,7 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
                                     ctx._repeated_ancestor_def_level);
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
-        auto sub_col = struct_col->field_column(type_desc.field_names[i]);
+        ASSIGN_OR_RETURN(auto sub_col, struct_col->field_column(type_desc.field_names[i]));
         RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col,
                                             write_leaf_callback));
     }
@@ -644,6 +677,77 @@ Status LevelBuilder::_write_json_column_chunk(const LevelBuilderContext& ctx, co
     return Status::OK();
 }
 
+Status LevelBuilder::_write_variant_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                 const CallbackFunction& write_leaf_callback) {
+    DCHECK(type_desc.type == TYPE_VARIANT);
+
+    auto variant_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    auto* null_col = get_raw_null_column(col);
+    auto* data_col = ColumnHelper::get_data_column(col.get());
+    auto* variant_col = down_cast<const VariantColumn*>(data_col);
+
+    auto rep_levels = ctx._rep_levels;
+    auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
+
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, rep_levels,
+                                    ctx._max_def_level + node->is_optional(), ctx._max_rep_level,
+                                    ctx._repeated_ancestor_def_level);
+
+    int metadata_index = -1;
+    int value_index = -1;
+    for (int i = 0; i < variant_node->field_count(); ++i) {
+        const auto& child = variant_node->field(i);
+        if (child->name() == "metadata") {
+            metadata_index = i;
+        } else if (child->name() == "value") {
+            value_index = i;
+        }
+    }
+
+    if (metadata_index < 0 || value_index < 0) {
+        return Status::NotSupported("Variant parquet schema requires 'metadata' and 'value' fields");
+    }
+
+    auto write_binary_leaf = [&](const ::parquet::schema::NodePtr& child_node, bool write_metadata) -> Status {
+        auto child_def_levels = _make_def_levels(derived_ctx, child_node, null_col, col->size());
+        auto null_bitset = _make_null_bitset(derived_ctx, null_col, col->size());
+
+        auto values = new ::parquet::ByteArray[col->size()];
+        DeferOp defer([&] { delete[] values; });
+        std::vector<std::string> datas;
+        datas.reserve(col->size());
+
+        for (size_t i = 0; i < col->size(); ++i) {
+            VariantRowValue variant_buffer;
+            const VariantRowValue* variant = variant_col->get_row_value(i, &variant_buffer);
+
+            if (variant == nullptr) {
+                datas.emplace_back();
+            } else {
+                std::string_view slice = write_metadata ? variant->get_metadata().raw() : variant->get_value().raw();
+                datas.emplace_back(slice);
+            }
+            const std::string& data = datas.back();
+            values[i].len = static_cast<uint32_t>(data.size());
+            values[i].ptr = reinterpret_cast<const uint8_t*>(data.data());
+        }
+
+        write_leaf_callback(LevelBuilderResult{
+                .num_levels = derived_ctx._num_levels,
+                .def_levels = child_def_levels ? child_def_levels->data() : nullptr,
+                .rep_levels = derived_ctx._rep_levels ? derived_ctx._rep_levels->data() : nullptr,
+                .values = reinterpret_cast<uint8_t*>(values),
+                .null_bitset = null_bitset ? null_bitset->data() : nullptr,
+        });
+        return Status::OK();
+    };
+
+    RETURN_IF_ERROR(write_binary_leaf(variant_node->field(metadata_index), true));
+    RETURN_IF_ERROR(write_binary_leaf(variant_node->field(value_index), false));
+    return Status::OK();
+}
+
 // Bit-pack null column into an LSB-first bitmap. Note the 0/1 values are flipped.
 std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const LevelBuilderContext& ctx,
                                                                       const uint8_t* nulls,
@@ -654,9 +758,48 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const Leve
         }
 
         auto bitset = std::make_shared<std::vector<uint8_t>>((col_size + 7) / 8);
+#ifdef __AVX2__
+        {
+            const __m256i zero_vec = _mm256_setzero_si256();
+            size_t i = 0;
+            // cmpeq_epi8 yields 0xFF where the input byte is 0 (i.e. NOT null);
+            // movemask_epi8 packs those MSB-bits into a 32-bit bitset directly,
+            // which matches the (1 - nulls[i]) << (i & 7) pattern below.
+            for (; i + 32 <= col_size; i += 32) {
+                __m256i nulls_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(nulls + i));
+                __m256i not_null = _mm256_cmpeq_epi8(nulls_vec, zero_vec);
+                uint32_t mask = _mm256_movemask_epi8(not_null);
+                std::memcpy(bitset->data() + (i >> 3), &mask, sizeof(mask));
+            }
+            for (; i < col_size; i++) {
+                (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
+            }
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        {
+            // NEON lacks movemask, so AND with per-lane bit weights and reduce
+            // via three pairwise adds to pack 8 bytes -> 1 bitset byte.
+            const uint8x8_t zero_vec = vdup_n_u8(0);
+            const uint8x8_t bit_mask = {1, 2, 4, 8, 16, 32, 64, 128};
+            size_t i = 0;
+            for (; i + 8 <= col_size; i += 8) {
+                uint8x8_t nulls_vec = vld1_u8(nulls + i);
+                uint8x8_t not_null = vceq_u8(nulls_vec, zero_vec);
+                uint8x8_t masked = vand_u8(not_null, bit_mask);
+                uint8x8_t sum1 = vpadd_u8(masked, masked);
+                uint8x8_t sum2 = vpadd_u8(sum1, sum1);
+                uint8x8_t sum3 = vpadd_u8(sum2, sum2);
+                (*bitset)[i >> 3] = vget_lane_u8(sum3, 0);
+            }
+            for (; i < col_size; i++) {
+                (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
+            }
+        }
+#else
         for (size_t i = 0; i < col_size; i++) {
             (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
         }
+#endif
         return bitset;
     }
 

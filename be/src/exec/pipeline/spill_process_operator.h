@@ -16,10 +16,10 @@
 
 #include <memory>
 
+#include "compute_env/spill/spiller.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/spiller.h"
 
 namespace starrocks::pipeline {
 // operator for process spill task
@@ -43,9 +43,12 @@ public:
 
     bool is_finished() const override;
 
+    Status set_finished(RuntimeState* state) override;
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    bool _is_finished = false;
     SpillProcessChannelPtr _channel;
 };
 

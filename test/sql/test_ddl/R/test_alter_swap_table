@@ -1,4 +1,4 @@
--- name: test_alter_swap_table
+-- name: test_alter_swap_table @native
 create database db_test_alter_swap_table;
 -- result:
 -- !result

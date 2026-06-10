@@ -16,9 +16,9 @@
 
 #include <functional>
 
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "http/http_handler.h"
-#include "runtime/client_cache.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/message_body_sink.h"
 
@@ -35,6 +35,12 @@ public:
     ~TransactionManagerAction() override;
 
     void handle(HttpRequest* req) override;
+
+    // Framework-level Basic is skipped: this endpoint uses a label-bound session
+    // model where begin parses Basic and stashes credentials into StreamLoadContext,
+    // and subsequent commit/rollback look up the ctx by label. Identity + INSERT
+    // are validated inside the begin/commit/rollback RPCs on FE.
+    bool need_auth() const override { return false; }
 
 private:
     void _send_error_reply(HttpRequest* req, const Status& st);
@@ -56,6 +62,11 @@ public:
     void on_chunk_data(HttpRequest* req) override;
 
     void free_handler_ctx(void* ctx) override;
+
+    // Framework-level Basic is skipped: this endpoint looks up the
+    // StreamLoadContext by label and inherits the credentials captured at begin.
+    // Identity + INSERT are validated by FE during the streamLoadPut RPC flow.
+    bool need_auth() const override { return false; }
 
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);

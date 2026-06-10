@@ -37,10 +37,11 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -52,6 +53,7 @@ import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -64,6 +66,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
@@ -207,6 +210,13 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     // Called from init, construct source tuple information
     private void initParams() throws StarRocksException {
+        if (streamLoadInfo.getEnvelope() == TEnvelopeType.DEBEZIUM
+                && dstTable instanceof OlapTable
+                && ((OlapTable) dstTable).getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new StarRocksException(
+                    "envelope=debezium is only supported on PRIMARY KEY tables");
+        }
+
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         paramCreateContext.params = params;
 
@@ -342,8 +352,8 @@ public class StreamLoadScanNode extends LoadScanNode {
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH)
-                        && !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
+                if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH)
+                        && !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH
                             + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=hll_empty()");
@@ -392,6 +402,9 @@ public class StreamLoadScanNode extends LoadScanNode {
                     rangeDesc.setJson_root(streamLoadInfo.getJsonRoot());
                 }
                 rangeDesc.setStrip_outer_array(streamLoadInfo.isStripOuterArray());
+            }
+            if (streamLoadInfo.getEnvelope() != TEnvelopeType.NONE) {
+                rangeDesc.setEnvelope(streamLoadInfo.getEnvelope());
             }
             if (rangeDesc.format_type == TFileFormatType.FORMAT_AVRO) {
                 if (!streamLoadInfo.getJsonPaths().isEmpty()) {

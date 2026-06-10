@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "不建议在 OLAP 场景中使用 INSERT INTO 语句单条写入数据。"
 ---
 
 # INSERT INTO 导入常见问题
@@ -29,3 +30,7 @@ displayed_sidebar: docs
 ```sql
 set insert_timeout =xx;
 ```
+
+## 为什么INSERT INTO SELECT返回 “Reach limit of connections”？
+
+这是因为用户连接数达到了限制。增加用户属性 `max_user_connections` 的值。

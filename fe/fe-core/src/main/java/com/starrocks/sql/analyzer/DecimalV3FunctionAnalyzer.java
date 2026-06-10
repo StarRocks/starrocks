@@ -57,7 +57,7 @@ public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.ABS).add(FunctionSet.POSITIVE).add(FunctionSet.NEGATIVE)
-                    .add(FunctionSet.MONEY_FORMAT).build();
+                    .add(FunctionSet.MONEY_FORMAT).add(FunctionSet.MATERIALIZE).build();
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String::compareTo)
@@ -425,7 +425,7 @@ public class DecimalV3FunctionAnalyzer {
     public static Function getDecimalV3Function(ConnectContext session,
                                                 FunctionCallExpr node,
                                                 Type[] argumentTypes) {
-        return getDecimalV3Function(session, node.getFnName().getFunction(), node.getParams(),
+        return getDecimalV3Function(session, node.getFunctionName(), node.getParams(),
                 argumentTypes, node.getPos());
     }
 
@@ -573,11 +573,22 @@ public class DecimalV3FunctionAnalyzer {
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
-            case FunctionSet.REVERSE:
+            case FunctionSet.ARRAY_SORT_LAMBDA:
             case FunctionSet.ARRAY_INTERSECT:
             case FunctionSet.ARRAY_CONCAT: {
                 newFn.setArgsType(new Type[] {argumentTypes[0]});
                 newFn.setRetType(argumentTypes[0]);
+                return newFn;
+            }
+            case FunctionSet.REVERSE: {
+                // reverse() supports both VARCHAR and array arguments.
+                // Only apply array-decimal type fixup when the argument is actually an array;
+                // for scalar decimal arguments the matched reverse(VARCHAR) is kept as-is so
+                // that ImplicitCastRule inserts the required cast(decimal -> VARCHAR).
+                if (argumentTypes[0].isArrayType()) {
+                    newFn.setArgsType(new Type[] {argumentTypes[0]});
+                    newFn.setRetType(argumentTypes[0]);
+                }
                 return newFn;
             }
             case FunctionSet.ARRAY_MAX:

@@ -43,10 +43,24 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OAuth2Action extends RestBaseAction {
+    private static final int CONNECT_TIMEOUT_SECOND = 5;
+    private static final int REQUEST_TIMEOUT_SECOND = 10;
+
+    // Reuse a single HttpClient instance across all OAuth2 token exchanges.
+    // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
+    // Creating a new instance per request leaks FDs (selector epoll/eventfd/pipe + idle
+    // sockets) because the JDK 17 HttpClient has no close() method and relies on GC,
+    // which fails to keep up under sustained load.
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECOND))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
     public OAuth2Action(ActionController controller) {
         super(controller);
     }
@@ -55,8 +69,14 @@ public class OAuth2Action extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/oauth2", new OAuth2Action(controller));
     }
 
+    // OAuth2 callback endpoint is itself the auth handshake; cannot require Basic.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String authorizationCode = getSingleParameter(request, "code", r -> r);
         String connectionIdStr = getSingleParameter(request, "state", r -> r);
         long connectionId = Long.parseLong(connectionIdStr);
@@ -137,14 +157,14 @@ public class OAuth2Action extends RestBaseAction {
                             URLEncoder.encode(entry.getValue().toString(), StandardCharsets.UTF_8))
                     .collect(Collectors.joining("&"));
 
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(oAuth2Context.tokenServerUrl()))
+                    .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECOND))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return response.body();
             } else {

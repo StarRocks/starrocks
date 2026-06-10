@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.2 版本发布说明：统一 Catalog、Hive 托管表创建、主键索引持久化、性能优化和 Bug 修复。"
 ---
 
 # StarRocks version 3.2
@@ -475,7 +476,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - 使用 JDK8 时，默认 GC 算法采用 G1。 [#37268](https://github.com/StarRocks/starrocks/pull/37268)
-- 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/3.2/reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- 系统变量 [sql_mode](https://docs.starrocks.io/docs/3.2/sql-reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - 隐藏了审计日志（Audit Log）中 [Broker Load 作业里 AWS S3](https://docs.starrocks.io/zh/docs/3.2/loading/s3/) 的鉴权信息 `aws.s3.access_key` 和 `aws.s3.access_secret`。[#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load 可以持续从 Apache Kafka® 消费消息并导入数据到 StarRocks。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -113,7 +114,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必需**：否\
 **描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul><li>`alive_be_number`：存活的 BE 节点数。</li><li>`partition_number`：要消费的分区数。</li><li>`desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。</li></ul>最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。<br/>
 
-####  `max_batch_interval`
+#### `max_batch_interval`
 
 **必需**：否\
 **描述**：任务的调度间隔，即任务执行的频率。单位：秒。取值范围：`5` ~ `60`。默认值：`10`。建议设置大于 `10` 的值。如果调度时间小于 10 秒，由于导入频率过高，会生成过多的 tablet 版本。
@@ -166,7 +167,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **必需**：否\
-**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（<code class="language-text">&#124;</code>）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：<code class="language-text">&#124; "Love StarRocks" &#124;</code>。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 <code class="language-text">&#124;"Love StarRocks"&#124;</code>。
+**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（`|`）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：`| "Love StarRocks" |`。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 `|"Love StarRocks"|`。
 
 #### `enclose`     
 
@@ -192,6 +193,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 **必需**：否\
 **描述**：要加载的 JSON 格式数据的根元素。StarRocks 通过 `json_root` 提取根节点的元素进行解析。默认情况下，此参数的值为空，表示将加载所有 JSON 格式数据。有关更多信息，请参见本主题中的 [指定要加载的 JSON 格式数据的根元素](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded)。
+
+#### `envelope`
+
+**必需**：否\
+**描述**：指定 JSON 格式数据的 CDC Envelope 格式。有效值：`debezium`。默认不设置（无 Envelope 包装）。设置为 `debezium` 时，StarRocks 将每条 Kafka 消息解析为 Debezium CDC 事件，消息中须包含 `op` 字段（`c`=insert、`u`=update、`d`=delete、`r`=快照读取）以及 `after` 字段（c/u/r 操作）或 `before` 字段（d 操作），用于承载实际行数据。`payload` 为 `null` 的 tombstone 消息将被跳过。只能在 `format` 为 `json` 时指定，不能与 `json_root` 或 `strip_outer_array` 同时使用。
 
 #### `task_consume_second`
 
@@ -359,7 +365,7 @@ FROM <data_source>
   - StarRocks 表由三列组成，按顺序为 `col1`、`col2` 和 `col3`。数据文件由四列组成，其中前三列可以按顺序映射到 StarRocks 表列 `col1`、`col2` 和 `col3`，第四列不能映射到任何 StarRocks 表列。在这种情况下，您需要为数据文件的第四列临时指定一个名称，并且临时名称必须与任何 StarRocks 表列名称不同。例如，您可以指定 `"columns: col1, col2, col3, temp"`，其中数据文件的第四列临时命名为 `temp`。
   - StarRocks 表由三列组成，按顺序为 `year`、`month` 和 `day`。数据文件仅由一列组成，该列包含 `yyyy-mm-dd hh:mm:ss` 格式的日期和时间值。在这种情况下，您可以指定 `"columns: col, year = year(col), month=month(col), day=day(col)"`，其中 `col` 是数据文件列的临时名称，函数 `year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于从数据文件列 `col` 中提取数据并将数据加载到映射的 StarRocks 表列中。例如，`year = year(col)` 用于从数据文件列 `col` 中提取 `yyyy` 数据并将数据加载到 StarRocks 表列 `year` 中。
 
-有关更多示例，请参见 [配置列映射](#configure-column-mapping)。
+有关更多示例，请参见 [配置列映射](#配置列映射)。
 
 ### 配置 JSON 格式或 Avro 格式数据的列映射
 

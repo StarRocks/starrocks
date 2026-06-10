@@ -20,12 +20,20 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LambdaFunctionOperatorTest {
     @Test
@@ -43,5 +51,37 @@ public class LambdaFunctionOperatorTest {
         Assertions.assertTrue(lambda.isNullable());
         Assertions.assertEquals("([1: x]->1: x = 1)", lambda.toString());
         Assertions.assertTrue(lambda.equals(lambda.clone()));
+    }
+
+    @Test
+    void testArgumentDependency() {
+        // GIVEN: lambda (x) -> x = 1, where x has the same id in refColumns and in the expression
+        var lambdaColRef = new ColumnRefOperator(1, IntegerType.INT, "x", true, true);
+        PredicateOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, IntegerType.INT, "x", true),
+                ConstantOperator.createInt(1));
+        var lambda = new LambdaFunctionOperator(Lists.newArrayList(lambdaColRef), lambdaExpr, BooleanType.BOOLEAN);
+
+        // WHEN / THEN
+        assertEquals(1, lambda.getNumberOfDependentArguments());
+        assertFalse(lambda.isIndependentOfArguments());
+
+        // GIVEN: lambda (x, y) -> x = y, both arguments used
+        var lambdaColRef2 = new ColumnRefOperator(2, IntegerType.INT, "y", true, true);
+        lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, IntegerType.INT, "x", true),
+                new ColumnRefOperator(2, IntegerType.INT, "y", true));
+        lambda = new LambdaFunctionOperator(List.of(lambdaColRef, lambdaColRef2), lambdaExpr, BooleanType.BOOLEAN);
+
+        // WHEN / THEN
+        assertEquals(2, lambda.getNumberOfDependentArguments());
+        assertFalse(lambda.isIndependentOfArguments());
+
+        // GIVEN: lambda (x) -> IS NULL(1), argument not used
+        lambdaExpr = new IsNullPredicateOperator(ConstantOperator.createInt(1));
+        lambda = new LambdaFunctionOperator(List.of(lambdaColRef), lambdaExpr, BooleanType.BOOLEAN);
+        // WHEN / THEN
+        assertEquals(0, lambda.getNumberOfDependentArguments());
+        assertTrue(lambda.isIndependentOfArguments());
     }
 }

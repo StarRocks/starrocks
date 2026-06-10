@@ -19,8 +19,9 @@
 
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
 
@@ -30,7 +31,7 @@ class RuntimeState;
 
 namespace pipeline {
 
-class Pipeline {
+class Pipeline : public DriverObserver {
 public:
     Pipeline() = delete;
     Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group);
@@ -39,15 +40,15 @@ public:
 
     Operators create_operators(int32_t degree_of_parallelism, int32_t i) {
         Operators operators;
+        operators.reserve(_op_factories.size());
         for (const auto& factory : _op_factories) {
             operators.emplace_back(factory->create(degree_of_parallelism, i));
         }
         return operators;
     }
-    void instantiate_drivers(RuntimeState* state);
-    Drivers& drivers();
     const Drivers& drivers() const;
-    void count_down_driver(RuntimeState* state);
+    Drivers& mutable_drivers();
+    void on_driver_finished(RuntimeState* state) override;
     void clear_drivers();
 
     SourceOperatorFactory* source_operator_factory() {
@@ -100,10 +101,6 @@ public:
         return ss.str();
     }
 
-    // STREAM MV
-    Status reset_epoch(RuntimeState* state);
-    void count_down_epoch_finished_driver(RuntimeState* state);
-
     size_t output_amplification_factor() const;
     Event* pipeline_event() const { return _pipeline_event.get(); }
 
@@ -116,8 +113,6 @@ private:
 
     EventPtr _pipeline_event;
     ExecutionGroupRawPtr _execution_group = nullptr;
-    // STREAM MV
-    std::atomic<size_t> _num_epoch_finished_drivers = 0;
 };
 
 } // namespace pipeline

@@ -1,0 +1,55 @@
+-- name: test_jvm_nested_udf
+
+create table t_nested (
+    id int,
+    arr array<array<int>>,
+    arr_map array<map<int, string>>,
+    m map<string, array<int>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_nested values (1, null, null, null);
+insert into t_nested values (2, [[1,2],[3,4]], [map(1,"k1"),map(2,"k2")], map('a', [1,2], 'b', [3,4]));
+
+
+-- scalar udf
+CREATE FUNCTION EchoNestedArray(array<array<int>>)
+RETURNS array<array<int>>
+PROPERTIES (
+    "symbol" = "EchoNestedArray",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/nested.jar"
+);
+
+CREATE FUNCTION EchoNestedArray2(array<map<int, string>>)
+RETURNS array<map<int, string>>
+PROPERTIES (
+    "symbol" = "EchoNestedArray2",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/nested.jar"
+);
+
+CREATE FUNCTION EchoNestedMap(map<string,array<int>>)
+RETURNS map<string,array<int>>
+PROPERTIES (
+    "symbol" = "EchoNestedMap",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/nested.jar"
+);
+
+select EchoNestedArray(null);
+select EchoNestedArray([[1,2],[3,4]]);
+select EchoNestedArray2(null);
+select EchoNestedArray2([map(1,"k1"),map(2,"k2")]);
+select EchoNestedMap(null);
+select EchoNestedMap(map('a', [1,2], 'b', [3,4]));
+
+select EchoNestedArray(arr) from t_nested order by id;
+select EchoNestedArray2(arr_map) from t_nested order by id;
+select EchoNestedMap(m) from t_nested order by id;
+
+select * from t_nested where EchoNestedArray(arr) = [[1,2],[3,4]];
+select * from t_nested where EchoNestedArray2(arr_map) = [map(1,"k1"),map(2,"k2")];
+select * from t_nested where EchoNestedMap(m) = map('a', [1,2], 'b', [3,4]);

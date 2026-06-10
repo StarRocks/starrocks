@@ -40,19 +40,21 @@
 #include <future>
 #include <vector>
 
+#include "base/auth/auth_info.h"
+#include "base/concurrency/concurrent_limiter.h"
+#include "base/metrics.h"
+#include "base/string/string_util.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "common/config_ingest_fwd.h"
 #include "common/status.h"
-#include "common/utils.h"
+#include "common/system/backend_options.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "pulsar/Client.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "service/backend_options.h"
-#include "util/concurrent_limiter.h"
-#include "util/string_util.h"
-#include "util/time.h"
-#include "util/uid_util.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -155,17 +157,7 @@ public:
         }
     }
 
-    ~StreamLoadContext() noexcept {
-        if (need_rollback) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(this);
-            need_rollback = false;
-        }
-
-        _exec_env->load_stream_mgr()->remove(id);
-        if (_running_loads != nullptr) {
-            _running_loads->increment(-1);
-        }
-    }
+    ~StreamLoadContext() noexcept;
 
     std::string to_json() const;
     std::string to_merge_commit_json() const;
@@ -185,6 +177,32 @@ public:
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
     static void release(StreamLoadContext* context);
+
+    // Returns the Thrift RPC timeout (in milliseconds) shared by the stream-load plan (put)
+    // and the txn prepare/commit RPCs sent to the FE.
+    //
+    // The base value is the configurable `stream_load_thrift_rpc_timeout_ms`. When the caller
+    // specifies a load timeout (`timeout_second`), the RPC timeout is clamped into the range
+    // [timeout_ms / 4, timeout_ms / 2], so that a single RPC is never allowed to take longer
+    // than half of the whole load timeout, nor be shorter than a quarter of it.
+    //
+    // The bounds are computed in 64-bit because `timeout_second` comes from a user-supplied
+    // header and `timeout_second * 1000` would overflow int32 once timeout_second > 2147483;
+    // the result is capped at INT32_MAX before narrowing back to the int32 RPC timeout.
+    int32_t calc_put_and_commit_rpc_timeout_ms() {
+        int32_t rpc_timeout_ms = config::stream_load_thrift_rpc_timeout_ms;
+        if (timeout_second != -1) {
+            int64_t timeout_ms = static_cast<int64_t>(timeout_second) * 1000;
+            int64_t min_rpc_timeout_ms = timeout_ms / 4;
+            int64_t max_rpc_timeout_ms = timeout_ms / 2;
+            if (rpc_timeout_ms < min_rpc_timeout_ms) {
+                rpc_timeout_ms = min_rpc_timeout_ms > INT32_MAX ? INT32_MAX : static_cast<int32_t>(min_rpc_timeout_ms);
+            } else if (rpc_timeout_ms > max_rpc_timeout_ms) {
+                rpc_timeout_ms = static_cast<int32_t>(max_rpc_timeout_ms);
+            }
+        }
+        return rpc_timeout_ms;
+    }
 
     // ========================== transaction stream load ==========================
     // try to get the lock when receiving http requests.

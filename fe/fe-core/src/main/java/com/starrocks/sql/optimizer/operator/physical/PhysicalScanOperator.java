@@ -52,6 +52,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected ScanOptimizeOption scanOptimizeOption;
     protected TvrVersionRange tvrVersionRange;
     protected DataCacheOptions dataCacheOptions = null;
+    protected boolean enableGlobalLateMaterialization = false;
 
     protected PhysicalScanOperator(OperatorType type) {
         super(type);
@@ -141,6 +142,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return tvrVersionRange;
     }
 
+    public boolean isEnableGlobalLateMaterialization() {
+        return enableGlobalLateMaterialization;
+    }
+
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
+    }
+
     public Table getTable() {
         return table;
     }
@@ -213,6 +222,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             builder.columnAccessPaths = operator.columnAccessPaths;
             builder.scanOptimizeOption = operator.scanOptimizeOption;
             builder.tvrVersionRange = operator.tvrVersionRange;
+            builder.enableGlobalLateMaterialization = operator.enableGlobalLateMaterialization;
             return (B) this;
         }
 
@@ -231,6 +241,11 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                     .addAll(this.builder.columnAccessPaths)
                     .addAll(accessPaths);
             this.builder.setColumnAccessPaths(builder.build());
+            return (B) this;
+        }
+
+        public B setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+            builder.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
             return (B) this;
         }
 

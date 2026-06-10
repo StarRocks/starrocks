@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Skew Join V2 in StarRocks to optimize JOIN queries with data skew by broadcasting skew values, improving performance for heavily skewed data..."
 ---
 
 # Skew Join V2
@@ -218,6 +219,8 @@ Follow these rules to choose the appropriate skew values:
   The support for complex expressions in Join conditions is limited.
 - **Skew Table**
   Skew Join V2 can only handle scenarios where the large table in the JOIN operation is skewed, and the large table must be used as the left table.
+- **Join Reordering**
+  Using the `skew` hint will prevent the optimizer from reordering the Join. The Join will be executed in the order specified in the SQL, and the optimizer will not attempt to change the Join order or swap the left and right tables of the Join node containing the hint.
 
 ## Troubleshooting
 
@@ -241,4 +244,4 @@ Check the following fields in the plan:
 - [Query Planning](../best_practices/query_tuning/query_planning.md)
 - [Query Profile Tuning](../best_practices/query_tuning/query_profile_tuning_recipes.md)
 - [System Variables](../sql-reference/System_variable.md)
-- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#join)
+- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md#join)

@@ -20,18 +20,33 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "common/util/thrift_util.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"
@@ -41,11 +56,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
-#include "util/thrift_util.h"
 
 // TODO: test multi thread
 // TODO: test runtime filter
@@ -60,6 +70,7 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
 
         const auto& params = _request.params;
         const auto& query_id = params.query_id;
@@ -67,20 +78,20 @@ public:
 
         ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
         _query_ctx->set_total_fragments(1);
-        _query_ctx->set_delivery_expire_seconds(60);
-        _query_ctx->set_query_expire_seconds(60);
-        _query_ctx->extend_delivery_lifetime();
-        _query_ctx->extend_query_lifetime();
+        _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+        _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+        _query_ctx->query_runtime_state().extend_delivery_lifetime();
+        _query_ctx->query_runtime_state().extend_query_lifetime();
         _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                      GlobalEnv::GetInstance()->query_pool_mem_tracker());
-        _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
         _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
         _fragment_ctx->set_query_id(query_id);
         _fragment_ctx->set_fragment_instance_id(fragment_id);
-        _fragment_ctx->set_runtime_state(
-                std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                               _request.query_options, _request.query_globals, _exec_env));
+        _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+                _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+                _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+        _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
         _fragment_future = _fragment_ctx->finish_future();
         _runtime_state = _fragment_ctx->runtime_state();
@@ -88,11 +99,12 @@ public:
         _runtime_state->set_chunk_size(config::vector_chunk_size);
         _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
         _runtime_state->set_be_number(_request.backend_num);
-        _runtime_state->set_query_ctx(_query_ctx);
+        _query_ctx->attach_to_runtime_state(_runtime_state);
         _runtime_state->set_fragment_ctx(_fragment_ctx);
+        _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
         _pool = _runtime_state->obj_pool();
         auto sink_dop = degree_of_parallelism;
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 
@@ -239,13 +251,14 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
         }
     });
 
-    _fragment_ctx->iterate_pipeline(
-            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
+    _fragment_ctx->iterate_pipeline([this](auto pipeline) { _fragment_ctx->instantiate_drivers(pipeline); });
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        RETURN_IF_ERROR(driver->prepare(state));
+        return driver->prepare_local_state(state);
+    });
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
         LOG(WARNING) << driver->to_readable_string();
@@ -405,7 +418,9 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     exec_group = ExecutionGroupBuilder::create_normal_exec_group();
 
-    OpFactories op_factories = file_scan_node->decompose_to_pipeline(_context);
+    auto op_factories_result = file_scan_node->decompose_to_pipeline(_context);
+    ASSERT_TRUE(op_factories_result.ok()) << op_factories_result.status().message();
+    OpFactories op_factories = std::move(op_factories_result).value();
 
     op_factories.push_back(std::make_shared<starrocks::pipeline::TestFileScanSinkOperatorFactory>(
             _context->next_operator_id(), 0, sinkCounter));

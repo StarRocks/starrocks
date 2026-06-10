@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -59,6 +60,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -112,6 +114,15 @@ public class WarehouseManager implements Writable {
     public List<Long> getAllWarehouseIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             return new ArrayList<>(idToWh.keySet());
+        }
+    }
+
+    public Set<Long> getAliveWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.values().stream()
+                    .filter(Warehouse::isAvailable)
+                    .map(Warehouse::getId)
+                    .collect(Collectors.toSet());
         }
     }
 
@@ -305,6 +316,7 @@ public class WarehouseManager implements Writable {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
+            LOG.warn("get primary compute node id for tablet {} fail {}.", tabletId, e.getMessage());
             return null;
         }
     }
@@ -327,6 +339,22 @@ public class WarehouseManager implements Writable {
             return nodeId;
         } catch (StarRocksException e) {
             LOG.warn("get alive compute node id to tablet {} fail {}.", tabletId, e.getMessage());
+            return null;
+        }
+    }
+
+    public Map<Long, List<Long>> getAllComputeNodeIdsAssignToTablets(ComputeResource computeResource,
+                                                                    List<Long> tabletIds) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShards(tabletIds, computeResource.getWorkerGroupId());
+        } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablets {} fail {}.", tabletIds, e.getMessage());
             return null;
         }
     }
@@ -371,6 +399,28 @@ public class WarehouseManager implements Writable {
 
     public ComputeResource getCompactionComputeResource(long tableId) {
         return DEFAULT_RESOURCE;
+    }
+
+    public ComputeResource getVectorIndexBuildComputeResource(long tableId) {
+        // Route async vector index build work to the warehouse named by
+        // lake_vector_index_build_warehouse so users can isolate it from query
+        // workload. Fall back to the default resource if the configured
+        // warehouse is unset, missing, or unavailable — building on the
+        // default warehouse is always preferable to dropping the build.
+        String warehouseName = Config.lake_vector_index_build_warehouse;
+        if (warehouseName == null || warehouseName.isEmpty()
+                || warehouseName.equalsIgnoreCase(DEFAULT_WAREHOUSE_NAME)) {
+            return DEFAULT_RESOURCE;
+        }
+        Warehouse wh = getWarehouseAllowNull(warehouseName);
+        if (wh == null) {
+            return DEFAULT_RESOURCE;
+        }
+        try {
+            return acquireComputeResource(CRAcquireContext.of(wh.getId()));
+        } catch (Exception e) {
+            return DEFAULT_RESOURCE;
+        }
     }
 
     public Warehouse getBackgroundWarehouse() {

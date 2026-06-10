@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.type.AnyMapType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
 
 import java.util.Collections;
@@ -123,6 +124,19 @@ public class ComplexFunctionCallTransformer {
             // "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" -> "yyyy-MM-ddTHH:mm:ss.SSS"
             formatString = formatString.replace("'", "").replace("Z", "");
             return new FunctionCallExpr("str_to_jodatime", java.util.List.of(args[0], new StringLiteral(formatString)));
+        } else if (functionName.equalsIgnoreCase("map_agg")) {
+            // map_agg(key, value) -> map_from_arrays(array_agg(key), array_agg(value))
+            if (args.length != 2) {
+                throw new SemanticException("map_agg function must have 2 argument");
+            }
+            FunctionCallExpr key = new FunctionCallExpr("array_agg", ImmutableList.of(args[0]));
+            FunctionCallExpr value = new FunctionCallExpr("array_agg", ImmutableList.of(args[1]));
+            return new FunctionCallExpr("map_from_arrays", ImmutableList.of(key, value));
+        } else if (functionName.equalsIgnoreCase(FunctionSet.DATE)) {
+            if (args.length != 1) {
+                throw new SemanticException("date function must have 1 argument");
+            }
+            return new CastExpr(DateType.DATE, args[0]);
         }
         return null;
     }

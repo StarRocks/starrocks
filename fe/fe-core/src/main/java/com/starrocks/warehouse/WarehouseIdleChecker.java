@@ -34,10 +34,12 @@ public class WarehouseIdleChecker extends FrontendDaemon {
 
     private static final Map<Long, Long> LAST_FINISHED_JOB_TIME = new ConcurrentHashMap<>();
 
+    private static final Map<Long, String> LAST_FINISHED_JOB_INFO = new ConcurrentHashMap<>();
+
     private final Map<Long, Long> warehouseIdleTime = new ConcurrentHashMap<>();
 
     public WarehouseIdleChecker() {
-        super("WarehouseIdleChecker", Config.warehouse_idle_check_interval_seconds * 1000);
+        super("warehouse-idle-checker", Config.warehouse_idle_check_interval_seconds * 1000);
     }
 
     @Override
@@ -103,24 +105,19 @@ public class WarehouseIdleChecker extends FrontendDaemon {
         runningSQL.incrementAndGet();
     }
 
-    public static void decreaseRunningSQL(long wId) {
+    public static void decreaseRunningSQL(long wId, String sql) {
         AtomicLong runningSQL = getRunningSQLCount(wId);
         runningSQL.decrementAndGet();
-        updateJobLastFinishTime(wId, System.currentTimeMillis());
+        String smallSql = sql.substring(0, Math.min(20, sql.length()));
+        updateJobLastFinishTime(wId, "Query: " + smallSql);
     }
 
-    public static void updateJobLastFinishTime(long wId) {
-        updateJobLastFinishTime(wId, System.currentTimeMillis());
-    }
-
-    public static void updateJobLastFinishTime(long wId, long ts) {
-        LAST_FINISHED_JOB_TIME.compute(wId, (key, value) -> {
-            if (value == null) {
-                return ts;
-            } else {
-                return ts > value ? ts : value;
-            }
-        });
+    public static void updateJobLastFinishTime(long wId, String info) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        LAST_FINISHED_JOB_TIME.put(wId, System.currentTimeMillis());
+        LAST_FINISHED_JOB_INFO.put(wId, info);
     }
 
     public static long getLastFinishedJobTime(long wId) {
@@ -168,6 +165,7 @@ public class WarehouseIdleChecker extends FrontendDaemon {
 
         idleStatus.warehouses.forEach(wStatus -> {
             wStatus.lastFinishedJobTime = getLastFinishedJobTime(wStatus.id);
+            wStatus.lastFinishedJobInfo = LAST_FINISHED_JOB_INFO.getOrDefault(wStatus.id, "");
             wStatus.runningSqlCnt = getRunningSQLCount(wStatus.id).get();
             wStatus.runningStreamLoadCnt = runningStreamLoadCnt.getOrDefault(wStatus.id, 0L);
             wStatus.runningLoadCnt = runningLoadCnt.getOrDefault(wStatus.id, 0L);

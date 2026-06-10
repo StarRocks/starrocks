@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AWS IAM 策略声明对特定 AWS 资源的访问权限，用于 StarRocks 集成 AWS 的身份认证。"
 ---
 
 # AWS IAM 策略
@@ -86,7 +87,7 @@ IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略
 
 ## 对接 AWS Glue
 
-如果您需要对接 AWS Glue，完成数据糊的查询与写入，请按如下配置 IAM 策略：
+如果您需要对接 AWS Glue，完成数据湖的查询与写入，请按如下配置 IAM 策略：
 
 ```SQL
 {

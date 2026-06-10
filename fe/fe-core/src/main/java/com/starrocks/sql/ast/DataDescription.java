@@ -102,7 +102,7 @@ public class DataDescription implements ParseNode {
             FunctionSet.GET_JSON_STRING);
 
     private final String tableName;
-    private final PartitionNames partitionNames;
+    private final PartitionRef partitionNames;
     private final List<String> filePaths;
     private final ColumnSeparator columnSeparator;
     private final RowDelimiter rowDelimiter;
@@ -141,7 +141,7 @@ public class DataDescription implements ParseNode {
     private final NodePosition pos;
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            List<String> filePaths,
                            List<String> columns,
                            ColumnSeparator columnSeparator,
@@ -154,7 +154,7 @@ public class DataDescription implements ParseNode {
     }
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            List<String> filePaths,
                            List<String> columns,
                            ColumnSeparator columnSeparator,
@@ -170,7 +170,7 @@ public class DataDescription implements ParseNode {
     }
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            List<String> filePaths,
                            List<String> columns,
                            ColumnSeparator columnSeparator,
@@ -199,7 +199,7 @@ public class DataDescription implements ParseNode {
 
     // data from table external_hive_table
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            String srcTableName,
                            boolean isNegative,
                            List<Expr> columnMappingList,
@@ -208,7 +208,7 @@ public class DataDescription implements ParseNode {
     }
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            String srcTableName,
                            boolean isNegative,
                            List<Expr> columnMappingList,
@@ -232,7 +232,7 @@ public class DataDescription implements ParseNode {
         return tableName;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -414,7 +414,7 @@ public class DataDescription implements ParseNode {
     private void analyzeColumnToHadoopFunction(String columnName, Expr child1) throws AnalysisException {
         Preconditions.checkState(child1 instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) child1;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         if (!HADOOP_SUPPORT_FUNCTION_NAMES.contains(functionName.toLowerCase())) {
             return;
         }
@@ -697,7 +697,13 @@ public class DataDescription implements ParseNode {
         }
 
         if (partitionNames != null) {
-            partitionNames.analyze();
+            List<String> names = partitionNames.getPartitionNames();
+            if (names.isEmpty()) {
+                throw new AnalysisException("No partition specifed in partition lists");
+            }
+            if (names.stream().anyMatch(Strings::isNullOrEmpty)) {
+                throw new AnalysisException("there are empty partition name");
+            }
         }
 
         analyzeColumns();

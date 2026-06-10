@@ -24,7 +24,8 @@ import uuid
 from alembic import command
 from alembic.config import Config
 import pytest
-from sqlalchemy import Engine, MetaData, create_engine, text
+from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.engine import Engine
 
 
 logger = logging.getLogger(__name__)

@@ -14,61 +14,79 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <map>
 #include <memory>
+#include <memory_resource>
 #include <unordered_map>
+#include <vector>
 
+#include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query_cache/cache_param.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
-#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
-#include "exec/query_cache/cache_param.h"
+#include "exec/pipeline/primitives/fragment_runtime_state.h"
+#include "exec/pipeline/runtime_filter_hub.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_tree_params.h"
-#include "util/hash_util.hpp"
+#include "storage/primitive/predicate_tree_params.h"
 
 namespace starrocks {
 
 class StreamLoadContext;
+class FragmentDictState;
 
 namespace pipeline {
+
+class PassThroughChunkBufferGuard;
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
 class FragmentContext {
-    friend FragmentContextManager;
+    friend class FragmentContextManager;
 
 public:
     FragmentContext();
     ~FragmentContext();
+
+    // Fragment-level shared MemPool — delegates to RuntimeState which owns it.
+    MemPool* fragment_mem_pool() { return _runtime_state ? _runtime_state->fragment_mem_pool() : nullptr; }
+
+    // PMR memory resource — delegates to RuntimeState which owns it.
+    std::pmr::memory_resource* mem_resource() { return _runtime_state ? _runtime_state->mem_resource() : nullptr; }
+
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const TUniqueId& fragment_instance_id() const { return _fragment_runtime_state.fragment_instance_id(); }
     void set_fragment_instance_id(const TUniqueId& fragment_instance_id) {
-        _fragment_instance_id = fragment_instance_id;
+        _fragment_runtime_state.set_fragment_instance_id(fragment_instance_id);
     }
+    FragmentRuntimeState& fragment_runtime_state() { return _fragment_runtime_state; }
+    const FragmentRuntimeState& fragment_runtime_state() const { return _fragment_runtime_state; }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
+    void attach_to_runtime_state(RuntimeState* state);
+    FragmentDictState* dict_state() const { return _fragment_dict_state.get(); }
     ExecNode*& plan() { return _plan; }
 
     void move_tplan(TPlan& tplan);
@@ -85,16 +103,11 @@ public:
 
     void set_final_status(const Status& status);
 
-    Status final_status() const {
-        auto* status = _final_status.load();
-        return status == nullptr ? Status::OK() : *status;
-    }
+    Status final_status() const { return _fragment_runtime_state.final_status(); }
 
     void cancel(const Status& status, bool cancelled_by_fe = false);
 
     void finish() { cancel(Status::OK()); }
-
-    bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
@@ -102,19 +115,15 @@ public:
 
     Status prepare_all_pipelines();
 
-    template <class Func>
-    void iterate_drivers(Func&& call) {
-        iterate_pipeline([&](const Pipeline* pipeline) {
-            for (auto& driver : pipeline->drivers()) {
-                call(driver);
-            }
-        });
-    }
+    void instantiate_drivers(Pipeline* pipeline);
+
+    void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
     void clear_all_drivers();
     void close_all_execution_groups();
 
-    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+    RuntimeFilterHub* runtime_filter_hub() { return _fragment_runtime_state.runtime_filter_hub(); }
+    const RuntimeFilterHub* runtime_filter_hub() const { return _fragment_runtime_state.runtime_filter_hub(); }
 
     RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
@@ -124,12 +133,13 @@ public:
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
     Status set_pipeline_timer(PipelineTimer* pipeline_timer);
     void clear_pipeline_timer();
+    PipelineTimerContextPtr pipeline_timer_context() const { return _pipeline_timer_context; }
 
     query_cache::CacheParam& cache_param() { return _cache_param; }
 
-    void set_enable_cache(bool flag) { _enable_cache = flag; }
+    void set_enable_cache(bool flag) { _fragment_runtime_state.set_enable_cache(flag); }
 
-    bool enable_cache() const { return _enable_cache; }
+    bool enable_cache() const { return _fragment_runtime_state.enable_cache(); }
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
@@ -138,7 +148,7 @@ public:
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
     const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
-    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
+    void set_pred_tree_params(const PredicateTreeParams& params) { _pred_tree_params = params; }
 
     size_t next_driver_id() { return _next_driver_id++; }
 
@@ -146,18 +156,6 @@ public:
     const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
     bool enable_resource_group() const { return _workgroup != nullptr; }
     TQueryType::type query_type() const;
-
-    // STREAM MV
-    Status reset_epoch();
-    void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
-    bool is_stream_pipeline() const { return _is_stream_pipeline; }
-    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
-
-#ifdef BE_TEST
-    // for ut
-    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
-    bool is_stream_test() const { return _is_stream_test; }
-#endif
 
     size_t expired_log_count() { return _expired_log_count; }
 
@@ -185,18 +183,15 @@ public:
     EventScheduler* event_scheduler() const { return _event_scheduler.get(); }
     void init_event_scheduler();
 
-    PipelineTimer* pipeline_timer() { return _pipeline_timer; }
-    void add_timer_observer(PipelineObserver* observer, uint64_t timeout);
-    Status submit_all_timer();
-
 private:
+    void _set_default_workgroup();
     void _close_stream_load_contexts();
 
     bool _enable_group_execution = false;
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
-    TUniqueId _fragment_instance_id;
+    FragmentRuntimeState _fragment_runtime_state;
     TNetworkAddress _fe_addr;
 
     // Hold tplan data datasink from delivery request to create driver lazily
@@ -210,6 +205,7 @@ private:
     // never adjust the order of _runtime_state, _plan, _pipelines and _drivers, since
     // _plan depends on _runtime_state and _drivers depends on _runtime_state.
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
     Pipelines _pipelines;
@@ -217,31 +213,19 @@ private:
     std::atomic<size_t> _num_finished_execution_groups = 0;
 
     std::unique_ptr<EventScheduler> _event_scheduler;
-    PipelineTimer* _pipeline_timer = nullptr;
-    PipelineTimerTask* _timeout_task = nullptr;
-    PipelineTimerTask* _report_state_task = nullptr;
-    std::unordered_map<uint64_t, PipelineTimerTask*> _rf_timeout_tasks;
-
-    RuntimeFilterHub _runtime_filter_hub;
+    PipelineTimerContextPtr _pipeline_timer_context = nullptr;
+    std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
+    std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
 
     MorselQueueFactoryMap _morsel_queue_factories;
     workgroup::WorkGroupPtr _workgroup = nullptr;
 
-    std::atomic<Status*> _final_status = nullptr;
-    Status _s_status;
-
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
-    query_cache::CacheParam _cache_param;
-    bool _enable_cache = false;
-    std::vector<StreamLoadContext*> _stream_load_contexts;
+    std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
 
-    // STREAM MV
-    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
-    bool _is_stream_pipeline = false;
-#ifdef BE_TEST
-    bool _is_stream_test = false;
-#endif
+    query_cache::CacheParam _cache_param;
+    std::vector<StreamLoadContext*> _stream_load_contexts;
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
@@ -256,37 +240,6 @@ private:
     RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
-};
-
-class FragmentContextManager {
-public:
-    FragmentContextManager() = default;
-    ~FragmentContextManager() = default;
-
-    FragmentContextManager(const FragmentContextManager&) = delete;
-    FragmentContextManager(FragmentContextManager&&) = delete;
-    FragmentContextManager& operator=(const FragmentContextManager&) = delete;
-    FragmentContextManager& operator=(FragmentContextManager&&) = delete;
-
-    FragmentContext* get_or_register(const TUniqueId& fragment_id);
-    FragmentContextPtr get(const TUniqueId& fragment_id);
-
-    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
-    void unregister(const TUniqueId& fragment_id);
-
-    void cancel(const Status& status);
-
-    template <class Caller>
-    void for_each_fragment(Caller&& caller) {
-        std::lock_guard guard(_lock);
-        for (auto& [_, fragment] : _fragment_contexts) {
-            caller(fragment);
-        }
-    }
-
-private:
-    std::mutex _lock;
-    std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
 };
 } // namespace pipeline
 } // namespace starrocks

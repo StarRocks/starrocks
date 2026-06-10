@@ -14,36 +14,62 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
-add_library(Column STATIC
+ADD_BE_LIB(ColumnCore
         array_column.cpp
         array_view_column.cpp
-        adaptive_nullable_column.cpp
-        chunk.cpp
-        chunk_extra_data.cpp
-        column.cpp
-        column_access_path.cpp
-        column_helper.cpp
-        column_viewer.cpp
-        const_column.cpp
-        datum.cpp
-        datum_convert.cpp
-        datum_tuple.cpp
-        field.cpp
-        fixed_length_column_base.cpp
-        fixed_length_column.cpp
-        nullable_column.cpp
-        schema.cpp
-        binary_column.cpp
-        object_column.cpp
-        decimalv3_column.cpp
-        column_visitor.cpp
-        column_visitor_mutable.cpp
-        json_column.cpp
         map_column.cpp
         struct_column.cpp
-        stream_chunk.cpp
+        raw_buffer.cpp
+        column.cpp
+        column_filter_range.cpp
+        column_visitor.cpp
+        column_visitor_mutable.cpp
+        mysql_row_buffer.cpp
+        german_string.cpp
+        object_column.cpp
+        variant_column.cpp
+        variant_converter.cpp
+        fixed_length_column_base.cpp
+        fixed_length_column.cpp
+        binary_column.cpp
+        const_column.cpp
+        nullable_column.cpp
+        decimalv3_column.cpp
+        json_column.cpp
+        adaptive_nullable_column.cpp
+        append_with_mask.cpp
+        column_helper.cpp
+        column_helper_time.cpp
+        arrow/arrow_to_starrocks_converter.cpp
+        arrow/arrow_to_json_converter.cpp
+        arrow/column_to_arrow_converter.cpp
+        datum_convert.cpp
+        logical_type_size.cpp
+        runtime_type_traits.cpp
+        column_viewer.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
-        variant_column.cpp
-        german_string.cpp
+        variant_path_parser.cpp
+        variant_encoder.cpp
+        variant_builder.cpp
+        variant_merger.cpp
+        column_hash/column_hash.cpp
+        adaptive_offsets.cpp
 )
+
+target_link_libraries(ColumnCore PRIVATE arrow)
+
+ADD_BE_LIB(ChunkCore
+        chunk_factory.cpp
+        chunk_schema_helper.cpp
+        field.cpp
+        schema.cpp
+        chunk.cpp
+        chunk_extra_data.cpp
+        chunk_slice.cpp
+        column_access_path.cpp
+        datum_tuple.cpp
+        segmented_chunk.cpp
+)
+
+target_link_libraries(ChunkCore PUBLIC ColumnCore)

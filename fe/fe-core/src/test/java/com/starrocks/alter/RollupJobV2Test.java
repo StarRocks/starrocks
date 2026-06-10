@@ -78,7 +78,7 @@ public class RollupJobV2Test extends DDLTestBase {
     public static void beforeAll() {
         new MockUp<MaterializedViewHandler>() {
             @Mock
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 // do nothing
             }
         };
@@ -162,11 +162,11 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
@@ -205,7 +205,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(MaterializedIndex.IndexState.NORMAL, baseIndex.getState());
         assertEquals(Partition.PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.ROLLUP, olapTable.getState());
@@ -228,11 +228,11 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
@@ -269,7 +269,11 @@ public class RollupJobV2Test extends DDLTestBase {
 
     @Test
     public void testCancelPendingJobWithFlag() throws Exception {
-        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        // Use a standalone handler whose daemon thread is not started, so the job can never
+        // be picked up by the background alter scheduler. Using the global rollup handler is
+        // racy: its daemon may run the job to WAITING_TXN between process() and the explicit
+        // runPendingJob() call below, even if clearJobs() is called right after process().
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
 
         // add a rollup job
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
@@ -282,7 +286,6 @@ public class RollupJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
-        materializedViewHandler.clearJobs(); // Disable the execution of job in background thread
 
         rollupJob.setIsCancelling(true);
         rollupJob.runPendingJob();

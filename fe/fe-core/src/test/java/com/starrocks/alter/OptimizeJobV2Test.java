@@ -27,6 +27,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -173,10 +175,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
         for (int i = 0; i < optimizeTasks.size(); ++i) {
             OptimizeTask optimizeTask = optimizeTasks.get(i);
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                        .getTaskRunScheduler().removeRunningTask(optimizeTask.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                        .getTaskRunScheduler().removePendingTask(optimizeTask);
+            removeTaskFromScheduler(optimizeTask);
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setTaskName(optimizeTask.getName());
             taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
@@ -210,10 +209,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // Mark all tasks SQL SUCCESS and add history
         for (OptimizeTask t : job.getOptimizeTasks()) {
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removePendingTask(t);
+            removeTaskFromScheduler(t);
             TaskRunStatus s = new TaskRunStatus();
             s.setTaskName(t.getName());
             s.setDbName(db.getFullName());
@@ -254,10 +250,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, job.getJobState());
 
         for (OptimizeTask t : job.getOptimizeTasks()) {
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removePendingTask(t);
+            removeTaskFromScheduler(t);
             TaskRunStatus s = new TaskRunStatus();
             s.setTaskName(t.getName());
             s.setDbName(db.getFullName());
@@ -329,7 +322,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
@@ -642,10 +635,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
         for (OptimizeTask t : optimizeTasks) {
             t.setOptimizeTaskState(Constants.TaskRunState.PENDING);
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                    .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                    .getTaskRunScheduler().removePendingTask(t);
+            removeTaskFromScheduler(t);
         }
 
         // Trigger path: executeTask for PENDING tasks should set state to RUNNING or FAILED
@@ -692,6 +682,45 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(Constants.TaskRunState.FAILED, fakeTask.getOptimizeTaskState());
         // Job should remain RUNNING because other tasks are not finished
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+    }
+
+    private void removeTaskFromScheduler(OptimizeTask task) {
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        TaskRunScheduler trs = trm.getTaskRunScheduler();
+        if (trm.tryTaskRunLock()) {
+            try {
+                trs.removePendingTask(task);
+                trs.removeRunningTask(task.getId());
+            } finally {
+                trm.taskRunUnlock();
+            }
+        }
+    }
+
+    @Test
+    public void testReplayFinishedWithNullDistributionInfo() throws Exception {
+        // Regression: a job persisted with allPartitionOptimized=true but no distribution change
+        // (e.g. from a previously-accepted empty alter clause) must not clobber the table's
+        // defaultDistributionInfo during replay.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        Assertions.assertNotNull(olapTable.getDefaultDistributionInfo());
+
+        OptimizeJobV2 badPersistedJob = new OptimizeJobV2(
+                9999L, db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+        badPersistedJob.setJobState(JobState.FINISHED);
+        java.lang.reflect.Field allOptField = OptimizeJobV2.class.getDeclaredField("allPartitionOptimized");
+        allOptField.setAccessible(true);
+        allOptField.set(badPersistedJob, true);
+        // distributionInfo stays null - this is the corruption shape
+
+        OptimizeJobV2 replayJob = new OptimizeJobV2(
+                9999L, db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+        replayJob.replay(badPersistedJob);
+
+        Assertions.assertNotNull(olapTable.getDefaultDistributionInfo(),
+                "replay must not null out defaultDistributionInfo when persisted job has null distributionInfo");
     }
 
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks カタログ、データベース、テーブルの編成: 内部・外部カタログ、テーブル、マテリアライズドビュー、ビューオブジェクト。"
 sidebar_position: 5
 ---
 

@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
@@ -46,6 +47,7 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -147,7 +149,8 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType,
+            CloudConfiguration cloudConfiguration) {
         ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
@@ -156,6 +159,7 @@ public class ScalarFunction extends Function {
         fn.closeFnSymbol = closeFnSymbol;
         fn.setIsolationType(isolationType);
         fn.setLocation(new HdfsURI(objectFile));
+        fn.setCloudConfiguration(cloudConfiguration);
         return fn;
     }
 
@@ -163,9 +167,10 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol,
+            CloudConfiguration cloudConfiguration) {
         return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
-                symbol, prepareFnSymbol, closeFnSymbol, true);
+                symbol, prepareFnSymbol, closeFnSymbol, true, cloudConfiguration);
     }
 
     /**
@@ -228,15 +233,42 @@ public class ScalarFunction extends Function {
 
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "", ifNotExists);
+        sb.append(signatureString()).append("\n")
+                .append("RETURNS ").append(getReturnType()).append("\n");
+
+        Map<String, String> props = synthesizePropertiesFromFields();
+        appendPropertiesBlock(sb, props);
+
+        if (content != null) {
+            // $$ ... $$ matches the inlineFunction grammar (ATTACHMENT token)
+            // so the emitted statement round-trips through CREATE FUNCTION.
+            sb.append("AS $$\n").append(content).append("\n$$\n");
         }
-        sb.append(dbName() + "." + signatureString() + "\n")
-                .append(" RETURNS " + getReturnType() + "\n")
-                .append(" LOCATION '" + getLocation() + "'\n")
-                .append(" SYMBOL='" + getSymbolName() + "'\n");
         return sb.toString();
+    }
+
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (!Strings.isEmpty(getSymbolName())) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
+        }
+        if (!Strings.isEmpty(inputType)) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, inputType);
+        }
+        // Default isolation is isolated (true); only emit the property when explicitly shared.
+        if (!isolationType) {
+            props.put(CreateFunctionStmt.ISOLATION_KEY, "shared");
+        }
+        return props;
     }
 
     @Override

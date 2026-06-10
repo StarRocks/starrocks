@@ -8,6 +8,7 @@ on:
       - 'branch-[0-9].[0-9].[0-9]'
     types:
       - closed
+      - labeled
 
 env:
   PR_ID: ${{ github.event.number }}
@@ -17,16 +18,22 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
   FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
 jobs:
   backport-close:
     runs-on: [self-hosted, normal]
     if: >
-      github.event.pull_request.merged != true &&
       contains(github.event.pull_request.title, 'backport') &&
-      (contains(github.event.pull_request.labels.*.name, 'conflicts') ||
-      contains(github.event.pull_request.labels.*.name, 'conflict')) &&
-      startsWith(github.head_ref, 'mergify/bp')
+      startsWith(github.head_ref, 'mergify/bp') &&
+      (
+        (github.event.action == 'labeled' &&
+         (github.event.label.name == 'conflicts' || github.event.label.name == 'conflict')) ||
+        (github.event.action == 'closed' &&
+         github.event.pull_request.merged != true &&
+         (contains(github.event.pull_request.labels.*.name, 'conflicts') ||
+          contains(github.event.pull_request.labels.*.name, 'conflict')))
+      )
     env:
       STATUS: CONFLICT
 

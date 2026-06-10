@@ -44,6 +44,7 @@ import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -56,6 +57,7 @@ import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 import org.sparkproject.guava.base.Strings;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -77,33 +79,40 @@ public class MaterializedViewsSystemTable extends SystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("MATERIALIZED_VIEW_ID", IntegerType.BIGINT)
-                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(20))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(50))
-                        .column("REFRESH_TYPE", TypeFactory.createVarchar(20))
-                        .column("IS_ACTIVE", TypeFactory.createVarchar(10))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(20))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(50))
+                        .column("REFRESH_TYPE", TypeFactory.createVarcharType(20))
+                        .column("IS_ACTIVE", TypeFactory.createVarcharType(10))
                         .column("INACTIVE_REASON", TypeFactory.createVarcharType(1024))
-                        .column("PARTITION_TYPE", TypeFactory.createVarchar(16))
+                        .column("PARTITION_TYPE", TypeFactory.createVarcharType(16))
                         .column("TASK_ID", IntegerType.BIGINT)
-                        .column("TASK_NAME", TypeFactory.createVarchar(50))
+                        .column("TASK_NAME", TypeFactory.createVarcharType(50))
                         .column("LAST_REFRESH_START_TIME", DateType.DATETIME)
                         .column("LAST_REFRESH_FINISHED_TIME", DateType.DATETIME)
                         .column("LAST_REFRESH_DURATION", FloatType.DOUBLE)
-                        .column("LAST_REFRESH_STATE", TypeFactory.createVarchar(20))
-                        .column("LAST_REFRESH_FORCE_REFRESH", TypeFactory.createVarchar(8))
-                        .column("LAST_REFRESH_START_PARTITION", TypeFactory.createVarchar(1024))
-                        .column("LAST_REFRESH_END_PARTITION", TypeFactory.createVarchar(1024))
-                        .column("LAST_REFRESH_BASE_REFRESH_PARTITIONS", TypeFactory.createVarchar(1024))
-                        .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", TypeFactory.createVarchar(1024))
-                        .column("LAST_REFRESH_ERROR_CODE", TypeFactory.createVarchar(20))
-                        .column("LAST_REFRESH_ERROR_MESSAGE", TypeFactory.createVarchar(1024))
+                        .column("LAST_REFRESH_STATE", TypeFactory.createVarcharType(20))
+                        .column("LAST_REFRESH_FORCE_REFRESH", TypeFactory.createVarcharType(8))
+                        .column("LAST_REFRESH_START_PARTITION", TypeFactory.createVarcharType(1024))
+                        .column("LAST_REFRESH_END_PARTITION", TypeFactory.createVarcharType(1024))
+                        .column("LAST_REFRESH_BASE_REFRESH_PARTITIONS", TypeFactory.createVarcharType(1024))
+                        .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", TypeFactory.createVarcharType(1024))
+                        .column("LAST_REFRESH_ERROR_CODE", TypeFactory.createVarcharType(20))
+                        .column("LAST_REFRESH_ERROR_MESSAGE", TypeFactory.createVarcharType(1024))
                         .column("TABLE_ROWS", IntegerType.BIGINT)
                         .column("MATERIALIZED_VIEW_DEFINITION",
-                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXTRA_MESSAGE", TypeFactory.createVarchar(1024))
+                                TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarcharType(1024))
                         .column("QUERY_REWRITE_STATUS", TypeFactory.createVarcharType(64))
-                        .column("CREATOR", TypeFactory.createVarchar(64))
+                        .column("CREATOR", TypeFactory.createVarcharType(64))
                         .column("LAST_REFRESH_PROCESS_TIME", DateType.DATETIME)
-                        .column("LAST_REFRESH_JOB_ID", TypeFactory.createVarchar(64))
+                        .column("LAST_REFRESH_JOB_ID", TypeFactory.createVarcharType(64))
+                        .column("LAST_REFRESH_TIME", DateType.DATETIME)
+                        .column("WAREHOUSE", TypeFactory.createVarcharType(128))
+                        .column("REFRESH_MODE", TypeFactory.createVarcharType(16))
+                        .column("REFRESH_TRIGGER", TypeFactory.createVarcharType(24))
+                        .column("REFRESH_POLICY", TypeFactory.createVarcharType(256))
+                        .column("RESOURCE_GROUP", TypeFactory.createVarcharType(128))
+                        .column("QUERY_REWRITE_STATUS_REASON", TypeFactory.createVarcharType(32))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 
@@ -137,6 +146,11 @@ public class MaterializedViewsSystemTable extends SystemTable {
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setType(MATERIALIZED_VIEW);
@@ -301,14 +315,14 @@ public class MaterializedViewsSystemTable extends SystemTable {
         }
 
         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-        long baseIdx = olapTable.getBaseIndexId();
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
         boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-            if (baseIdx == mvMeta.getIndexId()) {
+            if (baseIndexMetaId == mvMeta.getIndexMetaId()) {
                 continue;
             }
 
-            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()),
                     matcher, caseSensitive)) {
                 continue;
             }

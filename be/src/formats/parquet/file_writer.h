@@ -45,19 +45,18 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "formats/io/async_flush_output_stream.h"
 #include "formats/parquet/chunk_writer.h"
-#include "fs/fs.h"
+#include "fs/fs_fwd.h"
 #include "gen_cpp/Types_types.h"
-#include "io/async_flush_output_stream.h"
-#include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "util/priority_thread_pool.hpp"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_fwd.h"
+#include "types/type_descriptor.h"
 
 namespace parquet {
 class FileMetaData;
@@ -66,7 +65,6 @@ namespace starrocks {
 class Chunk;
 class ExprContext;
 class PriorityThreadPool;
-class RuntimeState;
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -106,7 +104,7 @@ private:
 
 class AsyncParquetOutputStream : public arrow::io::OutputStream {
 public:
-    AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream);
+    AsyncParquetOutputStream(formats::AsyncFlushOutputStream* stream);
 
     ~AsyncParquetOutputStream() override = default;
 
@@ -121,7 +119,7 @@ public:
     bool closed() const override { return _is_closed; };
 
 private:
-    io::AsyncFlushOutputStream* _stream;
+    formats::AsyncFlushOutputStream* _stream;
     bool _is_closed = false;
 };
 
@@ -129,6 +127,11 @@ struct ParquetBuilderOptions {
     TCompressionType::type compression_type = TCompressionType::SNAPPY;
     bool use_dict = true;
     int64_t row_group_max_size = 128 * 1024 * 1024;
+};
+
+struct ParquetSchemaOptions {
+    bool use_legacy_decimal_encoding = false;
+    bool use_int96_timestamp_encoding = false;
 };
 
 class ParquetBuildHelper {
@@ -141,16 +144,16 @@ public:
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);
 
+    static arrow::Result<::parquet::schema::NodePtr> make_schema_node(const std::string& name,
+                                                                      const TypeDescriptor& type_desc,
+                                                                      ::parquet::Repetition::type rep_type,
+                                                                      FileColumnId file_column_id = FileColumnId(),
+                                                                      const ParquetSchemaOptions& options = {});
+
     static StatusOr<std::shared_ptr<::parquet::WriterProperties>> make_properties(const ParquetBuilderOptions& options);
 
     static StatusOr<::parquet::Compression::type> convert_compression_type(
             const TCompressionType::type& compression_type);
-
-private:
-    static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
-                                                                       const TypeDescriptor& type_desc,
-                                                                       ::parquet::Repetition::type rep_type,
-                                                                       FileColumnId file_column_ids = FileColumnId());
 };
 
 class FileWriterBase {

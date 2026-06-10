@@ -1,0 +1,38 @@
+-- name: test_automatic_partition_reuse
+-- This test verifies that automatic partition creation is idempotent for partition reuse,
+-- meaning re-inserting data with existing partition values won't fail with "Duplicate values" error.
+-- Note: This does NOT test data deduplication - duplicate data rows are expected in the result.
+CREATE TABLE t_idempotent (
+    c1 date NOT NULL,
+    c2 varchar(20),
+    c3 boolean NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(c1, c2)
+PARTITION BY (c1, c3)
+DISTRIBUTED BY HASH(c1)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_idempotent values ("2025-12-01", "1", true), ("2025-12-01", "0", false);
+-- result:
+-- !result
+select * from t_idempotent order by c2;
+-- result:
+2025-12-01	0	0
+2025-12-01	1	1
+-- !result
+admin set frontend config ("max_load_initial_open_partition_number"="1");
+-- result:
+-- !result
+insert into t_idempotent values ("2025-12-01", "1", true), ("2025-12-01", "0", false);
+-- result:
+-- !result
+select * from t_idempotent order by c2;
+-- result:
+2025-12-01	0	0
+2025-12-01	0	0
+2025-12-01	1	1
+2025-12-01	1	1
+-- !result

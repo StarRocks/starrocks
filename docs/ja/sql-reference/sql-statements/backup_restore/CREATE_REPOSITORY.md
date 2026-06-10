@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "リモートストレージシステムにリポジトリを作成して、データスナップショットをバックアップおよび復元するために使用します。"
 ---
 
 # CREATE REPOSITORY
@@ -122,5 +123,18 @@ PROPERTIES(
     "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
     "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "http://minio:9000"
+);
+```
+
+例5: Kerberos を有効にした Apache™ Hadoop® クラスタに `kerberos_repo` という名前のリポジトリを作成する。
+
+```SQL
+CREATE REPOSITORY kerberos_repo
+WITH BROKER 
+ON LOCATION "hdfs://nameservices1/user/hive/backup"
+PROPERTIES(
+ "hadoop.security.authentication" = "kerberos",
+ "kerberos_principal" = "sr/cs01.starrocks.com@STARROCKS.COM",
+ "kerberos_keytab" = "/home/disk1/user1/sr.keytab"
 );
 ```

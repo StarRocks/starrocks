@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中通过 Skew Join V2 广播倾斜值优化存在数据倾斜的 JOIN 查询性能。"
 ---
 
 # Skew Join V2
@@ -218,6 +219,8 @@ LIMIT 10;
   对 Join 条件中复杂表达式的支持有限。
 - **倾斜表**
   Skew Join V2 只能处理 JOIN 操作中大表倾斜的场景，并且大表必须用作左表。
+- **Join 重排序**
+  使用 `skew` Hint 会阻止优化器对该 Join 进行重排序（Join Reorder）。该 Join 将按照 SQL 中指定的顺序执行，优化器不会尝试更改连接顺序，也不会交换包含该 Hint 的 Join 节点的左右表。
 
 ## 故障排除
 
@@ -241,4 +244,4 @@ SELECT ... FROM ... JOIN [skew|...] ...;
 - [Query Planning](../best_practices/query_tuning/query_planning.md)
 - [Query Profile Tuning](../best_practices/query_tuning/query_profile_tuning_recipes.md)
 - [System Variables](../sql-reference/System_variable.md)
-- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#join)
+- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md#join)

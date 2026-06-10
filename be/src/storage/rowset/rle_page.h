@@ -34,16 +34,16 @@
 
 #pragma once
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/status.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
-#include "util/coding.h"
-#include "util/rle_encoding.h"
-#include "util/slice.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -150,8 +150,8 @@ public:
     }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     PageBuilderOptions _options;
     uint32_t _count{0};
@@ -225,7 +225,10 @@ public:
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();
         }
-        CppType value{};
+
+        // Use batch decoding for better performance
+        constexpr size_t kBatchSize = 1024;
+        CppType batch_buffer[kBatchSize];
 
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
@@ -233,13 +236,18 @@ public:
         while (to_read > 0) {
             RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             Range<> r = iter.next(to_read);
-            for (size_t i = 0; i < r.span_size(); ++i) {
-                if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
+            size_t remaining = r.span_size();
+
+            while (remaining > 0) {
+                size_t batch_count = std::min(remaining, kBatchSize);
+                if (PREDICT_FALSE(!_rle_decoder.GetBatch(batch_buffer, batch_count))) {
                     return Status::Corruption("RLE decode failed");
                 }
-                [[maybe_unused]] int p = dst->append_numbers(&value, sizeof(value));
-                DCHECK_EQ(1, p);
+                [[maybe_unused]] int p = dst->append_numbers(batch_buffer, batch_count * sizeof(CppType));
+                DCHECK_EQ(batch_count, p);
+                remaining -= batch_count;
             }
+
             _cur_index += r.span_size();
             to_read -= r.span_size();
         }
@@ -253,8 +261,8 @@ public:
     EncodingTypePB encoding_type() const override { return RLE; }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     bool _parsed{false};

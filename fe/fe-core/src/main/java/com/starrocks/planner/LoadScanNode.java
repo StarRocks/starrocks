@@ -36,7 +36,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.SimpleScheduler;
@@ -44,6 +43,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;

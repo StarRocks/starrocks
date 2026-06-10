@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN CHECK TABLET is used to check a group of tablets."
 ---
 
 # ADMIN CHECK TABLET
@@ -15,7 +16,7 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 ## Syntax
 
 ```sql
-ADMIN CHECK TABLE (tablet_id1, tablet_id2, ...)
+ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...)
 PROPERTIES("type" = "...")
 ```
 

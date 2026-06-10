@@ -16,7 +16,9 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
+#include <iomanip>
+
+#include "base/testutil/assert.h"
 
 namespace starrocks {
 class LRUCacheEngineTest : public ::testing::Test {

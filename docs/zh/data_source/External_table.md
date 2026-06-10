@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "External tables are no longer recommended in StarRocks; use External Catalog instead for querying Hive, Iceberg, and Hudi data sources."
 ---
 
 # 外部表
@@ -135,7 +136,7 @@ PROPERTIES (
 
 * `password`：目标数据库用户登录密码。
 
-* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
+* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
 
     > **说明**
     >

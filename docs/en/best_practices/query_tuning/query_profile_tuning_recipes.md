@@ -1,7 +1,8 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', 'tune']
 sidebar_position: 40
+description: "Query tuning recipes for StarRocks: symptom-to-fix playbook using query profiles to diagnose slow operators, skew, spill, and join issues."
 ---
 
 # Query Tuning Recipes
@@ -17,11 +18,11 @@ sidebar_position: 40
    If `QueryPeakMemoryUsagePerNode > 80 %` or `QuerySpillBytes > 1 GB`, jump straight to the memory & spill recipes.
 
 2. **Find the slowest Pipeline / Operator**  
-   ⟶ In *Query Profile UI* click **Sort by OperatorTotalTime %**.  
+   ⟶ In _Query Profile UI_ click **Sort by OperatorTotalTime %**.  
    The hottest operator tells you which recipe block to read next (Scan, Join, Aggregate, …).
 
 3. **Confirm the bottleneck subtype**  
-   Each recipe begins with its *signature* metric pattern. Match those before trying the fixes.
+   Each recipe begins with its _signature_ metric pattern. Match those before trying the fixes.
 
 ---
 
@@ -38,7 +39,7 @@ To retrieve data from disk and apply the predicates, the storage engine utilize 
 1. **Data Storage**: Encoded and compressed data is stored on disk in segments, accompanied by various indices.
 2. **Index Filtering**: The engine leverages indices such as BitmapIndex, BloomfilterIndex, ZonemapIndex, ShortKeyIndex, and NGramIndex to skip unnecessary data.
 3. **Pushdown Predicates**: Simple predicates, like `a > 1`, are pushed down to evaluate on specific columns.
-4. **Late Materialization**: Only the required columns and filtered rows are retrieved from di sk.
+4. **Late Materialization**: Only the required columns and filtered rows are retrieved from disk.
 5. **Non-Pushdown Predicates**: Predicates that cannot be pushed down are evaluated.
 6. **Projection Expression**: Expressions, such as `SELECT a + 1`, are computed.
 
@@ -49,17 +50,17 @@ The Scan Operator utilizes an additional thread pool for executing IO tasks. The
 
 #### Common performance bottlenecks
 
-**Cold or slow storage** – When `BytesRead`, `ScanTime`, or `IOTaskExecTime` dominate and disk I/O hovers around 80‑100 %, the scan is hitting cold or under‑provisioned storage. Move hot data to NVMe/SSD, enable the storage cache, or—if you’re scanning S3/HDFS—raise `remote_cache_capacity`.
+**Cold or slow storage** – When `BytesRead`, `ScanTime`, or `IOTaskExecTime` dominate and disk I/O hovers around 80‑100 %, the scan is hitting cold or under‑provisioned storage. Move hot data to NVMe/SSD and enable the Data Cache. Size it via BE `datacache_*` settings (or legacy `block_cache_*`), and enable scan‑time usage via session `enable_scan_datacache`.
 
 **Filter push‑down missing** – If `PushdownPredicates` stays near 0 while `ExprFilterRows` is high, predicates aren’t reaching the storage layer. Rewrite them as simple comparisons (avoid `%LIKE%` and wide `OR` chains) or add zonemap/Bloom indexes or materialized views so they can be pushed down.
 
-**Thread‑pool starvation** – A high `IOTaskWaitTime` together with a low `PeakIOTasks` signals that the I/O thread pool is saturated. Increase `max_io_threads` on the BE or enlarge the cache to let more tasks run concurrently.
+**Thread‑pool starvation** – A high `IOTaskWaitTime` together with a low `PeakIOTasks` signals saturated I/O concurrency. Enable and size the Data Cache (BE `datacache_*` and session `enable_scan_datacache`), move hot data to faster storage (NVMe/SSD)
 
 **Data skew across tablets** – A wide gap between the maximum and minimum `OperatorTotalTime` means some tablets do much more work than others. Re‑bucket on a higher‑cardinality key or increase the bucket count to spread the load.
 
 **Rowset/segment fragmentation** – Exploding `RowsetsReadCount`/`SegmentsReadCount` plus a long `SegmentInitTime` indicate many tiny rowsets. Trigger a manual compaction and batch small loads so segments merge up‑front.
 
-**Accumulated soft deletes** – A large `DeleteFilterRows` implies heavy soft‑delete usage. Run BE compaction to purge tombstones and consolidate the delete bitmap.
+**Accumulated soft deletes** – A large `DeleteFilterRows` implies heavy soft‑delete usage. Run BE compaction to purge soft deletes.
 
 ### 2.2 Aggregate  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 
@@ -90,7 +91,7 @@ In StarRocks the aggregation is implemented in distributed manner, which can be 
 |--------|------------|--------------|
 | One-stage | The `DISTRIBUTED BY` is a subset of `GROUP BY`, the partitions are colocated | Partial aggregates immediately become the final result. |
 | Two-stage (local + global) | Typical distributed `GROUP BY` | Stage 0 inside each BE collapses duplicates adaptively; Stage 1 shuffles data based on `GROUP BY` then perform global aggregation |
-| Three-stage (local + shuffle + final) | Heavy `DISTINCT` and high-cardianlity `GROUP BY` | Stage 0 as above; Stage 1 shuffles by `GROUP BY`, then aggregate by `GROUP BY` and `DISTINCT`; Stage 2 merges partial state as `GROUP BY` |
+| Three-stage (local + shuffle + final) | Heavy `DISTINCT` and high-cardinality `GROUP BY` | Stage 0 as above; Stage 1 shuffles by `GROUP BY`, then aggregate by `GROUP BY` and `DISTINCT`; Stage 2 merges partial state as `GROUP BY` |
 | Four-stage (local + partial + intermediate + final) | Heavy `DISTINCT` and low-cardinality `GROUP BY` | Introduce an additional stage to shuffle by `GROUP BY` and `DISTINCT` to avoid single-point bottleneck |
 
 
@@ -123,7 +124,7 @@ StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be w
 | Strategy | When the optimizer picks it | What makes it fast |
 |----------|-----------------------------|---------------------|
 | Colocate Join | Both tables belong to the same colocation group (identical bucket keys, bucket count, and replica layout).  ￼ | No network shuffle: each BE joins only its local buckets. |
-| Bucket-Shuffle Join | One of join tables has the same buckket key with join key | Only need to shuffle one join table, which can reduce the network cost |
+| Bucket-Shuffle Join | One of join tables has the same bucket key with join key | Only need to shuffle one join table, which can reduce the network cost |
 | Broadcast Join | Build side is very small (row/byte thresholds or explicit hint).  ￼ | Small table is replicated to every probe node; avoids shuffling large table. |
 | Shuffle (Hash) Join | General case, keys don’t align. | Hash-partition each row on the join key so probes are balanced across BEs. |
 
@@ -143,9 +144,11 @@ StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be w
 
 ### 2.4 Exchange (Network)  [[metrics]](./query_profile_operator_metrics.md#exchange-operator)
 
-**Oversized shuffle or broadcast** – If `NetworkTime` exceeds 30 % and `BytesSent` is large, the query is shipping too much data. Re‑evaluate the join strategy or enable exchange compaction (`pipeline_enable_exchange_compaction`).
+**Oversized shuffle or broadcast** – If `NetworkTime` exceeds 30 % and `BytesSent` is large, the query is shipping too much data. Re‑evaluate the join strategy and reduce the shuffle/broadcast volume (e.g., enforce shuffle instead of broadcast, or pre‑filter upstream).
 
 **Receiver backlog** – High `WaitTime` in the sink with sender queues that stay full indicates the receiver cannot keep up. Increase the receiver thread pool (`brpc_num_threads`) and confirm NIC bandwidth and QoS settings.
+
+**Enable exchange compression** – When network bandwidth is the bottleneck, compress exchange payloads. Set `SET transmission_compression_type = 'zstd';` and optionally increase `SET transmission_encode_level = 7;` to enable adaptive column encoding. Expect higher CPU usage in exchange for reduced bytes on the wire.
 
 ### 2.5 Sort / Merge / Window
 
@@ -171,9 +174,9 @@ For ease of understanding various metrics, Merge can be represented as the follo
 
 **Sort spilling** – When `MaxBufferedBytes` rises above roughly 2 GB or `SpillBytes` is non‑zero, the sort phase is spilling to disk. Add a `LIMIT`, pre‑aggregate upstream, or raise `sort_spill_threshold` if the machine has enough memory.
 
-**Merge starvation** – A high `PendingStageTime` tells you the merge is waiting for upstream chunks. Optimise the producer operator first or enlarge pipeline buffers.
+**Merge starvation** – A high `PendingStageTime` tells you the merge is waiting for upstream chunks. Optimize the producer operator first or enlarge pipeline buffers.
 
-**Wide window partitions** – Huge `PeakBufferedRows` inside a window operator point to very broad partitions or an ORDER BY lacking frame limits. Partition more granularly, add `RANGE BETWEEN` bounds, or materialise intermediate aggregates.
+**Wide window partitions** – Huge `PeakBufferedRows` inside a window operator point to very broad partitions or an ORDER BY lacking frame limits. Partition more granularly, add `RANGE BETWEEN` bounds, or materialize intermediate aggregates.
 
 ---
 

@@ -33,11 +33,12 @@
 typedef unsigned long ulong;
 #endif
 #endif
+#include "base/time/timezone_hsscan.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -90,7 +91,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         }
     } else if (v1->is_nullable()) {
         auto v = ColumnHelper::as_column<NullableColumn>(v1);
-        auto& nulls = v->null_column()->get_data();
+        auto& nulls = v->immutable_null_column_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v->data_column())->get_data();
 
         auto null_column = NullColumn::create();
@@ -176,6 +177,91 @@ Status TimeFunctions::convert_tz_close(FunctionContext* context, FunctionContext
 
     return Status::OK();
 }
+
+namespace {
+
+cctz::time_zone get_iceberg_timestamptz_session_timezone(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        return context->state()->timezone_obj();
+    }
+    return cctz::utc_time_zone();
+}
+
+bool should_use_iceberg_timestamptz_utc_fast_path(const cctz::time_zone& timezone) {
+    return timezone == cctz::utc_time_zone();
+}
+
+bool normalize_iceberg_timestamptz_to_utc(FunctionContext* context, const TimestampValue& timestamp,
+                                          TimestampValue* normalized_timestamp) {
+    int year, month, day, hour, minute, second, usec;
+    timestamp.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    DateTimeValue datetime(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+
+    int64_t unix_second;
+    if (!datetime.unix_timestamp(&unix_second, get_iceberg_timestamptz_session_timezone(context))) {
+        return false;
+    }
+
+    normalized_timestamp->from_unixtime(unix_second, usec, cctz::utc_time_zone());
+    return true;
+}
+
+int64_t floor_div_microseconds(int64_t micros, int64_t unit_micros) {
+    int64_t quotient = micros / unit_micros;
+    int64_t remainder = micros % unit_micros;
+    if (remainder != 0 && ((remainder < 0) != (unit_micros < 0))) {
+        --quotient;
+    }
+    return quotient;
+}
+
+int64_t iceberg_microseconds_since_epoch(const TimestampValue& timestamp) {
+    return timestamp.diff_microsecond(TimeFunctions::unix_epoch);
+}
+
+int64_t iceberg_days_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_DAY);
+}
+
+int64_t iceberg_hours_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_HOUR);
+}
+
+template <typename TransformFn>
+StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* context, const Columns& columns,
+                                                           TransformFn transform_fn) {
+    DCHECK_EQ(columns.size(), 1);
+
+    auto datetime_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    bool use_utc_fast_path =
+            should_use_iceberg_timestamptz_utc_fast_path(get_iceberg_timestamptz_session_timezone(context));
+
+    for (int row = 0; row < size; ++row) {
+        if (datetime_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        if (use_utc_fast_path) {
+            result.append(transform_fn(datetime_viewer.value(row)));
+            continue;
+        }
+
+        TimestampValue normalized_timestamp;
+        if (!normalize_iceberg_timestamptz_to_utc(context, datetime_viewer.value(row), &normalized_timestamp)) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(transform_fn(normalized_timestamp));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+} // namespace
 
 StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
@@ -2358,7 +2444,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
                 result.append(ts);
             } else {
                 const Slice& fmt = fmt_viewer.value(i);
-                str_to_date_internal(&ts, fmt, str, &result);
+                RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
             }
         }
     }
@@ -2366,14 +2452,18 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
 }
 
 // uncommon approach to process string content, based on uncommon string format.
-void TimeFunctions::str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                         ColumnBuilder<TYPE_DATETIME>* result) {
+Status TimeFunctions::str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt,
+                                           const Slice& str, ColumnBuilder<TYPE_DATETIME>* result) {
     bool r = ts->from_uncommon_format_str(fmt.get_data(), fmt.get_size(), str.get_data(), str.get_size());
     if (r) {
         result->append(*ts);
-    } else {
-        result->append_null();
+        return Status::OK();
     }
+    if (context != nullptr && context->allow_throw_exception()) {
+        return Status::InvalidArgument("Fail to parse date");
+    }
+    result->append_null();
+    return Status::OK();
 }
 
 // Try to process string content, based on uncommon string format
@@ -2392,7 +2482,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
             const Slice& str = str_viewer.value(i);
             const Slice& fmt = fmt_viewer.value(i);
             TimestampValue ts;
-            str_to_date_internal(&ts, fmt, str, &result);
+            RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
         }
     }
 
@@ -2567,7 +2657,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
 
     size_t num_rows = viewer.size();
     ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
-    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+    builder.data_column_raw_ptr()->reserve(num_rows, num_rows * patten_size);
 
     for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {
@@ -2712,8 +2802,11 @@ StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starr
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2762,8 +2855,11 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
-        builder->append(Slice(std::string(buf)), !b);
+        if (!standard_format_one_row(ts, buf, viewer_format->value(i).to_string())) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
@@ -2905,8 +3001,11 @@ StatusOr<ColumnPtr> joda_standard_format(const std::string& fmt, int len, const 
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = joda_standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!joda_standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2955,8 +3054,11 @@ void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TY
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = joda_standard_format_one_row(ts, buf, format);
-        builder->append(Slice(std::string(buf)), !b);
+        if (!joda_standard_format_one_row(ts, buf, format)) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
@@ -3269,6 +3371,13 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionCo
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime(FunctionContext* context,
+                                                                                  const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
+        return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+    });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
@@ -3292,15 +3401,22 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionC
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime(FunctionContext* context,
+                                                                                   const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
+        return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+    });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
     auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
-    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+    return iceberg_days_since_epoch(ts);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
-    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_days_since_epoch(v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_date(FunctionContext* context,
@@ -3315,14 +3431,26 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_datetime(FunctionCon
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_days_since_epoch_datetime(FunctionContext* context,
+                                                                                 const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(
+            context, columns, [](const TimestampValue& timestamp) { return iceberg_days_since_epoch(timestamp); });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
-    return hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_hours_since_epoch(v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_hours_since_epoch_datetime(FunctionContext* context,
                                                                       const starrocks::Columns& columns) {
     return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
             VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime(FunctionContext* context,
+                                                                                  const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(
+            context, columns, [](const TimestampValue& timestamp) { return iceberg_hours_since_epoch(timestamp); });
 }
 
 // used as start point of time_slice.

@@ -14,10 +14,10 @@
 
 package com.starrocks.server;
 
+import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
-import com.starrocks.transaction.MockedLocalMetaStore;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;

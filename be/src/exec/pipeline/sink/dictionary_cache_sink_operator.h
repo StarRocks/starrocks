@@ -16,18 +16,16 @@
 
 #include "exec/dictionary_cache_writer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 
-namespace starrocks {
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class DictionaryCacheSinkOperator final : public Operator {
 public:
     DictionaryCacheSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                TDictionaryCacheSink t_dictionary_cache_sink, FragmentContext* fragment_ctx)
+                                const TDictionaryCacheSink& t_dictionary_cache_sink, FragmentContext* fragment_ctx)
             : Operator(factory, id, "dictionary_cache_sink", plan_node_id, false, driver_sequence),
               _t_dictionary_cache_sink(t_dictionary_cache_sink),
               _fragment_ctx(fragment_ctx) {}
@@ -85,5 +83,4 @@ private:
     FragmentContext* _fragment_ctx = nullptr;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

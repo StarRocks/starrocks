@@ -37,6 +37,17 @@ import java.util.List;
 import static java.lang.Math.max;
 
 public class MysqlSchemaResolver extends JDBCSchemaResolver {
+    private static final String INFORMATION_SCHEMA = "information_schema";
+    private static final String PARTITIONS_TABLE = "partitions";
+    private static final String PARTITIONS_TABLE_UPPERCASE = "PARTITIONS";
+
+    @Override
+    protected boolean isInternalSchema(String schemaName) {
+        return schemaName.equalsIgnoreCase(INFORMATION_SCHEMA) ||
+                schemaName.equalsIgnoreCase("mysql") ||
+                schemaName.equalsIgnoreCase("performance_schema") ||
+                schemaName.equalsIgnoreCase("sys");
+    }
 
     @Override
     public Collection<String> listSchemas(Connection connection) {
@@ -45,10 +56,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_CAT");
                 // skip internal schemas
-                if (!schemaName.equalsIgnoreCase("information_schema") &&
-                        !schemaName.equalsIgnoreCase("mysql") &&
-                        !schemaName.equalsIgnoreCase("performance_schema") &&
-                        !schemaName.equalsIgnoreCase("sys")) {
+                if (!isInternalSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
             }
@@ -59,29 +67,44 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
-    public boolean checkAndSetSupportPartitionInformation(Connection connection) {
-        String catalogSchema = "information_schema";
-        String partitionInfoTable = "partitions";
-        // Different types of MySQL protocol databases have different case names for schema and table names,
-        // which need to be converted to lowercase for comparison
-        try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
-            while (catalogSet.next()) {
-                String schemaName = catalogSet.getString("TABLE_CAT");
-                if (schemaName.equalsIgnoreCase(catalogSchema)) {
-                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null, null)) {
-                        while (tableSet.next()) {
-                            String tableName = tableSet.getString("TABLE_NAME");
-                            if (tableName.equalsIgnoreCase(partitionInfoTable)) {
-                                return this.supportPartitionInformation = true;
-                            }
-                        }
-                    }
+    public boolean databaseExists(Connection connection, String dbName) throws SQLException {
+        // Skip internal schemas to maintain consistency with listSchemas()
+        if (isInternalSchema(dbName)) {
+            return false;
+        }
+        try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
+            while (resultSet.next()) {
+                String catalogName = resultSet.getString("TABLE_CAT");
+                if (catalogName.equals(dbName)) {
+                    return true;
                 }
             }
+            return false;
+        }
+    }
+
+    @Override
+    public boolean checkAndSetSupportPartitionInformation(Connection connection) {
+        try {
+            return this.supportPartitionInformation =
+                    partitionInfoTableExists(connection, PARTITIONS_TABLE_UPPERCASE) ||
+                            partitionInfoTableExists(connection, PARTITIONS_TABLE);
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
-        return this.supportPartitionInformation = false;
+    }
+
+    private boolean partitionInfoTableExists(Connection connection, String tableNamePattern) throws SQLException {
+        try (ResultSet tableSet = connection.getMetaData().getTables(
+                INFORMATION_SCHEMA, null, tableNamePattern, null)) {
+            while (tableSet != null && tableSet.next()) {
+                String tableName = tableSet.getString("TABLE_NAME");
+                if (tableName != null && tableName.equalsIgnoreCase(PARTITIONS_TABLE)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     @Override
@@ -146,6 +169,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+                primitiveType = PrimitiveType.VARBINARY;
+                break;
             default:
                 // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
                 // However, the mariadb-java-client does not handle the JSON type,
@@ -172,6 +199,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
@@ -200,6 +228,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
@@ -223,6 +252,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
             ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             long createTime = TimeUtils.getEpochSeconds();

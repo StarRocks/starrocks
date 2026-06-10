@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 集群部署、升级和降级的完整流程和步骤概览。"
 ---
 
 # 部署总览
@@ -18,7 +19,7 @@ StarRocks 的部署通常遵循以下步骤：
 
 2. [规划集群规模](../deployment/plan_cluster.md)。
 
-   规划集群中 FE 节点和 BE 节点的数量，以及服务器的硬件规格。
+   规划集群中 FE 节点和 BE/CN 节点的数量，以及服务器的硬件规格。
 
 3. [检查环境配置](../deployment/environment_configurations.md)。
 
@@ -32,7 +33,7 @@ StarRocks 的部署通常遵循以下步骤：
 
 5. 部署 StarRocks。
 
-   - 如需部署存算分离架构的 StarRocks 集群，请参考 [部署使用 StarRocks 存算分离集群](../deployment/shared_data/s3.md)。
+   - 如需部署存算分离架构的 StarRocks 集群，请参考 [部署使用 StarRocks 存算分离集群](../deployment/deploy_shared_data_manually.md)。
    - 如需部署存算一体架构的 StarRocks 集群，则有以下选择：
 
      - [手动部署 StarRocks](../deployment/deploy_manually.md)。

@@ -1,4 +1,4 @@
--- name: test_basic_create_index @slow
+-- name: test_basic_create_index @slow @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -151,7 +151,7 @@ DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
--- name: test_query_gin_index
+-- name: test_query_gin_index @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -236,10 +236,175 @@ select count(*) from t_test_gin_index_query where query_chinese match_all "ç‰©åŒ
 -- result:
 1
 -- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'chinese' order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'starrocks' or query_english match 'lakehouse' order by id1;
+-- result:
+hello starrocks
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'test' or query_english match 'view' order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or id1=4 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and (query_english match 'nonexistent' or id1=1) order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or (query_english match 'chinese' and id1=5) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or (id1=5 and query_english match 'chinese') order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' and id1=1) or (query_english match 'test' and id1=5) order by id1;
+-- result:
+hello starrocks
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' or id1=4) and (query_english match 'world' or id1=1) order by id1;
+-- result:
+hello starrocks
+hello world
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'hello') order by id1;
+-- result:
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'starrocks' and not (query_english match 'world') order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'hello') or id1=1 order by id1;
+-- result:
+hello starrocks
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'hello') and not (query_english match 'test') order by id1;
+-- result:
+materialized view
+-- !result
+select query_english from t_test_gin_index_query where (not (query_english match 'hello') or id1=1) and query_english match 'starrocks' order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'test' or query_english match 'nonexistent' order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and query_english match 'starrocks' and id1 <= 3 order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' and id1 >= 1) or (query_english match 'test' and id1 < 6) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'nonexistent1') or not (query_english match 'nonexistent2') order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' or not (query_english match 'world')) and id1 in (1, 2, 3) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or not (query_english match 'world') or id1=10 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where not (not (query_english match 'hello') or id1=10) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and id1 * 2 <= 6 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or not (query_english match 'hello') or id1=10 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and query_english match 'starrocks' order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'nonexistent' order by id1;
+-- result:
+-- !result
+select count(*) from t_test_gin_index_query where query_english match '' or id1=1;
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_english match '' or query_english match 'hello';
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match 'hello' or query_english match '';
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match '' or id1 > 3;
+-- result:
+2
+-- !result
+select count(*) from t_test_gin_index_query where (query_english match '' or id1=1) and id1 < 5;
+-- result:
+1
+-- !result
 drop table t_test_gin_index_query;
 -- result:
 -- !result
--- name: test_gin_index_single_predicate_none
+-- name: test_gin_index_single_predicate_none @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -359,7 +524,7 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "ABC
 DROP TABLE t_gin_index_single_predicate_none;
 -- result:
 -- !result
--- name: test_gin_index_single_predicate_english
+-- name: test_gin_index_single_predicate_english @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -459,7 +624,7 @@ SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "thi%"
 DROP TABLE t_gin_index_single_predicate_english;
 -- result:
 -- !result
--- name: test_gin_index_multiple_predicate_none
+-- name: test_gin_index_multiple_predicate_none @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -551,7 +716,8 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" A
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
 -- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+1	ABC
+3	ABD
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
 -- result:
@@ -601,7 +767,7 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_an
 DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
--- name: test_gin_index_multiple_predicate_english
+-- name: test_gin_index_multiple_predicate_english @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -636,7 +802,9 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
 -- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+1	ABC
+2	abc
+4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_any "this abc";
 -- result:
@@ -671,7 +839,7 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all
 DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
 -- !result
--- name: test_gin_index_compaction
+-- name: test_gin_index_compaction @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -841,7 +1009,7 @@ DROP TABLE t_gin_index_compaction_english_base;
 DROP TABLE t_gin_index_compaction_english_cumu;
 -- result:
 -- !result
--- name: test_gin_index_type
+-- name: test_gin_index_type @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -960,7 +1128,7 @@ PROPERTIES (
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
--- name: test_clone_for_gin
+-- name: test_clone_for_gin @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1008,7 +1176,7 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 1	abc	abc	abc	abc
 2	ABC	ABC	ABC	ABC
 -- !result
--- name: test_complex_predicate_for_gin
+-- name: test_complex_predicate_for_gin @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1298,7 +1466,7 @@ DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;
 -- result:
 -- !result
--- name: test_delete_and_column_prune
+-- name: test_delete_and_column_prune @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1337,7 +1505,7 @@ SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
 DROP TABLE t_delete_and_column_prune;
 -- result:
 -- !result
--- name: test_upper_case_column_name
+-- name: test_upper_case_column_name @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1405,7 +1573,7 @@ SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ALL "b";
 DROP TABLE t_upper_case_column_name;
 -- result:
 -- !result
--- name: test_alter_replicated_storage
+-- name: test_alter_replicated_storage @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1447,7 +1615,7 @@ PROPERTIES (
 DROP TABLE t_alter_replicated_storage;
 -- result:
 -- !result
--- name: test_disable_global_dict_rewrite
+-- name: test_disable_global_dict_rewrite @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1570,7 +1738,7 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ALL "abc" ORDER BY v
 DROP TABLE t_disable_global_dict_rewrite;
 -- result:
 -- !result
--- name: test_create_mv_with_match
+-- name: test_create_mv_with_match @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1610,7 +1778,7 @@ None
 DROP TABLE t_create_mv_with_match;
 -- result:
 -- !result
--- name: test_alter_gin_col_into_other_type
+-- name: test_alter_gin_col_into_other_type @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1667,7 +1835,7 @@ DROP TABLE t_alter_gin_col_into_other_type;
 -- result:
 -- !result
 
--- name: test_gin_match_empty
+-- name: test_gin_match_empty @native
 CREATE TABLE `t_gin_match_empty` (
   `k` BIGINT NOT NULL COMMENT "",
   `v1` string COMMENT "",
@@ -1729,7 +1897,7 @@ SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ALL "";
 DROP TABLE t_gin_match_empty;
 -- result:
 -- !result
--- name: test_gin_view
+-- name: test_gin_view @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -1821,49 +1989,13 @@ select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
 [REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
--- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
--- !result
 DROP VIEW test_view;
 -- result:
 -- !result
 DROP TABLE duplicate_table_demo_datatype_not_replicated_all_varchar;
 -- result:
 -- !result
--- name: test_vertical_compaction
+-- name: test_vertical_compaction @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result

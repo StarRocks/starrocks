@@ -20,7 +20,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +53,7 @@ public class SyntaxSugars {
      * - window functions
      */
     public static FunctionCallExpr parse(FunctionCallExpr call) {
-        return FUNCTION_PARSER.getOrDefault(call.getFnName().getFunction(), SyntaxSugars::defaultParse).apply(call);
+        return FUNCTION_PARSER.getOrDefault(call.getFunctionName(), SyntaxSugars::defaultParse).apply(call);
     }
 
     private static FunctionCallExpr defaultParse(FunctionCallExpr call) {
@@ -108,7 +108,7 @@ public class SyntaxSugars {
     }
 
     private static FunctionCallExpr encodeRowId(FunctionCallExpr call) {
-        final String encodeRowIdFuncName = TvrOpUtils.getEncodeRowIdFunctionNameChecked(
+        final String encodeRowIdFuncName = IvmOpUtils.getEncodeRowIdFunctionNameChecked(
                 call.getChildren());
         return new FunctionCallExpr(encodeRowIdFuncName, call.getChildren());
     }

@@ -45,6 +45,26 @@ public class SessionVariableConstants {
     public static final String ETL = "etl";
     public static final String DEFAULT = "default";
 
+    public enum ExecMode {
+        DEFAULT,
+        ETL;
+
+        public static ExecMode getDefault() {
+            return DEFAULT;
+        }
+
+        public boolean isETL() {
+            return this == ETL;
+        }
+
+        public static ExecMode parse(String str) {
+            try {
+                return EnumUtils.getEnumIgnoreCase(ExecMode.class, str);
+            } catch (Exception e) {
+                return getDefault();
+            }
+        }
+    }
 
     public enum ChooseInstancesMode {
 
@@ -72,12 +92,32 @@ public class SessionVariableConstants {
     }
 
     public enum ComputationFragmentSchedulingPolicy {
-        
+
         // only select compute node in scheduler policy (default)
         COMPUTE_NODES_ONLY,
 
         // both select compute node and backend in scheduler policy
         ALL_NODES
+    }
+
+    /**
+     * How to pick a backup compute node in shared-data mode when the scan's primary worker is unavailable
+     * (for example because it is blocklisted).
+     */
+    public enum BlacklistBackupRoutingPolicy {
+        /**
+         * Walk the sorted warehouse node id ring starting from the primary worker and return the first eligible
+         * buddy (default, deterministic behavior).
+         */
+        CIRCULAR,
+        /**
+         * Choose uniformly at random from eligible nodes.
+         */
+        RANDOM;
+
+        public static BlacklistBackupRoutingPolicy getDefault() {
+            return CIRCULAR;
+        }
     }
 
     public enum AggregationStage {

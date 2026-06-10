@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Obtains the current time and returns a value of the TIME type."
 ---
 
 # curtime,current_time

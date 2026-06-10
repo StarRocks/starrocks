@@ -16,5 +16,6 @@ package com.starrocks.persist;
 
 public interface WALApplier {
 
+    // apply can not fail
     void apply(Object wal);
 }

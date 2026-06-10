@@ -163,6 +163,15 @@ public class CompoundPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) obj;
+        return type == that.type;
+    }
+
+    @Override
     public int hashCode() {
         int h = 0;
         for (ScalarOperator scalarOperator : this.getChildren()) {

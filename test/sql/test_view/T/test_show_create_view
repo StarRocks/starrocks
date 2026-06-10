@@ -1,0 +1,19 @@
+-- name: test_show_create_view
+create database db_${uuid0};
+use db_${uuid0};
+create or replace view test_view comment 'test comment 1' as ( select 
+"test" as test_column  -- this is a comment
+);
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables WHERE TABLE_NAME = 'test_view' and TABLE_SCHEMA = 'db_${uuid0}';
+show create view test_view;
+
+
+create table t1(c1 bigint, c2 bigint);
+
+create or replace view test_view as select 
+c1, -- this is a comment
+c2 -- this is a comment
+from t1;
+
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables WHERE TABLE_NAME = 'test_view' and TABLE_SCHEMA = 'db_${uuid0}';
+show create view test_view;

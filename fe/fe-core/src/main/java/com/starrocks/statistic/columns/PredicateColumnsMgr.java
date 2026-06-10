@@ -174,11 +174,14 @@ public class PredicateColumnsMgr {
 
     public void vacuum() {
         long ttlHour = Config.statistic_predicate_columns_ttl_hours;
+        if (ttlHour < 0) {
+            return;
+        }
         LocalDateTime ttlTime = TimeUtils.getSystemNow().minusHours(ttlHour);
         Predicate<ColumnUsage> outdated = x -> x.getLastUsed().isBefore(ttlTime);
 
         long before = id2columnUsage.size();
-        if (id2columnUsage.values().removeIf(outdated)) {
+        if (before > 0 && id2columnUsage.values().removeIf(outdated)) {
             long after = id2columnUsage.size();
             LOG.info("removed {} objects from predicate columns because of ttl {}", before - after,
                     Config.statistic_predicate_columns_ttl_hours);
@@ -214,7 +217,7 @@ public class PredicateColumnsMgr {
         private static final DaemonThread INSTANCE = new DaemonThread();
 
         public DaemonThread() {
-            super("PredicateColumnsDaemonThread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
+            super("predicate-columns-daemon-thread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
         }
 
         public static DaemonThread getInstance() {

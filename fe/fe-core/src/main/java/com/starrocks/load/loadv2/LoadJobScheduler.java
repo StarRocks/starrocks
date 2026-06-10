@@ -40,7 +40,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
@@ -57,23 +57,31 @@ import java.util.concurrent.RejectedExecutionException;
  * The function of execute will be called in LoadScheduler.
  * The status of LoadJob will be changed to loading after LoadScheduler.
  */
-public class LoadJobScheduler extends FrontendDaemon {
+public class LoadJobScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(LoadJobScheduler.class);
 
     private LinkedBlockingQueue<LoadJob> needScheduleJobs = Queues.newLinkedBlockingQueue();
 
     public LoadJobScheduler() {
-        super("Load job scheduler", Config.load_checker_interval_second * 1000L);
+        super("load-job-scheduler", Config.load_checker_interval_second * 1000L);
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
         }
+    }
+
+    @Override
+    protected void onStopped() {
+        // The pending LoadJob refs are leader-session bookkeeping; LoadMgr.prepareJobs() re-queues
+        // unfinished jobs from persistent state when the next leader activates, so dropping them
+        // here avoids double-scheduling on re-election.
+        needScheduleJobs.clear();
     }
 
     private void process() throws InterruptedException {
@@ -93,14 +101,14 @@ public class LoadJobScheduler extends FrontendDaemon {
                         .build(), e);
                 // transaction not begin, so need not abort
                 loadJob.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_SUBMIT_FAIL, e.getMessage()),
-                        false, true);
+                        false);
             } catch (LoadException e) {
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, loadJob.getId())
                         .add("error_msg", "Failed to submit etl job. Job will be cancelled")
                         .build(), e);
                 // transaction already begin, so need abort
                 loadJob.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_SUBMIT_FAIL, e.getMessage()),
-                        true, true);
+                        true);
             } catch (DuplicatedRequestException e) {
                 // should not happen in load job scheduler, there is no request id.
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, loadJob.getId())
@@ -120,7 +128,7 @@ public class LoadJobScheduler extends FrontendDaemon {
                         .add("error_msg", "Failed to submit etl job. Job queue is full.")
                         .build(), e);
                 loadJob.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_SUBMIT_FAIL, e.getMessage()),
-                        true, true);
+                        true);
             }
         }
     }

@@ -56,6 +56,7 @@ public class ShowMaterializedViewStatusTest {
 
         List<String> resultSet = viewStatus.toResultSet();
 
+        Assertions.assertEquals(34, resultSet.size());
         Assertions.assertEquals("", resultSet.get(3)); // refresh type
         Assertions.assertEquals("false", resultSet.get(4)); // is active
         Assertions.assertEquals("", resultSet.get(5)); // inactive reason
@@ -78,5 +79,22 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertEquals("", resultSet.get(22)); // owner
         Assertions.assertEquals("", resultSet.get(23)); // process start time
         Assertions.assertEquals("", resultSet.get(24)); // last refresh job id
+        Assertions.assertEquals("", resultSet.get(27)); // last refresh time
+        Assertions.assertEquals("", resultSet.get(28)); // warehouse
+        Assertions.assertEquals("", resultSet.get(29)); // refresh mode
+        Assertions.assertEquals("", resultSet.get(30)); // refresh trigger
+        Assertions.assertEquals("", resultSet.get(31)); // refresh policy
+        Assertions.assertEquals("", resultSet.get(32)); // resource group
+        Assertions.assertEquals("", resultSet.get(33)); // query rewrite status reason
+    }
+
+    @Test
+    public void toThriftIncludesLastRefreshTimeWhenPresent() {
+        ShowMaterializedViewStatus viewStatus = new ShowMaterializedViewStatus(1L, "testDb", "testView");
+        viewStatus.setLastRefreshTime(1735697100000L);
+
+        TMaterializedViewStatus thriftStatus = viewStatus.toThrift();
+
+        Assertions.assertEquals("2025-01-01 10:05:00", thriftStatus.getLast_refresh_time());
     }
 }

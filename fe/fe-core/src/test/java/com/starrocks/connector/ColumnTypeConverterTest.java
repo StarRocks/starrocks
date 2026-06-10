@@ -187,7 +187,7 @@ public class ColumnTypeConverterTest {
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = TypeFactory.createVarcharType(10);
+        keyType = TypeFactory.createVarcharType(40);
         valueType = TypeFactory.createCharType(5);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<varchar(10),char(5)>";
@@ -195,7 +195,7 @@ public class ColumnTypeConverterTest {
         Assertions.assertEquals(mapType, resType);
 
         keyType = BooleanType.BOOLEAN;
-        valueType = TypeFactory.createVarcharType(10);
+        valueType = TypeFactory.createVarcharType(40);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<boolean,varchar(10)>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -299,7 +299,7 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testVarcharString() {
-        Type varcharType = TypeFactory.createVarcharType(100);
+        Type varcharType = TypeFactory.createVarcharType(400);
         String typeStr = "varchar(100)";
         Type resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, varcharType);
@@ -318,10 +318,10 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, stringType);
 
-        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
-        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarcharType(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarcharType(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
     @Test
@@ -449,10 +449,10 @@ public class ColumnTypeConverterTest {
                 "Unsupported Hive type: CHAR(10000). Supported CHAR types: CHAR(<=255)",
                 () -> toHiveType(TypeFactory.createCharType(10000)));
 
-        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarchar(100)));
+        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarcharType(100)));
         Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(200000)));
 
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(getOlapMaxVarcharLength())));
 
         ScalarType itemType = DateType.DATE;
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));
@@ -472,5 +472,23 @@ public class ColumnTypeConverterTest {
         StructField b = new StructField("b", IntegerType.INT);
         StructType outerStruct = new StructType(Lists.newArrayList(a, b));
         Assertions.assertEquals(typeStr, toHiveType(outerStruct));
+    }
+
+    @Test
+    public void testFromPaimonSchemas() {
+        org.apache.paimon.types.DataField field1 = new org.apache.paimon.types.DataField(
+                0, "pk", new org.apache.paimon.types.IntType(false));
+        org.apache.paimon.types.DataField field2 = new org.apache.paimon.types.DataField(
+                1, "v1", new org.apache.paimon.types.VarCharType(true, 10));
+
+        List<Column> columns = ColumnTypeConverter.fromPaimonSchemas(ImmutableList.of(field1, field2));
+
+        Assertions.assertEquals(2, columns.size());
+
+        Assertions.assertEquals("pk", columns.get(0).getName());
+        Assertions.assertTrue(columns.get(0).isAllowNull(), "Paimon PK should be nullable");
+
+        Assertions.assertEquals("v1", columns.get(1).getName());
+        Assertions.assertTrue(columns.get(1).isAllowNull());
     }
 }

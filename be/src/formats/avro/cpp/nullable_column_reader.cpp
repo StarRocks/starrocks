@@ -14,6 +14,8 @@
 
 #include "formats/avro/cpp/nullable_column_reader.h"
 
+#include <fmt/format.h>
+
 #include "column/adaptive_nullable_column.h"
 #include "column/nullable_column.h"
 
@@ -29,8 +31,13 @@ Status NullableColumnReader::read_datum_for_adaptive_column(const avro::GenericD
         return read_datum_for_adaptive_column(union_value.datum(), column);
     }
 
-    auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
-    auto* data_column = nullable_column->mutable_begin_append_not_default_value();
+    auto* nullable_column = dynamic_cast<AdaptiveNullableColumn*>(column);
+    if (UNLIKELY(nullable_column == nullptr)) {
+        return Status::InternalError(
+                fmt::format("Avro adaptive nullable reader expected AdaptiveNullableColumn but got {}",
+                            column == nullptr ? "null" : column->get_name()));
+    }
+    auto* data_column = nullable_column->begin_append_not_default_value();
     auto st = _base_reader->read_datum(datum, data_column);
     if (st.ok()) {
         nullable_column->finish_append_one_not_default_value();
@@ -51,11 +58,15 @@ Status NullableColumnReader::read_datum(const avro::GenericDatum& datum, Column*
         return read_datum(union_value.datum(), column);
     }
 
-    auto nullable_column = down_cast<NullableColumn*>(column);
-    auto& data_column = nullable_column->data_column();
-    auto st = _base_reader->read_datum(datum, data_column.get());
+    auto* nullable_column = dynamic_cast<NullableColumn*>(column);
+    if (UNLIKELY(nullable_column == nullptr)) {
+        return Status::InternalError(fmt::format("Avro nullable reader expected NullableColumn but got {}",
+                                                 column == nullptr ? "null" : column->get_name()));
+    }
+    auto* data_column = nullable_column->data_column_raw_ptr();
+    auto st = _base_reader->read_datum(datum, data_column);
     if (st.ok()) {
-        nullable_column->null_column()->append(0);
+        nullable_column->null_column_raw_ptr()->append(0);
     } else if (st.is_data_quality_error() && _invalid_as_null) {
         nullable_column->append_nulls(1);
         return Status::OK();

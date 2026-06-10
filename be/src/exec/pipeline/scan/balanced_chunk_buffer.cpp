@@ -14,8 +14,8 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "fmt/format.h"
-#include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
 
@@ -105,6 +105,10 @@ void BalancedChunkBuffer::set_finished(int buffer_index) {
 
 void BalancedChunkBuffer::update_limiter(Chunk* chunk) {
     static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
+    if (chunk == nullptr || chunk->num_rows() == 0) {
+        return;
+    }
+
     // Update local counters.
     LimiterContext& ctx = _limiter_context;
     ctx.local_sum_row_bytes += chunk->memory_usage();

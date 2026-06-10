@@ -23,7 +23,7 @@ public class OptimizeClause extends AlterTableClause {
     private KeysDesc keysDesc;
     private PartitionDesc partitionDesc;
     private DistributionDesc distributionDesc;
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
     private OptimizeRange range;
 
     private List<Long> sourcePartitionIds = Lists.newArrayList();
@@ -41,7 +41,7 @@ public class OptimizeClause extends AlterTableClause {
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
                           List<OrderByElement> orderByElements,
-                          PartitionNames partitionNames,
+                          PartitionRef partitionNames,
                           OptimizeRange range) {
         this(keysDesc, partitionDesc, distributionDesc, orderByElements, partitionNames, range, NodePosition.ZERO);
     }
@@ -50,7 +50,7 @@ public class OptimizeClause extends AlterTableClause {
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
                           List<OrderByElement> orderByElements,
-                          PartitionNames partitionNames,
+                          PartitionRef partitionNames,
                           OptimizeRange range,
                           NodePosition pos) {
         super(pos);
@@ -103,7 +103,7 @@ public class OptimizeClause extends AlterTableClause {
         this.partitionDesc = partitionDesc;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 

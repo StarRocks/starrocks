@@ -17,8 +17,10 @@
 #include <set>
 #include <string_view>
 
+#include "common/config_lake_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
@@ -87,7 +89,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         meta_files->remove(expired_meta);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
     for (const auto& name : *bundle_meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!meta_ver_checker(version)) {
@@ -126,7 +128,7 @@ static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
         const std::list<std::string>& meta_files, const std::list<std::string>& bundle_meta_files) {
     DCHECK(tablet_mgr != nullptr);
     const auto segment_root_location = join_path(root_loc, kSegmentDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
     ASSIGN_OR_RETURN(auto data_files_to_vacuum,
                      find_orphan_data_files(fs.get(), root_loc, 0, meta_files, bundle_meta_files, nullptr));
     const auto original_size = data_files_to_vacuum.size();
@@ -192,7 +194,7 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
 
     const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_id());
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
     ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs.get(), metadata_root_location));
     auto& meta_files = meta_files_and_bundle_files.first;
     auto& bundle_meta_files = meta_files_and_bundle_files.second;
@@ -212,6 +214,11 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
 
     // 3. deleted txn log which have txn id < min_active_txn_id
     RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+
+    // 4. Reclaim load_spill entries whose txn_id < min_active_txn_id. Best-effort.
+    auto spill_st =
+            vacuum_load_spill(root_loc, min_active_txn_id, request.cleanup_legacy_load_spill(), &vacuumed_files);
+    LOG_IF(WARNING, !spill_st.ok()) << "Fail to vacuum load spill under " << root_loc << ": " << spill_st;
 
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);

@@ -14,8 +14,8 @@
 
 #include "storage/conjunctive_predicates.h"
 
+#include "base/failpoint/fail_point.h"
 #include "column/chunk.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

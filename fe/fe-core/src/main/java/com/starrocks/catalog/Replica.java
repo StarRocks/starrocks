@@ -36,6 +36,8 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.ShallowMemory;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -46,6 +48,7 @@ import java.util.Comparator;
 /**
  * This class represents the olap replica related metadata.
  */
+@ShallowMemory
 public class Replica implements Writable {
     private static final Logger LOG = LogManager.getLogger(Replica.class);
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
@@ -72,15 +75,6 @@ public class Replica implements Writable {
         }
     }
 
-    public enum ReplicaStatus {
-        OK, // health
-        DEAD, // backend is not available
-        VERSION_ERROR, // missing version
-        MISSING, // replica does not exist
-        SCHEMA_ERROR, // replica's schema hash does not equal to index's schema hash
-        BAD // replica is broken.
-    }
-
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "backendId")
@@ -105,6 +99,13 @@ public class Replica implements Writable {
     // Use this version to detect data lose on BE.
     // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
     private volatile long lastReportVersion = 0;
+
+    // The continuous version of the previous tablet report that carried version_miss=true while the replica
+    // was behind the visible version, or -1 otherwise. Used by ReportHandler to require a permanent version
+    // hole to persist across two consecutive reports before triggering recovery, so a transient out-of-order
+    // publish that fills quickly is not mistaken for a stuck hole. Not serialized; leader-local, reset after a
+    // failover (which only delays detection by one report, never compromises safety).
+    private volatile long versionMissBaselineVersion = -1L;
 
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
@@ -672,5 +673,13 @@ public class Replica implements Writable {
 
     public long getLastReportVersion() {
         return this.lastReportVersion;
+    }
+
+    public void setVersionMissBaselineVersion(long versionMissBaselineVersion) {
+        this.versionMissBaselineVersion = versionMissBaselineVersion;
+    }
+
+    public long getVersionMissBaselineVersion() {
+        return this.versionMissBaselineVersion;
     }
 }

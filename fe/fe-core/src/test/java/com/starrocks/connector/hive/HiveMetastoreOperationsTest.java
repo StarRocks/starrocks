@@ -21,7 +21,6 @@ import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -33,6 +32,8 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
@@ -282,7 +283,7 @@ public class HiveMetastoreOperationsTest {
                 "Failed to find location in database 'db'",
                 () -> hmsOps.getDefaultLocation("db", "table"));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return false;
@@ -308,7 +309,7 @@ public class HiveMetastoreOperationsTest {
                 "Database 'db' location does not exist: my_location",
                 () -> hmsOps2.getDefaultLocation("db", "table"));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;
@@ -324,7 +325,7 @@ public class HiveMetastoreOperationsTest {
                 "Database 'db' location is not a directory: my_location",
                 () -> hmsOps2.getDefaultLocation("db", "table"));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;
@@ -343,7 +344,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTable() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             public void createDirectory(Path path, Configuration conf) {
             }
         };
@@ -359,7 +360,8 @@ public class HiveMetastoreOperationsTest {
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
                 false,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -381,7 +383,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableWithLocation() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
             }
@@ -410,7 +412,8 @@ public class HiveMetastoreOperationsTest {
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
                 false,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -431,7 +434,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableForExternal() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
             }
@@ -450,7 +453,8 @@ public class HiveMetastoreOperationsTest {
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
                 true,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -471,7 +475,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableForExternalWithoutLocation() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
             }
@@ -489,7 +493,8 @@ public class HiveMetastoreOperationsTest {
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
                 true,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -510,7 +515,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableLike() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             public void createDirectory(Path path, Configuration conf) {
             }
         };
@@ -528,7 +533,8 @@ public class HiveMetastoreOperationsTest {
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
                 false,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("col1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("col2", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -547,8 +553,10 @@ public class HiveMetastoreOperationsTest {
 
         CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
                 false,
-                new TableName("hive_catalog", "hive_db", "hive_table_1"),
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table_1")),
+                        null, NodePosition.ZERO),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 null,
                 null,
                 new HashMap<>(),

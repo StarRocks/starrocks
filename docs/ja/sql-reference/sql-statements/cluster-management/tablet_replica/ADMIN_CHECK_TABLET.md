@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN CHECK TABLET は、一連の tablet をチェックするために使用されます。"
 ---
 
 # ADMIN CHECK TABLET
@@ -17,7 +18,7 @@ displayed_sidebar: docs
 ## 構文
 
 ```sql
-ADMIN CHECK TABLE (tablet_id1, tablet_id2, ...)
+ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...)
 PROPERTIES("type" = "...")
 ```
 

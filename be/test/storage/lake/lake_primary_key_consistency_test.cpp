@@ -20,12 +20,17 @@
 #include <random>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
@@ -59,7 +64,7 @@ enum PICT_OP {
 
 static const std::string kTestGroupPath = "./test_lake_primary_key_consistency";
 static const int64_t MaxNumber = 1000000;
-static const int64_t MaxN = 10000;
+static const int64_t MaxN = 50000;
 static const size_t MaxUpsert = 4;
 static const size_t MaxBatchCnt = 5;
 static const int64_t io_failure_percent = 3;
@@ -76,8 +81,8 @@ public:
 
     class ReplayEntry {
     public:
-        ReplayEntry(const ReplayerOP& o, const ChunkPtr& cp, const string& cc)
-                : op(o), chunk_ptr(cp), condition_col(cc) {}
+        ReplayEntry(ReplayerOP o, ChunkPtr cp, string cc)
+                : op(std::move(o)), chunk_ptr(std::move(cp)), condition_col(std::move(cc)) {}
         // Operation type
         ReplayerOP op;
         // Replay data
@@ -261,6 +266,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         _old_l0_size = config::l0_max_mem_usage;
         config::l0_max_mem_usage = MaxNumber * (sizeof(int) + sizeof(uint64_t) * 2) / 10;
         _old_memtable_size = config::write_buffer_size;
@@ -269,8 +275,13 @@ public:
         config::enable_pindex_minor_compaction = false;
         _old_enable_pk_strict_memcheck = config::enable_pk_strict_memcheck;
         config::enable_pk_strict_memcheck = false;
-        _old_pk_parallel_execution_threshold_bytes = config::pk_parallel_execution_threshold_bytes;
-        config::pk_parallel_execution_threshold_bytes = 1;
+        _old_pk_index_eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
+        config::pk_index_eager_build_threshold_bytes = 1;
+        _old_pk_index_parallel_execution_min_rows = config::pk_index_parallel_execution_min_rows;
+        config::pk_index_parallel_execution_min_rows = 128;
+        _old_pk_index_parallel_compaction_task_split_threshold_bytes =
+                config::pk_index_parallel_compaction_task_split_threshold_bytes;
+        config::pk_index_parallel_compaction_task_split_threshold_bytes = 4 * 1024 * 1024;
     }
 
     void TearDown() override {
@@ -278,7 +289,10 @@ public:
         config::l0_max_mem_usage = _old_l0_size;
         config::write_buffer_size = _old_memtable_size;
         config::enable_pk_strict_memcheck = _old_enable_pk_strict_memcheck;
-        config::pk_parallel_execution_threshold_bytes = _old_pk_parallel_execution_threshold_bytes;
+        config::pk_index_eager_build_threshold_bytes = _old_pk_index_eager_build_threshold_bytes;
+        config::pk_index_parallel_execution_min_rows = _old_pk_index_parallel_execution_min_rows;
+        config::pk_index_parallel_compaction_task_split_threshold_bytes =
+                _old_pk_index_parallel_compaction_task_split_threshold_bytes;
     }
 
     std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
@@ -339,7 +353,7 @@ public:
             key_col_str.emplace_back(std::to_string(cols[0][i]));
         }
         for (const auto& s : key_col_str) {
-            key_col.emplace_back(Slice(s));
+            key_col.emplace_back(s);
         }
 
         auto c0 = BinaryColumn::create();
@@ -370,7 +384,7 @@ public:
             key_col_str.emplace_back(std::to_string(cols[0][i]));
         }
         for (const auto& s : key_col_str) {
-            key_col.emplace_back(Slice(s));
+            key_col.emplace_back(s);
         }
 
         auto c0 = BinaryColumn::create();
@@ -395,16 +409,16 @@ public:
         return force_flush_guard;
     }
 
-    // 20% chance to enable pk parallel execution
-    std::unique_ptr<ConfigResetGuard<bool>> random_pk_parallel_execution() {
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard;
+    // 20% chance to enable eager PK index build
+    std::unique_ptr<ConfigResetGuard<bool>> random_pk_index_eager_build() {
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard;
         uint32_t r = _random_generator->random() % 100;
         if (r < 20) {
-            // 20% chance to enable pk parallel execution
-            pk_parallel_execution_guard =
-                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_parallel_execution, true);
+            // 20% chance to enable eager PK index build
+            pk_index_eager_build_guard =
+                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_index_eager_build, true);
         }
-        return pk_parallel_execution_guard;
+        return pk_index_eager_build_guard;
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {
@@ -412,9 +426,9 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;
@@ -427,7 +441,7 @@ public:
 
     Status upsert_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -464,7 +478,7 @@ public:
 
     Status partial_update_op(PartialUpdateMode mode) {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -501,7 +515,7 @@ public:
 
     Status condition_update() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         // c2 as merge_condition
         std::string merge_condition = "c2";
@@ -534,12 +548,12 @@ public:
 
     Status upsert_with_batch_pub_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
-        size_t batch_cnt = std::max(_random_generator->random() % MaxBatchCnt, (size_t)1);
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
+        size_t batch_cnt = std::max<size_t>(static_cast<size_t>(_random_generator->random() % MaxBatchCnt), 1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
             auto txn_id = next_id();
-            txn_ids.push_back(txn_id);
+            txn_ids.emplace_back(txn_id);
             ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                        .set_tablet_manager(_tablet_mgr.get())
                                                        .set_tablet_id(_tablet_metadata->id())
@@ -577,7 +591,7 @@ public:
 
     Status delete_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -604,7 +618,7 @@ public:
 
     Status compact_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
                                                                     false, nullptr);
@@ -713,12 +727,14 @@ protected:
     int64_t _old_l0_size = 0;
     int64_t _old_memtable_size = 0;
     bool _old_enable_pk_strict_memcheck = false;
-    int64_t _old_pk_parallel_execution_threshold_bytes = 0;
+    int64_t _old_pk_index_eager_build_threshold_bytes = 0;
+    int64_t _old_pk_index_parallel_execution_min_rows = 0;
+    int64_t _old_pk_index_parallel_compaction_task_split_threshold_bytes = 0;
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
     _seed = 1719499276; // seed
-    _run_second = 50;   // 50 second
+    _run_second = 100;  // 100 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -728,7 +744,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     _seed = time(nullptr); // use current ts as seed
-    _run_second = 50;      // 50 second
+    _run_second = 100;     // 100 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -737,8 +753,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::LOCAL},
-                                           PrimaryKeyParam{
-                                                   .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
+                         ::testing::Values(PrimaryKeyParam{
+                                 .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
 
 } // namespace starrocks::lake

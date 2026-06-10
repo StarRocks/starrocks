@@ -28,7 +28,7 @@ Checks: >
     performance-for-range-copy,
     performance-implicit-conversion-in-loop,
     performance-inefficient-algorithm,
-    performance-inefficient-vector-operation
+    performance-inefficient-vector-operation,
     performance-move-const-arg,
     performance-no-automatic-move,
     performance-no-int-to-ptr,

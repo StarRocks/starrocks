@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import org.junit.jupiter.api.Assertions;
@@ -386,8 +387,20 @@ public class ScanTest extends PlanTestBase {
         String sql = "select column_name, table_name from information_schema.columns" +
                 " where table_schema = 'information_schema' and table_name = 'columns'";
         ExecPlan plan = getExecPlan(sql);
-        Assertions.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaDb().equals("information_schema"));
-        Assertions.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaTable().equals("columns"));
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        // Equality values are escaped for LIKE-style pushdown; '_' in database names must be literal.
+        Assertions.assertEquals(PatternMatcher.escapeLikeValue("information_schema"), scanNode.getSchemaDb());
+        Assertions.assertEquals(PatternMatcher.escapeLikeValue("columns"), scanNode.getSchemaTable());
+    }
+
+    @Test
+    public void testSchemaScanWithLikePattern() throws Exception {
+        String sql = "select column_name from information_schema.columns " +
+                "where table_schema like 'test_%' and table_name like 'my_table%'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("test_%", scanNode.getSchemaDb());
+        Assertions.assertEquals("my_table%", scanNode.getSchemaTable());
     }
 
     @Test
@@ -467,7 +480,7 @@ public class ScanTest extends PlanTestBase {
         Collection<Partition> partitions = tb.getPartitions();
         acquireReplica:
         for (Partition partition : partitions) {
-            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tb.getBaseIndexId());
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestIndex(tb.getBaseIndexMetaId());
             for (Tablet tablet : index.getTablets()) {
                 replicaId = ((LocalTablet) tablet).getImmutableReplicas().get(0).getId();
                 break acquireReplica;
@@ -530,6 +543,29 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneCTE() throws Exception {
+        String sql = "select \n"
+                + "*\n"
+                + "from t0 a \n"
+                + "where 1=1\n"
+                + "and v1='2025-10-21'\n"
+                + "and (\n"
+                + "        a.v2 IN (SELECT '123')\n"
+                + "        or\n"
+                + "        a.v3 IN (SELECT '123')\n"
+                + ");\n";
+
+        try {
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "0:EMPTYSET");
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
+    }
+
+    @Test  
     public void testMetaScanWithCount1() throws Exception {
         String sql = "select count(1) from t0 [_META_];";
         String plan = getFragmentPlan(sql);
@@ -553,5 +589,4 @@ public class ScanTest extends PlanTestBase {
             assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
         }
     }
-
 }

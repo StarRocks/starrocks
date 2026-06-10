@@ -1,0 +1,35 @@
+-- name: test_write_csv_array
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+set catalog hive_sink_test_${uuid0};
+-- result:
+-- !result
+create database hive_db_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+create table t1(c1 string, c2 array<integer>) properties("file_format"="textfile");
+-- result:
+-- !result
+insert into t1(c1,c2) values('hello', [123456,0,-128,0]);
+-- result:
+-- !result
+select * from t1;
+-- result:
+hello	[123456,0,-128,0]
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_test_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

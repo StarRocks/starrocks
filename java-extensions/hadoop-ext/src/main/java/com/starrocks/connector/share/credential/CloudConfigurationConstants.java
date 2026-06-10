@@ -77,6 +77,10 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
     // https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-catalog-databases.html
     public static final String AWS_GLUE_CATALOG_ID = "aws.glue.catalog_id";
+    // Resource share type for GetDatabases API: ALL, FOREIGN, FEDERATED
+    // Default is ALL to include both local and shared databases
+    // https://docs.aws.amazon.com/glue/latest/webapi/API_GetDatabases.html
+    public static final String AWS_GLUE_RESOURCE_SHARE_TYPE = "aws.glue.resource_share_type";
 
     // Credential for Azure storage
     // For Azure Blob Storage
@@ -107,6 +111,7 @@ public class CloudConfigurationConstants {
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_SECRET = "azure.adls2.oauth2_client_secret";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT = "azure.adls2.oauth2_client_endpoint";
     public static final String AZURE_ADLS2_OAUTH2_TOKEN_FILE = "azure.adls2.oauth2_token_file";
+    public static final String AZURE_PATH_KEY = "azure_path_key";
 
     // Credential for Google Cloud Platform (GCP)
     // For Google Cloud Storage (GCS)
@@ -147,4 +152,11 @@ public class CloudConfigurationConstants {
     public static final String TENCENT_COS_ACCESS_KEY = "tencent.cos.access_key";
     public static final String TENCENT_COS_SECRET_KEY = "tencent.cos.secret_key";
     public static final String TENCENT_COS_ENDPOINT = "tencent.cos.endpoint";
+
+    // Credential for Huawei Cloud OBS
+    public static final String HUAWEI_OBS_ACCESS_KEY = "fs.obs.access_key";
+    public static final String HUAWEI_OBS_SECRET_KEY = "fs.obs.secret_key";
+    public static final String HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
+    public static final String HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
+    public static final String HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
 }

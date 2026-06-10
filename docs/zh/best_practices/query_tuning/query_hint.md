@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Query hints are directives that explicitly suggest the query optimizer on how to execute queries, including SET_VAR and Join hints."
 sidebar_position: 70
 ---
 
@@ -43,6 +44,16 @@ DISTRIBUTED BY HASH(`key`)
 BUCKETS 10 
 REFRESH ASYNC 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
+```
+
+在嵌套查询中指定系统变量：
+
+```SQL
+-- 在主查询中指定 Hint
+WITH t AS (SELECT region, sales_amount FROM sales_orders)  
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_planner_agg_stage = '2') */  
+       SUM(sales_amount) AS total_sales_amount  
+FROM t;
 ```
 
 ## 用户自定义变量提示

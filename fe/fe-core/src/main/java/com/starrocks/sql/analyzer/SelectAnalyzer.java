@@ -123,10 +123,15 @@ public class SelectAnalyzer {
 
         List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
+        boolean isGroupByAll = groupByClause != null
+                && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
+        boolean isAggregationQuery = AnalyzerUtils.isAggregate(aggregates, groupByExpressions) ||
+                (isGroupByAll && !analyzeState.getGroupingFunctionCallExprs().isEmpty());
+        if (isAggregationQuery) {
             if (!groupByExpressions.isEmpty() &&
                     selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
-                    !selectList.isDistinct()) {
+                    !selectList.isDistinct() &&
+                    !isGroupByAll) {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
@@ -170,7 +175,7 @@ public class SelectAnalyzer {
 
         analyzeWindowFunctions(analyzeState, outputExpressions, orderByExpressions);
 
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions) &&
+        if (isAggregationQuery &&
                 (sortClause != null || havingClause != null)) {
             /*
              * Create scope for order by when aggregation is present.
@@ -359,6 +364,19 @@ public class SelectAnalyzer {
         return outputExpressions;
     }
 
+    private List<OrderByElement> expandOrderByAll(OrderByElement orderByElement,
+                                                  List<Expr> outputExpressions) {
+        List<OrderByElement> newOrderByElements = new ArrayList<>();
+        for (Expr expr : outputExpressions) {
+            OrderByElement newElement = new OrderByElement(expr.clone(),
+                    orderByElement.getIsAsc(),
+                    orderByElement.getNullsFirstParam(),
+                    orderByElement.getPos());
+            newOrderByElements.add(newElement);
+        }
+        return newOrderByElements;
+    }
+
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
                                                 Scope orderByScope,
                                                 List<Expr> outputExpressions,
@@ -366,6 +384,19 @@ public class SelectAnalyzer {
         if (orderByElements == null) {
             analyzeState.setOrderBy(Collections.emptyList());
             return Collections.emptyList();
+        }
+
+        // Expand ORDER BY ALL to individual columns
+        if (orderByElements.size() == 1 && orderByElements.get(0).isOrderByAll()) {
+            orderByElements = expandOrderByAll(orderByElements.get(0), outputExpressions);
+        }
+        if (orderByElements.size() > 1 && orderByElements.stream().anyMatch(OrderByElement::isOrderByAll)) {
+            throw new SemanticException("ORDER BY ALL cannot be used with other ORDER BY elements",
+                    orderByElements.stream()
+                            .filter(OrderByElement::isOrderByAll)
+                            .findFirst()
+                            .get()
+                            .getPos());
         }
 
         for (OrderByElement orderByElement : orderByElements) {
@@ -579,6 +610,22 @@ public class SelectAnalyzer {
                             .mapToObj(i -> rewriteOriGrouping.subList(0, i)).collect(Collectors.toList());
 
                     analyzeState.setGroupingSetsList(groupingSets);
+                } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL)) {
+                    // Collect implicit grouping keys from non-aggregate output expressions.
+                    // GROUPING(expr...) itself is not a grouping key, but its arguments must participate in grouping.
+                    for (Expr outputExpr : outputExpressions) {
+                        if (ExprUtils.containsAggregate(outputExpr)) {
+                            continue;
+                        }
+
+                        if (outputExpr instanceof GroupingFunctionCallExpr groupingExpr) {
+                            for (Expr argument : groupingExpr.getChildren()) {
+                                addGroupByAllExpression(argument, groupByExpressions, analyzeState, sourceScope);
+                            }
+                        } else {
+                            addGroupByAllExpression(outputExpr, groupByExpressions, analyzeState, sourceScope);
+                        }
+                    }
                 } else {
                     throw new StarRocksPlannerException("unknown grouping type", INTERNAL_ERROR);
                 }
@@ -586,6 +633,21 @@ public class SelectAnalyzer {
         }
         analyzeState.setGroupBy(groupByExpressions);
         return groupByExpressions;
+    }
+
+    private void addGroupByAllExpression(Expr expression, List<Expr> groupByExpressions,
+                                         AnalyzeState analyzeState, Scope sourceScope) {
+        if (groupByExpressions.contains(expression)) {
+            return;
+        }
+        analyzeExpression(expression, analyzeState, sourceScope);
+        if (!expression.getType().canGroupBy()) {
+            throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
+        }
+        AnalyzerUtils.verifyNoAggregateFunctions(expression, "GROUP BY");
+        AnalyzerUtils.verifyNoWindowFunctions(expression, "GROUP BY");
+        AnalyzerUtils.verifyNoGroupingFunctions(expression, "GROUP BY");
+        groupByExpressions.add(expression);
     }
 
     private List<Expr> rewriteGroupByAlias(List<Expr> groupingExprs, AnalyzeState analyzeState, Scope sourceScope,
@@ -692,7 +754,29 @@ public class SelectAnalyzer {
 
             Optional<ResolvedField> resolvedField = outputScope.tryResolveField(slotRef);
             if (resolvedField.isPresent()) {
-                return outputExprs.get(resolvedField.get().getRelationFieldIndex());
+                Expr outputExpr = outputExprs.get(resolvedField.get().getRelationFieldIndex());
+                // If the alias matches the source column name and the output expression is an aggregation/analytic function,
+                // use the source column directly instead of the aggregation/analytic expression to avoid nested aggregation/analytic.
+                // For example: sum(input_count) as input_count, then sum(case when ... then input_count else 0 end)
+                // should use the source column input_count, not sum(input_count)
+                // Similarly: sum(input_count) over() as input_count, then sum(case when ... then input_count else 0 end) over()
+                // should use the source column input_count, not sum(input_count) over()
+                if (sourceScope.tryResolveField(slotRef).isPresent()) {
+                    // Check if output expression is an AnalyticExpr
+                    if (outputExpr instanceof AnalyticExpr) {
+                        return slotRef;
+                    }
+                    // Check if output expression is a FunctionCallExpr that is aggregate or analytic
+                    if (outputExpr instanceof FunctionCallExpr) {
+                        FunctionCallExpr funcCall = (FunctionCallExpr) outputExpr;
+                        // Check if it's an aggregate or analytic function (fn must be set and analyzed)
+                        if (funcCall.getFn() != null &&
+                                (funcCall.isAggregateFunction() || funcCall.isAnalyticFnCall())) {
+                            return slotRef;
+                        }
+                    }
+                }
+                return outputExpr;
             }
             return slotRef;
         }
@@ -970,4 +1054,3 @@ public class SelectAnalyzer {
         return result;
     }
 }
-

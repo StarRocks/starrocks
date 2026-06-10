@@ -132,8 +132,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataVersion")
                     .add("VersionEpoch")
                     .add("VersionTxnType")
-                    .add("MetaSwitchVersion")
-                    .add("PathId");
+                    .add("MetaSwitchVersion");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -291,7 +290,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             List<Long> partitionIds;
             PartitionInfo tblPartitionInfo = table.getPartitionInfo();
@@ -331,7 +331,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
         return partitionInfos;
     }
@@ -382,7 +382,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
         partitionInfo.add(byteSizeValue);
         partitionInfo.add(new ByteSizeValue(dataSize + extraFileSize));
-        partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
+        partitionInfo.add(false);
         partitionInfo.add(physicalPartition.storageRowCount());
 
         partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
@@ -426,7 +426,6 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
         partitionInfo.add(physicalPartition.getMetadataSwitchVersion()); // MetaSwitchVersion
-        partitionInfo.add(physicalPartition.getPathId()); // PathId
         return partitionInfo;
     }
 
@@ -453,19 +452,26 @@ public class PartitionsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
-        long partitionId = -1L;
-
+        // Take per-table READ: OlapTable.idToPartition is HashMap and
+        // nameToPartition is TreeMap (CASE_INSENSITIVE_ORDER); a concurrent
+        // ADD/DROP PARTITION (IX + table WRITE) can race with these gets, so the
+        // lock pins the table while we resolve the partition reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             PhysicalPartition partition;
             try {
                 partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
             } catch (NumberFormatException e) {
-                partition = table.getPartition(partitionIdOrName, false).getDefaultPhysicalPartition();
-                if (partition == null) {
-                    partition = table.getPartition(partitionIdOrName, true).getDefaultPhysicalPartition();
+                // getPartition(name, ...) can return null if the partition does not
+                // exist; null-guard before dereferencing or this throws NPE on a
+                // legitimate "not found" or under a concurrent DROP PARTITION race.
+                Partition byName = table.getPartition(partitionIdOrName, false);
+                if (byName == null) {
+                    byName = table.getPartition(partitionIdOrName, true);
                 }
+                partition = (byName != null) ? byName.getDefaultPhysicalPartition() : null;
             }
 
             if (partition == null) {
@@ -474,7 +480,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
             return new IndicesProcDir(db, table, partition);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 

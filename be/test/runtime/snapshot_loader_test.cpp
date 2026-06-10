@@ -18,14 +18,18 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <ranges>
 
+#include "common/system/cpu_info.h"
 #include "runtime/exec_env.h"
-#include "util/cpu_info.h"
 
 #define private public // hack complier
 #define protected public
 
 #include "runtime/snapshot_loader.h"
+
+#undef protected
+#undef private
 
 namespace starrocks {
 

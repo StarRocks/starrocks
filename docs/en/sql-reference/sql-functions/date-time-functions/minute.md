@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the minute for a given date."
 ---
 
 # minute

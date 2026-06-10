@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された時間粒度に基づいて時刻を時間間隔の始まりまたは終わりに変換します。"
 ---
 
 # time_slice

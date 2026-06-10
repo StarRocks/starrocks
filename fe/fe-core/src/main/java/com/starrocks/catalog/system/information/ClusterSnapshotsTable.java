@@ -32,14 +32,14 @@ public class ClusterSnapshotsTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("SNAPSHOT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("SNAPSHOT_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SNAPSHOT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("SNAPSHOT_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("CREATED_TIME", DateType.DATETIME)
                         .column("FE_JOURNAL_ID", IntegerType.BIGINT)
                         .column("STARMGR_JOURNAL_ID", IntegerType.BIGINT)
-                        .column("PROPERTIES", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_VOLUME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PROPERTIES", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("STORAGE_VOLUME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("STORAGE_PATH", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_CLUSTER_SNAPSHOTS);
     }
 }

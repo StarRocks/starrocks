@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HDFS から INSERT+FILES()、Broker Load、Spark Load を使用してデータをロードする方法。"
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---
@@ -40,9 +41,9 @@ HDFS クラスターとの接続を確立するために、シンプルな認証
 
 `FILES()` を使用すると、次のことができます:
 
-- [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して HDFS から直接データをクエリする。
+- [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して HDFS から直接データをクエリする。
 - [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS) を使用してテーブルを作成し、ロードする。
-- [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して既存のテーブルにデータをロードする。
+- [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して既存のテーブルにデータをロードする。
 
 ### 典型的な例
 

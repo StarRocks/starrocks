@@ -24,7 +24,6 @@
 #include <unordered_map>
 
 #include "http/http_handler.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -40,12 +39,15 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     bool _check_request(HttpRequest* req);
     void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
     void _handle_stat(HttpRequest* req);
     void _handle_app_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
+    static double _calc_rate(size_t total, size_t count);
 
     LocalDiskCacheEngine* _disk_cache;
     LocalMemCacheEngine* _mem_cache;

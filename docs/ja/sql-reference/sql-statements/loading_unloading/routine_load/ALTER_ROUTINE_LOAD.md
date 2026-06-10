@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "PAUSED 状態の Routine Load ジョブを変更します。"
 ---
 
 # ALTER ROUTINE LOAD

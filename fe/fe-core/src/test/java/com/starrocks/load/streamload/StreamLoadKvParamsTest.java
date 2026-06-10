@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -23,7 +24,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.http.rest.RestBaseAction.WAREHOUSE_KEY;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -33,6 +33,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COMPRESSIO
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REPLICATED_STORAGE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONPATHS;
@@ -55,6 +56,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEOUT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEZONE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRANSMISSION_COMPRESSION_TYPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRIM_SPACE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -249,7 +251,7 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
 
     @Override
     protected StreamLoadParams buildWarehouse(String expected) {
-        return buildParams(WAREHOUSE_KEY, expected);
+        return buildParams(HTTP_WAREHOUSE, expected);
     }
 
     @Override
@@ -295,6 +297,24 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
     @Override
     protected StreamLoadParams buildStripOuterArray(Boolean expected) {
         return buildParams(HTTP_STRIP_OUTER_ARRAY, expected == null ? null : String.valueOf(expected));
+    }
+
+    @Override
+    protected StreamLoadParams buildEnvelope(String value) {
+        return buildParams(HTTP_ENVELOPE, value);
+    }
+
+    @Test
+    public void testGetEnvelopeUnknownValue() {
+        StreamLoadKvParams params = new StreamLoadKvParams(
+                Collections.singletonMap(HTTP_ENVELOPE, "debezimu"));
+        try {
+            params.getEnvelope();
+            fail("Expected StarRocksException for unknown envelope type");
+        } catch (StarRocksException e) {
+            assertTrue(e.getMessage().contains("Unknown envelope type"));
+            assertTrue(e.getMessage().contains("debezimu"));
+        }
     }
 
     private StreamLoadParams buildParams(String key, String value) {

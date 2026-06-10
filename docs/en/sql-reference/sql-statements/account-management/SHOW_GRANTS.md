@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW GRANTS displays all the privileges that have been granted to a user or role."
 ---
 
 # SHOW GRANTS
@@ -16,12 +17,14 @@ All roles and users can view the privileges granted to them or the roles assigne
 
 ```SQL
 SHOW GRANTS; -- View the privileges of the current user.
+SHOW GRANTS FOR CURRENT_USER[()]; -- View the privileges of the current user (MySQL-compatible syntax).
 SHOW GRANTS FOR ROLE <role_name>; -- View the privileges of a specific role.
 SHOW GRANTS FOR <user_identity>; -- View the privileges of a specific user.
 ```
 
 ## Parameters
 
+- `CURRENT_USER[()]`: Returns the privileges of the current session user. The parentheses are optional. This form is equivalent to `SHOW GRANTS` and is provided for compatibility with MySQL clients (such as Metabase and DBeaver) that issue this statement automatically during connection initialization.
 - role_name
 - user_identity
 
@@ -50,6 +53,13 @@ Return fields:
 
 ```SQL
 mysql> SHOW GRANTS;
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
+mysql> SHOW GRANTS FOR CURRENT_USER();
 +--------------+---------+----------------------------------------+
 | UserIdentity | Catalog | Grants                                 |
 +--------------+---------+----------------------------------------+

@@ -22,9 +22,11 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -101,8 +103,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
+    // Runs persisted before this field existed have no recorded source and default to UNKNOWN (not a misleading CTAS).
     @SerializedName("source")
-    private Constants.TaskSource source = Constants.TaskSource.CTAS;
+    private Constants.TaskSource source = Constants.TaskSource.UNKNOWN;
 
     //////////// Variables should be volatile which can be visited by multi threads ///////////
 
@@ -224,6 +227,15 @@ public class TaskRunStatus implements Writable {
 
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
+    }
+
+    public String getWarehouseName() {
+        if (properties != null) {
+            return properties.getOrDefault(PropertyAnalyzer.PROPERTIES_WAREHOUSE,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        } else {
+            return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        }
     }
 
     public String getDbName() {

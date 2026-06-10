@@ -22,19 +22,20 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_param.h"
+#include "compute_env/query_cache/lane_arbiter.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "exec/query_cache/cache_manager.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/query_cache/cache_operator.h"
-#include "exec/query_cache/cache_param.h"
 #include "exec/query_cache/conjugate_operator.h"
-#include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
-#include "exec/query_cache/ticket_checker.h"
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -260,9 +261,9 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         }
         tasks[k].cache_operator = cache_op;
         tasks[k].lane_arbiter = cache_op->lane_arbiter();
-        query_cache::MultilaneOperators multilane_operators;
+        query_cache::CacheMultilaneOperators multilane_operators;
         for (size_t i = 0, size = cache_op_idx; i < size; ++i) {
-            auto* ml_op = dynamic_cast<query_cache::MultilaneOperator*>(upstream[i].get());
+            auto* ml_op = dynamic_cast<query_cache::CacheMultilaneOperator*>(upstream[i].get());
             ml_op->set_lane_arbiter(cache_op->lane_arbiter());
             multilane_operators.push_back(ml_op);
         }
@@ -528,12 +529,12 @@ void test_framework_with_with_options(const query_cache::CacheManagerPtr& cache_
     ASSERT_TRUE(chunk_or_status.ok());
     auto chunk = chunk_or_status.value();
     auto column = chunk->get_column_by_slot_id(SlotId(1));
-    auto& data = dynamic_cast<DoubleColumn*>(column.get())->get_data();
+    auto& data = dynamic_cast<DoubleColumn*>(column->as_mutable_raw_ptr())->get_data();
     validate_func(data[0]);
 }
 
-void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
-                    MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
+void test_framework(const query_cache::CacheManagerPtr& cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
+                    const MapFunc& map1, const MapFunc& map2, double init_value, const ReduceFunc& reduce,
                     const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
                     const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), false, false, num_lanes, dop, state_object, std::move(map1),
@@ -541,24 +542,22 @@ void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int d
                                      post_passthrough_actions, std::move(validate_func));
 }
 
-void test_framework_force_populate(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
-                                   RuntimeState& state_object, MapFunc map1, MapFunc map2, double init_value,
-                                   ReduceFunc reduce, const Actions& pre_passthrough_actions,
+void test_framework_force_populate(const query_cache::CacheManagerPtr& cache_mgr, int num_lanes, int dop,
+                                   RuntimeState& state_object, const MapFunc& map1, const MapFunc& map2,
+                                   double init_value, const ReduceFunc& reduce, const Actions& pre_passthrough_actions,
                                    const Actions& post_passthrough_actions, const ValidateFunc& validate_func) {
-    test_framework_with_with_options(std::move(cache_mgr), true, false, num_lanes, dop, state_object, std::move(map1),
-                                     std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
-                                     post_passthrough_actions, std::move(validate_func));
+    test_framework_with_with_options(cache_mgr, true, false, num_lanes, dop, state_object, map1, map2, init_value,
+                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
 }
 
-void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
-                                                   RuntimeState& state_object, MapFunc map1, MapFunc map2,
-                                                   double init_value, ReduceFunc reduce,
+void test_framework_force_populate_and_passthrough(const query_cache::CacheManagerPtr& cache_mgr, int num_lanes,
+                                                   int dop, RuntimeState& state_object, const MapFunc& map1,
+                                                   const MapFunc& map2, double init_value, const ReduceFunc& reduce,
                                                    const Actions& pre_passthrough_actions,
                                                    const Actions& post_passthrough_actions,
                                                    const ValidateFunc& validate_func) {
-    test_framework_with_with_options(std::move(cache_mgr), true, true, num_lanes, dop, state_object, std::move(map1),
-                                     std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
-                                     post_passthrough_actions, std::move(validate_func));
+    test_framework_with_with_options(cache_mgr, true, true, num_lanes, dop, state_object, map1, map2, init_value,
+                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
 }
 
 TEST_F(QueryCacheTest, testMultilane) {
@@ -1186,36 +1185,6 @@ TEST_F(QueryCacheTest, testPartialHit) {
     };
     test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
                    eq_validator_gen(801.0 * 801.0));
-}
-
-TEST_F(QueryCacheTest, testTicketChecker) {
-    auto test_func1 = [](int64_t id, int n) {
-        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
-        for (auto i = 0; i < n; ++i) {
-            ticket_checker->enter(1L, i + 1 == n);
-            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
-        }
-        for (auto i = 0; i < n; ++i) {
-            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
-        }
-    };
-
-    test_func1(1L, 1);
-    test_func1(1L, 10);
-    test_func1(1L, 100);
-
-    auto test_func2 = [](int64_t id, int n) {
-        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
-        for (auto i = 0; i < n; ++i) {
-            ticket_checker->enter(1L, i + 1 == n);
-            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
-            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
-        }
-    };
-
-    test_func2(1L, 1);
-    test_func2(1L, 10);
-    test_func2(1L, 100);
 }
 
 } // namespace starrocks

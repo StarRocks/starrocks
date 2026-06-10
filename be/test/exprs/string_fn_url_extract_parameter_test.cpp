@@ -50,14 +50,14 @@ struct UrlExtractParameterTest : public ::testing::Test {
 };
 
 void test_url_extract_parameter(const Columns& columns, const std::string& expect, bool only_null,
-                                std::function<bool(int)> row_is_null) {
+                                const std::function<bool(int)>& row_is_null) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ctx->set_constant_columns(columns);
     StringFunctions::url_extract_parameter_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result = StringFunctions::url_extract_parameter(ctx.get(), columns);
     StringFunctions::url_extract_parameter_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_TRUE(result.ok());
-    auto result_col = result.value();
+    const auto& result_col = result.value();
     auto num_rows = columns[0]->size();
     ASSERT_EQ(result_col->size(), num_rows);
     if (only_null) {

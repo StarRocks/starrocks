@@ -16,12 +16,12 @@
 
 #include <unordered_map>
 
+#include "base/concurrency/bthread_shared_mutex.h"
 #include "common/statusor.h"
+#include "common/util/bthreads/executor.h"
 #include "runtime/batch_write/isomorphic_batch_write.h"
 #include "runtime/batch_write/txn_state_cache.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/bthreads/bthread_shared_mutex.h"
-#include "util/bthreads/executor.h"
 
 namespace brpc {
 class Controller;
@@ -35,11 +35,12 @@ class PStreamLoadResponse;
 class StreamLoadContext;
 class PUpdateTransactionStateRequest;
 class PUpdateTransactionStateResponse;
+class MetricRegistry;
 
 class BatchWriteMgr {
 public:
     BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor);
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr);
 
     Status register_stream_load_pipe(StreamLoadContext* pipe_ctx);
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);

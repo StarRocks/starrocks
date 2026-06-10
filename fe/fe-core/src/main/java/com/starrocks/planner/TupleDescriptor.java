@@ -170,7 +170,7 @@ public class TupleDescriptor {
         ttupleDesc.setNumNullBytes(-1);
         ttupleDesc.setNumNullSlots(-1);
         if (table != null && table.getId() >= 0) {
-            ttupleDesc.setTableId((int) table.getId());
+            ttupleDesc.setTableId(table.getId());
         }
         return ttupleDesc;
     }

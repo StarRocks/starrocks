@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "变更异步物化视图的名称、刷新策略、状态和属性。"
 ---
 
 # ALTER MATERIALIZED VIEW
@@ -71,7 +72,7 @@ ALTER MATERIALIZED VIEW lo_mv1 RENAME lo_mv1_new_name;
 示例二：修改物化视图刷新间隔
 
 ```SQL
-ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
+ALTER MATERIALIZED VIEW lo_mv2 REFRESH SCHEDULE EVERY(INTERVAL 1 DAY);
 ```
 
 示例三：修改物化视图属性，调整物化视图刷新 Timeout 为一小时（默认）。

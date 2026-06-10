@@ -19,8 +19,11 @@
 #include "exec/tablet_scanner.h"
 #include "exprs/column_ref.h"
 #include "exprs/in_const_predicate.hpp"
-#include "exprs/runtime_filter.h"
 #include "formats/parquet/parquet_test_util/util.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "storage/predicate_parser.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -41,6 +44,8 @@ public:
         _opts.pred_tree_params.enable_or = true;
         _opts.key_column_names = &_key_column_names;
         _opts.conjunct_ctxs_ptr = &_expr_ctxs;
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
     }
 
 protected:
@@ -53,6 +58,7 @@ protected:
 
     ScanConjunctsManagerOptions _opts;
     RuntimeState _runtime_state;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
     std::vector<std::string> _key_column_names;
 
@@ -68,13 +74,42 @@ protected:
     std::vector<BoxedExprContext> _expr_containers;
 };
 
+static TExprNode create_compound_pred_node(TExprOpcode::type opcode) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::COMPOUND_PRED);
+    node.__set_num_children(2);
+    node.__set_opcode(opcode);
+    node.__set_child_type(TPrimitiveType::BOOLEAN);
+    node.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    node.__set_is_nullable(true);
+    return node;
+}
+
+static void append_int_eq_pred(std::vector<TExprNode>* nodes, SlotId slot_id, int32_t value) {
+    nodes->emplace_back(ExprsTestHelper::create_binary_pred_node(TPrimitiveType::INT, TExprOpcode::EQ));
+    nodes->emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true));
+    nodes->emplace_back(ExprsTestHelper::create_literal<TYPE_INT, int32_t>(value, false));
+}
+
+static TExpr create_or_pred_with_false_and_branch(SlotId slot_id) {
+    TExpr texpr;
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_OR));
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_OR));
+    append_int_eq_pred(&texpr.nodes, slot_id, 1);
+    append_int_eq_pred(&texpr.nodes, slot_id, 2);
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_AND));
+    append_int_eq_pred(&texpr.nodes, slot_id, 1);
+    append_int_eq_pred(&texpr.nodes, slot_id, 2);
+    return texpr;
+}
+
 template <LogicalType Type>
 StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_runtime_filter_desc(SlotId slot_id) {
     TRuntimeFilterDescription tRuntimeFilterDescription;
     tRuntimeFilterDescription.__set_filter_id(1);
     tRuntimeFilterDescription.__set_has_remote_targets(false);
     tRuntimeFilterDescription.__set_build_plan_node_id(1);
-    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
     tRuntimeFilterDescription.__set_filter_type(TRuntimeFilterBuildType::JOIN_FILTER);
 
     TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<Type>(slot_id, true);
@@ -360,6 +395,25 @@ TEST_F(ChunkPredicateBuilderTest, normalize_or_not_in_has_null_date) {
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::OR> builder(_opts, _expr_containers, false);
     ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
     ASSERT_FALSE(normalized);
+}
+
+TEST_F(ChunkPredicateBuilderTest, normalize_or_with_false_and_branch) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(create_or_pred_with_false_and_branch(slot_id));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+    ASSERT_FALSE(builder.is_pred_normalized(0));
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
 }
 
 TEST_F(ChunkPredicateBuilderTest, rt_has_no_null) {

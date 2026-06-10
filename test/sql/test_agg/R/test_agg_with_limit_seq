@@ -49,3 +49,6 @@ select * from (select max(c3), sum(c3) sc3, c1 from agg_with_limit_seq group by 
 admin disable failpoint 'scan_chunk_sleep_after_read';
 -- result:
 -- !result
+CLEANUP {
+    admin disable failpoint 'scan_chunk_sleep_after_read';
+} END CLEANUP

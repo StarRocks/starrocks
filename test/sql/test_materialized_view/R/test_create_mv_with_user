@@ -1,4 +1,4 @@
--- name: test_create_mv_with_user
+-- name: test_create_mv_with_user @no_arrow_flight_sql
 drop database if exists test_create_mv_with_user;
 -- result:
 -- !result

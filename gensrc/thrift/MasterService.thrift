@@ -71,6 +71,7 @@ struct TTabletInfo {
 struct TTabletVersionPair {
     1: optional Types.TTabletId tablet_id
     2: optional Types.TVersion version
+    3: optional Types.TVersion min_readable_version
 }
 
 struct TFinishTaskRequest {
@@ -93,6 +94,9 @@ struct TFinishTaskRequest {
     17: optional list<TTabletVersionPair> tablet_versions;
     18: optional list<TTabletVersionPair> tablet_publish_versions;
     19: optional Types.TSnapshotInfo snapshot_info
+    // Placeholder for external cluster snapshot feature.
+    20: optional Types.TClusterSnapshotPartitionSpec cluster_snapshot_partition_spec
+    21: optional AgentService.TRestoreTabletResult restore_tablet_result
 }
 
 struct TTablet {

@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -37,6 +36,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TStorageType;
@@ -109,7 +109,7 @@ public class LoadMgrEditLogTest {
         OlapTable olapTable = new OlapTable(tableId, tableName, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         olapTable.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
-        olapTable.setBaseIndexId(indexId);
+        olapTable.setBaseIndexMetaId(indexId);
         olapTable.addPartition(partition);
         
         // Register table to database

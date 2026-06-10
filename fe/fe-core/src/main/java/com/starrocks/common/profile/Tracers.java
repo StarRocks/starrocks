@@ -29,7 +29,7 @@ public class Tracers {
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, PARSER
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, CLIENT, ANALYZE, MV, EXTERNAL, PARSER
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -121,6 +121,7 @@ public class Tracers {
             tracers.moduleMask |= 1 << Module.BASE.ordinal();
             tracers.moduleMask |= 1 << Module.EXTERNAL.ordinal();
             tracers.moduleMask |= 1 << Module.SCHEDULER.ordinal();
+            tracers.moduleMask |= 1 << Module.CLIENT.ordinal();
             tracers.moduleMask |= 1 << Module.MV.ordinal();
 
             tracers.modeMask |= 1 << Mode.TIMER.ordinal();
@@ -154,6 +155,22 @@ public class Tracers {
     public static boolean isSetTraceModule(Module m) {
         Tracers tracers = THREAD_LOCAL.get();
         return (tracers.moduleMask & 1 << m.ordinal()) != 0;
+    }
+
+    public static void enableTraceModule(Module m) {
+        if (m == null || m == Module.NONE) {
+            return;
+        }
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.moduleMask |= 1 << m.ordinal();
+    }
+
+    public static void enableTraceMode(Mode m) {
+        if (m == null || m == Mode.NONE) {
+            return;
+        }
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.modeMask |= 1 << m.ordinal();
     }
 
     public static void close() {

@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
+#include "base/testutil/assert.h"
+#include "storage/lake/persistent_index_sstable.h"
 
 namespace starrocks::lake {
 

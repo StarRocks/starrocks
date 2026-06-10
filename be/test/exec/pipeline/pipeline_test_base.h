@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
@@ -23,8 +25,8 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {

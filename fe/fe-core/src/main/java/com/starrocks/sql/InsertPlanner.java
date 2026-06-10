@@ -24,7 +24,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -39,6 +38,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -55,7 +55,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -64,11 +63,13 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -84,12 +85,15 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.ConnectorSinkShuffleSpec;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
+import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -267,19 +271,6 @@ public class InsertPlanner {
         }
     }
 
-    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
-        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
-        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
-            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
-                if (t.getValue().isExternalTableWithFileSystem()) {
-                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
-                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
-                }
-            }
-        }
-    }
-
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -292,7 +283,20 @@ public class InsertPlanner {
             outputFullSchema = targetTable.getFullSchema();
         }
 
-        refreshExternalTable(insertStmt.getQueryStatement(), session);
+        if (targetTable.isIcebergTable()) {
+            boolean preserveRowLineage = targetTable instanceof IcebergTable
+                    && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
+            Set<String> columnsToFilter = preserveRowLineage
+                    ? IcebergTable.ICEBERG_META_COLUMNS.stream()
+                    .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                            && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                    .collect(Collectors.toSet())
+                    : IcebergTable.ICEBERG_META_COLUMNS;
+            outputBaseSchema = outputBaseSchema.stream().filter(col ->
+                    !columnsToFilter.contains(col.getName())).toList();
+            outputFullSchema = outputFullSchema.stream().filter(col ->
+                    !columnsToFilter.contains(col.getName())).toList();
+        }
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -444,7 +448,8 @@ public class InsertPlanner {
                 session.getSessionVariable().setPreferComputeNode(false);
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = insertStmt.getTableName();
+                TableRef tableRef = insertStmt.getTableRef();
+                TableName catalogDbTable = TableName.fromTableRef(tableRef);
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
@@ -492,12 +497,12 @@ public class InsertPlanner {
                     // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
                     sinkFragment.setPipelineDop(1);
                 } else {
-                    if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(
-                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                    SessionVariable sv = session.getSessionVariable();
+                    if (sv.getEnableAdaptiveSinkDop()) {
+                        long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                        sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                     } else {
-                        sinkFragment
-                                .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                        sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                     }
                 }
 
@@ -562,8 +567,11 @@ public class InsertPlanner {
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
+        PreOptimizePlanContext preOptimizePlanContext = preparePreOptimizePlanContext(
+                insertStmt, session.getSessionVariable(), targetTable, outputColumns, columnRefFactory, logicalPlan);
+
         PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
-                session.getSessionVariable());
+                session.getSessionVariable(), preOptimizePlanContext.partitionColumnIDs);
         OptExpression optimizedPlan;
 
         int sourceTablesCount = collectSourceTablesCount(session, insertStmt);
@@ -573,9 +581,9 @@ public class InsertPlanner {
             optimizerContext.setSourceTablesCount(sourceTablesCount);
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
-                    logicalPlan.getRoot(),
+                    preOptimizePlanContext.root,
                     requiredPropertySet,
-                    new ColumnRefSet(logicalPlan.getOutputColumn()));
+                    preOptimizePlanContext.requiredColumns);
         }
 
         //8. Build fragment exec plan
@@ -589,6 +597,25 @@ public class InsertPlanner {
         }
         return execPlan;
     }
+
+    private PreOptimizePlanContext preparePreOptimizePlanContext(InsertStmt insertStmt,
+                                                                 SessionVariable sessionVariable,
+                                                                 Table targetTable,
+                                                                 List<ColumnRefOperator> outputColumns,
+                                                                 ColumnRefFactory columnRefFactory,
+                                                                 LogicalPlan logicalPlan) {
+        OptExpression root = logicalPlan.getRoot();
+        ColumnRefSet requiredColumns = new ColumnRefSet(logicalPlan.getOutputColumn());
+        Optional<ConnectorSinkShuffleSpec> spec = ConnectorSinkShuffleSpec.forTable(targetTable);
+        if (spec.isEmpty() || !spec.get().shouldShuffle(insertStmt, sessionVariable)) {
+            return new PreOptimizePlanContext(root, requiredColumns, null);
+        }
+        ConnectorSinkShuffleSpec.PreOptimizeResult r = spec.get()
+                .prepare(insertStmt, outputColumns, columnRefFactory, root, requiredColumns);
+        return new PreOptimizePlanContext(r.root, r.requiredColumns, r.partitionColumnIDs);
+    }
+
+
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
         Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
@@ -673,7 +700,15 @@ public class InsertPlanner {
                     if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().getExprObject() != null) {
+                            Expr expr = targetColumn.getDefaultExpr().obtainExpr();
+                            if (!expr.getType().equals(targetColumn.getType())) {
+                                expr = new CastExpr(targetColumn.getType(), expr);
+                            }
+                            scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+                        } else {
+                            scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        }
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {
                             scalarOperator = SqlToScalarOperatorTranslator.
@@ -715,8 +750,11 @@ public class InsertPlanner {
                 ExpressionAnalyzer.analyzeExpression(expr,
                         new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                                 insertStatement.getTargetTable().getBaseSchema().stream()
-                                        .map(col -> new Field(col.getName(),
-                                                col.getType(), insertStatement.getTableName(), null))
+                                        .map(col -> {
+                                            TableRef tableRef = insertStatement.getTableRef();
+                                            TableName tableName = TableName.fromTableRef(tableRef);
+                                            return new Field(col.getName(), col.getType(), tableName, null);
+                                        })
                                         .collect(Collectors.toList()))), session);
 
                 List<SlotRef> slots = new ArrayList<>();
@@ -791,8 +829,8 @@ public class InsertPlanner {
                     // Only olap table can have the synchronized materialized view.
                     OlapTable targetOlapTable = (OlapTable) targetTable;
                     MaterializedIndexMeta targetIndexMeta = null;
-                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
-                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexMetaIdToMeta().values()) {
+                        if (indexMeta.getIndexMetaId() == targetOlapTable.getBaseIndexMetaId()) {
                             continue;
                         }
                         for (Column column : indexMeta.getSchema()) {
@@ -803,7 +841,7 @@ public class InsertPlanner {
                         }
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
-                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                            targetOlapTable.getIndexNameByMetaId(targetIndexMeta.getIndexMetaId());
                     throw new SemanticException(
                             "The define expr of shadow column " + targetColumn.getName() + " is null, " +
                                     "please check the associated materialized view " + targetIndexMetaName
@@ -837,20 +875,20 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
-                outputColumns.add(columnRefOperator);
-
+                ScalarOperator scalarOperator = null;
                 Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
+                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
-                            targetColumn.calculatedDefaultValue()));
+                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
@@ -880,6 +918,20 @@ public class InsertPlanner {
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
+
+    private static final class PreOptimizePlanContext {
+        private final OptExpression root;
+        private final ColumnRefSet requiredColumns;
+        private final List<Integer> partitionColumnIDs;
+
+        private PreOptimizePlanContext(OptExpression root, ColumnRefSet requiredColumns,
+                                       List<Integer> partitionColumnIDs) {
+            this.root = root;
+            this.requiredColumns = requiredColumns;
+            this.partitionColumnIDs = partitionColumnIDs;
+        }
+    }
+
     /**
      * OlapTableSink may be executed in multiply fragment instances of different machines
      * For non-duplicate key types, we must guarantee that the orders of the same key are
@@ -888,7 +940,8 @@ public class InsertPlanner {
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
                                                           List<ColumnRefOperator> outputColumns,
-                                                          SessionVariable session) {
+                                                          SessionVariable session,
+                                                          List<Integer> preComputedPartitionColumnIDs) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
             DistributionProperty distributionProperty = DistributionProperty
@@ -897,16 +950,17 @@ public class InsertPlanner {
         }
 
         Table targetTable = insertStmt.getTargetTable();
-        if (targetTable instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) targetTable;
-            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
-                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                return new PhysicalPropertySet(DistributionProperty
-                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
-            }
+        Optional<ConnectorSinkShuffleSpec> connectorSpec = ConnectorSinkShuffleSpec.forTable(targetTable);
+        if (connectorSpec.isPresent()) {
+            // preComputedPartitionColumnIDs is non-null iff the spec decided to shuffle
+            // (set in preparePreOptimizePlanContext). When non-empty, create the hash
+            // distribution; otherwise leave the property set distribution-less.
+            DistributionProperty distributionProperty =
+                    (preComputedPartitionColumnIDs != null && !preComputedPartitionColumnIDs.isEmpty())
+                            ? createDistributionPropertyFromPartitions(preComputedPartitionColumnIDs)
+                            : EmptyDistributionProperty.INSTANCE;
+            SortProperty sortProperty = connectorSpec.get().computeSortProperty(session, outputColumns);
+            return new PhysicalPropertySet(distributionProperty, sortProperty);
         }
 
         if (targetTable instanceof TableFunctionTable) {
@@ -924,10 +978,7 @@ public class InsertPlanner {
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return new PhysicalPropertySet(createDistributionPropertyFromPartitions(partitionColumnIDs));
                 }
             }
 
@@ -958,7 +1009,7 @@ public class InsertPlanner {
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
 
-        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexId());
+        List<Column> keyColumns = table.getKeyColumnsByIndexMetaId(table.getBaseIndexMetaId());
         List<Integer> keyColumnIds = Lists.newArrayList();
         keyColumns.forEach(column -> {
             int index = columns.indexOf(column);
@@ -979,6 +1030,12 @@ public class InsertPlanner {
         shuffleServiceEnable = true;
 
         return new PhysicalPropertySet(property);
+    }
+
+    private DistributionProperty createDistributionPropertyFromPartitions(List<Integer> partitionColumnIDs) {
+        HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        return DistributionProperty.createProperty(spec);
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,
@@ -1087,4 +1144,6 @@ public class InsertPlanner {
         checkPartitionInsertValid(targetTable);
         return true;
     }
+
+
 }

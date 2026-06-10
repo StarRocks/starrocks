@@ -14,11 +14,17 @@
 
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <cassert>
 #include <cstdlib>
 #include <random>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -31,11 +37,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 #include "testutil/deterministic_test_utils.h"
-#include "testutil/parallel_test.h"
-#include "util/coding.h"
-#include "util/faststring.h"
 #include "util/logging.h"
 
 DEFINE_bool(debug, false, "debug mode");
@@ -65,7 +67,8 @@ struct TestParams {
     bool print_debug_info = false;
 };
 
-static const std::string kTestDirectory = "./test_persistent_index_consistency";
+// Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+static const std::string kTestDirectory = "./test_persistent_index_consistency_" + std::to_string(getpid());
 
 template <typename T>
 class PersistentIndexWrapper {

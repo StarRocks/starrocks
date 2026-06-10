@@ -46,18 +46,28 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_file_reader.h"
+#include "types/type_descriptor.h"
 #ifndef __APPLE__
+#include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
+#include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
+#include "common/bloom_filter.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -76,9 +86,6 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
-#include "util/compression/block_compression.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 
@@ -119,11 +126,17 @@ ColumnReader::~ColumnReader() {
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
+    if (_builtin_inverted_index_meta != nullptr) {
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                 _builtin_inverted_index_meta->SpaceUsedLong());
+        _builtin_inverted_index_meta.reset(nullptr);
+    }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
@@ -202,6 +215,12 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
+            case BUILTIN_INVERTED_INDEX:
+                _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                         _builtin_inverted_index_meta->SpaceUsedLong());
+                _meta_mem_usage.fetch_add(_builtin_inverted_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+                break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
             }
@@ -228,6 +247,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(3);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
@@ -249,6 +269,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(2);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
@@ -341,8 +362,105 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
 }
 
 Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
+    // Lake ADD INDEX fast-path: if the IDG loader has an active entry for
+    // this (segment, col_unique_id, BITMAP), prefer the standalone .idx
+    // file over the segment-footer-embedded bitmap. The footer bitmap is
+    // typically absent in the fast-path case (it was added post-segment),
+    // so without this branch the call would fail at _load_bitmap_index.
+    if (opts.idg_loader != nullptr) {
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            // entries are returned newest-first; pick the first match.
+            for (const auto& e : list) {
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::BITMAP) {
+                        return _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
+                    }
+                }
+            }
+        }
+    }
+
+    // No IDG entry; fall back to the segment-footer-embedded bitmap. If the
+    // footer does not carry a bitmap either (e.g. the column simply has no
+    // bitmap index at all), leave `*iterator` null and return OK so the
+    // caller treats this column as "no bitmap filter".
+    if (_bitmap_index == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_load_bitmap_index(opts));
     RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, iterator));
+    return Status::OK();
+}
+
+Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts,
+                                                           const std::string& idx_filename,
+                                                           const std::string& encryption_meta,
+                                                           BitmapIndexIterator** iterator) {
+    // Resolve the .idx file path. IDG entries store relative filenames
+    // (matching the gen_idx_filename UUID-based scheme) under the same
+    // segment directory as the source segment data file.
+    const std::string& seg_path = _segment->file_name();
+    auto pos = seg_path.find_last_of('/');
+    std::string idx_path = (pos == std::string::npos) ? idx_filename : seg_path.substr(0, pos + 1) + idx_filename;
+
+    // When transparent data encryption is on, AddIndexSchemaChange writes
+    // the .idx file with an EncryptionMetaPB and stores the serialized
+    // bytes on the IDG entry. The read side must unwrap the meta back
+    // into a FileEncryptionInfo and pass it through RandomAccessFileOptions,
+    // otherwise the underlying file is read raw and the .idx footer parse
+    // sees ciphertext.
+    RandomAccessFileOptions raf_opts;
+    if (!encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(raf_opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(raf_opts, idx_path));
+
+    // Parse the .idx footer and look up the bitmap meta for this column.
+    lake::IndexFileReader idx_reader;
+    RETURN_IF_ERROR(idx_reader.init(idx_file.get()));
+    const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, IndexType::BITMAP);
+    if (meta == nullptr || !meta->has_bitmap_index()) {
+        return Status::Corruption("IDG entry references missing bitmap index in .idx file");
+    }
+
+    // Build a transient BitmapIndexReader backed by the .idx file. The
+    // upstream IndexReadOptions points at the original segment data; swap
+    // in the .idx stream so the underlying page reads come from the right
+    // file. Stats / cache options are inherited.
+    IndexReadOptions sub_opts = opts;
+    sub_opts.read_file = idx_file->stream().get();
+
+    auto bitmap_reader = std::make_unique<BitmapIndexReader>();
+    ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
+    (void)first_load;
+    BitmapIndexIterator* inner = nullptr;
+    RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, &inner));
+
+    // Wrap the inner iterator so destruction tears down its backing reader
+    // and file handle deterministically. BitmapIndexIterator has a virtual
+    // destructor, so the caller's `delete iterator` correctly dispatches
+    // into the wrapper's dtor.
+    class OwningBitmapIndexIterator final : public BitmapIndexIterator {
+    public:
+        OwningBitmapIndexIterator(BitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
+                                  std::unique_ptr<RandomAccessFile> file)
+                : BitmapIndexIterator(std::move(base)), _reader(std::move(reader)), _file(std::move(file)) {}
+        ~OwningBitmapIndexIterator() override = default;
+
+    private:
+        std::unique_ptr<BitmapIndexReader> _reader;
+        std::unique_ptr<RandomAccessFile> _file;
+    };
+
+    // Transfer inner iterator state into the wrapper. `inner` was allocated
+    // by BitmapIndexReader::new_iterator via `new`, so we take ownership
+    // through a unique_ptr and move-construct into the wrapper.
+    std::unique_ptr<BitmapIndexIterator> inner_owned(inner);
+    *iterator = new OwningBitmapIndexIterator(std::move(*inner_owned), std::move(bitmap_reader), std::move(idx_file));
     return Status::OK();
 }
 
@@ -416,10 +534,78 @@ Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMap
 template <bool is_original_bf>
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
-    RETURN_IF_ERROR(_load_bloom_filter_index(opts));
-    SparseRange<> bf_row_ranges;
+    // Lake ADD INDEX fast-path for bloom filters: if the IDG loader has an
+    // active entry for this (segment, col_unique_id, <BF flavor>), open a
+    // transient BloomFilterIndexReader from the .idx file. Holders are
+    // kept on this function's stack so they outlive the iterator without
+    // needing a virtual destructor on BloomFilterIndexIterator.
+    //
+    // The IDG key type disambiguates the two flavors. `is_original_bf=true`
+    // (plain BF, driven by the `bloom_filter_columns` table property) looks
+    // for IndexType::BLOOM_FILTER entries; `is_original_bf=false` (NGRAMBF)
+    // looks for IndexType::NGRAMBF. Only one flavor can exist per column at
+    // a time, mirroring the footer constraint.
+    std::unique_ptr<RandomAccessFile> idg_file_holder;
+    std::unique_ptr<BloomFilterIndexReader> idg_reader_holder;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+
+    bool used_idg = false;
+    if (opts.idg_loader != nullptr) {
+        const IndexType wanted = is_original_bf ? IndexType::BLOOM_FILTER : IndexType::NGRAMBF;
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            for (const auto& e : list) {
+                bool match = false;
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == wanted) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match) continue;
+
+                // Resolve .idx path under the segment directory and parse footer.
+                const std::string& seg_path = _segment->file_name();
+                auto pos = seg_path.find_last_of('/');
+                std::string idx_path =
+                        (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
+                // Same encryption plumbing as the bitmap IDG path: when the
+                // entry carries a non-empty EncryptionMetaPB, unwrap it back
+                // into a FileEncryptionInfo so the .idx file is decrypted at
+                // read time.
+                RandomAccessFileOptions raf_opts;
+                if (!e.encryption_meta.empty()) {
+                    ASSIGN_OR_RETURN(raf_opts.encryption_info,
+                                     KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
+                }
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
+
+                lake::IndexFileReader idx_reader;
+                RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
+                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, wanted);
+                if (meta == nullptr || !meta->has_bloom_filter_index()) {
+                    return Status::Corruption("IDG entry references missing bloom filter in .idx file");
+                }
+                IndexReadOptions sub_opts = opts;
+                sub_opts.read_file = idg_file_holder->stream().get();
+                idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
+                ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                (void)bf_first_load;
+                RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
+                used_idg = true;
+                break;
+            }
+        }
+    }
+
+    if (!used_idg) {
+        RETURN_IF_ERROR(_load_bloom_filter_index(opts));
+        RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+    }
+    SparseRange<> bf_row_ranges;
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;
@@ -531,40 +717,47 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
 }
 
 Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
-                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts) {
-    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts));
-    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator));
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts,
+                                                 const IndexReadOptions& index_opt) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts, index_opt));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator, index_opt));
     return Status::OK();
 }
 
 Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
-                                          const SegmentReadOptions& opts) {
-    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id() &&
-        _inverted_index_loaded()) {
+                                          const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
+    if (index_meta == nullptr || _inverted_index_loaded()) {
         return Status::OK();
     }
 
 #ifndef __APPLE__
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    return success_once(_inverted_index_load_once,
-                        [&]() {
-                            LogicalType type;
-                            if (_column_type == LogicalType::TYPE_ARRAY) {
-                                type = _column_child_type;
-                            } else {
-                                type = _column_type;
-                            }
+    return success_once(
+                   _inverted_index_load_once,
+                   [&]() {
+                       LogicalType type = _column_type;
+                       ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                       std::string index_path = IndexDescriptor::inverted_index_file_path(
+                               opts.rowset_path, opts.rowsetid.to_string(), _segment->id(), index_meta->index_id());
+                       ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
+                       RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
+                                                                                     &_inverted_index));
+                       RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
+                       if (_builtin_inverted_index_meta != nullptr) {
+                           auto* builtin_inverted_index = dynamic_cast<BuiltinInvertedReader*>(_inverted_index.get());
+                           RETURN_IF(builtin_inverted_index == nullptr,
+                                     Status::Corruption("Inverted index reader type mismatch"));
 
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
-                            std::string index_path = IndexDescriptor::inverted_index_file_path(
-                                    opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
-                                    index_meta->index_id());
-                            ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
-                            RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
-                                                                                          &_inverted_index));
-
-                            return Status::OK();
-                        })
+                           MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                                    _builtin_inverted_index_meta->SpaceUsedLong());
+                           _meta_mem_usage.fetch_sub(_builtin_inverted_index_meta->SpaceUsedLong(),
+                                                     std::memory_order_relaxed);
+                           _meta_mem_usage.fetch_add(builtin_inverted_index->mem_usage(), std::memory_order_relaxed);
+                           _builtin_inverted_index_meta.reset();
+                           _segment->update_cache_size();
+                       }
+                       return Status::OK();
+                   })
             .status();
 #endif
     return Status::OK();
@@ -759,7 +952,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
                 auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                         sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
-                        type_info, sub_column->length(), num_rows());
+                        type_info, sub_column->length(), num_rows(), child_paths[i]);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 field_iters.emplace_back(std::move(default_value_iter));

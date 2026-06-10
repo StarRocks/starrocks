@@ -57,6 +57,7 @@ struct TTabletSchema {
     12: optional i32 schema_version;
     13: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
     14: optional i32 compression_level = -1;
+    15: optional Types.TPrimaryKeyEncodingType primary_key_encoding_type;
 }
 
 // this enum stands for different storage format in src_backends
@@ -138,6 +139,11 @@ struct TCreateTabletReq {
     24: optional i64 gtid = 0;
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
+    27: optional Types.TTabletRange range;
+
+    // New fields should be added above this comment.
+    // NOTE: If you add a new field here that ends up in tablet metadata,
+    // also update TCloudTabletMeta in FrontendService.thrift to keep the two paths in sync.
 }
 
 struct TDropTabletReq {
@@ -186,12 +192,45 @@ struct TAlterTabletReqV2 {
     11: optional i64 job_id
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
+    // This field is used for shared-nothing fast schema evolution, and shared-data use base_tablet_read_schema instead.
     14: optional list<Descriptors.TColumn> columns
     // synchronized materialized view parameters
     15: optional TAlterJobType alter_job_type = TAlterJobType.SCHEMA_CHANGE
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
+    // Schema from FE catalog for reading data from base tablet in shared-data. This may be newer than the schema stored
+    // in tablet metadata in Fast Schema Evolution v2 scenario. Must use this schema to read data, otherwise correctness
+    // issues may occur. Why shared-data doesn't reuse the 'columns' field from shared-nothing:
+    // 1. shared-nothing only sends columns, requiring BE to construct complete schema (complex, not extensible).
+    //    For example, shared-nothing assumes adding key columns won't trigger fast schema evolution,
+    //    so BE won't rebuild sort key when constructing schema. This would cause issues in shared-data,
+    //    where fast schema evolution supports adding key columns, requiring complete schema info.
+    // 2. In shared-data's original fast schema evolution (non-v2), columns were meaningless since FE catalog
+    //    schema matches tablet metadata schema. base_tablet_read_schema can directly replace columns;
+    //    old BE will fall back to tablet metadata schema if columns are missing, with no compatibility impact.
+    19: optional TTabletSchema base_tablet_read_schema
+
+    // ADD INDEX fast-path (lake-only). When true, BE skips data rewrite and
+    // builds indexes into standalone .idx files (Index Delta Group). The
+    // indexes_to_add list carries the new TabletIndex entries to build.
+    // BE that does not recognize this field falls back to the regular
+    // schema-change path automatically.
+    20: optional bool only_add_index
+    21: optional list<Descriptors.TOlapTableIndex> indexes_to_add
+
+    // DROP INDEX fast-path (lake-only). When true, BE writes a logical
+    // tombstone into IDG metadata; physical .idx file cleanup happens at
+    // compaction time.
+    22: optional bool only_drop_index
+    23: optional list<TDropIndexInfo> drop_indexes
+}
+
+// One index removal request used by the DROP INDEX fast-path.
+struct TDropIndexInfo {
+    1: optional i64 index_id
+    2: optional i32 col_unique_id
+    3: optional Descriptors.TIndexType index_type
 }
 
 struct TClusterInfo {
@@ -413,23 +452,75 @@ struct TRemoteSnapshotRequest {
      15: optional Types.TVersion data_version
  }
 
- struct TReplicateSnapshotRequest {
-     1: optional Types.TTransactionId transaction_id
-     2: optional Types.TTableId table_id
-     3: optional Types.TPartitionId partition_id
-     4: optional Types.TTabletId tablet_id
-     5: optional TTabletType tablet_type
-     6: optional Types.TSchemaHash schema_hash
-     7: optional Types.TVersion visible_version
-     8: optional string src_token
-     9: optional Types.TTabletId src_tablet_id
-     10: optional TTabletType src_tablet_type
-     11: optional Types.TSchemaHash src_schema_hash
-     12: optional Types.TVersion src_visible_version
-     13: optional list<Types.TSnapshotInfo> src_snapshot_infos
-     14: optional binary encryption_meta
-     15: optional Types.TVersion data_version
- }
+struct TReplicateSnapshotRequest {
+    1: optional Types.TTransactionId transaction_id
+    2: optional Types.TTableId table_id
+    3: optional Types.TPartitionId partition_id
+    4: optional Types.TTabletId tablet_id
+    5: optional TTabletType tablet_type
+    6: optional Types.TSchemaHash schema_hash
+    7: optional Types.TVersion visible_version
+    8: optional string src_token
+    9: optional Types.TTabletId src_tablet_id
+    10: optional TTabletType src_tablet_type
+    11: optional Types.TSchemaHash src_schema_hash
+    12: optional Types.TVersion src_visible_version
+    13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+    14: optional binary encryption_meta
+    15: optional Types.TVersion data_version
+    16: optional Types.TTabletId virtual_tablet_id
+    17: optional Types.TDatabaseId src_db_id
+    18: optional Types.TTableId src_table_id
+    19: optional Types.TPartitionId src_partition_id
+    // Full path of source partition for S3 storage type
+    // Format: "s3://bucket/[computed-prefix/]service_id/db{db_id}/{table_id}/{partition_id}"
+    // Note: [computed-prefix/] is dynamically computed by StarClient based on partition ID hash,
+    //       only present when partitioned prefix is enabled on the storage volume.
+    // When set, BE should use this path directly instead of constructing path via RemoteStarletLocationProvider
+    20: optional string src_partition_full_path
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TComputeNodeTablets {
+    1: optional Types.TBackend compute_node
+    2: optional list<Types.TTabletId> tablets
+}
+
+// Placeholder for external cluster snapshot feature.
+// NOTE: fields 9-11 replace a prior placeholder definition (src_tablets/compute_nodes
+// at 9/10) that was never wired into any code path.
+struct TExternalClusterSnapshotRequest {
+    1: optional i64 job_id
+    2: optional i64 db_id
+    3: optional Types.TTableId table_id
+    4: optional Types.TPartitionId partition_id
+    5: optional Types.TPartitionId physical_partition_id
+    6: optional Types.TVersion pre_version
+    7: optional Types.TVersion new_version
+    8: optional Types.TTabletId dest_tablet_id
+    9: optional bool is_filebundling
+    10: optional bool is_drop_partition
+    11: optional list<TComputeNodeTablets> compute_node_tablets
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TRestoreTabletInfo {
+    1: optional Types.TTabletId source_tablet_id
+    2: optional Types.TTabletId target_tablet_id
+    3: optional i64 target_schema_id
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TRestoreTabletRequest {
+    1: optional list<TRestoreTabletInfo> tablet_infos
+    2: optional i64 source_visible_version
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TRestoreTabletResult {
+     1: optional bool success
+     2: optional string error_msg
+}
 
 enum TTabletMetaType {
     PARTITIONID,
@@ -516,6 +607,9 @@ struct TAgentTaskRequest {
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
+    33: optional TExternalClusterSnapshotRequest external_cluster_snapshot_req
+    // Placeholder for external cluster snapshot feature.
+    34: optional TRestoreTabletRequest restore_tablet_req
 }
 
 struct TAgentResult {

@@ -16,8 +16,8 @@
 
 #include <orc/OrcFile.hh>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "io/shared_buffered_input_stream.h"
 namespace starrocks {
 
 class RandomAccessFile;
@@ -30,14 +30,14 @@ public:
     };
 
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream);
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, SharedBufferedInputStream* sb_stream);
 
     ~ORCHdfsFileStream() override = default;
 
     uint64_t getLength() const override { return _length; }
 
     // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
+    uint64_t getNaturalReadSize() const override;
 
     // It's for read size after doing seek.
     // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
@@ -53,7 +53,7 @@ public:
     // And this value can not be too small because if we can not read a row group in a single shot,
     // we will fallback to read in normal size, and we pay cost of a extra read.
 
-    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
+    uint64_t getNaturalReadSizeAfterSeek() const override;
 
     void read(void* buf, uint64_t length, uint64_t offset) override;
 
@@ -63,19 +63,19 @@ public:
         _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     }
     void set_app_stats(HdfsScanStats* stats) { _app_stats = stats; }
-    bool isIOCoalesceEnabled() const override { return config::orc_coalesce_read_enable; }
-    bool isIOAdaptiveCoalesceEnabled() const override { return config::io_coalesce_adaptive_lazy_active; }
+    bool isIOCoalesceEnabled() const override;
+    bool isIOAdaptiveCoalesceEnabled() const override;
     bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
     void releaseToOffset(const int64_t offset) override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
-    Status setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+    Status setIORanges(const std::vector<SharedBufferedInputStream::IORange>& io_ranges,
                        const bool coalesce_active_lazy_column = true);
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() override;
 
 private:
     RandomAccessFile* _file;
     uint64_t _length;
-    io::SharedBufferedInputStream* _sb_stream;
+    SharedBufferedInputStream* _sb_stream;
     std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
     HdfsScanStats* _app_stats = nullptr;
 };

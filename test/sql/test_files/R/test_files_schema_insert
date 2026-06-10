@@ -1,0 +1,56 @@
+-- name: test_files_schema_insert
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_sink (a BIGINT, b VARCHAR(64))
+distributed by hash(a) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 2,281. OK num: 1(upload 1 files).
+-- !result
+insert into t_sink
+select k2, k7 from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 INT, k7 VARCHAR(64)");
+-- result:
+-- !result
+select count(*), min(a), max(a) from t_sink;
+-- result:
+2	1	11
+-- !result
+create table ctas_target
+distributed by hash(k2) buckets 1 properties("replication_num" = "1")
+as select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 BIGINT, k7 VARCHAR(64)");
+-- result:
+-- !result
+desc ctas_target;
+-- result:
+k2	bigint	YES	true	None	
+k7	varchar(1048576)	YES	true	None	
+-- !result
+select count(*) from ctas_target;
+-- result:
+2
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

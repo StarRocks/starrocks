@@ -14,7 +14,11 @@
 
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
 
-#include "util/debug_util.h"
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
+#include "common/util/debug_util.h"
 
 namespace starrocks {
 
@@ -30,9 +34,17 @@ void ParquetBlockSplitBloomFilter::add_hash(uint64_t hash) {
     uint32_t masks[8];
     _set_masks(key, masks);
     auto* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
+
+#ifdef __AVX2__
+    // OR the 8 mask lanes into the 8 block lanes in one 256-bit op instead of the loop.
+    __m256i v_block = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(block_offset));
+    __m256i v_masks = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(masks));
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(block_offset), _mm256_or_si256(v_block, v_masks));
+#else
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
         *(block_offset + i) |= masks[i];
     }
+#endif
 }
 
 bool ParquetBlockSplitBloomFilter::test_hash(uint64_t hash) const {
@@ -45,12 +57,22 @@ bool ParquetBlockSplitBloomFilter::test_hash(uint64_t hash) const {
     uint32_t masks[BITS_SET_PER_BLOCK];
     _set_masks(key, masks);
     auto* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
+
+#ifdef __AVX2__
+    // Hash is present iff every mask lane is also set in the block lane, i.e.
+    // (~v_block) & v_masks == 0. PTEST sets CF on exactly that condition, so
+    // _mm256_testc_si256 returns 1 when the hash may be present.
+    __m256i v_block = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(block_offset));
+    __m256i v_masks = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(masks));
+    return _mm256_testc_si256(v_block, v_masks);
+#else
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
         if ((*(block_offset + i) & masks[i]) == 0) {
             return false;
         }
     }
     return true;
+#endif
 }
 
 } // namespace starrocks

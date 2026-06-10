@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.0 release notes: new aggregate functions (percentile_disc), GROUP BY compatibility improvements, and storage engine and query engine updates."
 ---
 
 # StarRocks version 3.0
@@ -332,7 +333,6 @@ Release date: April 28, 2023
 
 #### Query engine
 
-<!-- - [Preview] Supports operator **spilling** for large queries, which can use disk space to ensure stable running of queries in case of insufficient memory. -->
 - Allows more queries on joined tables to benefit from the [query cache](https://docs.starrocks.io/docs/using_starrocks/query_cache/). For example, the query cache now supports Broadcast Join and Bucket Shuffle Join.
 - Supports [Global UDFs](https://docs.starrocks.io/docs/sql-reference/sql-functions/JAVA_UDF/).
 - Dynamic adaptive parallelism: StarRocks can automatically adjust the `pipeline_dop` parameter for query concurrency.

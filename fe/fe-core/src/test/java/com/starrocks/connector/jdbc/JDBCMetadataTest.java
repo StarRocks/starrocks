@@ -21,11 +21,15 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -33,13 +37,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
@@ -50,15 +59,22 @@ public class JDBCMetadataTest {
 
     @Mocked
     Connection connection;
-
+    @Mocked
+    DatabaseMetaData metaData;
+    @Mocked
+    PreparedStatement preparedStatement;
+    @Mocked
+    Statement statement;
+    @Mocked
+    ResultSet queryResultSet;
+    @Mocked
+    ResultSetMetaData queryResultSetMetaData;
+    MockResultSet partitionsInfoTablesResult;
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
-    @Mocked
-    PreparedStatement preparedStatement;
     private MockResultSet partitionsResult;
-    MockResultSet partitionsInfoTablesResult;
 
     @BeforeEach
     public void setUp() throws SQLException {
@@ -70,17 +86,19 @@ public class JDBCMetadataTest {
         columnResult.addColumn("DATA_TYPE",
                 Arrays.asList(Types.INTEGER, Types.DECIMAL, Types.CHAR, Types.VARCHAR, Types.TINYINT, Types.SMALLINT,
                         Types.INTEGER, Types.BIGINT, Types.TINYINT, Types.SMALLINT,
-                        Types.INTEGER, Types.BIGINT, Types.DATE, Types.TIME, Types.TIMESTAMP));
+                        Types.INTEGER, Types.BIGINT, Types.DATE, Types.TIME, Types.TIMESTAMP,
+                        Types.BINARY, Types.VARBINARY));
         columnResult.addColumn("TYPE_NAME",
                 Arrays.asList("INTEGER", "DECIMAL", "CHAR", "VARCHAR", "TINYINT UNSIGNED", "SMALLINT UNSIGNED",
                         "INTEGER UNSIGNED", "BIGINT UNSIGNED", "TINYINT", "SMALLINT",
-                        "INTEGER", "BIGINT", "DATE", "TIME", "TIMESTAMP"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8, 8, 8, 8));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+                        "INTEGER", "BIGINT", "DATE", "TIME", "TIMESTAMP", "BINARY", "VARBINARY"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8, 8, 8, 8, 16, 16));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
         columnResult.addColumn("COLUMN_NAME",
-                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4", "g1", "g2", "g3"));
+                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4", "g1", "g2", "g3", "h1", "h2"));
         columnResult.addColumn("IS_NULLABLE",
-                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
+                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO",
+                        "NO"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
@@ -100,16 +118,20 @@ public class JDBCMetadataTest {
                 result = connection;
                 minTimes = 0;
 
-                connection.getMetaData().getCatalogs();
+                connection.getMetaData();
+                result = metaData;
+                minTimes = 0;
+
+                metaData.getCatalogs();
                 result = dbResult;
                 minTimes = 0;
 
-                connection.getMetaData().getTables("test", null, null,
+                metaData.getTables("test", null, null,
                         new String[] {"TABLE", "VIEW"});
                 result = tableResult;
                 minTimes = 0;
 
-                connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                metaData.getColumns("test", null, "tbl1", "%");
                 result = columnResult;
                 minTimes = 0;
 
@@ -221,6 +243,8 @@ public class JDBCMetadataTest {
         Assertions.assertTrue(columns.get(12).getType().equals(DateType.DATE));
         Assertions.assertTrue(columns.get(13).getType().equals(DateType.TIME));
         Assertions.assertTrue(columns.get(14).getType().equals(DateType.DATETIME));
+        Assertions.assertTrue(columns.get(15).getType().equals(VarbinaryType.VARBINARY));
+        Assertions.assertTrue(columns.get(16).getType().equals(VarbinaryType.VARBINARY));
     }
 
     @Test
@@ -248,6 +272,105 @@ public class JDBCMetadataTest {
     }
 
     @Test
+    public void testDbCacheHit() {
+        // Test that second getDb call uses cache (getCatalogs only called once)
+        try {
+            // Enable cache for this test and create new JDBCMetadata instance
+            Map<String, String> cachedProperties = new HashMap<>(properties);
+            cachedProperties.put("jdbc_meta_cache_enable", "true");
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(cachedProperties, "catalog", dataSource);
+
+            new Expectations() {
+                {
+                    dataSource.getConnection();
+                    result = connection;
+                    minTimes = 0;
+
+                    // getCatalogs should only be called ONCE due to caching
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                    minTimes = 1;
+                    maxTimes = 1;
+
+                    connection.getMetaData().getTables("test", null, null,
+                            new String[] {"TABLE", "VIEW"});
+                    result = tableResult;
+                    minTimes = 0;
+
+                    connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                    result = columnResult;
+                    minTimes = 0;
+                }
+            };
+
+            dbResult.beforeFirst();
+            Database db1 = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertNotNull(db1);
+            Assertions.assertEquals("test", db1.getOriginName());
+
+            // Second call should use cache, getCatalogs won't be called again
+            Database db2 = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertNotNull(db2);
+            Assertions.assertEquals("test", db2.getOriginName());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testDbCacheMissForNonExistentDb() {
+        // Test getDb returns null for non-existent database
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "nonexistent");
+            Assertions.assertNull(db);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testDbCacheEnabledReturnsNullForNonExistentDb() throws SQLException {
+        // Test that getDb returns null (not NPE) for non-existent database when cache is enabled
+        // This is the bug fix test - previously it would throw NullPointerException due to
+        // Objects.requireNonNull() in JDBCMetaCache.get() when the lambda returned null
+
+        MockResultSet emptySchemaResult = new MockResultSet("schemas");
+        emptySchemaResult.addColumn("TABLE_SCHEM", Arrays.asList("information_schema"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                // Mock getSchemas to return empty result (simulating non-existent database)
+                connection.getMetaData().getSchemas();
+                result = emptySchemaResult;
+                minTimes = 0;
+            }
+        };
+
+        // Enable cache
+        Map<String, String> cachedProperties = new HashMap<>(properties);
+        cachedProperties.put("jdbc_meta_cache_enable", "true");
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(cachedProperties, "catalog", dataSource);
+
+        // First call - should return null without throwing NPE
+        Database db1 = jdbcMetadata.getDb(new ConnectContext(), "nonexistent_db");
+        Assertions.assertNull(db1, "First call should return null for non-existent database");
+
+        // Second call - should also return null (not cached, and no NPE)
+        Database db2 = jdbcMetadata.getDb(new ConnectContext(), "nonexistent_db");
+        Assertions.assertNull(db2, "Second call should also return null for non-existent database");
+    }
+
+    @Test
     public void testGetJdbcUrl() {
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
@@ -255,6 +378,116 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.URI, "jdbc:mysql://abc.mysql.com:3306");
         jdbcMetadata = new JDBCMetadata(properties, "catalog");
         Assertions.assertEquals("jdbc:mariadb://abc.mysql.com:3306", jdbcMetadata.getJdbcUrl());
+    }
+
+    @Test
+    public void testGetTableDoesNotFetchComment() throws SQLException {
+        // getTable() must not populate the comment — keep its hot path single
+        // round-trip (getColumns only). Comment fetch is deferred to
+        // getTableComment(). No getTables() mock is set for "tbl1" here so any
+        // unintended REMARKS round-trip in the lambda would also surface via the
+        // returned table's empty comment.
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals("", table.getComment());
+    }
+
+    @Test
+    public void testGetTableCommentReadsRemarks() throws SQLException {
+        MockResultSet tablesWithRemarks = new MockResultSet("tables_with_remarks");
+        tablesWithRemarks.addColumn("TABLE_NAME", Arrays.asList("tbl1"));
+        tablesWithRemarks.addColumn("REMARKS", Arrays.asList("jdbc table comment"));
+
+        new Expectations() {
+            {
+                connection.getMetaData().getTables("test", null, "tbl1", new String[] {"TABLE", "VIEW"});
+                result = tablesWithRemarks;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        String comment = jdbcMetadata.getTableComment(new ConnectContext(), "test", "tbl1");
+        Assertions.assertEquals("jdbc table comment", comment);
+    }
+
+    @Test
+    public void testGetTableFromQuery() throws SQLException {
+        String passThroughQuery = "SELECT 1 AS id, payload ? 'k' AS name FROM docs";
+        String metadataQuery = "SELECT * FROM (" + passThroughQuery + ") starrocks_query WHERE 1 = 0";
+
+        new Expectations() {
+            {
+                connection.createStatement();
+                result = statement;
+                minTimes = 1;
+
+                statement.executeQuery(metadataQuery);
+                result = queryResultSet;
+                minTimes = 1;
+
+                queryResultSet.getMetaData();
+                result = queryResultSetMetaData;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnCount();
+                result = 2;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(1);
+                result = Types.INTEGER;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(1);
+                result = "INTEGER";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(1);
+                result = 4;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(1);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(1);
+                result = "id";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(1);
+                result = ResultSetMetaData.columnNoNulls;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(2);
+                result = Types.VARCHAR;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(2);
+                result = "VARCHAR";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(2);
+                result = 20;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(2);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(2);
+                result = "name";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(2);
+                result = ResultSetMetaData.columnNullable;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", passThroughQuery + ";");
+        Assertions.assertInstanceOf(JDBCTable.class, table);
+        JDBCTable jdbcTable = (JDBCTable) table;
+        Assertions.assertTrue(jdbcTable.isQueryTable());
+        Assertions.assertEquals("(" + passThroughQuery + ") starrocks_query", jdbcTable.getCatalogTableName());
+        Assertions.assertEquals(2, jdbcTable.getFullSchema().size());
+        Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
+        Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));
+        Assertions.assertEquals(Types.VARCHAR, jdbcTable.getOriginalJdbcColumnTypes().get("name"));
+        Assertions.assertEquals(IntegerType.INT, jdbcTable.getFullSchema().get(0).getType());
+        Assertions.assertEquals("name", jdbcTable.getFullSchema().get(1).getName());
+        Assertions.assertEquals(TypeFactory.createVarcharType(20), jdbcTable.getFullSchema().get(1).getType());
     }
 
     @Test
@@ -267,5 +500,510 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
         new JDBCMetadata(properties, "catalog");
+    }
+
+    @Test
+    public void testGetConnectionSetsNetworkTimeout() throws SQLException {
+        long originalTimeoutMs = Config.jdbc_network_timeout_ms;
+        try {
+            // Verify timeout value is correctly passed (Optimization 1)
+            Config.jdbc_network_timeout_ms = 12345;
+            new Expectations() {
+                {
+                    connection.setNetworkTimeout(
+                            (java.util.concurrent.ExecutorService) any,
+                            12345);  // Verify config value is passed correctly in milliseconds
+                    minTimes = 1;  // Fail test if setNetworkTimeout is not called
+
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                    minTimes = 0;
+                }
+            };
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
+            // Assert the operation completes successfully
+            Assertions.assertEquals(Lists.newArrayList("test"), result);
+
+        } finally {
+            Config.jdbc_network_timeout_ms = originalTimeoutMs;
+        }
+    }
+
+    @Test
+    public void testNetworkTimeoutBoundaryConditions() throws SQLException {
+        long originalTimeoutMs = Config.jdbc_network_timeout_ms;
+        try {
+            // Test boundary conditions (Optimization 2)
+
+            // Boundary 1: timeout = 1ms (smallest positive value)
+            Config.jdbc_network_timeout_ms = 1;
+            new Expectations() {
+                {
+                    connection.setNetworkTimeout((Executor) any, 1);
+                    minTimes = 1;
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                }
+            };
+            JDBCMetadata jdbcMetadata1 = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result1 = jdbcMetadata1.listDbNames(new ConnectContext());
+            Assertions.assertEquals(Lists.newArrayList("test"), result1, "boundary: timeout=1ms");
+
+            // Boundary 2: timeout = Integer.MAX_VALUE
+            Config.jdbc_network_timeout_ms = Integer.MAX_VALUE;
+            new Expectations() {
+                {
+                    connection.setNetworkTimeout((Executor) any, Integer.MAX_VALUE);
+                    minTimes = 1;
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                }
+            };
+            JDBCMetadata jdbcMetadata2 = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result2 = jdbcMetadata2.listDbNames(new ConnectContext());
+            Assertions.assertEquals(Lists.newArrayList("test"), result2, "boundary: timeout=MAX_VALUE");
+
+            // Boundary 3: timeout = -1, setNetworkTimeout should NOT be called (code has >= 0 check)
+            Config.jdbc_network_timeout_ms = -1;
+            new Expectations() {
+                {
+                    // When timeout = -1, setNetworkTimeout should not be called
+                    connection.setNetworkTimeout((Executor) any, anyInt);
+                    maxTimes = 0;  // Fail test if setNetworkTimeout is called
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                }
+            };
+            JDBCMetadata jdbcMetadata3 = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result3 = jdbcMetadata3.listDbNames(new ConnectContext());
+            Assertions.assertEquals(Lists.newArrayList("test"), result3,
+                    "boundary: timeout=-1 (should NOT call setNetworkTimeout)");
+
+        } finally {
+            Config.jdbc_network_timeout_ms = originalTimeoutMs;
+        }
+    }
+
+    @Test
+    public void testExecutorServiceReuse() throws SQLException {
+        long originalTimeoutMs = Config.jdbc_network_timeout_ms;
+        try {
+            // Verify ExecutorService reuse (Optimization 5)
+            Config.jdbc_network_timeout_ms = 5000;
+
+            // Collect all Executor instances passed to setNetworkTimeout
+            final java.util.Set<Executor> executors = new java.util.HashSet<>();
+
+            new Expectations() {
+                {
+                    // Record all Executor instances
+                    connection.setNetworkTimeout((Executor) any, 5000);
+                    minTimes = 3;  // Expect 3 calls
+                    result = new Delegate() {
+                        void setNetworkTimeout(Executor executor, long milliseconds) {
+                            executors.add(executor);
+                        }
+                    };
+
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                    minTimes = 0;
+                }
+            };
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+            // Call getConnection multiple times
+            dbResult.beforeFirst();
+            jdbcMetadata.listDbNames(new ConnectContext());
+
+            dbResult.beforeFirst();
+            jdbcMetadata.listDbNames(new ConnectContext());
+
+            dbResult.beforeFirst();
+            jdbcMetadata.listDbNames(new ConnectContext());
+
+            // Verify: 3 calls should use the same Executor instance (shared static Executor)
+            // This avoids creating new Executor each time, saving resources
+            Assertions.assertEquals(1, executors.size(),
+                    "Should reuse the same ExecutorService instance for multiple calls");
+            Assertions.assertNotNull(executors.iterator().next(),
+                    "Executor should be the shared static instance");
+
+        } finally {
+            Config.jdbc_network_timeout_ms = originalTimeoutMs;
+        }
+    }
+
+    @Test
+    public void testGetTableResultSetClosed() throws SQLException {
+        // Test that ResultSet is properly closed after getTable() to prevent cursor leaks
+        // This is a regression test for ORA-01000: maximum open cursors exceeded
+
+        // Create a mock ResultSet that tracks whether close() was called
+        final boolean[] closed = {false};
+        MockResultSet trackableColumnResult = new MockResultSet("columns") {
+            @Override
+            public void close() throws SQLException {
+                closed[0] = true;
+                super.close();
+            }
+        };
+        trackableColumnResult.addColumn("DATA_TYPE",
+                Arrays.asList(Types.INTEGER, Types.VARCHAR));
+        trackableColumnResult.addColumn("TYPE_NAME",
+                Arrays.asList("INTEGER", "VARCHAR"));
+        trackableColumnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 100));
+        trackableColumnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0));
+        trackableColumnResult.addColumn("COLUMN_NAME", Arrays.asList("id", "name"));
+        trackableColumnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "YES"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getMetaData().getColumns("test", null, "trackable_tbl", "%");
+                result = trackableColumnResult;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+        // Call getTable which should properly close the ResultSet
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "trackable_tbl");
+
+        // Verify table was retrieved successfully
+        Assertions.assertNotNull(table, "Table should be retrieved successfully");
+        Assertions.assertTrue(table instanceof JDBCTable, "Table should be JDBCTable");
+
+        // Most importantly: verify ResultSet was closed
+        // This prevents cursor leaks (ORA-01000 in Oracle)
+        Assertions.assertTrue(closed[0], "ResultSet must be closed after getTable() to prevent cursor leaks");
+    }
+
+    @Test
+    public void testAllSupportedSchemaResolvers() {
+        // Test that all supported schema_resolver values create correct resolver instances
+        try {
+            Map<String, String> testProperties = new HashMap<>(properties);
+
+            // Test postgresql
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "postgresql");
+            JDBCMetadata metadata1 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata1.schemaResolver instanceof PostgresSchemaResolver,
+                    "postgresql should create PostgresSchemaResolver");
+
+            // Test mysql
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "mysql");
+            JDBCMetadata metadata2 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata2.schemaResolver instanceof MysqlSchemaResolver,
+                    "mysql should create MysqlSchemaResolver");
+
+            // Test oracle
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "oracle");
+            JDBCMetadata metadata3 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata3.schemaResolver instanceof OracleSchemaResolver,
+                    "oracle should create OracleSchemaResolver");
+
+            // Test sqlserver
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "sqlserver");
+            JDBCMetadata metadata4 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata4.schemaResolver instanceof SqlServerSchemaResolver,
+                    "sqlserver should create SqlServerSchemaResolver");
+
+            // Test clickhouse
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "clickhouse");
+            JDBCMetadata metadata5 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata5.schemaResolver instanceof ClickhouseSchemaResolver,
+                    "clickhouse should create ClickhouseSchemaResolver");
+        } catch (Exception e) {
+            Assertions.fail("Test should not throw exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSchemaResolverEmptyString() {
+        // Test that empty string falls back to auto-detection
+        try {
+            Map<String, String> testProperties = new HashMap<>(properties);
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "");
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(testProperties, "catalog", dataSource);
+
+            // Should fall back to auto-detection and use MysqlSchemaResolver (MariaDB driver auto-detects as MySQL)
+            Assertions.assertTrue(jdbcMetadata.schemaResolver instanceof MysqlSchemaResolver,
+                    "Empty schema_resolver should fall back to auto-detection");
+        } catch (Exception e) {
+            Assertions.fail("Test should not throw exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testAutoDetectionWithoutSchemaResolver() {
+        // Test that auto-detection still works when schema_resolver is not specified
+        try {
+            Map<String, String> testProperties = new HashMap<>(properties);
+            testProperties.remove(JDBCResource.SCHEMA_RESOLVER);
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(testProperties, "catalog", dataSource);
+
+            // Should auto-detect to MysqlSchemaResolver based on MariaDB driver
+            Assertions.assertTrue(jdbcMetadata.schemaResolver instanceof MysqlSchemaResolver,
+                    "Should auto-detect MysqlSchemaResolver for MariaDB driver");
+        } catch (Exception e) {
+            Assertions.fail("Test should not throw exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigDefaults() {
+        // Verify default config values produce correct HikariConfig settings
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(30000L, config.getKeepaliveTime());
+            Assertions.assertEquals(0L, config.getLeakDetectionThreshold());
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigInvalidMaxLifetime() {
+        // maxLifetime < 30000 should fall back to 300000
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 10000L; // too small
+            Config.jdbc_connection_keepalive_time_ms = 5000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime(),
+                    "maxLifetime < 30000 should fall back to 300000");
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepaliveTime 5000 is below minimum 30000, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigInvalidKeepaliveTime() {
+        // keepaliveTime >= maxLifetime or negative should fall back to 0 (disabled)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            // Case 1: keepaliveTime >= maxLifetime → disabled
+            Config.jdbc_connection_max_lifetime_ms = 60000L;
+            Config.jdbc_connection_keepalive_time_ms = 60000L; // equal to maxLifetime
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config1 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config1);
+
+            Assertions.assertEquals(60000L, config1.getMaxLifetime());
+            Assertions.assertEquals(0L, config1.getKeepaliveTime(),
+                    "keepaliveTime >= maxLifetime should fall back to 0 (disabled)");
+
+            // Case 2: keepaliveTime == 0 → disabled (passthrough, HikariCP semantics)
+            Config.jdbc_connection_keepalive_time_ms = 0L;
+
+            HikariConfig config2 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config2);
+
+            Assertions.assertEquals(0L, config2.getKeepaliveTime(),
+                    "keepaliveTime == 0 should be respected as disabled");
+
+            // Case 3: keepaliveTime negative → disabled
+            Config.jdbc_connection_keepalive_time_ms = -1L;
+
+            HikariConfig config3 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config3);
+
+            Assertions.assertEquals(0L, config3.getKeepaliveTime(),
+                    "negative keepaliveTime should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigLeakDetection() {
+        // Verify leak detection is set when > 0, not set when <= 0
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L;
+
+            // Enabled
+            Config.jdbc_connection_leak_detection_threshold_ms = 60000L;
+            HikariConfig config1 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config1);
+            Assertions.assertEquals(60000L, config1.getLeakDetectionThreshold(),
+                    "Positive threshold should enable leak detection");
+
+            // Disabled (0)
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+            HikariConfig config2 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config2);
+            Assertions.assertEquals(0L, config2.getLeakDetectionThreshold(),
+                    "Zero threshold should disable leak detection");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigValidCustomValues() {
+        // Verify valid custom values are applied correctly
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 120000L;
+            Config.jdbc_connection_keepalive_time_ms = 60000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 30000L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(120000L, config.getMaxLifetime());
+            Assertions.assertEquals(60000L, config.getKeepaliveTime());
+            Assertions.assertEquals(30000L, config.getLeakDetectionThreshold());
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveDisabledExplicitly() {
+        // keepaliveTime = 0 should be respected as "disabled" (HikariCP semantics)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 0L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepaliveTime=0 should mean disabled (no keepalive probing)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigMaxLifetimeAtMinimum() {
+        // When maxLifetime=30000, no valid enabled keepalive exists, so keepalive must be 0
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 30000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L; // would equal maxLifetime
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(30000L, config.getMaxLifetime(),
+                    "maxLifetime=30000 is valid (at minimum)");
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive must be 0 (disabled) when maxLifetime=30000");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveBelowMinimum() {
+        // keepalive > 0 but < 30000 should fall back to 0 (disabled)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 15000L; // below 30000 minimum
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive=15000 is below 30000 minimum, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveAlmostValid() {
+        // keepalive=29999 with maxLifetime=30000: below minimum AND below maxLifetime
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 30000L;
+            Config.jdbc_connection_keepalive_time_ms = 29999L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(30000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive=29999 is below 30000 minimum, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
     }
 }

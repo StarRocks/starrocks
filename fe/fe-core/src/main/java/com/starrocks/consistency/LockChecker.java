@@ -16,12 +16,9 @@ package com.starrocks.consistency;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,8 +26,6 @@ import org.apache.logging.log4j.Logger;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
 
 public class LockChecker extends FrontendDaemon {
 
@@ -38,75 +33,49 @@ public class LockChecker extends FrontendDaemon {
     private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
 
     public LockChecker() {
-        super("DeadlockChecker", 1000 * Config.lock_checker_interval_second);
+        super("deadlock-checker", 1000 * Config.lock_checker_interval_second);
     }
 
     @Override
     protected void runAfterCatalogReady() {
         checkDeadlocks();
-        checkSlowLocks();
 
         setInterval(Config.lock_checker_interval_second * 1000);
     }
 
-    private void checkSlowLocks() {
-        Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
-        JsonArray dbLocks = new JsonArray();
-        for (Database db : dbs.values()) {
-            boolean hasSlowLock = false;
-            JsonObject ownerInfo = new JsonObject();
-            QueryableReentrantReadWriteLock lock = db.getRwLock();
-            // holder information
-            Thread exclusiveLockThread = lock.getOwner();
-            Set<Thread> sharedLockThreads = lock.getSharedLockThreads();
-            if (exclusiveLockThread != null) {
-                long lockStartTime = db.getRwLock().getExclusiveLockStartTimeMs();
-                if (lockStartTime > 0L && System.currentTimeMillis() - lockStartTime > Config.slow_lock_threshold_ms) {
-                    hasSlowLock = true;
-                    ownerInfo.addProperty("status", "exclusive");
-                    ownerInfo.addProperty("id", exclusiveLockThread.getId());
-                    ownerInfo.addProperty("name", exclusiveLockThread.getName());
-                    ownerInfo.addProperty("heldFor", (System.currentTimeMillis() - lockStartTime) + " ms");
-                    ownerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
-                            exclusiveLockThread, 0, DEFAULT_STACK_RESERVE_LEVELS));
-                }
-            } else if (!sharedLockThreads.isEmpty()) {
-                JsonArray currReaders =
-                        lock.getCurrReadersInfoToJsonArray(true, true, DEFAULT_STACK_RESERVE_LEVELS);
-                if (!currReaders.isEmpty()) {
-                    hasSlowLock = true;
-                    ownerInfo.addProperty("status", "shared");
-                    ownerInfo.add("currReaders", currReaders);
-                }
-            }
-
-            if (hasSlowLock) {
-                ownerInfo.addProperty("lockDbName", db.getFullName());
-                // waiters
-                ownerInfo.add("queuedReaders", getLockWaiterInfoJsonArray(lock.getQueuedReaderThreads()));
-                ownerInfo.add("queuedWriters", getLockWaiterInfoJsonArray(lock.getQueuedWriterThreads()));
-                dbLocks.add(ownerInfo);
-            }
-        }
-
-        if (!dbLocks.isEmpty()) {
-            LOG.info("slow db locks: {}", dbLocks.toString());
-        } else {
-            LOG.debug("no slow db locks");
-        }
+    public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters) {
+        return getLockWaiterInfoJsonArray(waiters, 0);
     }
 
-    public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters) {
+    /**
+     * Build a JSON array of waiter thread info, capped at {@code cap} entries when {@code cap > 0}.
+     * If the source list contains more than {@code cap} non-null entries, a trailer object
+     * {@code {"omitted": "remain N waiters omitted"}} is appended so the total count is still
+     * visible. {@code cap <= 0} disables the cap and serializes every waiter.
+     */
+    public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters, int cap) {
         JsonArray waiterInfos = new JsonArray();
+        int emitted = 0;
+        int totalNonNull = 0;
         for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
-            if (th != null) {
-                JsonObject waiter = new JsonObject();
-                waiter.addProperty("threadId", th.getId());
-                waiter.addProperty("threadName", th.getName());
-                waiterInfos.add(waiter);
+            if (th == null) {
+                continue;
             }
+            totalNonNull++;
+            if (cap > 0 && emitted >= cap) {
+                continue;
+            }
+            JsonObject waiter = new JsonObject();
+            waiter.addProperty("threadId", th.getId());
+            waiter.addProperty("threadName", th.getName());
+            waiterInfos.add(waiter);
+            emitted++;
         }
-
+        if (cap > 0 && totalNonNull > cap) {
+            JsonObject omitted = new JsonObject();
+            omitted.addProperty("omitted", "remain " + (totalNonNull - cap) + " waiters omitted");
+            waiterInfos.add(omitted);
+        }
         return waiterInfos;
     }
 

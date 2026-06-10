@@ -81,53 +81,53 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 25) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // LABEL
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&info.label);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&info.label);
                 break;
             }
             case 2: {
                 // ID
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.id);
                 break;
             }
             case 3: {
                 // LOAD_ID
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&info.load_id);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&info.load_id);
                 break;
             }
             case 4: {
                 // TXN_ID
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.txn_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.txn_id);
                 break;
             }
             case 5: {
                 // DB_NAME
                 Slice db_name = Slice(info.db_name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&db_name);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&db_name);
                 break;
             }
             case 6: {
                 // TABLE_NAME
                 Slice table_name = Slice(info.table_name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&table_name);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&table_name);
                 break;
             }
             case 7: {
                 // STATE
                 Slice state = Slice(info.state);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&state);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&state);
                 break;
             }
             case 8: {
                 // ERROR_MSG
                 if (info.__isset.error_msg) {
                     Slice error_msg = Slice(info.error_msg);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&error_msg);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&error_msg);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
@@ -135,72 +135,72 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 // TRACKING_SQL
                 if (info.__isset.tracking_url) {
                     Slice tracking_url = Slice(info.tracking_url);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&tracking_url);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&tracking_url);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 10: {
                 // CHANNEL_NUM
                 if (info.__isset.channel_num) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.channel_num);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.channel_num);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 11: {
                 // PREPARED_CHANNEL_NUM
                 if (info.__isset.prepared_channel_num) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.prepared_channel_num);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.prepared_channel_num);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 12: {
                 // NUM_ROWS_NORMAL
                 if (info.__isset.num_rows_normal) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_rows_normal);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_rows_normal);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 13: {
                 // NUM_ROWS_AB_NORMAL
                 if (info.__isset.num_rows_ab_normal) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_rows_ab_normal);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_rows_ab_normal);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 14: {
                 // NUM_ROWS_UNSELECTED
                 if (info.__isset.num_rows_unselected) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_rows_unselected);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_rows_unselected);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 15: {
                 // NUM_LOAD_BYTES
                 if (info.__isset.num_load_bytes) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_load_bytes);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_load_bytes);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 16: {
                 // TIMEOUT_SECOND
                 if (info.__isset.timeout_second) {
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.timeout_second);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.timeout_second);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
@@ -209,11 +209,11 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.create_time_ms) {
                     if (t.from_date_str(info.create_time_ms.data(), info.create_time_ms.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 18: {
@@ -221,11 +221,11 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.before_load_time_ms) {
                     if (t.from_date_str(info.before_load_time_ms.data(), info.before_load_time_ms.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 19: {
@@ -233,11 +233,11 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.start_loading_time_ms) {
                     if (t.from_date_str(info.start_loading_time_ms.data(), info.start_loading_time_ms.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 20: {
@@ -245,11 +245,11 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.start_preparing_time_ms) {
                     if (t.from_date_str(info.start_preparing_time_ms.data(), info.start_preparing_time_ms.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 21: {
@@ -257,11 +257,11 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.finish_preparing_time_ms) {
                     if (t.from_date_str(info.finish_preparing_time_ms.data(), info.finish_preparing_time_ms.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 22: {
@@ -269,36 +269,36 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.end_time_ms) {
                     if (t.from_date_str(info.end_time_ms.data(), info.end_time_ms.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 23: {
                 // CHANNEL_STATE
                 if (info.__isset.channel_state) {
                     Slice channel_state = Slice(info.channel_state);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&channel_state);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&channel_state);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 24: {
                 // TYPE
                 Slice type = Slice(info.type);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&type);
                 break;
             }
             case 25: {
                 // TRACKING_SQL
                 if (info.__isset.tracking_sql) {
                     Slice tracking_sql = Slice(info.tracking_sql);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&tracking_sql);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&tracking_sql);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }

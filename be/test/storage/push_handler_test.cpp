@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/schema.h"
+#include "common/config_exec_fwd.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
@@ -74,11 +76,10 @@ void PushHandlerTest::_create_src_dst_tuple(TDescriptorTable& t_desc_table) {
             slot_desc.slotType = type;
             slot_desc.columnPos = -1;
             slot_desc.byteOffset = 4;
-            slot_desc.nullIndicatorByte = 0;
-            slot_desc.nullIndicatorBit = 1;
             slot_desc.colName = "k1_int";
             slot_desc.slotIdx = 1;
             slot_desc.isMaterialized = true;
+            slot_desc.__set_isNullable(true);
 
             t_desc_table.slotDescriptors.push_back(slot_desc);
         }
@@ -100,11 +101,10 @@ void PushHandlerTest::_create_src_dst_tuple(TDescriptorTable& t_desc_table) {
             slot_desc.slotType = type;
             slot_desc.columnPos = -1;
             slot_desc.byteOffset = 2;
-            slot_desc.nullIndicatorByte = 0;
-            slot_desc.nullIndicatorBit = 0;
             slot_desc.colName = "k2_smallint";
             slot_desc.slotIdx = 0;
             slot_desc.isMaterialized = true;
+            slot_desc.__set_isNullable(true);
 
             t_desc_table.slotDescriptors.push_back(slot_desc);
         }
@@ -127,11 +127,10 @@ void PushHandlerTest::_create_src_dst_tuple(TDescriptorTable& t_desc_table) {
             slot_desc.slotType = type;
             slot_desc.columnPos = -1;
             slot_desc.byteOffset = 16;
-            slot_desc.nullIndicatorByte = 0;
-            slot_desc.nullIndicatorBit = 3;
             slot_desc.colName = "k3_varchar";
             slot_desc.slotIdx = 3;
             slot_desc.isMaterialized = true;
+            slot_desc.__set_isNullable(true);
 
             t_desc_table.slotDescriptors.push_back(slot_desc);
         }
@@ -153,11 +152,10 @@ void PushHandlerTest::_create_src_dst_tuple(TDescriptorTable& t_desc_table) {
             slot_desc.slotType = type;
             slot_desc.columnPos = -1;
             slot_desc.byteOffset = 8;
-            slot_desc.nullIndicatorByte = 0;
-            slot_desc.nullIndicatorBit = 2;
             slot_desc.colName = "v_bigint";
             slot_desc.slotIdx = 2;
             slot_desc.isMaterialized = true;
+            slot_desc.__set_isNullable(true);
 
             t_desc_table.slotDescriptors.push_back(slot_desc);
         }
@@ -325,7 +323,7 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
     PushBrokerReader reader;
     Schema schema = _create_schema();
     reader.init(broker_scan_range, request);
-    ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
+    ChunkPtr chunk = ChunkFactory::new_chunk(schema, 0);
 
     // next chunk
     reader.next_chunk(&chunk);

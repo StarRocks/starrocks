@@ -19,14 +19,17 @@ import com.starrocks.lake.DataCacheInfo;
 
 public class RecycleListPartitionInfo extends RecyclePartitionInfoV2 {
     public RecycleListPartitionInfo(long dbId, long tableId, Partition partition, DataProperty dataProperty,
-                                    short replicationNum, boolean isInMemory,
-                                    DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                                    short replicationNum, DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
         setRecoverable(false);
     }
 
     @Override
-    public void recover(OlapTable table) throws DdlException {
+    public void checkRecoverable(OlapTable table) throws DdlException {
         throw new DdlException("Does not support recover list partition");
+    }
+
+    @Override
+    public void recover(OlapTable table) {
     }
 }

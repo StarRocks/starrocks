@@ -99,6 +99,14 @@ struct CompileAssert {};
     TypeName(const TypeName&) = delete; \
     void operator=(const TypeName&) = delete
 
+// For class templates: use ClassName (no template-id) for constructor/operator=,
+// and FullTypeName (e.g. ClassName<T>) for the parameter. Avoids C++20
+// -Wtemplate-id-cdtor (template-id not allowed for constructor).
+#undef DISALLOW_COPY_TEMPLATE
+#define DISALLOW_COPY_TEMPLATE(ClassName, FullTypeName) \
+    ClassName(const FullTypeName&) = delete;            \
+    void operator=(const FullTypeName&) = delete
+
 #undef DISALLOW_MOVE
 #define DISALLOW_MOVE(TypeName)    \
     TypeName(TypeName&&) = delete; \

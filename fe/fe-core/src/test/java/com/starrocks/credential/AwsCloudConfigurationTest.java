@@ -26,7 +26,10 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
+import software.amazon.awssdk.core.exception.SdkClientException;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -74,6 +77,81 @@ public class AwsCloudConfigurationTest {
     }
 
     @Test
+    public void testUseWebIdentityProfile() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertTrue(cloudConfiguration instanceof AwsCloudConfiguration);
+
+        Map<String, String> thriftProperties = new HashMap<>();
+        ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential().toThrift(thriftProperties);
+        Assertions.assertEquals("true", thriftProperties.get("aws.s3.use_web_identity_token_file"));
+    }
+
+    @Test
+    public void testWebIdentityApplyToConfiguration() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        Configuration configuration = new Configuration();
+        cloudConfiguration.applyToConfiguration(configuration);
+        Assertions.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
+                configuration.get("fs.s3a.aws.credentials.provider"));
+    }
+
+    @Test
+    public void testWebIdentityApplyToConfigurationWithAssumeRole() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        properties.put("aws.s3.iam_role_arn", "arn:aws:iam::123456789:role/MyRole");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        Configuration configuration = new Configuration();
+        cloudConfiguration.applyToConfiguration(configuration);
+        Assertions.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
+                configuration.get("fs.s3a.assumed.role.credentials.provider"));
+        Assertions.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
+                configuration.get("fs.s3a.aws.credentials.provider"));
+        Assertions.assertEquals("arn:aws:iam::123456789:role/MyRole", configuration.get("fs.s3a.assumed.role.arn"));
+    }
+
+    @Test
+    public void testWebIdentityGenerateCredentialsProvider() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        AwsCredentialsProvider provider =
+                ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential().generateAWSCredentialsProvider();
+        Assertions.assertInstanceOf(WebIdentityTokenFileCredentialsProvider.class, provider);
+    }
+
+    @Test
+    public void testWebIdentityToFileStoreInfo() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        FileStoreInfo fileStoreInfo = cloudConfiguration.toFileStoreInfo();
+        Assertions.assertTrue(fileStoreInfo.getS3FsInfo().getCredential().hasDefaultCredential());
+    }
+
+    @Test
+    public void testWebIdentityToFileStoreInfoWithAssumeRole() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        properties.put("aws.s3.iam_role_arn", "arn:aws:iam::123456789:role/MyRole");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+        FileStoreInfo fileStoreInfo = cloudConfiguration.toFileStoreInfo();
+        Assertions.assertTrue(fileStoreInfo.getS3FsInfo().getCredential().hasAssumeRoleCredential());
+        Assertions.assertEquals("arn:aws:iam::123456789:role/MyRole",
+                fileStoreInfo.getS3FsInfo().getCredential().getAssumeRoleCredential().getIamRoleArn());
+    }
+
+    @Test
     public void testUseAwsSDKDefaultBehaviorPlusAssumeRole() {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();
@@ -99,8 +177,9 @@ public class AwsCloudConfigurationTest {
         AwsCloudCredential awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
         Assertions.assertNotNull(awsCloudCredential);
         Assertions.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
-                "useInstanceProfile=false, accessKey='ak', secretKey='sk', sessionToken='', iamRoleArn='', " +
-                "stsRegion='', stsEndpoint='', externalId='', region='us-west-1', endpoint=''}",
+                "useInstanceProfile=false, useWebIdentityProfile=false, accessKey='ak', secretKey='sk', " +
+                "sessionToken='', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                "region='us-west-1', endpoint=''}",
                 awsCloudCredential.toCredString());
 
         hiveConf = new HiveConf();
@@ -159,7 +238,10 @@ public class AwsCloudConfigurationTest {
         {
             AwsCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assertions.assertNotNull(credential);
-            Assertions.assertThrows(NullPointerException.class, credential::generateAWSCredentialsProvider);
+            // After fixing ensureSchemeInEndpoint, the endpoint URI is now properly formatted,
+            // so AWS SDK validates the configuration and throws SdkClientException when region
+            // is missing (instead of NullPointerException from malformed URI)
+            Assertions.assertThrows(SdkClientException.class, credential::generateAWSCredentialsProvider);
         }
 
         hiveConf.set("aws.glue.sts.region", "region");

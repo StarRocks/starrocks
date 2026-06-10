@@ -18,12 +18,12 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -69,8 +69,8 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
         for (PhysicalOlapScanOperator scan : scans) {
             // default false
             scan.setPreAggregation(false);
-            long selectedIndex = scan.getSelectedIndexId();
-            MaterializedIndexMeta meta = ((OlapTable) scan.getTable()).getIndexMetaByIndexId(selectedIndex);
+            long selectedIndexMetaId = scan.getSelectedIndexMetaId();
+            MaterializedIndexMeta meta = ((OlapTable) scan.getTable()).getIndexMetaByMetaId(selectedIndexMetaId);
             if (!meta.getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
@@ -146,9 +146,9 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             // default false
             scan.setPreAggregation(false);
 
-            long selectedIndex = scan.getSelectedIndexId();
+            long selectedIndexMetaId = scan.getSelectedIndexMetaId();
             OlapTable olapTable = ((OlapTable) scan.getTable());
-            MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(selectedIndex);
+            MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByMetaId(selectedIndexMetaId);
             if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");

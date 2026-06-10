@@ -21,6 +21,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -162,6 +163,26 @@ public class ScalarOperatorToExpr {
             }
         }
 
+        private static void syncVarcharExprType(Type rewrittenType, Expr expr) {
+            expr.setType(rewrittenType);
+            expr.setOriginType(rewrittenType.clone());
+            if (expr instanceof SlotRef) {
+                SlotDescriptor desc = ((SlotRef) expr).getSlotDescriptorWithoutCheck();
+                if (desc != null) {
+                    desc.setOriginType(rewrittenType.clone());
+                }
+            }
+        }
+
+        private static boolean needSyncVarcharExprType(ColumnRefOperator node, Expr expr) {
+            if (!node.getType().isVarchar() || !expr.getType().isVarchar()) {
+                return false;
+            }
+            if (node.getType().toSql().equalsIgnoreCase(expr.getType().toSql())) {
+                return false;
+            }
+            return GlobalVariable.isEnableReduceCastVarcharExprSyncType();
+        }
         @Override
         public Expr visit(ScalarOperator scalarOperator, FormatterContext context) {
             throw new UnsupportedOperationException(
@@ -172,7 +193,12 @@ public class ScalarOperatorToExpr {
         public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
             Expr expr = context.colRefToExpr.get(node);
             if (context.projectOperatorMap.containsKey(node) && expr == null) {
-                expr = buildExpr.build(context.projectOperatorMap.get(node), context);
+                final ScalarOperator projected = context.projectOperatorMap.get(node);
+                if (projected.equals(node)) {
+                    throw new SemanticException("Cannot convert ColumnRefOperator to Expr, " +
+                            "please check the input expression: " + node);
+                }
+                expr = buildExpr.build(projected, context);
                 hackTypeNull(expr);
                 context.colRefToExpr.put(node, expr);
                 return expr;
@@ -182,6 +208,9 @@ public class ScalarOperatorToExpr {
                         "please check the input expression: " + node);
             }
 
+            if (needSyncVarcharExprType(node, expr)) {
+                syncVarcharExprType(node.getType().clone(), expr);
+            }
             hackTypeNull(expr);
             return expr;
         }
@@ -500,6 +529,7 @@ public class ScalarOperatorToExpr {
                 case "current_user":
                 case "current_role":
                 case "current_group":
+                case "current_warehouse":
                 case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),

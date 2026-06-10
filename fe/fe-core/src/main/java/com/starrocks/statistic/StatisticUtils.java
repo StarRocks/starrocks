@@ -22,17 +22,16 @@ import com.google.common.collect.Sets;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.VirtualColumnRegistry;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -42,10 +41,13 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DmlType;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -112,13 +114,25 @@ public class StatisticUtils {
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);
         }
+        // Set warehouse FIRST: ConnectContext.setCurrentWarehouse() replaces sessionVariable
+        // with a fresh clone of defaultSessionVariable, which would discard every override
+        // applied below (enable_profile, queryTimeoutS, parallelism, pipeline, CTE reuse, etc.).
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getBackgroundWarehouse();
+        context.setCurrentWarehouse(warehouse.getName());
+
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
+        // Note: queryTimeoutS and insertTimeoutS will be set dynamically based on remaining job time
+        // in StatisticsCollectJob.calculateAndSetRemainingTimeout() to ensure the total job timeout
+        // is respected across all SQL tasks, not just individual task timeout.
+        // Set a default large value here, but it will be overridden per task.
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
@@ -127,14 +141,14 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePlanSerializeConcurrently(false);
         // set the max task num of connector io tasks per scan operator to collectStatsIoTasksPerConnectorOperator,
         // default value is 4, avoid generate too many chunk source for collect stats in BE
-        context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
+        context.getSessionVariable()
+                .setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
         context.getSessionVariable().setEnableSPMRewrite(false);
-
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.setCurrentWarehouse(warehouse.getName());
+        context.getSessionVariable().setSingleNodeExecPlan(false);
+        context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
 
         context.setStatisticsContext(true);
+        context.setOnlyReadIcebergCache(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -160,7 +174,16 @@ public class StatisticUtils {
                                                     Table table,
                                                     boolean sync,
                                                     boolean useLock) {
-        StatisticsCollectionTrigger.triggerOnFirstLoad(txnState, db, table, sync, useLock);
+        triggerCollectionOnFirstLoad(txnState, db, table, sync, useLock, DmlType.INSERT_INTO);
+    }
+
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState,
+                                                    Database db,
+                                                    Table table,
+                                                    boolean sync,
+                                                    boolean useLock,
+                                                    DmlType dmlType) {
+        StatisticsCollectionTrigger.triggerOnFirstLoad(txnState, db, table, sync, useLock, dmlType);
     }
 
     // check database in black list
@@ -180,7 +203,8 @@ public class StatisticUtils {
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
+            if (null != db &&
+                    null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -219,9 +243,9 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
+                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas",
                             tableName, partition.getName());
                     return false;
                 }
@@ -233,7 +257,7 @@ public class StatisticUtils {
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
             long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
-                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+                    PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -324,10 +348,10 @@ public class StatisticUtils {
         ScalarType tableUUIDType = TypeFactory.createVarcharType(65530);
         ScalarType partitionNameType = TypeFactory.createVarcharType(65530);
         ScalarType dbNameType = TypeFactory.createVarcharType(65530);
-        ScalarType maxType = TypeFactory.createOlapMaxVarcharType();
-        ScalarType minType = TypeFactory.createOlapMaxVarcharType();
-        ScalarType bucketsType = TypeFactory.createOlapMaxVarcharType();
-        ScalarType mostCommonValueType = TypeFactory.createOlapMaxVarcharType();
+        ScalarType maxType = TypeFactory.createVarcharType(Config.max_varchar_length);
+        ScalarType minType = TypeFactory.createVarcharType(Config.max_varchar_length);
+        ScalarType bucketsType = TypeFactory.createVarcharType(Config.max_varchar_length);
+        ScalarType mostCommonValueType = TypeFactory.createVarcharType(Config.max_varchar_length);
         ScalarType catalogNameType = TypeFactory.createVarcharType(65530);
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
@@ -412,7 +436,7 @@ public class StatisticUtils {
                     new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("column_names", new TypeDef(columnNameType)),
-                    new ColumnDef("ndv",  new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else {
@@ -466,6 +490,14 @@ public class StatisticUtils {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
             if (column.isGeneratedColumn() && column.getName()
                     .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
+            // skip hidden columns
+            if (column.isHidden()) {
+                continue;
+            }
+            // skip virtual columns (e.g. _tablet_id_), they are not real stored columns
+            if (VirtualColumnRegistry.isVirtualColumn(column.getName())) {
                 continue;
             }
             // generated column doesn't support cross DB use

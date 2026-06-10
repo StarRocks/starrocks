@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -99,6 +100,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
 import static com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner.doFurtherPartitionPrune;
 import static com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner.isNeedFurtherPrune;
 import static com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner.buildDeducedConjunct;
@@ -513,8 +515,14 @@ public class PartitionSelector {
         Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, Integer> entry : colRefIdxMap.entrySet()) {
             ColumnRefOperator colRef = entry.getKey();
+            LiteralExpr literalExpr;
             try {
-                LiteralExpr literalExpr = LiteralExprFactory.create(values.get(entry.getValue()), colRef.getType());
+                if (values.get(entry.getValue()) != null &&
+                        values.get(entry.getValue()).equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
+                    literalExpr = NullLiteral.create(colRef.getType());
+                } else {
+                    literalExpr = LiteralExprFactory.create(values.get(entry.getValue()), colRef.getType());
+                }
                 ConstantOperator replace = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                 replaceMap.put(colRef, replace);
             } catch (Exception e) {
@@ -532,7 +540,7 @@ public class PartitionSelector {
                                                          boolean isDropPartitionCondition,
                                                          Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
-        Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
+        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getNonEmptyRanges(false);
         if (inputCells != null && !inputCells.isEmpty()) {
             // mock partition ids since input cells has not been added into olapTable yet.
             inputCells.entrySet().stream()

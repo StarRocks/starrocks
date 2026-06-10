@@ -19,13 +19,12 @@
 #include <utility>
 #include <vector>
 
+#include "common/thread/threadpool.h"
 #include "storage/olap_common.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -34,7 +33,7 @@ class ThreadPool;
 
 class PersistentIndexCompactionManager {
 public:
-    PersistentIndexCompactionManager() {}
+    PersistentIndexCompactionManager() = default;
     virtual ~PersistentIndexCompactionManager();
     Status init();
     virtual void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo);

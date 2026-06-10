@@ -16,9 +16,9 @@
 
 #include <rapidjson/document.h>
 
+#include "common/config_update_registry.h"
 #include "common/configbase.h"
 #include "gutil/strings/substitute.h"
-#include "http/action/update_config_action.h"
 #include "script/script.h"
 
 namespace starrocks {
@@ -26,11 +26,6 @@ namespace starrocks {
 Status handle_set_config(const string& params_str) {
     rapidjson::Document params;
     params.Parse(params_str.c_str());
-    auto update_config = UpdateConfigAction::instance();
-    if (update_config == nullptr) {
-        LOG(WARNING) << "write_be_configs_table ignored: UpdateConfigAction is not inited";
-        return Status::OK();
-    }
     auto name_itr = params.FindMember("name");
     if (name_itr == params.MemberEnd() || !name_itr->value.IsString()) {
         return Status::InvalidArgument("invalid param name");
@@ -39,7 +34,7 @@ Status handle_set_config(const string& params_str) {
     if (value_itr == params.MemberEnd() || !value_itr->value.IsString()) {
         return Status::InvalidArgument("invalid param value");
     }
-    return update_config->update_config(name_itr->value.GetString(), value_itr->value.GetString());
+    return ConfigUpdateRegistry::instance()->update_config(name_itr->value.GetString(), value_itr->value.GetString());
 }
 
 Status execute_command(const std::string& command, const std::string& params, std::string* result) {

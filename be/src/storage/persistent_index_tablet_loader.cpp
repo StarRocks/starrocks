@@ -74,7 +74,7 @@ Status PersistentIndexTabletLoader::rowset_iterator(
     }
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), data_dir()->get_meta(),
+        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), MetaLoadMode::ALL,
                                                   apply_version, &stats);
         if (!res.ok()) {
             return res.status();

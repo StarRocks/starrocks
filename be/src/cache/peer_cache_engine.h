@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <memory>
+
 #include "cache/remote_cache_engine.h"
 #include "starcache/time_based_cache_adaptor.h"
 
 namespace starrocks {
+
+class BrpcStubCache;
 
 class PeerCacheEngine : public RemoteCacheEngine {
 public:
@@ -25,6 +29,8 @@ public:
     ~PeerCacheEngine() override = default;
 
     Status init(const RemoteCacheOptions& options) override;
+
+    void set_stub_cache(BrpcStubCache* stub_cache) { _stub_cache = stub_cache; }
 
     Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                 DiskCacheReadOptions* options) override;
@@ -45,6 +51,7 @@ public:
 
 private:
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
+    BrpcStubCache* _stub_cache = nullptr;
 };
 
 } // namespace starrocks

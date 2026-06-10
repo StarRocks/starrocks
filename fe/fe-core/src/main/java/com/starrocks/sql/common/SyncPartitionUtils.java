@@ -33,7 +33,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -122,10 +122,10 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         PCellSortedSet rollupRange = PCellSortedSet.of();
-        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+        if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
-        } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+        } else if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
         return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
@@ -206,11 +206,11 @@ public class SyncPartitionUtils {
             return baseRange;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+        if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             return baseRange;
         }
-        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-            throw new SemanticException("Do not support function: %s", functionCallExpr.getFnName().getFunction());
+        if (!functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            throw new SemanticException("Do not support function: %s", functionCallExpr.getFunctionName());
         }
         Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
 
@@ -804,7 +804,7 @@ public class SyncPartitionUtils {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
                     try {
                         boolean isListPartition = mv.getPartitionInfo().isListPartition();
-                        Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
+                        Set<String> partitionNames = MVPartitionCellBuilder.getMVPartitionNames(baseTable, partitionColumn,
                                 Lists.newArrayList(partitionName), isListPartition, expr);
                         return partitionNames != null && partitionNames.size() == 1 &&
                                 Lists.newArrayList(partitionNames).get(0).equals(mvPartitionName);

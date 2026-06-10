@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.AlterResourceInfo;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
@@ -86,9 +87,11 @@ public class HudiResource extends Resource {
      * @param properties the properties that user uses to alter
      * @throws DdlException
      */
-    public void alterProperties(Map<String, String> properties) throws DdlException {
+    @Override
+    public AlterResourceInfo checkAlterProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null, "properties can not be null");
 
+        String changedMetastoreURIs = null;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
@@ -97,10 +100,22 @@ public class HudiResource extends Resource {
                     throw new DdlException(HIVE_METASTORE_URIS + " can not be null");
                 }
                 validateMetastoreUris(value);
-                this.metastoreURIs = value;
+                changedMetastoreURIs = value;
             } else {
                 throw new DdlException(String.format("property %s has not support yet", key));
             }
+        }
+        if (changedMetastoreURIs != null) {
+            return new AlterResourceInfo(name, changedMetastoreURIs);
+        } else {
+            return null;
+        }
+    }
+
+    @Override
+    public void alterProperties(AlterResourceInfo info) {
+        if (info.getMetastoreURIs() != null) {
+            this.metastoreURIs = info.getMetastoreURIs();
         }
     }
 }

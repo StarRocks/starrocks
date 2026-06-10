@@ -168,6 +168,16 @@ public class SlotRef extends Expr {
         this(new SlotDescriptor(slotId, "", InvalidType.INVALID, false));
     }
 
+    /**
+     * Create an analyzed SlotRef with the given column metadata.
+     * Use this when a pre-analyzed SlotRef is needed but no DescriptorTable is required
+     * (e.g., DDL generated-column analysis, partition expression recovery).
+     */
+    public static SlotRef createAnalyzed(int slotId, String columnName, Type type, boolean nullable) {
+        SlotDescriptor slotDesc = new SlotDescriptor(new SlotId(slotId), columnName, type, nullable);
+        return new SlotRef(slotDesc);
+    }
+
     public void setBackQuoted(boolean isBackQuoted) {
         this.isBackQuoted = isBackQuoted;
     }
