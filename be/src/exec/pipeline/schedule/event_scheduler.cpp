@@ -37,6 +37,7 @@ void EventScheduler::add_blocked_driver(const DriverRawPtr driver) {
     auto query_ctx = runtime_state->query_ctx()->shared_from_this();
     // BlockReason check: a wakeable edge operator (source/sink with covered_wakeups() != 0) parked here
     // must name a reason that its declared wakeups cover, or the driver would sleep with nobody to wake it.
+    // Interior parks are checked at the INTERMEDIATE_BLOCK classification in process().
     driver->verify_block_reason_covered();
     SCHEDULE_CHECK(!driver->is_in_blocked());
     driver->set_in_blocked(true);

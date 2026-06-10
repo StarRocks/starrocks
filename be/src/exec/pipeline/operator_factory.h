@@ -89,6 +89,14 @@ public:
 
     virtual bool support_event_scheduler() const { return false; }
 
+    // Whether the operator this factory builds parks in an interior position on waits that are covered by
+    // notifications (spill-layer subscriptions and/or its own notifying tasks). It pairs with
+    // Operator::supports_intermediate_wakeup(): the fragment gate consults support_event_scheduler() for an
+    // intermediate factory only when that factory declares an interior wakeup. Non-wakeable intermediates
+    // (project, limit, chunk_accumulate, ...) are self-driven and not gated, so they must not demote the
+    // fragment. Base: false.
+    virtual bool supports_intermediate_wakeup() const { return false; }
+
 protected:
     // when an operator waiting for local runtime filters is woken, the factory prepares
     // the shared instance-level filters exactly once before binding them to operators.
