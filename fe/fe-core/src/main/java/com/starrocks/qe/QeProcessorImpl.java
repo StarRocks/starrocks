@@ -224,17 +224,13 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .user(context.getQualifiedUser())
                     .connId(String.valueOf(context.getConnectionId()))
                     .db(context.getDatabase())
-<<<<<<< HEAD
                     .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
                     .profile(info.getCoord().getQueryProfile())
                     .warehouseName(info.coord.getWarehouseName())
                     .resourceGroupName(info.coord.getResourceGroupName())
                     .execState(execState)
+                    .queryType(getQueryType(context))
                     .build();
-=======
-                    .execState(execState)
-                    .queryType(getQueryType(context));
->>>>>>> 4ccf09ccf9 ([Enhancement] Surface internal queries in current_queries with a type and make them killable (#74488))
 
             querySet.put(queryIdStr, item);
         }
