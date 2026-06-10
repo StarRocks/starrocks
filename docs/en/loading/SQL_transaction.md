@@ -148,6 +148,7 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 - Multiple INSERT statements against the same table within a transaction are supported only in shared-data clusters from v4.0 onwards.
 - Within a transaction, you can only define one UPDATE or DELETE statement against each table, and it must precede the INSERT statements.
 - Subsequent DML statements cannot read the uncommitted changes brought by preceding statements within the same transaction. For example, the target table of the preceding INSERT statement cannot be the source table of subsequent statements. Otherwise, the system returns an error.
+- For the same reason, a partial column update (an INSERT that writes only a subset of a Primary Key table's columns) against a table that was already modified earlier in the same transaction is not allowed. A partial update must implicitly read the table's other columns to complete each row, which would read the preceding statements' uncommitted changes. Otherwise, the system returns an error.
 - All target tables of the DML statements in a transaction must be within the same database. Cross-database operations are not allowed.
 - Currently, INSERT OVERWRITE is not supported.
 - Nesting transactions are not allowed. You cannot specify BEGIN WORK within a BEGIN-COMMIT/ROLLBACK pair.

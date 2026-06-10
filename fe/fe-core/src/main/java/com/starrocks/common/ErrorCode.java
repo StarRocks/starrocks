@@ -279,6 +279,8 @@ public enum ErrorCode {
             "Explicit transaction only support single update/delete before insert statement"),
     ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE(5307, new byte[] {'2', '5', 'P', '0', '1'},
             "SELECT cannot read table '%s' modified earlier in the same transaction"),
+    ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE(5308, new byte[] {'2', '5', 'P', '0', '1'},
+            "Partial update cannot be applied to table '%s' modified earlier in the same transaction"),
 
     /**
      * 5400 - 5499: Internal error
