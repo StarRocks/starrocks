@@ -105,6 +105,26 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Find the ConnectContext of a running query by the query id string shown in
+     * "SHOW PROC '/current_queries'" (i.e. {@code DebugUtil.printId(executionId)}). This lets KILL QUERY
+     * target coordinator-backed queries that are not registered as client connections in ConnectScheduler,
+     * such as statistics collection (ANALYZE), task runs and materialized view refreshes. Queries without a
+     * ConnectContext are not visible in current_queries, so a context-based lookup mirrors that visibility.
+     */
+    public ConnectContext getConnectContextByQueryId(String queryId) {
+        if (queryId == null) {
+            return null;
+        }
+        for (QueryInfo info : coordinatorMap.values()) {
+            ConnectContext ctx = info.getConnectContext();
+            if (ctx != null && queryId.equals(DebugUtil.printId(ctx.getExecutionId()))) {
+                return ctx;
+            }
+        }
+        return null;
+    }
+
     @Override
     public void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException {
         registerQuery(queryId, new QueryInfo(coord));
@@ -173,14 +193,20 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                         DebugUtil.printId(entry.getKey()), context.getEndTime());
                 continue;
             }
-            if (!context.getState().isRunning()) {
+            // Determine liveness from the coordinator once the query is executing. Internal queries (e.g.
+            // statistics collection) reuse a single ConnectContext across many statements, so the context's
+            // last-command state may already be EOF/OK while a new coordinator-backed statement is actively
+            // running; context.getState().isRunning() must not be used to filter those out. Planning-phase
+            // entries have no coordinator yet and fall back to the context state.
+            if (info.coord != null) {
+                if (info.coord.isDone()) {
+                    LOG.warn("query {} is done, but doesn't clean from coordinator",
+                            DebugUtil.printId(entry.getKey()));
+                    continue;
+                }
+            } else if (!context.getState().isRunning()) {
                 LOG.warn("query {} is not running, context state: {}, but doesn't clean from coordinator",
                         DebugUtil.printId(entry.getKey()), context.getState());
-                continue;
-            }
-            if (info.coord != null && info.coord.isDone()) {
-                LOG.warn("query {} is done, but doesn't clean from coordinator",
-                        DebugUtil.printId(entry.getKey()));
                 continue;
             }
 
@@ -203,11 +229,37 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .warehouseName(info.coord.getWarehouseName())
                     .resourceGroupName(info.coord.getResourceGroupName())
                     .execState(execState)
+                    .queryType(getQueryType(context))
                     .build();
 
             querySet.put(queryIdStr, item);
         }
         return querySet;
+    }
+
+    /**
+     * Classify a running query by the origin of its ConnectContext, so that "SHOW PROC '/current_queries'"
+     * (and '/global_current_queries') can distinguish user queries from internal ones such as statistics
+     * collection (ANALYZE), task runs and materialized view refreshes.
+     */
+    private static String getQueryType(ConnectContext context) {
+        if (context.isStatisticsConnection()) {
+            return "Statistics";
+        }
+        if (context.getQuerySource() == null) {
+            return "Query";
+        }
+        switch (context.getQuerySource()) {
+            case TASK:
+                return "Task";
+            case MV:
+                return "MV";
+            case INTERNAL:
+                return "Internal";
+            case EXTERNAL:
+            default:
+                return "Query";
+        }
     }
 
     @Override

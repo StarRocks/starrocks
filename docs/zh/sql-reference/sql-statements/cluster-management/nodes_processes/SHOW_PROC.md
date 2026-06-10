@@ -572,5 +572,6 @@ MySQL > show proc '/global_current_queries';
 | Warehouse       | 处理查询的计算仓库。                                              |
 | CustomQueryId   | 自定义查询标识符（如果指定）。                                     |
 | ResourceGroup   | 分配给查询的资源组。                                              |
+| QueryType       | 查询类型：`Query`、`Statistics`（如 ANALYZE）、`Task`、`MV` 或 `Internal`。 |
 
 ```

@@ -29,6 +29,7 @@ sidebar_position: 9
 | Warehouse | クエリで使用されたウェアハウス |
 | CustomQueryId | ユーザー定義のクエリ ID |
 | ResourceGroup | クエリで使用されたリソースグループ |
+| QueryType | クエリのタイプ：`Query`（ユーザークエリ）、`Statistics`（ANALYZE などの統計情報収集）、`Task`（タスク実行）、`MV`（マテリアライズドビューのリフレッシュ）、または `Internal`（その他の内部クエリ） |
 
 **例**:
 ```sql
@@ -49,6 +50,7 @@ ExecTime      | 4.077 s
 Warehouse     | default_warehouse
 CustomQueryId |
 ResourceGroup | rg1
+QueryType     | Query
 ```
 
 ## global_current_queries
@@ -74,6 +76,7 @@ ExecTime      | 3.032 s
 Warehouse     | default_warehouse
 CustomQueryId |
 ResourceGroup | rg1
+QueryType     | Query
 ```
 
 ## 実行中のクエリ
