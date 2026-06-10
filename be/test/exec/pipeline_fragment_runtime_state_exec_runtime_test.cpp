@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "exec/pipeline/primitives/fragment_runtime_state.h"
+#include "exec/runtime/fragment_runtime_state.h"
 
 namespace starrocks::pipeline {
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/primitives/query_runtime_state.h"
+#include "exec/runtime/query_runtime_state.h"
 
 #include "runtime/query_statistics.h"
 

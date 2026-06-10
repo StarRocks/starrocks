@@ -33,7 +33,6 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/primitives/event.cpp
     pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
-    pipeline/primitives/query_runtime_state.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
@@ -513,6 +512,7 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
 ENDIF()
 
 ADD_BE_LIB(ExecRuntime
+    runtime/query_runtime_state.cpp
     pipeline/pipeline.cpp
     pipeline/pipeline_driver.cpp
 )
