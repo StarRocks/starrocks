@@ -87,7 +87,7 @@ HdfsScannerParams* CacheSelectScannerTest::_create_param(const std::string& file
     auto* param = _pool.add(new HdfsScannerParams());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
-    param->path = file;
+    param->file_path = file;
     param->file_size = range->file_length;
     param->scan_range = range;
     param->tuple_desc = tuple_desc;

@@ -47,9 +47,9 @@ TEST_F(DeletionVectorTest, inlineDeletionVectorTest) {
 
 TEST_F(DeletionVectorTest, absolutePathTest) {
     // test relative path
-    params.deletion_vector_descriptor = std::make_shared<TDeletionVectorDescriptor>();
-    params.deletion_vector_descriptor->__set_storageType("u");
-    params.deletion_vector_descriptor->__set_pathOrInlineDv("ab^-aqEH.-t@S}K{vb[*k^");
+    params.table_specific.deletion_vector_descriptor = std::make_shared<TDeletionVectorDescriptor>();
+    params.table_specific.deletion_vector_descriptor->__set_storageType("u");
+    params.table_specific.deletion_vector_descriptor->__set_pathOrInlineDv("ab^-aqEH.-t@S}K{vb[*k^");
     dv = std::make_shared<DeletionVector>(params);
 
     std::string table_location = "s3://mytable";
@@ -57,9 +57,9 @@ TEST_F(DeletionVectorTest, absolutePathTest) {
     ASSERT_TRUE(absolute_path.ok());
     ASSERT_EQ("s3://mytable/ab/deletion_vector_d2c639aa-8816-431a-aaf6-d3fe2512ff61.bin", absolute_path.value());
     // test absolute path
-    params.deletion_vector_descriptor = std::make_shared<TDeletionVectorDescriptor>();
-    params.deletion_vector_descriptor->__set_storageType("p");
-    params.deletion_vector_descriptor->__set_pathOrInlineDv(
+    params.table_specific.deletion_vector_descriptor = std::make_shared<TDeletionVectorDescriptor>();
+    params.table_specific.deletion_vector_descriptor->__set_storageType("p");
+    params.table_specific.deletion_vector_descriptor->__set_pathOrInlineDv(
             "s3://mytable/deletion_vector_d2c639aa-8816-431a-aaf6-d3fe2512ff61.bin");
     dv = std::make_shared<DeletionVector>(params);
     absolute_path = dv->get_absolute_path(table_location);

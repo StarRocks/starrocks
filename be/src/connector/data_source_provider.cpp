@@ -26,7 +26,7 @@ StatusOr<pipeline::MorselQueueBuilderPtr> DataSourceProvider::convert_scan_range
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
-    peek_scan_ranges(scan_ranges);
+    prepare_scan_ranges(scan_ranges);
 
     pipeline::Morsels morsels;
     bool has_more_morsel = false;

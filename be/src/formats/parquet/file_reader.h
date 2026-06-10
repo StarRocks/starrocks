@@ -98,8 +98,6 @@ private:
     StatusOr<bool> _update_rf_and_filter_group(const GroupReaderPtr& group_reader);
 
     // get row group to read
-    // if scan range contain the first byte in the row group, will be read
-    // TODO: later modify the larger block should be read
     bool _select_row_group(const tparquet::RowGroup& row_group);
 
     // only scan partition column + not exist column
@@ -131,7 +129,7 @@ private:
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     SkipRowsContextPtr _skip_rows_ctx = nullptr;
-    std::shared_ptr<RuntimeScanRangePruner> _rf_scan_range_pruner;
+    std::shared_ptr<RuntimeScanRangePruner> _runtime_filter_scan_range_pruner;
 };
 
 } // namespace starrocks::parquet
