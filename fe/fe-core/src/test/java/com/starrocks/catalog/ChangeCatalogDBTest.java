@@ -21,11 +21,8 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.sql.analyzer.Authorizer;
->>>>>>> 467751f0b0 ([BugFix] Catch exceptions in MysqlProto to prevent ERROR 2013 (#70072))
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
