@@ -692,7 +692,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_min_max_all_nu
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _all_null_parquet_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -709,7 +709,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -726,7 +726,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -743,7 +743,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -760,7 +760,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -777,7 +777,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -794,7 +794,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);
@@ -811,7 +811,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_has_null_page_
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
     auto scan_ctx = _create_scan_context(slot_descs, slot_descs, _has_null_page_file);
     _scanner_ctx.conjuncts.min_max_ctxs.insert(_scanner_ctx.conjuncts.min_max_ctxs.end(), expr_ctxs.begin(),
-                                                  expr_ctxs.end());
+                                               expr_ctxs.end());
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     ParquetUTBase::setup_conjuncts_manager(_scanner_ctx.conjuncts.min_max_ctxs, nullptr, tuple_desc, _runtime_state,
                                            scan_ctx);

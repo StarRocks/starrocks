@@ -40,8 +40,8 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
         int64_t offset = _deletion_vector_descriptor->offset;
         int64_t length = _deletion_vector_descriptor->sizeInBytes;
 
-        ASSIGN_OR_RETURN(auto dv_file, open_random_access_file(path, fs_stats, app_stats,
-                                                               shared_buffered_input_stream, cache_input_stream));
+        ASSIGN_OR_RETURN(auto dv_file, open_random_access_file(path, fs_stats, app_stats, shared_buffered_input_stream,
+                                                               cache_input_stream));
         // Check the dv size
         uint32_t size_from_deletion_vector_file;
         RETURN_IF_ERROR(dv_file->read_at_fully(offset, &size_from_deletion_vector_file, DV_SIZE_LENGTH));

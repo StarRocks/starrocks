@@ -82,8 +82,8 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
     std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
 
-    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats,
-                                                        shared_buffered_input_stream, cache_input_stream));
+    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
+                                                        cache_input_stream));
 
     std::unique_ptr<parquet::FileReader> reader;
     try {
@@ -170,8 +170,8 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
     std::shared_ptr<CacheInputStream> cache_input_stream;
 
-    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats,
-                                                        shared_buffered_input_stream, cache_input_stream));
+    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
+                                                        cache_input_stream));
 
     auto input_stream = std::make_unique<ORCHdfsFileStream>(file.get(), delete_file.length, nullptr);
     std::unique_ptr<orc::Reader> reader;

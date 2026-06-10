@@ -25,9 +25,7 @@ namespace starrocks::parquet {
 
 class ParquetFooterTest : public testing::Test {
 public:
-    ParquetFooterTest() {
-        ctx.stats = &stats;
-    }
+    ParquetFooterTest() { ctx.stats = &stats; }
 
 protected:
     std::unique_ptr<RandomAccessFile> open_file(const std::string& file_path) {

@@ -249,8 +249,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                             {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
                             {""},
                     };
-                    ctx->min_max_tuple_desc =
-                            Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+                    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
                     std::vector<TExpr> t_conjuncts;
                     ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, oprands[0], &t_conjuncts);
@@ -269,8 +268,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                             {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
                             {""},
                     };
-                    ctx->min_max_tuple_desc =
-                            Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+                    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
                     std::vector<TExpr> t_conjuncts;
                     ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, oprands[0], &t_conjuncts);
@@ -377,8 +375,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 5500, &t_conjuncts);
         ParquetUTBase::append_int_conjunct(TExprOpcode::LT, 0, 7500, &t_conjuncts);
 
-        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
-                                            &ctx->conjuncts.min_max_ctxs);
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjuncts.min_max_ctxs);
         ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
         // tuple desc
@@ -472,8 +469,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         // c1: 20000->1, c1 > 5000
         ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 5000, &t_conjuncts);
 
-        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
-                                            &ctx->conjuncts.min_max_ctxs);
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjuncts.min_max_ctxs);
 
         std::vector<TExpr> t_conjuncts_slot0{t_conjuncts[0]};
         ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot0, &ctx->conjunct_ctxs_by_slot[0]);
