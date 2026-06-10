@@ -202,13 +202,13 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     @Test
-    public void testRejectGroupByAll() throws Exception {
-        // GROUP BY ALL re-derives its keys from the output list, which now leads with the prepended
-        // __ROW_ID__; grouping by it would double-encode the row id at refresh, so reject at CREATE.
-        String ddl = "CREATE MATERIALIZED VIEW mv_group_all "
+    public void testRejectGroupByRollup() throws Exception {
+        // Non-plain GROUP BY has no IVM delta rule, so reject at CREATE. branch-4.1 has no
+        // GROUP BY ALL syntax (main's variant of this test), so exercise the guard via ROLLUP.
+        String ddl = "CREATE MATERIALIZED VIEW mv_group_rollup "
                 + "REFRESH DEFERRED MANUAL "
                 + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
-                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY ALL";
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY ROLLUP(id)";
 
         CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
         QueryStatement qs = stmt.getQueryStatement();
@@ -217,7 +217,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
         SemanticException ex = assertThrows(SemanticException.class,
                 () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
-                "INCREMENTAL refresh must reject GROUP BY ALL");
+                "INCREMENTAL refresh must reject ROLLUP");
         assertTrue(ex.getMessage().contains("does not support")
                         && ex.getMessage().contains("incremental view maintenance"),
                 "error must mention the unsupported grouping type, got: " + ex.getMessage());
