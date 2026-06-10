@@ -27,8 +27,8 @@ import java.util.List;
 /**
  * Production meta-tier {@link RowGroupStatisticsProvider} for the INSERT-from-FILES
  * load path. Enumerates the {@link TableFunctionTable}'s already-resolved file
- * list, opens each Parquet file's footer via
- * {@link ParquetRowGroupStatisticsReader}, and concatenates per-row-group
+ * list, opens each file's footer via the {@link MetaTierFormat} reader for the
+ * table's format (Parquet or ORC), and concatenates per-stripe/row-group
  * statistics projected onto the request's sort key. Shared Hadoop-side wiring
  * (configuration build, broker → Hadoop file-status conversion) lives in
  * {@link PreSplitHadoopAccess}.
@@ -39,7 +39,8 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
     public List<RowGroupStatistics> fetch(SampleRequest request) throws StarRocksException {
         InsertFromFilesScanContext context = requireInsertFromFilesContext(request);
         TableFunctionTable sourceTable = context.sourceTable();
-        rejectNonParquetFormat(sourceTable);
+        // FILES() reports one format for the whole table, so resolve the reader once.
+        MetaTierFormat format = MetaTierFormat.fromTableFunctionFormat(sourceTable.getFormat());
         // ParquetMetadataSampler.rejectCompositeSortKey runs upstream in tryPlan
         // before this provider is invoked, so a single-element sort key is the
         // contract by the time we get here.
@@ -49,7 +50,7 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
 
         // Read every non-directory file's footer. The pipeline picks K (tablet
         // count) from total file bytes, and ParquetMetadataSampler computes
-        // K-1 row-quantile cuts from the full per-row-group stats list — a
+        // K-1 row-quantile cuts from the full per-stripe stats list — a
         // partial enumeration would bias the cuts toward the prefix.
         List<RowGroupStatistics> aggregated = new ArrayList<>();
         for (TBrokerFileStatus brokerFileStatus : sourceTable.loadFileList()) {
@@ -57,8 +58,7 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
                 continue;
             }
             FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-            aggregated.addAll(
-                    ParquetRowGroupStatisticsReader.read(hadoopFileStatus, hadoopConfig, sortKeyColumn));
+            aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn));
         }
         return aggregated;
     }
@@ -72,13 +72,5 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
                             + " — wire only the INSERT-from-FILES load kind here");
         }
         return insertFromFilesContext;
-    }
-
-    private static void rejectNonParquetFormat(TableFunctionTable sourceTable) throws MetaTierUnavailableException {
-        String format = sourceTable.getFormat();
-        if (format == null || !"parquet".equalsIgnoreCase(format)) {
-            throw new MetaTierUnavailableException(
-                    "meta tier supports Parquet sources only; FILES() reported format \"" + format + "\"");
-        }
     }
 }
