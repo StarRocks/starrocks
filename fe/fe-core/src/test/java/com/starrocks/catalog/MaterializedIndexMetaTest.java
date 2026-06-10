@@ -61,6 +61,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
@@ -152,6 +154,64 @@ public class MaterializedIndexMetaTest {
             } else {
                 Assertions.assertEquals(null, column.getDefineExpr());
             }
+        }
+    }
+
+    /**
+     * Regression test for the data race on updateSchemaBackendId. The send path (reserve) and the
+     * task-finish path (remove) both run under a shared READ lock, so they mutate the set
+     * concurrently. With a plain HashSet this races and can throw or corrupt the set during resize;
+     * with a concurrent set plus an atomic reserve-then-act it must be safe and consistent.
+     *
+     * <p>This is a probabilistic race test, not a deterministic one: it hammers the set hard enough
+     * that the old buggy implementation would very likely throw, but a passing run does not prove
+     * the absence of a race on every reintroduced bug.
+     */
+    @Test
+    public void testUpdateSchemaBackendConcurrency() throws InterruptedException {
+        List<Column> schema = Lists.newArrayList(new Column("c0", ArrayType.ARRAY_VARCHAR));
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(0, schema, 0, 0,
+                (short) 0, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+
+        final int threadCount = 16;
+        final int iterations = 2000;
+        final int backendCount = 200;
+
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        for (int t = 0; t < threadCount; t++) {
+            Thread thread = new Thread(() -> {
+                try {
+                    startLatch.await();
+                    for (int i = 0; i < iterations; i++) {
+                        Long backendId = (long) (i % backendCount);
+                        // Mirror the production check-then-act: only the sender that won the
+                        // reservation removes it, just like only a real task gets finished.
+                        if (meta.addUpdateSchemaBackendIfAbsent(backendId)) {
+                            meta.removeUpdateSchemaBackend(backendId);
+                        }
+                    }
+                } catch (Throwable e) {
+                    failure.compareAndSet(null, e);
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+            thread.start();
+        }
+
+        startLatch.countDown();
+        doneLatch.await();
+
+        Assertions.assertNull(failure.get(), "concurrent add/remove threw: " + failure.get());
+
+        // Every reservation was paired with a removal, so the set must be empty: a fresh reserve
+        // for any backend must succeed (return true), proving no entry leaked.
+        for (long backendId = 0; backendId < backendCount; backendId++) {
+            Assertions.assertTrue(meta.addUpdateSchemaBackendIfAbsent(backendId),
+                    "backend " + backendId + " was still reserved; an entry leaked");
         }
     }
 }
