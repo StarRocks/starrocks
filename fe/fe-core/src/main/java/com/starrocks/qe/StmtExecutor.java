@@ -250,6 +250,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.ExplainMockRewriter;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -2793,7 +2794,26 @@ public class StmtExecutor {
                 explainString += buildQueryQueueExplainString(execPlan, context, queryType);
             }
             if (execPlan != null) {
-                explainString += execPlan.getExplainString(explainLevel);
+                String rendered = execPlan.getExplainString(explainLevel);
+                if (parsedStmt.isMockColumnNames()) {
+                    ExplainMockRewriter rewriter = new ExplainMockRewriter(execPlan.getColumnRefFactory());
+                    // Mirror PlanNode.explainExpr: literals in the plan get digested when
+                    // either the cluster-wide config or the session variable opts in. Use
+                    // the same toggle for the Mocked SQL block so it doesn't reintroduce
+                    // values that the plan side already hid.
+                    boolean digestLiterals = Config.enable_sql_desensitize_in_log
+                            || context.getSessionVariable().isEnableDesensitizeExplain();
+                    FormatOptions opts = FormatOptions.allEnable()
+                            .setColumnSimplifyTableName(false)
+                            .setEnableDigest(digestLiterals);
+                    String mockedSql = AstToSQLBuilder.toSQL(parsedStmt, opts).orElse("");
+                    mockedSql = rewriter.rewrite(mockedSql);
+                    if (mockedSql != null && !mockedSql.isEmpty()) {
+                        explainString += "Mocked SQL:\n" + mockedSql + "\n\n";
+                    }
+                    rendered = rewriter.rewrite(rendered);
+                }
+                explainString += rendered;
             }
         }
 

@@ -101,6 +101,100 @@ public class ExplainTest extends PlanTestBase {
     }
 
     @Test
+    public void testExplainCostsMockSyntax() throws Exception {
+        String sql = "EXPLAIN COSTS MOCK SELECT t0.v1 FROM t0";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.COSTS, stmt.getExplainLevel());
+        Assertions.assertTrue(stmt.isMockColumnNames());
+
+        sql = "EXPLAIN COSTS SELECT t0.v1 FROM t0";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.COSTS, stmt.getExplainLevel());
+        Assertions.assertFalse(stmt.isMockColumnNames());
+
+        sql = "EXPLAIN MOCK SELECT t0.v1 FROM t0";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertTrue(stmt.isMockColumnNames());
+    }
+
+    @Test
+    public void testExplainCostsMockSyntaxOnInsert() throws Exception {
+        // visitInsertStatement applies the EXPLAIN clause to the inner QueryStatement
+        // and returns an InsertStmt wrapper; the wrapper must delegate isExplain /
+        // isMockColumnNames so buildExplainString sees the MOCK flag.
+        String sql = "EXPLAIN COSTS MOCK INSERT INTO t0 SELECT v4, v5, v6 FROM t1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.COSTS, stmt.getExplainLevel());
+        Assertions.assertTrue(stmt.isMockColumnNames(),
+                stmt.getClass().getSimpleName() + " did not delegate isMockColumnNames");
+    }
+
+    @Test
+    public void testExplainCostsMockRewriterPlan() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        ExecPlan execPlan = getExecPlan(sql);
+        String plan = execPlan.getExplainString(com.starrocks.thrift.TExplainLevel.COSTS);
+        ExplainMockRewriter rewriter = new ExplainMockRewriter(execPlan.getColumnRefFactory());
+
+        String rewritten = rewriter.rewrite(plan);
+        Assertions.assertTrue(rewritten.contains("mock_col_"), rewritten);
+        Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv1\\b").matcher(rewritten).find(),
+                rewritten);
+        Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv4\\b").matcher(rewritten).find(),
+                rewritten);
+        Assertions.assertTrue(rewritten.contains("table: t0"), rewritten);
+    }
+
+    @Test
+    public void testExplainCostsMockRewriterSql() throws Exception {
+        String sql = "SELECT t0.v1 FROM t0 WHERE t0.v2 > 1";
+        StatementBase parsedStmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExplainMockRewriter rewriter = new ExplainMockRewriter(execPlan.getColumnRefFactory());
+
+        String mockedSql = rewriter.rewrite(
+                com.starrocks.sql.analyzer.AstToSQLBuilder.toSQL(parsedStmt));
+        Assertions.assertTrue(mockedSql.contains("mock_col_"), mockedSql);
+        Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv1\\b").matcher(mockedSql).find(),
+                mockedSql);
+        Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv2\\b").matcher(mockedSql).find(),
+                mockedSql);
+        // SQL and plan must share the same mock_col_<N> mapping so the two
+        // halves of the rendered output can be correlated.
+        String mockedPlan = rewriter.rewrite(
+                execPlan.getExplainString(com.starrocks.thrift.TExplainLevel.COSTS));
+        for (String mock : rewriter.getMapping().values()) {
+            if (mockedSql.contains(mock)) {
+                Assertions.assertTrue(mockedPlan.contains(mock),
+                        "expected " + mock + " in plan:\n" + mockedPlan);
+            }
+        }
+    }
+
+    @Test
+    public void testExplainCostsMockRewriterPreservesFunctionNames() throws Exception {
+        // ColumnRefFactory names aggregate outputs after the function name (e.g.
+        // "sum"); rewriter must restrict its mapping to base-table columns so
+        // function and SQL keyword tokens stay intact in the rendered output.
+        String sql = "SELECT sum(t0.v1) FROM t0 WHERE t0.v2 > 1";
+        ExecPlan execPlan = getExecPlan(sql);
+        ExplainMockRewriter rewriter = new ExplainMockRewriter(execPlan.getColumnRefFactory());
+
+        Assertions.assertFalse(rewriter.getMapping().containsKey("sum"),
+                "function-named ColumnRefOperator leaked into mapping: " + rewriter.getMapping());
+        String rewritten = rewriter.rewrite(
+                execPlan.getExplainString(com.starrocks.thrift.TExplainLevel.COSTS));
+        Assertions.assertTrue(rewritten.contains("mock_col_"), rewritten);
+        // Function name "sum" must still appear (aggregate operator label).
+        Assertions.assertTrue(java.util.regex.Pattern.compile("\\bsum\\b").matcher(rewritten).find(),
+                rewritten);
+    }
+
+    @Test
     public void testExplainCostsWithLabels() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
         String plan = getCostExplainWithLabels(sql);
