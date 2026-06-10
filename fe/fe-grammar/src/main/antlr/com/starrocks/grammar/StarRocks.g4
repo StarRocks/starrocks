@@ -102,6 +102,7 @@ statement
     | insertStatement
     | updateStatement
     | deleteStatement
+    | mergeIntoStatement
 
     // Routine Statement
     | createRoutineLoadStatement
@@ -1561,6 +1562,28 @@ updateStatement
 
 deleteStatement
     : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    ;
+
+mergeIntoStatement
+    : explainDesc? MERGE INTO qualifiedName (AS? targetAlias=identifier)?
+      USING relation (AS? sourceAlias=identifier)?
+      ON mergeCondition=expression
+      mergeWhenClause+
+    ;
+
+mergeWhenClause
+    : WHEN MATCHED (AND matchedCondition=expression)? THEN mergeMatchedAction       #mergeWhenMatched
+    | WHEN NOT MATCHED (AND notMatchedCondition=expression)? THEN mergeNotMatchedAction   #mergeWhenNotMatched
+    ;
+
+mergeMatchedAction
+    : UPDATE SET assignmentList      #mergeMatchedUpdate
+    | DELETE                         #mergeMatchedDelete
+    ;
+
+mergeNotMatchedAction
+    : INSERT ASTERISK_SYMBOL                                                                    #mergeNotMatchedInsertStar
+    | INSERT ('(' cols+=identifier (',' cols+=identifier)* ')')? VALUES '(' expressionList ')'   #mergeNotMatchedInsertValues
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -3662,7 +3685,11 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
+<<<<<<< HEAD
     | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATCH | MATCH_ALL | MATCH_ANY | MATERIALIZED | MAX | MEMBER | MEMBERS | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+=======
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+>>>>>>> 194391abdfe... [Feature] Add MERGE INTO parser and analyzer for Iceberg tables (#73707)
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

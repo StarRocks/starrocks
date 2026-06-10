@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.StreamLoadStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 
@@ -29,7 +30,8 @@ public enum DmlType {
     INSERT_OVERWRITE,
     UPDATE,
     DELETE,
-    STREAM_LOAD;
+    STREAM_LOAD,
+    MERGE_INTO;
 
     public static DmlType fromStmt(DmlStmt stmt) {
         if (stmt instanceof InsertStmt) {
@@ -45,6 +47,8 @@ public enum DmlType {
             return DELETE;
         } else if (stmt instanceof StreamLoadStmt) {
             return STREAM_LOAD;
+        } else if (stmt instanceof MergeIntoStmt) {
+            return MERGE_INTO;
         } else {
             throw new UnsupportedOperationException("unsupported");
         }

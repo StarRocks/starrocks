@@ -30,6 +30,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -281,6 +282,15 @@ public class ColumnPrivilege {
             tableNameToTableObj.put(tableName, table);
             tableTableNameMap.put(table, tableName);
             return super.visitDeleteStatement(node, context);
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            Table table = node.getTable();
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tableNameToTableObj.put(tableName, table);
+            tableTableNameMap.put(table, tableName);
+            return super.visitMergeIntoStatement(node, context);
         }
 
         @Override
