@@ -14,6 +14,7 @@
 
 #include "storage/projection_iterator.h"
 
+#include <unordered_map>
 #include <unordered_set>
 
 #include "column/chunk.h"
@@ -75,7 +76,7 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
         DCHECK_GT(_child->output_schema().num_fields(), 0);
-        _chunk = ChunkHelper::new_chunk(_child->output_schema(), _chunk_size);
+        ASSIGN_OR_RETURN(_chunk, ChunkHelper::new_chunk_checked(_child->output_schema(), _chunk_size));
     }
     _chunk->reset();
     Status st = _child->get_next(_chunk.get());
@@ -83,6 +84,28 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
         Columns& input_columns = _chunk->columns();
         for (size_t i = 0; i < _index_map.size(); i++) {
             chunk->get_column_by_index(i).swap(input_columns[_index_map[i]]);
+        }
+        // The child (SegmentIterator) may append synthetic columns beyond its
+        // output schema (e.g. the vector distance or BM25 score column added in
+        // _do_get_next). Those have no entry in _index_map; carry them over so
+        // the projection does not drop them.
+        const size_t base = _child->output_schema().num_fields();
+        if (_chunk->num_columns() > base) {
+            std::unordered_map<size_t, SlotId> idx_to_slot;
+            for (const auto& [sid, idx] : _chunk->get_slot_id_to_index_map()) {
+                idx_to_slot[idx] = sid;
+            }
+            for (size_t i = base; i < _chunk->num_columns(); i++) {
+                auto it = idx_to_slot.find(i);
+                if (it != idx_to_slot.end()) {
+                    // Deep-copy into the output chunk. _chunk is a reusable buffer that
+                    // Chunk::reset() clears in place on the next get_next(); sharing the
+                    // ColumnPtr would let that reset clobber the data still referenced by
+                    // downstream operators (e.g. the score column buffered by TOP-N),
+                    // collapsing row counts. The synthetic column is tiny (one float/row).
+                    chunk->append_vector_column(input_columns[i]->clone(), _chunk->schema()->field(i), it->second);
+                }
+            }
         }
     }
 #ifndef NDEBUG

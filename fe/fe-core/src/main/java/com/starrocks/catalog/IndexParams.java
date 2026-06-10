@@ -90,6 +90,8 @@ public class IndexParams {
         // index
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.PARSER, true, true, "none",
                 null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM,
+                false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION,
                 false, false, null, null);
 
@@ -99,6 +101,10 @@ public class IndexParams {
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.DEFAULT_SEARCH_ANALYZER,
                 false, false, "english", null);
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.RERANK, false, false,
+                "false", null);
+        register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.SUPPORT_PHRASE, false, false,
+                "false", null);
+        register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.SUPPORT_BM25, false, false,
                 "false", null);
 
         /* NGramFilter */

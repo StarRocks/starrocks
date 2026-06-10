@@ -203,6 +203,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
+    seg_options.use_bm25_score = options.use_bm25_score;
+    seg_options.bm25_score_slot_id = options.bm25_score_slot_id;
+    seg_options.bm25_score_column_id = options.bm25_score_column_id;
+    seg_options.bm25_score_column_name = options.bm25_score_column_name;
+    seg_options.bm25_score_limit = options.bm25_score_limit;
+    seg_options.bm25_score_min = options.bm25_score_min;
+    seg_options.bm25_score_max = options.bm25_score_max;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
@@ -220,6 +227,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
     seg_options.reader_type = options.reader_type;
+    seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);

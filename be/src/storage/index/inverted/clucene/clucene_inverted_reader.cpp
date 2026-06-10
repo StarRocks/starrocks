@@ -19,8 +19,10 @@
 #include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
+#include "clucene_inverted_util.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/match_operator.h"
+#include "storage/rowset/options.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
@@ -28,8 +30,8 @@
 namespace starrocks {
 
 Status CLuceneInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
-                                           InvertedIndexIterator** iterator) {
-    *iterator = new InvertedIndexIterator(index_meta, this);
+                                           InvertedIndexIterator** iterator, const IndexReadOptions& index_opt) {
+    *iterator = new InvertedIndexIterator(index_meta, this, index_opt.stats);
     return Status::OK();
 }
 
@@ -53,6 +55,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
     std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
+    std::vector<std::wstring> tokens;
+    RETURN_IF_ERROR(starrocks::tokenize_text(_parser_type, search_str, tokens));
     VLOG(2) << "begin to query the inverted index from clucene"
             << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
@@ -71,10 +75,15 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     lucene::search::IndexSearcher index_searcher(directory);
 
     switch (query_type) {
-    case InvertedIndexQueryType::MATCH_ALL_QUERY:
     case InvertedIndexQueryType::EQUAL_QUERY:
         match_operator =
                 std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
+        break;
+    case InvertedIndexQueryType::MATCH_ANY_QUERY:
+        match_operator = std::make_unique<MatchAnyOperator>(&index_searcher, nullptr, column_name_ws, tokens);
+        break;
+    case InvertedIndexQueryType::MATCH_ALL_QUERY:
+        match_operator = std::make_unique<MatchAllOperator>(&index_searcher, nullptr, column_name_ws, tokens);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
         // in phrase query

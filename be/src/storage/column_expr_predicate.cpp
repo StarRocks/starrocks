@@ -12,10 +12,12 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/literal.h"
+#include "exprs/match_expr.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
+#include "storage/index/inverted/inverted_index_common.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -284,7 +286,8 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     return Status::OK();
 }
 Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                roaring::Roaring* row_bitmap) const {
+                                                roaring::Roaring* row_bitmap,
+                                                std::unordered_map<uint32_t, float>* row_to_score) const {
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
@@ -336,13 +339,42 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
-        query_type = InvertedIndexQueryType::EQUAL_QUERY;
+    bool has_wildcard = str_v.find('*') != std::string::npos || str_v.find('%') != std::string::npos;
+
+    // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
+    if (vaild_match && expr->op() == TExprOpcode::MATCH_ANY) {
+        query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+    } else if (vaild_match && expr->op() == TExprOpcode::MATCH_ALL) {
+        query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
+    } else if (vaild_match && expr->op() == TExprOpcode::MATCH_PHRASE) {
+        query_type = InvertedIndexQueryType::MATCH_PHRASE_QUERY;
+    } else if (vaild_match && expr->op() == TExprOpcode::MATCH) {
+        // plain MATCH tokenizes the pattern and matches any term (not a raw term lookup).
+        query_type =
+                has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::MATCH_ANY_QUERY;
     } else {
-        query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+        query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
     }
+
     roaring::Roaring roaring;
-    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    if (query_type == InvertedIndexQueryType::MATCH_PHRASE_QUERY) {
+        // Phrase query needs slop carried via PhraseQueryValue. Slop comes from
+        // TExprNode.match_expr.slop (FE-side parsed from "...~N" pattern suffix);
+        // when absent (old FE), MatchExpr::slop() returns 0 — same as existing behavior.
+        const auto* match_expr = down_cast<const MatchExpr*>(expr);
+        PhraseQueryValue phrase_value;
+        phrase_value.text = padded_value;
+        phrase_value.slop = match_expr->slop();
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &phrase_value, query_type, &roaring));
+    } else if (row_to_score != nullptr && !with_not &&
+               (query_type == InvertedIndexQueryType::MATCH_ANY_QUERY ||
+                query_type == InvertedIndexQueryType::MATCH_ALL_QUERY)) {
+        // BM25 score() path: capture per-row scores alongside the match bitmap.
+        RETURN_IF_ERROR(iterator->read_from_inverted_index_scored(column_name, &padded_value, query_type, &roaring,
+                                                                  row_to_score));
+    } else {
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    }
     if (with_not) {
         *row_bitmap -= roaring;
     } else {

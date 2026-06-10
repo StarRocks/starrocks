@@ -18,27 +18,42 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.InvertedIndexUtil;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.proto.DeleteCompoundIndexFilesRequest;
+import com.starrocks.proto.DeleteCompoundIndexFilesResponse;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -55,6 +70,8 @@ import static java.util.Objects.requireNonNull;
  * 8. Finish the transaction
  */
 public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase implements GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(LakeTableAsyncFastSchemaChangeJob.class);
+
     // shadow index id -> index schema
     @SerializedName(value = "schemaInfos")
     private List<IndexSchemaInfo> schemaInfos;
@@ -112,6 +129,9 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @Override
     protected void updateCatalog(Database db, LakeTable table) {
         updateCatalogUnprotected(db, table);
+        if (GlobalStateMgr.getCurrentState().isReady()) {
+            maybeDeleteCompoundIndexFiles(table);
+        }
     }
 
     private void updateCatalogUnprotected(Database db, LakeTable table) {
@@ -146,6 +166,57 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
         // If modified columns are already done, inactive related mv
         AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
+    }
+
+    private void maybeDeleteCompoundIndexFiles(LakeTable table) {
+        long remainingCompound = InvertedIndexUtil.countCompoundIndexes(table.getIndexes());
+        if (remainingCompound > 0) {
+            return;
+        }
+
+        Map<Long, List<Long>> nodeToTabletIds = new HashMap<>();
+        Map<Long, List<Long>> nodeToTabletVersions = new HashMap<>();
+        Map<Long, ComputeNode> nodeIdToNode = new HashMap<>();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            long version = partition.getVisibleVersion();
+            for (MaterializedIndex index : partition.getMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    LakeTablet lakeTablet = (LakeTablet) tablet;
+                    ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(
+                            warehouse.getId(), lakeTablet);
+                    if (node != null) {
+                        long nodeId = node.getId();
+                        nodeIdToNode.put(nodeId, node);
+                        nodeToTabletIds.computeIfAbsent(nodeId, k -> new ArrayList<>())
+                                .add(tablet.getId());
+                        nodeToTabletVersions.computeIfAbsent(nodeId, k -> new ArrayList<>())
+                                .add(version);
+                    }
+                }
+            }
+        }
+
+        for (Map.Entry<Long, List<Long>> entry : nodeToTabletIds.entrySet()) {
+            long nodeId = entry.getKey();
+            ComputeNode node = nodeIdToNode.get(nodeId);
+            DeleteCompoundIndexFilesRequest request = new DeleteCompoundIndexFilesRequest();
+            request.tabletIds = entry.getValue();
+            request.tabletVersions = nodeToTabletVersions.get(nodeId);
+            try {
+                LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+                Future<DeleteCompoundIndexFilesResponse> future = service.deleteCompoundIndexFiles(request);
+                LOG.info("Sent compound index cleanup request to {}:{} for {} tablets, versions={} (table={})",
+                        node.getHost(), node.getBrpcPort(), entry.getValue().size(),
+                        request.tabletVersions, tableName);
+            } catch (RpcException e) {
+                LOG.warn("Failed to send compound index cleanup request to {}:{}: {}",
+                        node.getHost(), node.getBrpcPort(), e.getMessage());
+            }
+        }
     }
 
     @Override

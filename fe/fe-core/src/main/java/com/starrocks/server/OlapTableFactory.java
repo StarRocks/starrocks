@@ -52,6 +52,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
@@ -79,11 +80,15 @@ import org.threeten.extra.PeriodDuration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.validation.constraints.NotNull;
+
+import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class OlapTableFactory implements AbstractTableFactory {
 
@@ -466,18 +471,30 @@ public class OlapTableFactory implements AbstractTableFactory {
                             properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                             Config.enable_replicated_storage_as_default_engine));
 
+            boolean hasGin = table.getIndexes() != null && table.getIndexes().stream()
+                    .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+            boolean hasCLuceneGin = table.getIndexes() != null && table.getIndexes().stream()
+                    .anyMatch(index -> {
+                        if (index.getIndexType() != IndexType.GIN) {
+                            return false;
+                        }
+                        String impVal = index.getProperties() == null ? null :
+                                index.getProperties().get(IMP_LIB.name().toLowerCase(Locale.ROOT));
+                        return impVal == null ? !RunMode.isSharedDataMode() /* default to CLUCENE for share nothing */
+                                              : CLUCENE.name().equalsIgnoreCase(impVal);
+                    });
+            if (hasGin && hasCLuceneGin && table.enableReplicatedStorage()) {
+                // CLucene GIN indexes are incompatible with replicated_storage right now and we will disable
+                // replicated_storage if table contains CLucene GIN Index.
+                table.setEnableReplicatedStorage(false);
+            }
+
             if (table.enableReplicatedStorage().equals(false)) {
                 for (Column col : baseSchema) {
                     if (col.isAutoIncrement()) {
                         throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
                     }
                 }
-            }
-
-            boolean hasGin = table.getIndexes().stream()
-                    .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            if (hasGin && table.enableReplicatedStorage()) {
-                throw new SemanticException("GIN does not support replicated mode");
             }
 
             TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;

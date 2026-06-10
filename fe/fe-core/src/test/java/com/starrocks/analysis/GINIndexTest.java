@@ -21,6 +21,8 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
@@ -40,6 +42,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
@@ -67,12 +70,12 @@ public class GINIndexTest extends PlanTestBase {
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.PRIMARY_KEYS),
-                "The inverted index can only be build on DUPLICATE table.");
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, new HashMap<>(), KeysType.UNIQUE_KEYS),
+                "The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table.");
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, new HashMap<>(), KeysType.DUP_KEYS),
                 "The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
 
         Column c2 = new Column("f2", Type.STRING, true);
@@ -81,7 +84,7 @@ public class GINIndexTest extends PlanTestBase {
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), "???");
                 }}, KeysType.DUP_KEYS),
-                "Only support clucene implement for now");
+                "Only support clucene or builtin implement for now. ");
 
         Assertions.assertThrows(
                 SemanticException.class,
@@ -121,10 +124,25 @@ public class GINIndexTest extends PlanTestBase {
                 return true;
             }
         };
+        // Without imp_lib in shared-data mode should default to builtin.
+        HashMap<String, String> properties = new HashMap<>();
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, properties, KeysType.DUP_KEYS));
+        Assertions.assertEquals(InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT),
+                properties.get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
-                "The inverted index does not support shared data mode");
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                }}, KeysType.DUP_KEYS),
+                "Clucene inverted index does not support shared data mode");
+
+        // Builtin implementation is allowed in shared-data mode.
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.BUILTIN.name());
+                }}, KeysType.DUP_KEYS));
     }
 
     @Test
@@ -176,5 +194,109 @@ public class GINIndexTest extends PlanTestBase {
         StringLiteral stringExpr = new StringLiteral("test");
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
+    }
+
+    @Test
+    public void testCheckInvertedIndexNgram() {
+        // Test case 1: Valid gram_num value
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put("dict_gram_num", "5");
+        properties1.put("imp_lib", "builtin");
+        InvertedIndexUtil.checkInvertedIndexNgram(properties1); // Should not throw exception
+
+        // Test case 2: Invalid gram_num value (not numeric)
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put("dict_gram_num", "invalid");
+        properties2.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            InvertedIndexUtil.checkInvertedIndexNgram(properties2);
+        }, "INVERTED index dict gram num invalid is a invalid number.");
+
+        // Test case 3: Non-positive gram_num value
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put("dict_gram_num", "-1");
+        properties3.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            InvertedIndexUtil.checkInvertedIndexNgram(properties3);
+        }, "INVERTED index dict gram num -1 should be greater than zero.");
+
+        // Test case 4: Zero gram_num value
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put("dict_gram_num", "0");
+        properties4.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            InvertedIndexUtil.checkInvertedIndexNgram(properties4);
+        }, "INVERTED index dict gram num 0 should be greater than zero.");
+
+        // Test case 5: Non-builtin implementation with gram_num (should fail)
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put("dict_gram_num", "5");
+        properties5.put("imp_lib", "clucene");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            InvertedIndexUtil.checkInvertedIndexNgram(properties5);
+        }, "INVERTED index with clucene implement is invalid for dict gram.");
+
+        // Test case 6: Non-builtin implementation with invalid gram_num (should fail with gram_num error first)
+        Map<String, String> properties6 = new HashMap<>();
+        properties6.put("dict_gram_num", "invalid");
+        properties6.put("imp_lib", "clucene");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            InvertedIndexUtil.checkInvertedIndexNgram(properties6);
+        }, "INVERTED index dict gram num invalid is a invalid number.");
+
+        // Test case 7: Null gram_num (should not throw exception)
+        Map<String, String> properties7 = new HashMap<>();
+        properties7.put("imp_lib", "builtin");
+        InvertedIndexUtil.checkInvertedIndexNgram(properties7); // Should not throw exception
+
+        // Test case 8: Empty gram_num (should throw exception as it's not numeric)
+        Map<String, String> properties8 = new HashMap<>();
+        properties8.put("dict_gram_num", "");
+        properties8.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            InvertedIndexUtil.checkInvertedIndexNgram(properties8);
+        }, "INVERTED index dict gram num  should be greater than zero.");
+    }
+
+    @Test
+    public void testGINWithAutoIncrement() throws Exception {
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = true (Should succeed)
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(
+                "CREATE TABLE `t_builtin` (" +
+                        "  `k` BIGINT AUTO_INCREMENT," +
+                        "  `msg_all` varchar(100)," +
+                        "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                        ") ENGINE=OLAP " +
+                        "DUPLICATE KEY(`k`) " +
+                        "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+        starRocksAssert.dropTable("t_builtin");
+
+        // Test clucene GIN with AUTO_INCREMENT and replicated_storage = true (Should fail)
+        // because OlapTableFactory will force replicated_storage to false for clucene GIN
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_clucene` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = false (Should fail)
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_builtin_no_rs` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"false\" );"));
     }
 }

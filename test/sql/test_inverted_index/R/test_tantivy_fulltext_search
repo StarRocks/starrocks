@@ -1,0 +1,228 @@
+-- name: test_tantivy_single_column_basic
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+-- result:
+-- !result
+USE ${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_tantivy_single (
+    id INT,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tantivy_single VALUES
+(1, 'the quick brown fox jumps over the lazy dog'),
+(2, 'starrocks tantivy full text search engine'),
+(3, NULL),
+(4, 'tantivy index on shared data mode'),
+(5, 'quick fox jumps high'),
+(6, 'brown bear sleeps in the forest'),
+(7, 'lazy cat and quick mouse'),
+(8, 'full text search is powerful'),
+(9, NULL),
+(10, 'the fox and the dog are friends');
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'fox';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'quick';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'tantivy';
+-- result:
+2
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'fox dog';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ALL 'quick fox';
+-- result:
+2
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ALL 'full text search';
+-- result:
+2
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_PHRASE 'quick brown';
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_PHRASE 'brown fox';
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'nonexistent';
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_tantivy_single WHERE content IS NULL;
+-- result:
+2
+-- !result
+DROP TABLE t_tantivy_single;
+-- result:
+-- !result
+DROP DATABASE ${uuid0};
+-- result:
+-- !result
+-- name: test_tantivy_multi_column
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+-- result:
+-- !result
+USE ${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_tantivy_multi (
+    id INT,
+    title VARCHAR(65535),
+    body VARCHAR(65535),
+    tags VARCHAR(65535),
+    INDEX gin_title (title) USING GIN ("parser" = "none", "imp_lib" = "tantivy"),
+    INDEX gin_body (body) USING GIN ("parser" = "none", "imp_lib" = "tantivy"),
+    INDEX gin_tags (tags) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tantivy_multi VALUES
+(1, 'starrocks olap', 'the quick brown fox jumps over the lazy dog', 'database search'),
+(2, 'tantivy engine', 'full text search with tantivy inverted index', 'search index'),
+(3, NULL, 'starrocks shared data mode', NULL),
+(4, 'performance test', NULL, 'benchmark speed'),
+(5, 'quick start guide', 'getting started with tantivy search', 'guide tutorial');
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_multi WHERE title MATCH_ANY 'starrocks';
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_tantivy_multi WHERE body MATCH_ANY 'tantivy';
+-- result:
+2
+-- !result
+SELECT count(*) FROM t_tantivy_multi WHERE tags MATCH_ANY 'search';
+-- result:
+2
+-- !result
+SELECT count(*) FROM t_tantivy_multi WHERE body MATCH_ANY 'search' AND tags MATCH_ANY 'index';
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_tantivy_multi WHERE title IS NULL;
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_tantivy_multi WHERE tags IS NULL;
+-- result:
+1
+-- !result
+DROP TABLE t_tantivy_multi;
+-- result:
+-- !result
+DROP DATABASE ${uuid0};
+-- result:
+-- !result
+-- name: test_tantivy_batch_insert
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+-- result:
+-- !result
+USE ${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_tantivy_batch (
+    id INT,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tantivy_batch SELECT generate_series, concat('document number ', cast(generate_series as string), ' with searchable text content') FROM TABLE(generate_series(1, 100));
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_ANY 'document';
+-- result:
+100
+-- !result
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_ANY 'searchable';
+-- result:
+100
+-- !result
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_PHRASE 'searchable text';
+-- result:
+100
+-- !result
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_ANY 'nonexistent';
+-- result:
+0
+-- !result
+DROP TABLE t_tantivy_batch;
+-- result:
+-- !result
+DROP DATABASE ${uuid0};
+-- result:
+-- !result
+-- name: test_tantivy_compaction @cloud
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+-- result:
+-- !result
+USE ${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_tantivy_compact (
+    id INT,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tantivy_compact VALUES (1, 'first batch fox'), (2, 'first batch dog');
+-- result:
+-- !result
+INSERT INTO t_tantivy_compact VALUES (3, 'second batch cat'), (4, 'second batch fox');
+-- result:
+-- !result
+INSERT INTO t_tantivy_compact VALUES (5, 'third batch fox and dog'), (6, 'third batch bear');
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'fox';
+-- result:
+3
+-- !result
+ALTER TABLE t_tantivy_compact COMPACT;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'fox';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'dog';
+-- result:
+2
+-- !result
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ALL 'fox dog';
+-- result:
+1
+-- !result
+DROP TABLE t_tantivy_compact;
+-- result:
+-- !result
+DROP DATABASE ${uuid0};
+-- result:
+-- !result

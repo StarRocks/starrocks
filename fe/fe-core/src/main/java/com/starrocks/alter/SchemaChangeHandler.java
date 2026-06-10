@@ -2041,7 +2041,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution = false;
                 processAddIndex((CreateIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof DropIndexClause) {
-                fastSchemaEvolution = false;
+                if (!RunMode.isSharedDataMode()) {
+                    fastSchemaEvolution = false;
+                }
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof OptimizeClause) {
                 // AlterTableStatementAnalyzer.checkAlterOpConflict() ensures the OPTIMIZE clause is alone.
@@ -2744,9 +2746,21 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws StarRocksException {
-        Index newIndex = alterClause.getIndex();
-        if (newIndex == null) {
-            return;
+        // Create Index object directly from IndexDef
+        IndexDef indexDef = alterClause.getIndexDef();
+        Index newIndex;
+        // Only assign meaningful indexId for OlapTable
+        if (olapTable.isOlapTableOrMaterializedView() ||
+                (olapTable.isCloudNativeTableOrMaterializedView() && indexDef.getIndexType() != IndexDef.IndexType.VECTOR)) {
+            long indexId = IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType()) ?
+                    olapTable.incAndGetMaxIndexId() : -1;
+            newIndex = new Index(indexId, indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        } else {
+            newIndex = new Index(indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         }
 
         if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
@@ -2764,7 +2778,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();
-        IndexDef indexDef = alterClause.getIndexDef();
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {

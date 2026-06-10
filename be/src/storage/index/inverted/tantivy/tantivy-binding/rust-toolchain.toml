@@ -1,0 +1,7 @@
+[toolchain]
+# tantivy 0.25 declares rust-version = "1.85", but its transitive deps
+# (darling 0.23, time 0.3.47, etc.) require rustc >= 1.88. Pin to 1.88.0 to
+# satisfy the resolved dependency graph without manually downgrading deps.
+channel = "1.88.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

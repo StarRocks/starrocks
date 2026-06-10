@@ -2561,7 +2561,7 @@ primaryExpression
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     | identifierList '->' '('(expressionList)?')'                                         #lambdaFunctionExpr
-    | left = primaryExpression NOT? MATCH right = primaryExpression                       #matchExpr
+    | left = primaryExpression NOT? matchOperator right = primaryExpression               #matchExpr
     ;
 
 literalExpression
@@ -2915,6 +2915,13 @@ comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
 
+matchOperator
+    : MATCH
+    | MATCH_ANY
+    | MATCH_ALL
+    | MATCH_PHRASE
+    ;
+
 booleanValue
     : TRUE | FALSE
     ;
@@ -3089,7 +3096,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MATCH_PHRASE | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

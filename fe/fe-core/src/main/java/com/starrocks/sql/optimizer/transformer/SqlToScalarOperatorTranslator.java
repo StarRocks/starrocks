@@ -707,8 +707,8 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .toArray(ScalarOperator[]::new);
-
-            return new MatchExprOperator(children);
+            MatchExpr.MatchOperator matchOperator = node.getMatchOperator();
+            return new MatchExprOperator(matchOperator, node.getSlop(), children);
         }
 
         @Override

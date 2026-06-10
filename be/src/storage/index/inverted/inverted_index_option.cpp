@@ -22,8 +22,13 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
     auto inverted_imp_prop = tablet_index.common_properties().find(INVERTED_IMP_KEY);
     if (inverted_imp_prop != tablet_index.common_properties().end()) {
         const auto& imp_type = inverted_imp_prop->second;
-        if (boost::algorithm::to_lower_copy(imp_type) == TYPE_CLUCENE) {
+        const std::string imp_type_lower = boost::algorithm::to_lower_copy(imp_type);
+        if (imp_type_lower == TYPE_CLUCENE) {
             return InvertedImplementType::CLUCENE;
+        } else if (imp_type_lower == TYPE_BUILTIN) {
+            return InvertedImplementType::BUILTIN;
+        } else if (imp_type_lower == TYPE_TANTIVY) {
+            return InvertedImplementType::TANTIVY;
         } else {
             return Status::InvalidArgument("Do not support imp_type : " + imp_type);
         }
@@ -42,6 +47,8 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_ENGLISH;
     case InvertedIndexParserType::PARSER_CHINESE:
         return INVERTED_INDEX_PARSER_CHINESE;
+    case InvertedIndexParserType::PARSER_JIEBA:
+        return INVERTED_INDEX_PARSER_JIEBA;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }
@@ -57,6 +64,8 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
         return InvertedIndexParserType::PARSER_ENGLISH;
     } else if (lower_value == INVERTED_INDEX_PARSER_CHINESE) {
         return InvertedIndexParserType::PARSER_CHINESE;
+    } else if (lower_value == INVERTED_INDEX_PARSER_JIEBA) {
+        return InvertedIndexParserType::PARSER_JIEBA;
     }
 
     return InvertedIndexParserType::PARSER_UNKNOWN;
@@ -69,6 +78,19 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
         }
     }
     return INVERTED_INDEX_PARSER_NONE;
+}
+
+int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_DICT_GRAM_NUM_KEY); it != properties.end()) {
+        const std::string& gram_num = it->second;
+        try {
+            return std::stoi(gram_num);
+        } catch (const std::exception& e) {
+            LOG(WARNING) << "Parsing gram num failed, reason: " << e.what() << ". Using default value -1.";
+            return -1;
+        }
+    }
+    return -1;
 }
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties) {

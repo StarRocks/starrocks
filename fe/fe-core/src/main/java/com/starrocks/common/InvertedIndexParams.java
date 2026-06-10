@@ -30,7 +30,9 @@ public class InvertedIndexParams {
             .collect(Collectors.toSet());
 
     public enum InvertedIndexImpType {
-        CLUCENE
+        CLUCENE,
+        BUILTIN,
+        TANTIVY,
     }
 
     public enum CommonIndexParamKey implements ParamsKey {
@@ -50,7 +52,12 @@ public class InvertedIndexParams {
         /**
          * Whether to omit term frequency and term position when indexing
          */
-        OMIT_TERM_FREQ_AND_POSITION("false");
+        OMIT_TERM_FREQ_AND_POSITION("false"),
+
+        /**
+         * Gram num for the dictionary of builtin inverted index.
+         */
+        DICT_GRAM_NUM("-1");
 
         private final String defaultValue;
         private boolean needDefault = false;
@@ -77,7 +84,18 @@ public class InvertedIndexParams {
         /**
          * Whether to support to reserve the rank result within index
          */
-        RERANK("false");
+        RERANK("false"),
+        /**
+         * Tantivy-only hint: enable phrase matching capability on the index.
+         * Phase 1 only validates whitelist; BE always supports phrase regardless.
+         */
+        SUPPORT_PHRASE("false"),
+        /**
+         * Tantivy-only hint: enable BM25 scoring capability on the index.
+         * Phase 1 only validates whitelist; Phase 2 will use this to enable
+         * fieldnorms in the tantivy schema.
+         */
+        SUPPORT_BM25("false");
 
         private String defaultValue;
 

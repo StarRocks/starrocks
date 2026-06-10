@@ -771,6 +771,13 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.tablet_schema = options.tablet_schema;
     seg_options.use_vector_index = options.use_vector_index;
     seg_options.vector_search_option = options.vector_search_option;
+    seg_options.use_bm25_score = options.use_bm25_score;
+    seg_options.bm25_score_slot_id = options.bm25_score_slot_id;
+    seg_options.bm25_score_column_id = options.bm25_score_column_id;
+    seg_options.bm25_score_column_name = options.bm25_score_column_name;
+    seg_options.bm25_score_limit = options.bm25_score_limit;
+    seg_options.bm25_score_min = options.bm25_score_min;
+    seg_options.bm25_score_max = options.bm25_score_max;
     seg_options.sample_options = options.sample_options;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
 

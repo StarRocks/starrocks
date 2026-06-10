@@ -764,6 +764,9 @@ vectorized_functions = [
     # Utility functions
     [100011, 'sleep', True, False, 'BOOLEAN', ['INT'], "UtilityFunctions::sleep"],
     [100012, 'version', True, False, 'VARCHAR', [], "UtilityFunctions::version"],
+    # BM25 relevance score for a GIN/tantivy MATCH; rewritten to a scan output
+    # column by RewriteToBm25ScorePlanRule, so it has no BE scalar impl.
+    [191005, 'score', True, False, 'FLOAT', [], 'nullptr'],
     [100013, 'current_version', True, False, 'VARCHAR', [], "UtilityFunctions::current_version"],
     [100014, 'last_query_id', True, False, 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', True, False, 'VARCHAR', [], "UtilityFunctions::uuid"],

@@ -256,6 +256,8 @@ set(STORAGE_FILES
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
+    index/compound_index_file_writer.cpp
+    index/compound_index_file_reader.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
@@ -263,6 +265,10 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
+    index/inverted/tantivy/tantivy_plugin.cpp
+    index/inverted/tantivy/tantivy_inverted_writer.cpp
+    index/inverted/tantivy/tantivy_inverted_reader.cpp
+    index/inverted/tantivy/random_access_bridge.cpp
     index/vector/empty_index_reader.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
@@ -271,7 +277,12 @@ set(STORAGE_FILES
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
-    index/vector/tenann/tenann_index_utils.cpp)
+    index/vector/tenann/tenann_index_utils.cpp
+    index/inverted/builtin/builtin_plugin.cpp
+    index/inverted/builtin/builtin_inverted_writer.cpp
+    index/inverted/builtin/builtin_inverted_reader.cpp
+    index/inverted/builtin/builtin_inverted_index_iterator.cpp
+    index/inverted/builtin/builtin_simple_analyzer.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

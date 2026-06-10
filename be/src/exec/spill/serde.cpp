@@ -16,6 +16,7 @@
 
 #include <cstring>
 
+#include "common/statusor.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
 #include "gen_cpp/types.pb.h"
@@ -143,10 +144,7 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         }
         for (size_t i = 0; i < columns.size(); i++) {
             uint8_t* begin = buf;
-            buf = serde::ColumnArraySerde::serialize(*columns[i], buf, false, encode_levels[i]);
-            if (UNLIKELY(buf == nullptr)) {
-                return Status::InternalError("unsupported column occurs in spill serialize phase");
-            }
+            ASSIGN_OR_RETURN(buf, serde::ColumnArraySerde::serialize(*columns[i], buf, false, encode_levels[i]));
             column_stats.emplace_back(columns[i]->byte_size(), buf - begin);
             if (serde::EncodeContext::enable_encode_integer(encode_levels[i])) {
                 padding_size = serde::EncodeContext::STREAMVBYTE_PADDING_SIZE;
@@ -196,7 +194,8 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     read_cursor += columns.size() * sizeof(uint32_t);
     SCOPED_TIMER(_parent->metrics().deserialize_timer);
     for (size_t i = 0; i < columns.size(); i++) {
-        read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]);
+        ASSIGN_OR_RETURN(read_cursor,
+                         serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]));
     }
 
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()

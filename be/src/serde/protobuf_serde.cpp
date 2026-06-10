@@ -18,6 +18,7 @@
 
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
+#include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -105,13 +106,13 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
     int padding_size = 0; // as streamvbyte may read up to 16 extra bytes from the input.
     if (context == nullptr) {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
-            buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff);
+            ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*chunk.columns()[i], buff));
         }
     } else {
+        using Serd = ColumnArraySerde;
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
-            buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
-            if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
+            ASSIGN_OR_RETURN(buff, Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i)));
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
             if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
                 padding_size = context->STREAMVBYTE_PADDING_SIZE;
@@ -121,7 +122,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
 
     // do serialize extra data
     if (chunk_extra_data) {
-        buff = chunk_extra_data->serialize(buff);
+        ASSIGN_OR_RETURN(buff, chunk_extra_data->serialize(buff));
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     serialized_data->resize(chunk_pb.serialized_size() + padding_size);
@@ -174,9 +175,6 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
 }
 
 StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
-    using ColumnHelper = ColumnHelper;
-    using Chunk = Chunk;
-
     auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
 
     uint32_t version = decode_fixed32_le(cur);
@@ -188,9 +186,9 @@ StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::stri
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
-    auto chunk = ChunkHelper::new_chunk(schema, rows);
+    ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
     for (auto& column : chunk->columns()) {
-        cur = ColumnArraySerde::deserialize(cur, column.get());
+        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
     }
     return Chunk(std::move(*chunk));
 }
@@ -205,9 +203,6 @@ static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, i
 }
 
 StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
-    using ColumnHelper = ColumnHelper;
-    using Chunk = Chunk;
-
     auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
 
     uint32_t version = decode_fixed32_le(cur);
@@ -227,12 +222,12 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     if (_encode_level.empty()) {
         for (auto& column : columns) {
-            cur = ColumnArraySerde::deserialize(cur, column.get());
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
         }
     } else {
         DCHECK(_encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
-            cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]);
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]));
         }
     }
 
@@ -258,7 +253,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
                     ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
         }
         for (auto& column : extra_columns) {
-            cur = ColumnArraySerde::deserialize(cur, column.get());
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
         }
         for (int i = 0; i < extra_columns.size(); ++i) {
             size_t col_num_rows = extra_columns[i]->size();

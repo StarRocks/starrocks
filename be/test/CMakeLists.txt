@@ -254,6 +254,14 @@ set(EXEC_FILES
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./io/spill_block_manager_test.cpp
+        ./storage/index/compound_index_file_test.cpp
+        ./storage/index/inverted_index_plugin_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_smoke_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_wildcard_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_plugin_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_compound_reader_test.cpp
+        ./storage/index/inverted/tantivy/random_access_bridge_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_compaction_test.cpp
         ./storage/data_dir_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
@@ -329,6 +337,7 @@ set(EXEC_FILES
         ./storage/rowset/rle_page_test.cpp
         ./storage/rowset/segment_rewriter_test.cpp
         ./storage/rowset/segment_test.cpp
+        ./storage/rowset/segment_writer_tantivy_test.cpp
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/struct_column_rw_test.cpp
         ./storage/rowset/flat_json_column_rw_test.cpp
@@ -343,6 +352,7 @@ set(EXEC_FILES
         ./storage/rowset/metadata_cache_test.cpp
         ./storage/index/vector_index_test.cpp
         ./storage/index/vector_search_test.cpp
+        ./storage/index/builtin_inverted_index_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp
@@ -531,6 +541,7 @@ set(EXEC_FILES
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
         ./util/url_coding_test.cpp
+        ./util/slice_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp

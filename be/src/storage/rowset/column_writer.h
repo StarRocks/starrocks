@@ -136,6 +136,8 @@ public:
 
     virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
 
+    virtual std::vector<CompoundIndexEntry> take_compound_entries() { return {}; }
+
     virtual ordinal_t get_next_rowid() const = 0;
 
     // only invalid in the case of global_dict is not nullptr
@@ -190,6 +192,7 @@ public:
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
     Status write_inverted_index() override;
+    std::vector<CompoundIndexEntry> take_compound_entries() override;
 
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
@@ -273,6 +276,8 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    std::vector<CompoundIndexEntry> _compound_entries;
 };
 
 } // namespace starrocks

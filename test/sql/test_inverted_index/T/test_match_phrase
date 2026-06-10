@@ -1,0 +1,42 @@
+-- name: test_match_phrase
+-- End-to-end MATCH_PHRASE coverage. Requires a working BE inverted index plugin
+-- This test is FE-side smoke + clucene round-trip.
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
+
+CREATE TABLE `t_match_phrase` (
+  `id` bigint NOT NULL,
+  `body` varchar(500) NOT NULL,
+  INDEX gin_body(`body`) USING GIN ("imp_lib" = "clucene", "parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_match_phrase VALUES
+  (1, 'the quick brown fox jumps over the lazy dog'),
+  (2, 'a quick fox is faster than a brown dog'),
+  (3, 'quick brown fox'),
+  (4, 'lazy fox sleeps'),
+  (5, 'sphinx of black quartz judge my vow');
+
+-- Exact phrase (slop=0): only docs that contain "quick brown fox" in order with no gaps
+SELECT id FROM t_match_phrase WHERE body MATCH_PHRASE 'quick brown fox' ORDER BY id;
+
+-- With slop=2: also matches doc 2 ("quick fox" with one word "is" between, "faster than a brown")
+-- Note: behavior depends on tokenizer + clucene phrase semantics; test asserts the parse
+-- succeeds and returns a non-empty set.
+SELECT id FROM t_match_phrase WHERE body MATCH_PHRASE 'quick fox ~2' ORDER BY id;
+
+-- NOT MATCH_PHRASE
+SELECT id FROM t_match_phrase WHERE NOT body MATCH_PHRASE 'quick brown fox' ORDER BY id;
+
+-- Empty pattern should be rejected at FE analysis
+SELECT id FROM t_match_phrase WHERE body MATCH_PHRASE '';
+
+-- Only slop marker should be rejected (text becomes empty after parse)
+SELECT id FROM t_match_phrase WHERE body MATCH_PHRASE '~3';

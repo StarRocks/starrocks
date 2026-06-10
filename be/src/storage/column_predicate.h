@@ -176,8 +176,12 @@ public:
         return Status::Cancelled("not implemented");
     }
 
+    // `row_to_score` (optional): when non-null and the predicate is a scorable
+    // MATCH (MATCH_ANY/MATCH_ALL, not negated), also emit per-row BM25 scores
+    // (segment-local row id -> score) to back a SQL score() column.
     virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                       roaring::Roaring* row_bitmap) const {
+                                       roaring::Roaring* row_bitmap,
+                                       std::unordered_map<uint32_t, float>* row_to_score = nullptr) const {
         return Status::Cancelled("not implemented");
     }
 

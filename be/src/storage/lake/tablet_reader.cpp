@@ -334,6 +334,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.lake_io_opts = params.lake_io_opts;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.use_bm25_score = params.use_bm25_score;
+    rs_opts.bm25_score_slot_id = params.bm25_score_slot_id;
+    rs_opts.bm25_score_column_id = params.bm25_score_column_id;
+    rs_opts.bm25_score_column_name = params.bm25_score_column_name;
+    rs_opts.bm25_score_limit = params.bm25_score_limit;
+    rs_opts.bm25_score_min = params.bm25_score_min;
+    rs_opts.bm25_score_max = params.bm25_score_max;
 
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;

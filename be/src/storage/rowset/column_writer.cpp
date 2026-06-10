@@ -246,6 +246,9 @@ public:
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
     Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); };
+    std::vector<CompoundIndexEntry> take_compound_entries() override {
+        return _scalar_column_writer->take_compound_entries();
+    }
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
 
@@ -570,10 +573,19 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 }
 
 Status ScalarColumnWriter::write_inverted_index() {
-    if (_inverted_index_builder != nullptr) {
-        return _inverted_index_builder->finish();
+    if (_inverted_index_builder == nullptr) {
+        return Status::OK();
     }
-    return Status::OK();
+    if (_inverted_index_builder->need_compound()) {
+        ASSIGN_OR_RETURN(auto entry, _inverted_index_builder->finish_compound(_opts.meta));
+        _compound_entries.push_back(std::move(entry));
+        return Status::OK();
+    }
+    return _inverted_index_builder->finish(_wfile, _opts.meta);
+}
+
+std::vector<CompoundIndexEntry> ScalarColumnWriter::take_compound_entries() {
+    return std::move(_compound_entries);
 }
 
 // write a data page into file and update ordinal index

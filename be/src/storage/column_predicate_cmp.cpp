@@ -300,7 +300,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
@@ -346,7 +346,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
@@ -393,7 +393,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
@@ -440,7 +440,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
@@ -489,7 +489,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
@@ -532,7 +532,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
@@ -709,7 +709,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
@@ -753,7 +753,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
         roaring::Roaring roaring;
@@ -796,7 +796,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
         roaring::Roaring roaring;
@@ -840,7 +840,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
         roaring::Roaring roaring;
@@ -883,7 +883,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
         roaring::Roaring roaring;
@@ -911,7 +911,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, std::unordered_map<uint32_t, float>*) const override {
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;

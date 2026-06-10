@@ -234,6 +234,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepar
     const std::string path = params.tablet->segment_location(gen_cols_filename(_txn_id));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     SegmentWriterOptions writer_options;
+    writer_options.tablet_id = params.tablet->id();
+    writer_options.txn_id = _txn_id;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
         opts.encryption_info = pair.info;

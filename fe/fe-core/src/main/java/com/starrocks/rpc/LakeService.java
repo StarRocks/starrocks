@@ -22,6 +22,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.DeleteCompoundIndexFilesRequest;
+import com.starrocks.proto.DeleteCompoundIndexFilesResponse;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
@@ -72,6 +74,7 @@ public interface LakeService {
     long TIMEOUT_ABORT_COMPACTION = 5 * MILLIS_PER_SECOND;
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
     long TIMEOUT_REPAIR_METADATA = MILLIS_PER_HOUR;
+    long TIMEOUT_DELETE_COMPOUND_INDEX = 10 * MILLIS_PER_MINUTE;
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = TIMEOUT_PUBLISH_VERSION)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
@@ -127,5 +130,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "repair_tablet_metadata", onceTalkTimeout = TIMEOUT_REPAIR_METADATA)
     Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_compound_index_files",
+            onceTalkTimeout = TIMEOUT_DELETE_COMPOUND_INDEX)
+    Future<DeleteCompoundIndexFilesResponse> deleteCompoundIndexFiles(DeleteCompoundIndexFilesRequest request);
 }
 

@@ -8111,7 +8111,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitMatchExpr(StarRocksParser.MatchExprContext context) {
         NodePosition pos = createPos(context);
-        MatchExpr matchExpr = new MatchExpr((Expr) visit(context.left), (Expr) visit(context.right), pos);
+        String matchOp = context.matchOperator().getText();
+        MatchExpr.MatchOperator operator;
+        switch (matchOp.toUpperCase()) {
+            case "MATCH":
+                operator = MatchExpr.MatchOperator.MATCH;
+                break;
+            case "MATCH_ANY":
+                operator = MatchExpr.MatchOperator.MATCH_ANY;
+                break;
+            case "MATCH_ALL":
+                operator = MatchExpr.MatchOperator.MATCH_ALL;
+                break;
+            case "MATCH_PHRASE":
+                operator = MatchExpr.MatchOperator.MATCH_PHRASE;
+                break;
+            default:
+                throw new SemanticException("Unknown match operator: " + matchOp);
+        }
+        Expr left = (Expr) visit(context.left);
+        Expr right = (Expr) visit(context.right);
+        int slop = 0;
+        // For MATCH_PHRASE with a string literal pattern, split off any trailing "~N" slop suffix
+        // at FE so the wire format carries (text, slop) separately. Non-literal patterns keep
+        // slop=0 here; future work could lower runtime parsing to BE if needed.
+        if (operator == MatchExpr.MatchOperator.MATCH_PHRASE && right instanceof StringLiteral) {
+            StringLiteral literal = (StringLiteral) right;
+            MatchExpr.PhrasePattern parsed = MatchExpr.parsePhrasePattern(literal.getValue());
+            slop = parsed.getSlop();
+            if (!parsed.getText().equals(literal.getValue())) {
+                right = new StringLiteral(parsed.getText(), literal.getPos());
+            }
+        }
+        MatchExpr matchExpr = new MatchExpr(operator, left, right, slop, pos);
         if (context.NOT() != null) {
             return new CompoundPredicate(CompoundPredicate.Operator.NOT, matchExpr, null, pos);
         } else {

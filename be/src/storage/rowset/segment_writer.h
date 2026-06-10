@@ -44,6 +44,7 @@
 #include "gutil/macros.h"
 #include "io/input_stream.h"
 #include "runtime/global_dict/types.h"
+#include "storage/index/compound_index_common.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 
@@ -79,6 +80,10 @@ struct SegmentWriterOptions {
     SegmentFileMark segment_file_mark;
     std::string encryption_meta;
     bool is_compaction = false;
+    // Lake-mode identifiers used to isolate per-transaction tantivy temp dirs.
+    // 0 means "not set" — callers in the shared-nothing path can leave them at default.
+    int64_t tablet_id = 0;
+    int64_t txn_id = 0;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -177,6 +182,11 @@ private:
     uint32_t _num_rows = 0;
 
     DictColumnsValidMap _global_dict_columns_valid_info;
+
+    // Compound index entries collected during finalize_columns from writers
+    // that support finish_compound (e.g. tantivy). Packed into a single .idx
+    // file after all column writers have finished.
+    std::vector<CompoundIndexEntry> _compound_entries;
 };
 
 } // namespace starrocks

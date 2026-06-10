@@ -63,6 +63,48 @@ fi
 set -eo pipefail
 . ${STARROCKS_HOME}/env.sh
 
+# -----------------------------------------------------------------------------
+# Helpers for git submodule and Rust toolchain (used by --be path)
+# -----------------------------------------------------------------------------
+
+# Initialize a git submodule at <path>; on failure, fall back to downloading the
+# pinned commit's archive and extracting it.
+#
+# Args:
+#   $1  submodule_path       (e.g. "contrib/tantivy")
+#   $2  submodule_name       (human-readable, used only for log messages)
+#   $3  archive_url_template (URL with literal "<COMMIT>" placeholder, e.g.
+#                             "https://code.devops.xiaohongshu.com/data/tantivy/-/archive/<COMMIT>/tantivy-<COMMIT>.tar.gz")
+update_submodule() {
+    local submodule_path=$1
+    local submodule_name=$2
+    local archive_url_template=$3
+
+    cd "${STARROCKS_HOME}"
+    echo "[update_submodule] Updating ${submodule_name} at ${submodule_path} ..."
+
+    set +e
+    git submodule update --init --recursive "${submodule_path}"
+    local rc=$?
+    set -e
+
+    if [[ ${rc} -ne 0 ]]; then
+        echo "[update_submodule] git submodule update failed for ${submodule_name}, falling back to archive download"
+        local commit
+        commit=$(git ls-tree HEAD "${submodule_path}" | awk '{print $3}')
+        if [[ -z "${commit}" ]]; then
+            echo "[update_submodule] ERROR: cannot resolve pinned commit for ${submodule_path}"
+            exit 1
+        fi
+        local archive_url=${archive_url_template//<COMMIT>/${commit}}
+        mkdir -p "${STARROCKS_HOME}/${submodule_path}"
+        if ! curl -fL "${archive_url}" | tar -xz -C "${STARROCKS_HOME}/${submodule_path}" --strip-components=1; then
+            echo "[update_submodule] ERROR: archive fallback failed (${archive_url})"
+            exit 1
+        fi
+    fi
+}
+
 if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
@@ -415,6 +457,14 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         exit 1
     fi
 
+    # Ensure the contrib/tantivy submodule is checked out so the binding crate's
+    # path dep resolves. The Rust toolchain itself is provided by the CI image
+    # (olap-devops/cicd bakes rustup + 1.88.0 + the cargo dep cache).
+    update_submodule \
+        "contrib/tantivy" \
+        "tantivy" \
+        "https://code.devops.xiaohongshu.com/data/tantivy/-/archive/<COMMIT>/tantivy-<COMMIT>.tar.gz"
+
     # When build starrocks format lib, USE_STAROS must be ON
     if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         USE_STAROS=ON
@@ -434,6 +484,10 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if [ ${CLEAN} -eq 1 ]; then
         rm -rf $CMAKE_BUILD_DIR
         rm -rf ${STARROCKS_HOME}/be/output/
+        # tantivy_binding's cargo target lives outside be/build_${TYPE} so it
+        # survives ordinary BE rebuilds (cmake re-runs become no-ops). On a
+        # --clean however, drop it too so cargo is forced to recompile next time.
+        rm -rf ${STARROCKS_HOME}/be/src/storage/index/inverted/tantivy/tantivy-binding/target
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
 

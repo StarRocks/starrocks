@@ -15,12 +15,20 @@
 #pragma once
 #include "common/global_types.h"
 #include "storage/olap_common.h"
+#include "util/slice.h"
 
 namespace starrocks {
+
+struct PhraseQueryValue {
+    Slice text;
+    int slop = 0;
+};
 
 enum class InvertedImplementType {
     UNKNOWN = 0,
     CLUCENE = 1,
+    BUILTIN = 2,
+    TANTIVY = 3,
 };
 
 enum class InvertedIndexParserType {
@@ -29,17 +37,24 @@ enum class InvertedIndexParserType {
     PARSER_STANDARD = 2,
     PARSER_ENGLISH = 3,
     PARSER_CHINESE = 4,
+    PARSER_JIEBA = 5,
 };
 
 const std::string INVERTED_IMP_KEY = "imp_lib";
 const std::string TYPE_CLUCENE = "clucene";
+const std::string TYPE_BUILTIN = "builtin";
+const std::string TYPE_TANTIVY = "tantivy";
+
 const std::string INVERTED_INDEX_PARSER_KEY = "parser";
 const std::string INVERTED_INDEX_PARSER_UNKNOWN = "unknown";
 const std::string INVERTED_INDEX_PARSER_NONE = "none";
 const std::string INVERTED_INDEX_PARSER_STANDARD = "standard";
 const std::string INVERTED_INDEX_PARSER_ENGLISH = "english";
 const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
+const std::string INVERTED_INDEX_PARSER_JIEBA = "jieba";
 const std::string LIKE_FN_NAME = "like";
+
+const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 
@@ -61,6 +76,7 @@ enum class InvertedIndexQueryType {
     MATCH_FUZZY_QUERY = 6,
     MATCH_ALL_QUERY = 7,
     MATCH_PHRASE_QUERY = 8,
+    MATCH_ANY_QUERY = 9
 };
 
 } // namespace starrocks

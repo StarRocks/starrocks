@@ -56,6 +56,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -268,6 +269,7 @@ private:
     Status _encode_to_global_id(ScanContext* ctx);
 
     FieldPtr _make_field(size_t i);
+    FieldPtr _make_bm25_score_field(size_t i);
 
     Status _switch_context(ScanContext* to);
 
@@ -391,7 +393,11 @@ private:
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
 
-    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
+    // Build rowids only when a score column is actually materialized (>= 0); the
+    // [min,max] gate filters via the inverted-index seek and needs no rowid, so
+    // count(*) / filter-only queries (column id -1) don't build rowids.
+    bool _bm25_score_materialized() const { return _bm25_score_requested && _bm25_score_column_id >= 0; }
+    bool _always_build_rowid() const { return (_use_vector_index && !_use_ivfpq) || _bm25_score_materialized(); }
 
     bool _use_vector_index;
     std::string _vector_distance_column_name;
@@ -402,6 +408,22 @@ private:
     double _vector_range;
     int _result_order;
     bool _use_ivfpq;
+
+    // BM25 score(): mirror of the vector distance path. When requested, the
+    // GIN/tantivy MATCH predicate runs in scoring mode; the per-row BM25 score
+    // (segment-local row id -> score) is captured in _apply_inverted_index and
+    // materialized into the synthetic score output column in _do_get_next.
+    bool _bm25_score_requested = false;
+    // -1 = score column not in scan output (count(*)/filter-only); gate still filters.
+    int _bm25_score_column_id = -1;
+    SlotId _bm25_score_slot_id = 0;
+    int32_t _bm25_score_limit = 0;
+    // BM25 score(): inclusive [min, max] gate for a `WHERE score() > c` predicate,
+    // pushed into the scored GIN query; -/+INFINITY = unbounded.
+    float _bm25_score_min = -std::numeric_limits<float>::infinity();
+    float _bm25_score_max = std::numeric_limits<float>::infinity();
+    std::string _bm25_score_column_name;
+    std::unordered_map<rowid_t, float> _bm25_score_map;
 
     Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
                                   const std::map<std::string, std::string>& query_params);
@@ -438,6 +460,15 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
                 .size = static_cast<uint32_t>(_opts.vector_search_option->query_vector.size()),
                 .elem_type = tenann::PrimitiveType::kFloatType};
 #endif
+    }
+    if (_opts.use_bm25_score) {
+        _bm25_score_requested = true;
+        _bm25_score_column_id = _opts.bm25_score_column_id;
+        _bm25_score_slot_id = _opts.bm25_score_slot_id;
+        _bm25_score_column_name = _opts.bm25_score_column_name;
+        _bm25_score_limit = _opts.bm25_score_limit;
+        _bm25_score_min = _opts.bm25_score_min;
+        _bm25_score_max = _opts.bm25_score_max;
     }
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
@@ -1598,6 +1629,17 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk->append_vector_column(std::move(distance_column), _make_field(_vector_column_id), _vector_slot_id);
     }
 
+    if (_bm25_score_materialized()) {
+        DCHECK(rowid != nullptr);
+        FloatColumn::MutablePtr score_column = FloatColumn::create();
+        for (const auto& rid : *rowid) {
+            auto it = _bm25_score_map.find(rid);
+            score_column->append(it != _bm25_score_map.end() ? it->second : 0.0f);
+        }
+        chunk->append_vector_column(std::move(score_column), _make_bm25_score_field(_bm25_score_column_id),
+                                    _bm25_score_slot_id);
+    }
+
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -1611,6 +1653,10 @@ FieldPtr SegmentIterator::_make_field(size_t i) {
     return std::make_shared<Field>(i, _vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
 }
 
+FieldPtr SegmentIterator::_make_bm25_score_field(size_t i) {
+    return std::make_shared<Field>(i, _bm25_score_column_name, get_type_info(TYPE_FLOAT), false);
+}
+
 Status SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
         const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
@@ -1621,12 +1667,13 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_read_chunk, ChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _reserve_chunk_size);
+            ASSIGN_OR_RETURN(to->_dict_chunk,
+                             ChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -1661,15 +1708,16 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                 output_schema_idx++;
             }
         }
-
-        to->_final_chunk = ChunkHelper::new_chunk(final_chunk_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     }
-
-    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size)
-                                           : to->_final_chunk;
+    if (to->_has_force_dict_encode) {
+        ASSIGN_OR_RETURN(to->_adapt_global_dict_chunk,
+                         ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+    } else {
+        to->_adapt_global_dict_chunk = to->_final_chunk;
+    }
 
     _context = to;
     return Status::OK();
@@ -2296,8 +2344,17 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
+        IndexReadOptions index_opts;
+        index_opts.use_page_cache =
+                !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+        index_opts.lake_io_opts = _opts.lake_io_opts;
+        index_opts.read_file = _column_files[cid].get();
+        index_opts.stats = _opts.stats;
+        index_opts.segment_rows = num_rows();
+
         if (_inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
+            RETURN_IF_ERROR(
+                    _segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts, index_opts));
             _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
         }
     }
@@ -2331,12 +2388,23 @@ Status SegmentIterator::_apply_inverted_index() {
         RETURN_IF(it == cid_2_fid.end(),
                   Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
         std::string column_name(_schema.field(it->second)->name());
+        if (_bm25_score_requested) {
+            // Push the SQL LIMIT into the scored GIN query so tantivy returns only
+            // the top-k rows (see InvertedIndexIterator::set_bm25_topk_limit).
+            _inverted_index_iterators[cid]->set_bm25_topk_limit(_bm25_score_limit);
+            // Push the WHERE score() >/< c threshold so tantivy gates hits by score.
+            _inverted_index_iterators[cid]->set_bm25_score_range(_bm25_score_min, _bm25_score_max);
+        }
         for (const ColumnPredicate* pred : pred_list) {
             if (_inverted_index_iterators[cid]->is_untokenized() || pred->type() == PredicateType::kExpr) {
-                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
+                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap,
+                                                       _bm25_score_requested ? &_bm25_score_map : nullptr);
                 if (res.ok()) {
                     erased_preds.emplace(pred);
                     erased_pred_col_ids.emplace(cid);
+                } else {
+                    LOG(WARNING) << "Failed to seek inverted index for column " << column_name
+                                 << ", reason: " << res.detailed_message();
                 }
             }
         }
@@ -2357,6 +2425,12 @@ Status SegmentIterator::_apply_inverted_index() {
                 // inverted index filtering.These columns may can be pruned.
                 _prune_cols_candidate_by_inverted_index.insert(cid);
             }
+        }
+    }
+
+    for (auto* iter : _inverted_index_iterators) {
+        if (iter != nullptr) {
+            RETURN_IF_ERROR(iter->close());
         }
     }
 

@@ -358,6 +358,8 @@ public class FunctionSet {
     public static final String ARRAY_SORTBY = "array_sortby";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
+    // BM25 relevance score() for a GIN/tantivy MATCH; planner-rewritten to a scan column.
+    public static final String MATCH_SCORE = "score";
 
     public static final String ARRAY_GENERATE = "array_generate";
 

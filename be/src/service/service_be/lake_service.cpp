@@ -22,14 +22,18 @@
 #include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
@@ -1349,6 +1353,47 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
         LOG(WARNING) << "Repair tablet metadata failed for " << failed_count << " tablets, the first "
                      << messages.size() << " tablets: [" << JoinStrings(messages, "; ") << "]";
     }
+}
+
+void LakeServiceImpl::delete_compound_index_files(::google::protobuf::RpcController* controller,
+                                                  const ::starrocks::DeleteCompoundIndexFilesRequest* request,
+                                                  ::starrocks::DeleteCompoundIndexFilesResponse* response,
+                                                  ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+
+    std::vector<std::string> idx_files;
+    for (int i = 0; i < request->tablet_ids_size(); ++i) {
+        auto tablet_id = request->tablet_ids(i);
+        int64_t version = (i < request->tablet_versions_size()) ? request->tablet_versions(i) : 0;
+        if (version <= 0) {
+            LOG(WARNING) << "Skipping tablet " << tablet_id << " during compound index cleanup: no version provided";
+            continue;
+        }
+        auto metadata_or = _tablet_mgr->get_tablet_metadata(tablet_id, version, false);
+        if (!metadata_or.ok()) {
+            LOG(WARNING) << "Failed to get metadata for tablet " << tablet_id << " version " << version
+                         << " during compound index cleanup: " << metadata_or.status();
+            continue;
+        }
+        const auto& metadata = *metadata_or.value();
+        for (const auto& rowset : metadata.rowsets()) {
+            for (const auto& segment : rowset.segments()) {
+                if (lake::is_segment(segment)) {
+                    auto idx_name = IndexDescriptor::compound_index_file_path_from_segment(segment);
+                    idx_files.emplace_back(_tablet_mgr->segment_location(tablet_id, idx_name));
+                }
+            }
+        }
+    }
+
+    int64_t num_files = idx_files.size();
+    if (!idx_files.empty()) {
+        LOG(INFO) << "Deleting " << num_files << " compound index files after DROP INDEX";
+        lake::delete_files_async(std::move(idx_files));
+    }
+
+    response->set_deleted_files(num_files);
+    Status::OK().to_protobuf(response->mutable_status());
 }
 
 } // namespace starrocks

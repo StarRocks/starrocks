@@ -230,7 +230,25 @@ public class ExpressionPrinter<C> extends ScalarOperatorVisitor<String, C> {
 
     @Override
     public String visitMatchExprOperator(MatchExprOperator predicate, C context) {
-        return print(predicate.getChild(0), context) + " MATCH " + print(predicate.getChild(1), context);
+        // Use the actual operator (MATCH/MATCH_ANY/MATCH_ALL/MATCH_PHRASE) rather than the
+        // hard-coded "MATCH" string. For MATCH_PHRASE with non-zero slop, surface the slop
+        // value as "~N" so the printed expression round-trips through the parser.
+        String op = " " + predicate.getMatchOperator().getName() + " ";
+        String right = print(predicate.getChild(1), context);
+        if (predicate.getMatchOperator() == com.starrocks.analysis.MatchExpr.MatchOperator.MATCH_PHRASE
+                && predicate.getSlop() > 0) {
+            // best-effort: append ~N inside the literal text. The child print typically
+            // renders a string literal as 'text'; we splice ~N before the closing quote
+            // when it looks like a quoted literal, otherwise append outside.
+            if (right.length() >= 2 && right.startsWith("'") && right.endsWith("'")) {
+                String inner = right.substring(1, right.length() - 1);
+                String separator = inner.isEmpty() ? "" : " ";
+                right = "'" + inner + separator + "~" + predicate.getSlop() + "'";
+            } else {
+                right = right + " ~" + predicate.getSlop();
+            }
+        }
+        return print(predicate.getChild(0), context) + op + right;
     }
 
     @Override

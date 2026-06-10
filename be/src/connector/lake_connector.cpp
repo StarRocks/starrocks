@@ -21,6 +21,7 @@
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
@@ -133,8 +134,9 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
-    auto* chunk_ptr = chunk->get();
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
@@ -225,7 +227,17 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
                                             std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        int32_t index = _tablet_schema->field_index(slot->col_name());
+        int32_t index;
+        if (_use_bm25_score && _bm25_score_slot_id >= 0 && slot->id() == _bm25_score_slot_id) {
+            // BM25 score(): synthetic FLOAT column past the real columns; storage
+            // skips it on read, SegmentIterator fills it from the score map.
+            index = _tablet_schema->num_columns();
+            _params.bm25_score_column_id = index;
+            _params.bm25_score_slot_id = slot->id();
+            _params.bm25_score_column_name = slot->col_name();
+        } else {
+            index = _tablet_schema->field_index(slot->col_name());
+        }
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -296,6 +308,34 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
                                            config::lake_cache_select_in_physical_way;
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
+
+    if (thrift_lake_scan_node.__isset.enable_prune_column_after_index_filter) {
+        _params.prune_column_after_index_filter = thrift_lake_scan_node.enable_prune_column_after_index_filter;
+    }
+    if (thrift_lake_scan_node.__isset.enable_gin_filter) {
+        _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
+    }
+    // BM25 score(): run the scored seek when a score slot (materialize score()) OR
+    // a min/max gate (WHERE score()>c, no score output) is present. slot_id < 0
+    // means gate-only: narrow the bitmap, do not materialize a score column.
+    bool bm25_has_gate = thrift_lake_scan_node.__isset.bm25_score_min || thrift_lake_scan_node.__isset.bm25_score_max;
+    _use_bm25_score = thrift_lake_scan_node.__isset.bm25_score_slot_id || bm25_has_gate;
+    if (_use_bm25_score) {
+        _bm25_score_slot_id =
+                thrift_lake_scan_node.__isset.bm25_score_slot_id ? thrift_lake_scan_node.bm25_score_slot_id : -1;
+        _bm25_score_limit = thrift_lake_scan_node.__isset.bm25_score_limit ? thrift_lake_scan_node.bm25_score_limit : 0;
+        // [min, max] score gate for a `WHERE score() > c` predicate; absent = unbounded.
+        if (thrift_lake_scan_node.__isset.bm25_score_min) {
+            _bm25_score_min = static_cast<float>(thrift_lake_scan_node.bm25_score_min);
+        }
+        if (thrift_lake_scan_node.__isset.bm25_score_max) {
+            _bm25_score_max = static_cast<float>(thrift_lake_scan_node.bm25_score_max);
+        }
+        _params.use_bm25_score = true;
+        _params.bm25_score_limit = _bm25_score_limit;
+        _params.bm25_score_min = _bm25_score_min;
+        _params.bm25_score_max = _bm25_score_max;
+    }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
@@ -580,6 +620,19 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 
+    const std::string gin_filter_name = "GinFilter";
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
+    _gin_prefix_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinPrefixFilter", gin_filter_name);
+    _gin_ngram_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinNgramDictFilter", gin_filter_name);
+    _gin_predicate_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinDictFilter", gin_filter_name);
+    _gin_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinNGramDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinNGramFilteredDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_predicate_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
+
     // SegmentRead
     const std::string segment_read_name = "SegmentRead";
     _block_load_timer = ADD_TIMER(_runtime_profile, segment_read_name);
@@ -701,6 +754,16 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_counter, _reader->stats().gin_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
