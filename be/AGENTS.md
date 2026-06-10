@@ -247,10 +247,10 @@ Read-side connector contracts, DataSource, and DataSourceProvider default mechan
 - Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
 
 ### ConnectorLance (`connectorlance`)
-Lance JNI connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.
+JNI-based Lance connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.
 - Targets: `ConnectorLance`
 - Allowed internal include prefixes: `connector/lance/`, `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exec/hdfs_scanner/jni_scanner.h`, `exec/hdfs_scanner/hdfs_scanner.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ConnectorPrimitive`, `Connector`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Exec`
+- Allowed target deps: `ConnectorPrimitive`, `Connector`, `Exec`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep ConnectorLance limited to the Lance JNI connector implementation; move registration into ConnectorBootstrap and avoid pulling storage, service, or full Exec code into the connector library.
 
 ### ConnectorBootstrap (`connectorbootstrap`)
