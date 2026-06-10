@@ -195,7 +195,9 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.timezone = _runtime_state->timezone();
     ctx.stats = &_app_stats;
 
-    ctx.obj_pool = _runtime_state->obj_pool();
+    if (ctx.obj_pool == nullptr) {
+        ctx.obj_pool = _runtime_state->obj_pool();
+    }
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_ctx.conjuncts.all_ctxs;

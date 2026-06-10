@@ -801,6 +801,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     // Copy all shared fields from the datasource-level template context, then
     // override the per-range fields below.
     HdfsScannerContext scanner_ctx = _scanner_ctx;
+    scanner_ctx.obj_pool = &_pool;
     scanner_ctx.partition_expr_ctxs = _partition_filter.values;
     scanner_ctx.extended_col_expr_ctxs = _extended_column_expr_ctxs;
 
