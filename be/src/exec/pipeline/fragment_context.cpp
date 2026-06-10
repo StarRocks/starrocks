@@ -130,8 +130,7 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
 
 void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
-    state->set_fragment_ctx(this);
-    state->set_fragment_runtime_state(&fragment_runtime_state());
+    state->set_fragment_ctx(this, &fragment_runtime_state());
 }
 
 void FragmentContext::count_down_execution_group(size_t val) {
@@ -160,7 +159,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
+    workgroup()->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -170,7 +169,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
         params.__set_fragment_instance_id(fragment_instance_id());
         // params.query_id = query_id();
         // params.fragment_instance_id = fragment_instance_id();
-        const auto& fe_addr = state->fragment_ctx()->fe_addr();
+        const auto& fe_addr = state->fragment_runtime_state()->fe_addr();
 
         class RpcRunnable : public Runnable {
         public:
@@ -250,7 +249,7 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
+        workgroup()->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
     }
 }
 
@@ -274,8 +273,8 @@ void FragmentContext::set_final_status(const Status& status) {
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
         if (!s_status.ok() && !finished_cancel) {
-            const auto* executors = _workgroup != nullptr
-                                            ? _workgroup->executors()
+            const auto* executors = workgroup() != nullptr
+                                            ? workgroup()->executors()
                                             : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
             auto* executor = executors->driver_executor();
             auto* query_ctx = _runtime_state->query_ctx();
@@ -296,8 +295,8 @@ void FragmentContext::set_final_status(const Status& status) {
             }
 
             const auto* executors =
-                    _workgroup != nullptr
-                            ? _workgroup->executors()
+                    workgroup() != nullptr
+                            ? workgroup()->executors()
                             : execution_services(_runtime_state.get()).workgroup_manager->shared_executors();
             auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });

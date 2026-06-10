@@ -106,7 +106,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _query_ctx->attach_to_runtime_state(_runtime_state);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     std::vector<TExpr> t_output_expr;

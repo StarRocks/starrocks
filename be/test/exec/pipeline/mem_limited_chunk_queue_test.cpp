@@ -60,7 +60,7 @@ public:
         dummy_fragment_ctx.set_workgroup(dummy_wg);
         dummy_query_ctx = std::make_shared<QueryContext>();
 
-        dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx);
+        dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx, &dummy_fragment_ctx.fragment_runtime_state());
         dummy_runtime_state.set_fragment_dict_state(dummy_fragment_ctx.dict_state());
         dummy_query_ctx->attach_to_runtime_state(&dummy_runtime_state);
     }

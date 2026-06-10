@@ -159,7 +159,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.scan_keys_unlimited = true;
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
-    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = state->fragment_runtime_state()->pred_tree_params();
     opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
 
     _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
@@ -245,9 +245,10 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
         schema_key_pb.set_schema_id(t_schema_key.schema_id);
         schema_key_pb.set_db_id(t_schema_key.db_id);
         schema_key_pb.set_table_id(t_schema_key.table_id);
-        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
-                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
-                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+        ASSIGN_OR_RETURN(_tablet_schema,
+                         tablet_manager->table_schema_service()->get_schema_for_scan(
+                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
+                                 _runtime_state->fragment_runtime_state()->fe_addr(), _tablet.metadata()));
     } else {
         // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
         // so fallback to the old way to get schema from tablet metadata
@@ -551,7 +552,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
         COUNTER_SET(_non_pushdown_predicates_counter,
                     static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
-        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        if (runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
             _runtime_profile->add_info_string(
                     "NonPushdownPredicateTree",
                     _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
@@ -1122,7 +1123,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
-    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+    if (_runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         _runtime_profile->add_info_string(
                 "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
     }

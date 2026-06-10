@@ -226,7 +226,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
     if (_scanner_ctx.conjuncts_manager != nullptr &&
-        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        _runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
     }
 

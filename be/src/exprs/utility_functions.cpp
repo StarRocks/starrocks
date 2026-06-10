@@ -340,7 +340,7 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
         return Status::NotSupported("unsupport get_query_profile for no-pipeline");
     }
 
-    const auto& fe_addr = state->fragment_ctx()->fe_addr();
+    const auto& fe_addr = state->fragment_runtime_state()->fe_addr();
     TGetProfileResponse res;
     TGetProfileRequest req;
 

@@ -143,7 +143,7 @@ protected:
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>(TUniqueId(), TUniqueId(), TQueryOptions(),
                                                                             TQueryGlobals(), ExecEnv::GetInstance()));
         _runtime_state = _fragment_context->runtime_state();
-        _runtime_state->set_fragment_ctx(_fragment_context);
+        _runtime_state->set_fragment_ctx(_fragment_context, &_fragment_context->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
     }
 
