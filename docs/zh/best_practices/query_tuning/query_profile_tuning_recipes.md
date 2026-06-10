@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+description: "利用 StarRocks 查询配置文件诊断并解决操作符运行缓慢、数据偏斜、溢出和连接问题的一套“症状与解决方案”指南。"
+keywords: ['profile', 'query', '调优']
 sidebar_position: 40
 ---
 
