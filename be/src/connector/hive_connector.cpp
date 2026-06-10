@@ -430,14 +430,13 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _scanner_params.partition_index_in_chunk.push_back(i);
             _scanner_params._partition_index_in_hdfs_partition_columns.push_back(
                     _hive_table->get_partition_col_index(slots[i]));
-            _scanner_params._partition_index_in_hdfs_partition_columns.push_back(
-                    _hive_table->get_partition_col_index(slots[i]));
         } else if (int32_t index = scan_range_indicate_const_column_index(slots[i]->id()); index >= 0) {
             _scanner_params.partition_slots.push_back(slots[i]);
             _scanner_params.partition_index_in_chunk.push_back(i);
             _scanner_params._partition_index_in_hdfs_partition_columns.push_back(index);
         } else if (int32_t extended_col_index = extended_column_index(slots[i]->id()); extended_col_index >= 0) {
             _scanner_params.extended_col_slots.push_back(slots[i]);
+            _scanner_params.extended_col_index_in_chunk.push_back(i);
             _scanner_params.index_in_extended_columns.push_back(extended_col_index);
         } else {
             _scanner_params.materialize_slots.push_back(slots[i]);

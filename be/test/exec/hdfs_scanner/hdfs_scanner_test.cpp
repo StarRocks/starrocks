@@ -327,10 +327,12 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
                         {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
                         {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerParams scanner_params;
     HdfsScannerContext ctx;
+    ctx.params = &scanner_params;
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
-    ctx.params->materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
+    scanner_params.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
@@ -342,9 +344,11 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerParams scanner_params;
     HdfsScannerContext ctx;
+    ctx.params = &scanner_params;
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
-    ctx.params->materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+    scanner_params.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
@@ -356,9 +360,11 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
     auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
+    HdfsScannerParams scanner_params;
     HdfsScannerContext ctx;
+    ctx.params = &scanner_params;
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
-    ctx.params->materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+    scanner_params.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
@@ -369,9 +375,11 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerParams scanner_params;
     HdfsScannerContext ctx;
+    ctx.params = &scanner_params;
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
-    ctx.params->materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+    scanner_params.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);

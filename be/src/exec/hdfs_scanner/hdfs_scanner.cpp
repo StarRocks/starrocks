@@ -526,7 +526,7 @@ Status HdfsScanner::reinterpret_status(const Status& st) {
 
 void HdfsScanner::update_counter() {
     HdfsScannerProfile* profile = &_scanner_params.profile;
-    if (profile == nullptr) return;
+    if (profile->runtime_profile == nullptr) return;
 
     update_hdfs_counter(profile);
 
