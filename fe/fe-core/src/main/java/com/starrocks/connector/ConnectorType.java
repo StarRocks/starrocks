@@ -25,6 +25,7 @@ import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
 import com.starrocks.connector.kudu.KuduConnector;
+import com.starrocks.connector.lance.LanceConnector;
 import com.starrocks.connector.odps.OdpsConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.unified.UnifiedConnector;
@@ -44,6 +45,7 @@ public enum ConnectorType {
     PAIMON("paimon", PaimonConnector.class, null),
     ODPS("odps", OdpsConnector.class, null),
     KUDU("kudu", KuduConnector.class, null),
+    LANCE("lance", LanceConnector.class, null),
     UNIFIED("unified", UnifiedConnector.class, null),
     BENCHMARK("benchmark", BenchmarkConnector.class, BenchmarkConfig.class);
 
@@ -57,6 +59,7 @@ public enum ConnectorType {
             PAIMON,
             ODPS,
             KUDU,
+            LANCE,
             UNIFIED,
             BENCHMARK
     );

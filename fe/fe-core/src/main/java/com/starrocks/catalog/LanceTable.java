@@ -24,12 +24,20 @@ import com.starrocks.thrift.TTableType;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+
 public class LanceTable extends Table {
 
-    private static final String DATASET_URI = "dataset.uri";
+    public static final String DATASET_URI = "dataset.uri";
 
     @SerializedName(value = "prop")
     private Map<String, String> lanceProperties;
+
+    // Only set when the table is served by a Lance external catalog (vs. a single ENGINE=LANCE table).
+    @SerializedName(value = "cn")
+    private String catalogName;
+    @SerializedName(value = "dn")
+    private String databaseName;
 
     public LanceTable() {
         super(TableType.LANCE);
@@ -40,6 +48,25 @@ public class LanceTable extends Table {
         super(id, srTableName, TableType.LANCE, schema);
         this.comment = comment;
         this.lanceProperties = lanceProperties;
+    }
+
+    // Constructor used by the Lance external catalog connector.
+    public LanceTable(String catalogName, String dbName, String tblName,
+                      List<Column> schema, Map<String, String> lanceProperties) {
+        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.LANCE, schema);
+        this.catalogName = catalogName;
+        this.databaseName = dbName;
+        this.lanceProperties = lanceProperties;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName == null ? super.getCatalogName() : catalogName;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return databaseName;
     }
 
     public List<Column> getPartitionColumns() {
