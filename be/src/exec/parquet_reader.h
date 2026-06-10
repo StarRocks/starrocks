@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_set>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -83,6 +84,11 @@ private:
     Status next_selected_row_group();
     // _init_parquet_reader initializes the underlying parquets reader.
     Status _init_parquet_reader();
+    // Re-tag INT96 timestamp columns of the current _batch as UTC. Legacy INT96 carries no
+    // isAdjustedToUTC flag and Arrow decodes it as timezone-naive, indistinguishable from an
+    // INT64 isAdjustedToUTC=false (wall-clock) column. Tagging INT96 as UTC keeps its instant
+    // semantics so the converter shifts it to the session timezone, matching the native reader.
+    void _rectify_int96_timezone();
 
     const int32_t _num_of_columns_from_file;
     int64_t _num_rows = 0;
@@ -97,6 +103,8 @@ private:
 
     // For nested column type, it's consisting of multiple physical-columns
     std::map<std::string, std::vector<int>> _map_column_nested;
+    // Top-level column names whose parquet physical type is INT96 (see _rectify_int96_timezone).
+    std::unordered_set<std::string> _int96_columns;
     std::vector<int> _parquet_column_ids;
     int _total_groups{0}; // groups in a parquet file
     int _current_group{0};

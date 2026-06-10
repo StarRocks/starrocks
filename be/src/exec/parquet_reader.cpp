@@ -143,8 +143,20 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             auto parquet_schema = _file_metadata->schema();
             for (int i = 0; i < parquet_schema->num_columns(); i++) {
                 auto column_desc = parquet_schema->Column(i);
-                std::string field_name = column_desc->path()->ToDotVector()[0];
+                const auto dot_vector = column_desc->path()->ToDotVector();
+                const std::string& field_name = dot_vector[0];
                 _map_column_nested[field_name].push_back(i);
+                // Record top-level INT96 columns so _rectify_int96_timezone() can re-tag them
+                // as UTC instants. Arrow surfaces INT96 as timezone-naive, identical to an
+                // INT64 isAdjustedToUTC=false wall-clock column, so they are otherwise
+                // indistinguishable downstream.
+                // INT96 leaves nested inside complex types (dot_vector.size() > 1) are
+                // deliberately not re-tagged: INT96 is a legacy physical type and rarely
+                // nested, and re-tagging would require rebuilding nested ArrayData trees.
+                // Such leaves are read as wall-clock (no session-timezone shift).
+                if (dot_vector.size() == 1 && column_desc->physical_type() == ::parquet::Type::INT96) {
+                    _int96_columns.insert(field_name);
+                }
             }
         }
 
@@ -314,7 +326,45 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
     return Status::OK();
 }
 
+void ParquetReaderWrap::_rectify_int96_timezone() {
+    // _batch is guaranteed non-null by the caller: get_batch() is only reached after a
+    // successful read_record_batch()/next_batch(), which always populates _batch.
+    if (_int96_columns.empty()) {
+        return;
+    }
+    auto fields = _batch->schema()->fields();
+    auto columns = _batch->columns();
+    bool changed = false;
+    for (size_t i = 0; i < fields.size(); ++i) {
+        if (fields[i]->type()->id() != arrow::Type::TIMESTAMP) {
+            continue;
+        }
+        if (_int96_columns.find(fields[i]->name()) == _int96_columns.end()) {
+            continue;
+        }
+        auto ts_type = std::static_pointer_cast<arrow::TimestampType>(fields[i]->type());
+        if (!ts_type->timezone().empty()) {
+            continue;
+        }
+        // INT96 is a UTC-normalized instant but Arrow decodes it as timezone-naive. Tag it as
+        // UTC so the downstream converter overrides it with the session timezone and shifts the
+        // value (matching the native parquet reader's Int96ToDateTimeConverter), instead of
+        // treating it as a wall-clock INT64 isAdjustedToUTC=false column. The underlying int64
+        // buffer is shared unchanged; only the Arrow type metadata gains the "UTC" zone.
+        auto utc_type = arrow::timestamp(ts_type->unit(), "UTC");
+        auto data = columns[i]->data()->Copy();
+        data->type = utc_type;
+        columns[i] = arrow::MakeArray(data);
+        fields[i] = fields[i]->WithType(utc_type);
+        changed = true;
+    }
+    if (changed) {
+        _batch = arrow::RecordBatch::Make(arrow::schema(fields), _batch->num_rows(), columns);
+    }
+}
+
 const std::shared_ptr<arrow::RecordBatch>& ParquetReaderWrap::get_batch() {
+    _rectify_int96_timezone();
     _current_line_of_batch += _batch->num_rows();
     _current_line_of_group += _batch->num_rows();
     return _batch;

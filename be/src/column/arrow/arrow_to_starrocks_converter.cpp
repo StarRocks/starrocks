@@ -136,13 +136,17 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
                                              chunk_start_idx, chunk_filter, conv_ctx);
     }
 
-    // for timestamp type, state->timezone which is specified by user. convert function
-    // obtains timezone from array. thus timezone in array should be rectified to
-    // state->timezone.
+    // Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
+    // isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
+    // `timezone`, see arrow/type.h TimestampType docstring) and must be
+    // displayed identically regardless of session timezone. Only override the
+    // column timezone when it is already timezone-aware (isAdjustedToUTC=true
+    // -> non-empty Arrow tz). This preserves PR #50448's fix for complex-type
+    // timezone-aware timestamps while restoring spec compliance for naive ones.
     if (array->type_id() == ArrowTypeId::TIMESTAMP) {
         auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
         auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-        if (conv_ctx != nullptr && !conv_ctx->timezone.empty()) {
+        if (conv_ctx != nullptr && !conv_ctx->timezone.empty() && !mutable_timezone.empty()) {
             mutable_timezone = conv_ctx->timezone;
         }
     }
@@ -859,21 +863,16 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             }
         } else if constexpr (at_is_datetime<AT>) {
             auto timezone = concrete_type->timezone();
-            if (timezone.empty()) {
-                // Quote from https://github.com/apache/arrow/blob/4743e181596b9ee45c6b063bcf59fdf9eb72418f/cpp/src/arrow/type.h#L1217
-
-                /// If a TimestampType is constructed without a timezone (or, equivalently, if the
-                /// timezone supplied is an empty string) then the resulting Arrow field (column) is
-                /// considered "timezone-naive".  The producer of a timezone-naive column may populate
-                /// its constituent integer arrays with datetime values from any timezone; the consumer
-                /// of a timezone-naive column should make no assumptions about the interoperability or
-                /// comparability of the values of such a column with those of any other timestamp
-                /// column or datetime value.
-
-                // When the parquet timezone is empty, populate data with runtime timezone instead.
-                if (ctx != nullptr && !ctx->timezone.empty()) {
-                    timezone = ctx->timezone;
-                }
+            const bool is_timezone_naive = timezone.empty();
+            if (is_timezone_naive) {
+                // Arrow timezone-naive = Parquet isAdjustedToUTC=false. Per
+                // Parquet LogicalTypes.md TIMESTAMP, the value must be
+                // displayed "the same way, regardless of the local time zone
+                // in effect." Use UTC so the cctz lookup yields offset=0 and
+                // convert_datetime becomes a no-op for the wall-clock case.
+                // Matches Trino's `DateTimeZone.UTC` pattern in
+                // ColumnReaderFactory.java for the same case.
+                timezone = "UTC";
             }
 
             cctz::time_zone ctz;
