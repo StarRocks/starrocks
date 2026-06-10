@@ -82,7 +82,9 @@ struct GroupReaderParam {
     // context-derived fields (partition columns, not-existed slots, options,
     // global dicts, etc.) without copying them into every GroupReaderParam.
     // Always non-null when used from FileReader; may be null in unit tests.
-    const HdfsScannerContext* scanner_ctx = nullptr;
+    // Non-const because unit tests need to populate the context fields after
+    // construction; GroupReader treats it as read-only by convention.
+    HdfsScannerContext* scanner_ctx = nullptr;
 
     // conjunct_ctxs that column is materialized in group reader
     // Mutable per-group-reader shallow copy of the scanner context's by_slot map;

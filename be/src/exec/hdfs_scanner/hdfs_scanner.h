@@ -194,9 +194,9 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* fs_io_counter = nullptr;
 };
 
-// Immutable scan options derived from the query plan node.  Owned by
-// HiveDataSource; HdfsScannerParams and HdfsScannerContext hold a non-owning
-// pointer so every option is written exactly once and shared without copying.
+// Immutable scan options derived from the query plan node, embedded by value
+// inside HdfsScannerParams so they are copied together with the rest of the
+// per-scanner params.
 struct HdfsScannerOptions {
     bool case_sensitive = false;
     bool use_min_max_opt = false;
@@ -216,14 +216,14 @@ struct HdfsScannerOptions {
     int64_t connector_max_split_size = 0;
 };
 
-// All conjunct contexts and slot metadata derived from the scan plan node.
-// Owned exclusively by HiveDataSource.  Both HdfsScannerParams and
-// HdfsScannerContext hold a non-owning pointer into this struct so the
-// vectors are allocated only once rather than being copied at each layer.
+// All conjunct contexts and slot metadata derived from the scan plan node,
+// embedded by value inside HdfsScannerParams.  HiveDataSource populates it
+// once; HdfsScannerParams copies it (shallow — ExprContext* pointers are
+// owned by HiveDataSource's ObjectPool) into the scanner.
 //
-// The one exception is HdfsScannerContext::conjunct_ctxs_by_slot, which starts
-// as a shallow copy of by_slot because update_with_none_existed_slot() erases
-// entries from it when a column is absent from the data file.
+// HdfsScannerContext::conjunct_ctxs_by_slot starts as a shallow copy of
+// by_slot because update_with_none_existed_slot() erases entries from it
+// when a column is absent from the data file.
 struct HdfsScannerConjuncts {
     // Clone of (min_max_ctxs ∪ scan conjuncts), used to build the
     // ScanConjunctsManager predicate tree (Parquet row-group statistics, etc.).

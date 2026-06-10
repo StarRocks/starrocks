@@ -768,10 +768,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
-    bool disable_column_access_path_hints = false;
     HdfsScannerParams scanner_params = _scanner_params;
-    if (hdfs_scan_node.__isset.column_access_paths && !disable_column_access_path_hints &&
-        _column_access_paths.empty()) {
+    if (hdfs_scan_node.__isset.column_access_paths && _column_access_paths.empty()) {
         bool failed = false;
         auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
@@ -847,7 +845,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     // setup options for datacache
     scanner_params.datacache_options = _scanner_params.datacache_options;
-    if (!disable_column_access_path_hints && !_column_access_paths.empty()) {
+    if (!_column_access_paths.empty()) {
         scanner_params.column_access_paths = &_column_access_paths;
     }
 

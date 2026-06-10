@@ -49,7 +49,9 @@ public:
 
 protected:
     StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
-    // Predicate evaluation/filtering is handled by HdfsScanner::get_next(); no per-scanner chunk filter is needed.
+    // Predicate evaluation/filtering is handled uniformly by HdfsScanner::get_next()
+    // via evaluate_on_conjunct_ctxs_by_slot() and ChunkPredicateEvaluator; JniScanner
+    // does not maintain its own chunk filter.
 
 private:
     struct FillColumnArgs {

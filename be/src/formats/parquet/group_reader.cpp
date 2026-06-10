@@ -402,6 +402,9 @@ Status GroupReader::_create_column_readers() {
     _global_dict_applied_in_group = false;
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
+    if (_param.scanner_ctx == nullptr) {
+        return Status::InternalError("GroupReader: scanner_ctx must not be null");
+    }
     opts.timezone = _param.scanner_ctx->timezone;
     opts.case_sensitive = _param.scanner_ctx->params->options.case_sensitive;
     opts.use_file_pagecache = _param.scanner_ctx->params->options.use_file_pagecache;
