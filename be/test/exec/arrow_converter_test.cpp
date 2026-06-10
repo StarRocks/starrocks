@@ -32,6 +32,7 @@
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/parquet_scanner.h"
 #include "runtime/datetime_value.h"
+#include "runtime/runtime_state.h"
 #include "util/arrow/row_batch.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
@@ -947,6 +948,47 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
         auto type = std::make_shared<arrow::TimestampType>(unit, tz);
         test_datetime<ArrowTypeId::TIMESTAMP, TYPE_DATETIME, arrow::TimestampType>(type, test_cases);
         test_nullable_datetime<ArrowTypeId::TIMESTAMP, TYPE_DATETIME, arrow::TimestampType>(type, test_cases);
+    }
+}
+
+// Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
+// isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
+// `timezone`) and must be displayed "the same way, regardless of the local
+// time zone in effect." Confirms that the convert path no longer applies the
+// session timezone offset to such columns.
+//
+// branch-3.5 note: ArrowConvertContext carries a RuntimeState* (`state`), not a
+// `timezone` string; the timestamp converter reads the session tz via
+// ctx->state->timezone() only when the Arrow type is timezone-aware. We build a
+// RuntimeState whose timezone() returns each session tz, point ctx.state at it,
+// and drive the same ParquetScanner::convert_array_to_column entry used in
+// production.
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_naive_preserves_wall_clock) {
+    auto type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND, "");
+    size_t counter = 0;
+    auto array = create_constant_datetime_array<arrow::TimestampType, false>(1, 0, type, counter);
+    ConvertFuncTree cf(get_arrow_converter(ArrowTypeId::TIMESTAMP, TYPE_DATETIME, false, false));
+    ASSERT_TRUE(cf.func != nullptr);
+
+    // The raw value (0) is 1970-01-01 00:00:00 in wall-clock semantics.
+    // No matter what session timezone is set, the result must be identical.
+    for (const auto* session_tz : {"UTC", "Asia/Shanghai", "Asia/Seoul", "America/Los_Angeles"}) {
+        SCOPED_TRACE(std::string("session_tz=") + session_tz);
+
+        TQueryGlobals query_globals;
+        query_globals.__set_time_zone(session_tz);
+        RuntimeState state(query_globals);
+        ASSERT_EQ(state.timezone(), session_tz);
+
+        ArrowConvertContext ctx;
+        ctx.state = &state;
+        ColumnPtr column = TimestampColumn::create();
+        Filter filter(1, 1);
+        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), column, 0, 0, &filter,
+                                                                 &ctx));
+        ASSERT_EQ(down_cast<TimestampColumn*>(column.get())->get_data()[0],
+                  string_to_datetime<TYPE_DATETIME>("1970-01-01 00:00:00"))
+                << "naive timestamp must not be shifted by session timezone";
     }
 }
 
