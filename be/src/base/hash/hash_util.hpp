@@ -55,6 +55,8 @@ public:
 
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
+    static const uint32_t XXHASH32_SEED = 0;
+    static const uint64_t XXHASH64_SEED = 0;
     static const uint64_t XXHASH3_64_SEED = 0;
 
     ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
@@ -112,6 +114,7 @@ public:
     }
 
     static uint64_t xx_hash3_64(const void* key, int32_t len, uint64_t seed);
+    static uint32_t xx_hash32(const void* key, int32_t len, uint32_t seed);
     static uint64_t xx_hash64(const void* key, int32_t len, uint64_t seed);
 
     // default values recommended by http://isthe.com/chongo/tech/comp/fnv/

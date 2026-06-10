@@ -62,6 +62,7 @@ public class ExpressionStatisticCalculator {
 
     public static final long DAYS_FROM_0_TO_1970 = 719528;
     public static final long DAYS_FROM_0_TO_9999 = 3652424;
+    private static final double UINT32_DOMAIN_CARDINALITY = 4294967296.0;
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -565,6 +566,18 @@ public class ExpressionStatisticCalculator {
                     // murmur_hash3_32's range is uint32_t, so 0 ~ 4294967295
                     minValue = 0;
                     maxValue = 4294967295.0;
+                    distinctValue = rowCount;
+                    break;
+                case FunctionSet.XX_HASH32:
+                    // xx_hash32's range is int32_t
+                    minValue = Integer.MIN_VALUE;
+                    maxValue = Integer.MAX_VALUE;
+                    distinctValue = Math.min(rowCount, UINT32_DOMAIN_CARDINALITY);
+                    break;
+                case FunctionSet.XX_HASH64:
+                    // xx_hash64's range is int64_t
+                    minValue = Long.MIN_VALUE;
+                    maxValue = Long.MAX_VALUE;
                     distinctValue = rowCount;
                     break;
                 case FunctionSet.XX_HASH3_64:
