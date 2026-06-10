@@ -76,6 +76,13 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 continue;
             }
 
+            // Deliberate full-DB READ (not the table-scoped intensive path): this walk iterates
+            // every table and reads per-table internal state (partitions -> indices -> tablets ->
+            // replica versions) over the unbounded table set, which is the case the lock rubric
+            // assigns to plain lockDatabase(READ). It also only runs under
+            // Config.metadata_enable_recovery_mode, where a coherent DB-wide view of partition
+            // versions is wanted and concurrent DDL should not race the repair; the IX-blocking
+            // that READ imposes is acceptable (and desirable) in that mode.
             Locker locker = new Locker();
             locker.lockDatabase(database.getId(), LockType.READ);
             try {
