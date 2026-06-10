@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -109,6 +110,18 @@ final class PresplitTestSupport {
         Mockito.when(sessionVariable.isEnableTabletPreSplit()).thenReturn(enablePreSplit);
         Mockito.when(context.getSessionVariable()).thenReturn(sessionVariable);
         return context;
+    }
+
+    /**
+     * Stub {@link TabletReshardUtils#computeNodeCount} to return a fixed count while delegating every
+     * other static method to its real implementation. The returned MockedStatic MUST be closed by the
+     * caller — declare it in a try-with-resources.
+     */
+    static MockedStatic<TabletReshardUtils> stubComputeNodeCount(int count) {
+        MockedStatic<TabletReshardUtils> reshardUtils =
+                Mockito.mockStatic(TabletReshardUtils.class, Mockito.CALLS_REAL_METHODS);
+        reshardUtils.when(() -> TabletReshardUtils.computeNodeCount(any())).thenReturn(count);
+        return reshardUtils;
     }
 
     static TBrokerFileStatus brokerFileStatus(String path, long size) {
