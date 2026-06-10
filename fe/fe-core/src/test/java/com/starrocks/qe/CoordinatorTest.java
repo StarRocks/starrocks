@@ -189,9 +189,6 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testClearExternalResourcesOnlyOnce() throws StarRocksException {
-=======
     public void testTimeoutHintUsesMetadataCollectQueryTimeoutForMetadataContext() {
         ctx.setMetadataContext(true);
 
@@ -233,8 +230,7 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-    public void testClearExternalResourcesOnlyOnce() {
->>>>>>> 2559780ac35... [BugFix] Fix timeout hint for metadata collection job (#73927)
+    public void testClearExternalResourcesOnlyOnce() throws StarRocksException {
         AtomicInteger clearCount = new AtomicInteger();
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         ScanNode scanNode = new ScanNode(new PlanNodeId(0), desc, "counting-scan") {
@@ -260,5 +256,4 @@ public class CoordinatorTest extends PlanTestBase {
 
         Assertions.assertEquals(1, clearCount.get());
     }
-
 }
