@@ -17,11 +17,10 @@
 #include <ctime>
 #include <utility>
 
-#include "exec/pipeline/adaptive/adaptive_fwd.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_observer.h"
+#include "exec/pipeline/primitives/pipeline_group.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
 
@@ -34,7 +33,7 @@ namespace pipeline {
 class Pipeline : public DriverObserver {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group);
+    Pipeline(uint32_t id, OpFactories op_factories, PipelineGroupRawPtr group);
 
     uint32_t get_id() const { return _id; }
 
@@ -112,7 +111,7 @@ private:
     std::atomic<size_t> _num_finished_drivers = 0;
 
     EventPtr _pipeline_event;
-    ExecutionGroupRawPtr _execution_group = nullptr;
+    PipelineGroupRawPtr _group = nullptr;
 };
 
 } // namespace pipeline
