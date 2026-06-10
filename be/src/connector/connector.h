@@ -163,7 +163,7 @@ public:
 
     virtual bool always_shared_scan() const { return true; }
 
-    virtual void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {}
+    virtual void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {}
 
     virtual void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
         *min_value = MIN_DATA_SOURCE_MEM_BYTES;

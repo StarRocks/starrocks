@@ -86,8 +86,8 @@ Status ColumnMaterializer::init_read_chunk() {
     for (const auto& column : _param.read_cols) {
         read_slots.emplace_back(column.slot_desc);
     }
-    if (_param.reserved_field_slots != nullptr) {
-        for (auto* slot : *_param.reserved_field_slots) {
+    if (!_param.scanner_ctx->reserved_field_slots.empty()) {
+        for (auto* slot : _param.scanner_ctx->reserved_field_slots) {
             read_slots.push_back(slot);
         }
     }
@@ -111,8 +111,8 @@ ChunkPtr ColumnMaterializer::create_read_chunk(const std::vector<SlotId>& slot_i
         ColumnPtr& column = _read_chunk->get_column_by_slot_id(slot_id);
         chunk->append_column(column, slot_id);
     }
-    if (include_reserved_fields && _param.reserved_field_slots != nullptr) {
-        for (const auto* slot : *_param.reserved_field_slots) {
+    if (include_reserved_fields && !_param.scanner_ctx->reserved_field_slots.empty()) {
+        for (const auto* slot : _param.scanner_ctx->reserved_field_slots) {
             ColumnPtr& column = _read_chunk->get_column_by_slot_id(slot->id());
             chunk->append_column(column, slot->id());
         }
@@ -144,8 +144,8 @@ StatusOr<size_t> ColumnMaterializer::read_active_range_round_by_round(const Rang
     DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost, first_selectivity); });
     size_t hit_count = 0;
 
-    if (_param.reserved_field_slots != nullptr) {
-        for (const auto* slot : *_param.reserved_field_slots) {
+    if (!_param.scanner_ctx->reserved_field_slots.empty()) {
+        for (const auto* slot : _param.scanner_ctx->reserved_field_slots) {
             SlotId slot_id = slot->id();
             RETURN_IF_ERROR(read_slot(slot_id, range, filter, chunk));
             if (_post_read_conjuncts_by_slot.find(slot_id) != _post_read_conjuncts_by_slot.end()) {
@@ -224,11 +224,11 @@ StatusOr<size_t> ColumnMaterializer::eval_slot_conjuncts(const std::vector<ExprC
 
 Status ColumnMaterializer::read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
                                       const Filter* filter, ChunkPtr* chunk, bool ignore_reserved_field) {
-    if (read_columns.empty() && _param.reserved_field_slots == nullptr) {
+    if (read_columns.empty() && _param.scanner_ctx->reserved_field_slots.empty()) {
         return Status::OK();
     }
-    if (!ignore_reserved_field && _param.reserved_field_slots != nullptr) {
-        for (const auto& slot : *_param.reserved_field_slots) {
+    if (!ignore_reserved_field && !_param.scanner_ctx->reserved_field_slots.empty()) {
+        for (const auto& slot : _param.scanner_ctx->reserved_field_slots) {
             RETURN_IF_ERROR(read_slot(slot->id(), range, filter, chunk));
         }
     }
@@ -285,8 +285,8 @@ Status ColumnMaterializer::emit_physical_columns(ChunkPtr& active_chunk, ChunkPt
         RETURN_IF_ERROR(fill_dst_column(slot_id, (*dst)->get_column_by_slot_id(slot_id),
                                         active_chunk->get_column_by_slot_id(slot_id)));
     }
-    if (_param.reserved_field_slots != nullptr) {
-        for (const auto* slot : *_param.reserved_field_slots) {
+    if (!_param.scanner_ctx->reserved_field_slots.empty()) {
+        for (const auto* slot : _param.scanner_ctx->reserved_field_slots) {
             SlotId slot_id = slot->id();
             RETURN_IF_ERROR(fill_dst_column(slot_id, (*dst)->get_column_by_slot_id(slot_id),
                                             active_chunk->get_column_by_slot_id(slot_id)));
@@ -321,8 +321,8 @@ void ColumnMaterializer::classify_columns(bool* out_has_reserved_field_filter) {
         ++read_col_idx;
     }
 
-    if (_param.reserved_field_slots != nullptr) {
-        for (auto* slot : *_param.reserved_field_slots) {
+    if (!_param.scanner_ctx->reserved_field_slots.empty()) {
+        for (auto* slot : _param.scanner_ctx->reserved_field_slots) {
             SlotId slot_id = slot->id();
             auto it = conjunct_ctxs_by_slot.find(slot_id);
             if (it != conjunct_ctxs_by_slot.end()) {

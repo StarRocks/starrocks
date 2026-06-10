@@ -55,7 +55,7 @@ void HdfsScannerJsonReaderTest::TearDown() {}
 void HdfsScannerJsonReaderTest::create_random_access_file(const std::string& path) {
     ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(path));
     _opts.fs = _fs.get();
-    _opts.path = path;
+    _opts.file_path = path;
     _opts.file_size = _fs->get_file_size(path).value();
     ASSIGN_OR_ABORT(_file,
                     HdfsScanner::create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, _opts));

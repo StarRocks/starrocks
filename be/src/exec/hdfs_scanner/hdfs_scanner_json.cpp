@@ -220,13 +220,7 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
         RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
         _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
-        for (auto& [_, ctxs] : _scanner_ctx.conjunct_ctxs_by_slot) {
-            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, chunk->get()));
-            if ((*chunk)->num_rows() == 0) {
-                break;
-            }
-        }
+        // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
     }
 
     return st;
@@ -240,7 +234,7 @@ Status HdfsJsonScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify a compress type, we choose it by looking at the filename.
-        compression_type = get_compression_type_from_path(_scanner_params.path);
+        compression_type = get_compression_type_from_path(_scanner_params.file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;

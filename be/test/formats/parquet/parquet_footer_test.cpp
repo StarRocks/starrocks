@@ -24,7 +24,10 @@ namespace starrocks::parquet {
 
 class ParquetFooterTest : public testing::Test {
 public:
-    ParquetFooterTest() { ctx.stats = &stats; }
+    ParquetFooterTest() {
+        ctx.stats = &stats;
+        ctx.params = &scanner_params;
+    }
 
 protected:
     std::unique_ptr<RandomAccessFile> open_file(const std::string& file_path) {
@@ -32,6 +35,7 @@ protected:
     }
 
     HdfsScanStats stats;
+    HdfsScannerParams scanner_params;
     HdfsScannerContext ctx;
 };
 

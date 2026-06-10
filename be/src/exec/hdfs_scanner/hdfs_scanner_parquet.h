@@ -30,7 +30,16 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    void do_update_counter(HdfsScanProfile* profile) override;
+    void do_update_counter(HdfsScannerProfile* profile) override;
+    // Parquet handles single-slot predicates via row-group zone-map, page-index,
+    // dict-filter, and lazy materialisation inside FileReader; the base class must
+    // not apply them a second time.
+    bool scanner_handles_predicate_by_slot_internally() const override { return true; }
+    // Parquet evaluates multi-slot predicates at the end of do_get_next() after
+    // FileReader has materialised all columns.  In the future, expression-driven
+    // lazy materialisation will interleave this with column loading for deeper
+    // optimisation — the override keeps the base class from double-applying them.
+    bool scanner_handles_multi_slot_conjuncts_internally() const override { return true; }
 
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
