@@ -176,8 +176,8 @@ Status HdfsJsonReader::_construct_column(simdjson::ondemand::value& value, Colum
     return add_nullable_column(column, type_desc, col_name, &value, true);
 }
 
-Status HdfsJsonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    const auto& text_file_desc = _scanner_params.scan_range->text_file_desc;
+Status HdfsJsonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
+    const auto& text_file_desc = _scanner_ctx.scan_range->text_file_desc;
     return _setup_compression_type(text_file_desc);
 }
 
@@ -235,7 +235,7 @@ Status HdfsJsonScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify a compress type, we choose it by looking at the filename.
-        compression_type = get_compression_type_from_path(_scanner_params.file_path);
+        compression_type = get_compression_type_from_path(_scanner_ctx.file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;

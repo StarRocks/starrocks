@@ -168,8 +168,8 @@ char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, s
     }
 }
 
-Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    const TTextFileDesc& text_file_desc = _scanner_params.scan_range->text_file_desc;
+Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
+    const TTextFileDesc& text_file_desc = _scanner_ctx.scan_range->text_file_desc;
     RETURN_IF_ERROR(_setup_delimiter(text_file_desc));
     RETURN_IF_ERROR(_setup_compression_type(text_file_desc));
 
@@ -238,7 +238,7 @@ Status HdfsTextScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify compress type, we choose it by looking at filename.
-        compression_type = get_compression_type_from_path(_scanner_params.file_path);
+        compression_type = get_compression_type_from_path(_scanner_ctx.file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;
@@ -247,7 +247,7 @@ Status HdfsTextScanner::_setup_compression_type(const TTextFileDesc& text_file_d
     }
 
     // If it's compressed file, we only handle scan range whose offset == 0.
-    if (_compression_type != NO_COMPRESSION && _scanner_params.scan_range->offset != 0) {
+    if (_compression_type != NO_COMPRESSION && _scanner_ctx.scan_range->offset != 0) {
         _no_data = true;
     }
     return Status::OK();
@@ -396,7 +396,7 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
 }
 
 Status HdfsTextScanner::_create_csv_reader() {
-    const THdfsScanRange* scan_range = _scanner_ctx.params->scan_range;
+    const THdfsScanRange* scan_range = _scanner_ctx.scan_range;
 
     if (_compression_type != NO_COMPRESSION) {
         // we don't know real stream size in adavance, so we set a very large stream size
@@ -441,7 +441,7 @@ Status HdfsTextScanner::_create_csv_reader() {
 
 StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
     // if reading start of file, skipping UTF-8 BOM
-    if (_scanner_ctx.params->scan_range->offset == 0) {
+    if (_scanner_ctx.scan_range->offset == 0) {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
         CSVReader::Record first_line;
         RETURN_IF_ERROR(reader->next_record(&first_line));
@@ -457,7 +457,7 @@ StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // For some table like file table, there is no hive_column_names at all.
     // So we use slot order defined in table schema.
-    if (_scanner_ctx.params->hive_column_names->empty()) {
+    if (_scanner_ctx.hive_column_names->empty()) {
         _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
         for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
             _materialize_slots_index_2_csv_column_index[i] = i;
@@ -465,13 +465,13 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
         return Status::OK();
     }
 
-    const bool case_sensitive = _scanner_ctx.params->options.case_sensitive;
+    const bool case_sensitive = _scanner_ctx.options.case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)
     std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;
 
-    for (size_t i = 0; i < _scanner_ctx.params->hive_column_names->size(); i++) {
-        const std::string& name = (*_scanner_ctx.params->hive_column_names)[i];
+    for (size_t i = 0; i < _scanner_ctx.hive_column_names->size(); i++) {
+        const std::string& name = (*_scanner_ctx.hive_column_names)[i];
         const std::string formatted_column_name = _scanner_ctx.formatted_name(name);
         formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
     }

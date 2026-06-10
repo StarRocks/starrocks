@@ -30,11 +30,10 @@ public:
             : _filepath(filepath),
               _file(_create_file(filepath)),
               _scanner_ctx(std::make_shared<HdfsScannerContext>()),
-              _scan_stats(std::make_shared<HdfsScanStats>()) {
-        _scanner_ctx->params = &_scanner_params;
+              _scan_stats(std::make_shared<HdfsScannerStats>()) {
+        _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         _scanner_ctx->timezone = "Asia/Shanghai";
         _scanner_ctx->stats = _scan_stats.get();
-        _scanner_params.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     }
     ~ParquetCLIReader() {
         _file_reader = nullptr;
@@ -54,12 +53,10 @@ public:
         // create temporary reader to load schema.
         const FileMetaData* file_metadata = nullptr;
         HdfsScannerContext ctx;
-        HdfsScannerParams local_params;
-        ctx.params = &local_params;
-        HdfsScanStats stats;
+        HdfsScannerStats stats;
         ctx.stats = &stats;
-        local_params.scan_range = scan_range;
-        local_params.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx.scan_range = scan_range;
+        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         std::shared_ptr<FileReader> reader =
                 std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         RETURN_IF_ERROR(reader->init(&ctx));
@@ -83,7 +80,7 @@ public:
         TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
         _scanner_ctx->slot_descs = tuple_desc->slots();
         _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
-        _scanner_params.scan_range = scan_range;
+        _scanner_ctx->scan_range = scan_range;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
@@ -256,8 +253,7 @@ private:
     std::shared_ptr<FileReader> _file_reader;
     std::unique_ptr<RandomAccessFile> _file;
     std::shared_ptr<HdfsScannerContext> _scanner_ctx;
-    HdfsScannerParams _scanner_params;
-    std::shared_ptr<HdfsScanStats> _scan_stats;
+    std::shared_ptr<HdfsScannerStats> _scan_stats;
     ChunkPtr _chunk;
     ObjectPool _pool;
 };

@@ -45,7 +45,7 @@ public:
 
 protected:
     void _create_runtime_state(const std::string& timezone);
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    HdfsScannerContext* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length,
                                        const THdfsFileFormat::type& type);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -82,9 +82,9 @@ THdfsScanRange* CacheSelectScannerTest::_create_scan_range(const std::string& fi
     return scan_range;
 }
 
-HdfsScannerParams* CacheSelectScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
+HdfsScannerContext* CacheSelectScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
                                                          TupleDescriptor* tuple_desc) {
-    auto* param = _pool.add(new HdfsScannerParams());
+    auto* param = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
     param->file_path = file;

@@ -27,7 +27,7 @@ namespace starrocks {
 
 static const std::string kAvroProfileSectionPrefix = "Avro";
 
-Status HdfsAvroScanner::do_init(RuntimeState* state, const HdfsScannerParams& /*params*/) {
+Status HdfsAvroScanner::do_init(RuntimeState* state, const HdfsScannerContext& /*scanner_ctx*/) {
     if (!TimezoneUtils::find_cctz_time_zone(state->timezone(), _timezone)) {
         return Status::InvalidArgument(fmt::format("Cannot find cctz time zone: {}", state->timezone()));
     }
@@ -65,17 +65,17 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     // scanner would read the whole file and produce duplicated rows.
     int64_t split_offset = 0;
     int64_t split_length = 0;
-    if (_scanner_params.scan_range != nullptr) {
-        split_offset = _scanner_params.scan_range->offset;
-        split_length = _scanner_params.scan_range->length;
+    if (_scanner_ctx.scan_range != nullptr) {
+        split_offset = _scanner_ctx.scan_range->offset;
+        split_length = _scanner_ctx.scan_range->length;
     }
 
     _avro_reader = std::make_unique<AvroReader>();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    return _avro_reader->init(std::move(input_stream), _scanner_params.file_path, state, &_scanner_counter,
+    return _avro_reader->init(std::move(input_stream), _scanner_ctx.file_path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
                               /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
-                              split_offset, split_length, _scanner_params.avro_schema_json,
+                              split_offset, split_length, _scanner_ctx.avro_schema_json,
                               /*invalid_as_null=*/false, /*allow_direct_path=*/true);
 }
 

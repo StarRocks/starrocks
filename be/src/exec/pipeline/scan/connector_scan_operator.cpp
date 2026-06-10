@@ -911,7 +911,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                                                                              *current_morsel->get_scan_range());
                 m->set_split_context(std::move(t));
                 split_morsels.emplace_back(std::move(m));
-            }
+            }   
 
             RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
         }

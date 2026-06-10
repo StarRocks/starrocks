@@ -268,12 +268,15 @@ void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = {true, true};
-    params->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
-    ASSERT_TRUE(params->conjuncts_manager->parse_conjuncts().ok());
+    params->obj_pool = runtime_state->obj_pool();
+    auto* s = params->obj_pool->add(new HdfsScannerPredicateState());
+    params->predicate_state = s;
+    s->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ASSERT_TRUE(s->conjuncts_manager->parse_conjuncts().ok());
     ConnectorPredicateParser predicate_parser{&tuple_desc->decoded_slots()};
-    auto st = params->conjuncts_manager->get_predicate_tree(&predicate_parser, params->predicate_free_pool);
+    auto st = s->conjuncts_manager->get_predicate_tree(&predicate_parser, s->predicate_free_pool);
     ASSERT_TRUE(st.ok());
-    params->predicate_tree = st.value();
+    s->predicate_tree = st.value();
 }
 
 void ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id,

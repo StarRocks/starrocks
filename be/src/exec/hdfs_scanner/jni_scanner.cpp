@@ -40,7 +40,7 @@ Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message)
     return Status::OK();
 }
 
-Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     RETURN_IF_ERROR(detect_java_runtime());
     return Status::OK();
 }
@@ -451,7 +451,7 @@ Status JniScanner::update_jni_scanner_params() {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            auto col_name = column.formatted_name(_scanner_ctx.params->options.case_sensitive);
+            auto col_name = column.formatted_name(_scanner_ctx.options.case_sensitive);
             names.insert(col_name);
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));

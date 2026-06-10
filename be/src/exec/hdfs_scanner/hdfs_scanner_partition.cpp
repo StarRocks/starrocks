@@ -24,7 +24,7 @@ Status HdfsPartitionScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* 
     }
     _output = true;
     (*chunk) = std::make_shared<Chunk>();
-    for (const SlotDescriptor* slot : _scanner_params.materialize_slots) {
+    for (const SlotDescriptor* slot : _scanner_ctx.materialize_slots) {
         MutableColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
         column->append_default(1);
         (*chunk)->append_column(std::move(column), slot->id());
@@ -39,7 +39,7 @@ Status HdfsPartitionScanner::do_open(RuntimeState* runtime_state) {
 }
 void HdfsPartitionScanner::do_close(RuntimeState* runtime_state) noexcept {}
 
-Status HdfsPartitionScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+Status HdfsPartitionScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     return Status::OK();
 }
 

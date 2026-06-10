@@ -32,6 +32,9 @@
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
+#include "storage/column_predicate.h"
+#include "storage/predicate_parser.h"
+#include "storage/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 
@@ -46,12 +49,11 @@ using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
 
 struct SkipRowsContext {
     DeletionBitmapPtr deletion_bitmap;
-
     bool has_skip_rows() { return deletion_bitmap != nullptr && !deletion_bitmap->empty(); }
 };
 using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 
-struct HdfsScanStats {
+struct HdfsScannerStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
     int64_t late_materialize_skip_rows = 0;
@@ -120,8 +122,6 @@ struct HdfsScanStats {
     // orc stripe information
     std::vector<int64_t> orc_stripe_sizes{};
     int64_t orc_total_tiny_stripe_size = 0;
-
-    // io coalesce
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -195,7 +195,7 @@ struct HdfsScannerProfile {
 };
 
 // Immutable scan options derived from the query plan node, embedded by value
-// inside HdfsScannerParams so they are copied together with the rest of the
+// inside HdfsScannerContext so they are copied together with the rest of the
 // per-scanner params.
 struct HdfsScannerOptions {
     bool case_sensitive = false;
@@ -217,8 +217,8 @@ struct HdfsScannerOptions {
 };
 
 // All conjunct contexts and slot metadata derived from the scan plan node,
-// embedded by value inside HdfsScannerParams.  HiveDataSource populates it
-// once; HdfsScannerParams copies it (shallow — ExprContext* pointers are
+// embedded by value inside HdfsScannerContext.  HiveDataSource populates it
+// once; HdfsScannerContext copies it (shallow — ExprContext* pointers are
 // owned by HiveDataSource's ObjectPool) into the scanner.
 //
 // HdfsScannerContext::conjunct_ctxs_by_slot starts as a shallow copy of
@@ -264,56 +264,49 @@ struct TableSpecificData {
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
 };
 
-struct HdfsScannerParams {
-    // ---- scan-range ----
-    const THdfsScanRange* scan_range = nullptr;
-    int32_t scan_range_id = -1;
-    FileSystem* fs = nullptr;
-    std::string file_path;
-    int64_t file_size = -1;
-    std::string table_location;
-
-    const HdfsSplitContext* split_context = nullptr;
-    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
-    HdfsScannerConjuncts conjuncts;
-    HdfsScannerOptions options;
-    HdfsScannerProfile profile;
-    DataCacheOptions datacache_options{};
-
-    // ---- materialized columns ----
-    std::vector<SlotDescriptor*> materialize_slots;
-    std::vector<int> materialize_index_in_chunk;
-    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
-
-    // ---- partition columns ----
-    std::vector<SlotDescriptor*> partition_slots;
-    std::vector<int> partition_index_in_chunk;
-    std::vector<int> _partition_index_in_hdfs_partition_columns;
-    std::vector<ExprContext*> partition_values;
-
-    // ---- extended columns (iceberg data_seq_num etc.) ----
-    std::vector<SlotDescriptor*> extended_col_slots;
-    std::vector<int> extended_col_index_in_chunk;
-    std::vector<int> index_in_extended_columns;
-    std::vector<ExprContext*> extended_col_values;
-
-    const TupleDescriptor* tuple_desc = nullptr;
-    const TupleDescriptor* min_max_tuple_desc = nullptr;
-    std::vector<std::string>* hive_column_names = nullptr;
-    std::string avro_schema_json;
-    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
-
-    // ---- table-format-specific data ----
-    TableSpecificData table_specific;
-
-    // TODO: probably should be removed in later version.
-    std::atomic<int32_t>* lazy_column_coalesce_counter;
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
-
-    bool is_lazy_materialization_slot(SlotId slot_id) const;
+// Owns all predicate state built by HdfsScanner::_build_scanner_context().
+// An instance is allocated in HdfsScannerContext::obj_pool so its lifetime is
+// tied to the RuntimeState fragment pool.  HdfsScannerContext holds only a raw
+// non-owning pointer (predicate_state) so the context remains copyable.
+//
+// Member declaration order is significant: C++ destroys members in reverse
+// declaration order, giving the required sequence:
+//   runtime_filter_scan_range_pruner (holds ref into conjuncts_manager → dies first)
+//   → predicate_tree  (holds ColumnPredicate* into predicate_free_pool)
+//   → predicate_parser
+//   → predicate_free_pool
+//   → conjuncts_manager (dies last)
+struct HdfsScannerPredicateState {
+    std::unique_ptr<ScanConjunctsManager> conjuncts_manager;
+    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+    std::unique_ptr<ConnectorPredicateParser> predicate_parser;
+    PredicateTree predicate_tree;
+    std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
 };
 
+// HdfsScannerContext carries all state needed by an HdfsScanner from creation
+// through close().  It was formed by merging the former HdfsScannerParams (the
+// immutable input struct filled by HiveDataSource) with the former working-state
+// struct (which held a back-pointer to params).  The merge eliminates the
+// ctx.params->field double-indirection that made every callsite noisy, and
+// removes the need for the scanner to hold two separate objects with identical
+// lifetimes.
+//
+// Copy semantics: the struct is intentionally copyable.  HiveDataSource keeps a
+// "shared template" (_scanner_ctx) that holds query-level fields common to all
+// scan ranges.  _init_scanner() copies it with a plain `= _scanner_ctx` and
+// then overwrites only the per-range fields (scan_range, file_path, etc.).
+// The predicate fields (obj_pool / predicate_state) are null in the template
+// and are populated by HdfsScanner::_build_scanner_context() during open().
 struct HdfsScannerContext {
+    HdfsScannerContext() = default;
+    // Copies all fields except split_tasks (non-copyable unique_ptr vector).
+    // split_tasks is always empty in the template context at copy time.
+    HdfsScannerContext(const HdfsScannerContext&);
+    HdfsScannerContext& operator=(const HdfsScannerContext&);
+    HdfsScannerContext(HdfsScannerContext&&) = default;
+    HdfsScannerContext& operator=(HdfsScannerContext&&) = default;
+
     struct ColumnInfo {
         int idx_in_chunk;
         SlotDescriptor* slot_desc;
@@ -330,12 +323,52 @@ struct HdfsScannerContext {
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
-    // Non-owning pointer to the immutable params that built this context.
-    // Lifetime: _scanner_params outlives _scanner_ctx (both are HdfsScanner members).
-    const HdfsScannerParams* params = nullptr;
+    // ---- per-range (set once per datasource) ----
+    const THdfsScanRange* scan_range = nullptr;
+    int32_t scan_range_id = -1;
+    FileSystem* fs = nullptr;
+    std::string file_path;
+    int64_t file_size = -1;
+    std::string table_location;
+    const HdfsSplitContext* split_context = nullptr;
+    DataCacheOptions datacache_options{};
+    TableSpecificData table_specific;
+
+    // ---- shared across all scan ranges ----
+    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+    HdfsScannerConjuncts conjuncts;
+    HdfsScannerOptions options;
+    HdfsScannerProfile profile;
+
+    // ---- materialized columns ----
+    std::vector<SlotDescriptor*> materialize_slots;
+    std::vector<int> materialize_index_in_chunk;
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
+
+    // ---- partition columns ----
+    std::vector<SlotDescriptor*> partition_slots;
+    std::vector<int> partition_index_in_chunk;
+    std::vector<int> _partition_index_in_hdfs_partition_columns;
+
+    // ---- extended columns (iceberg data_seq_num etc.) ----
+    std::vector<SlotDescriptor*> extended_col_slots;
+    std::vector<int> extended_col_index_in_chunk;
+    std::vector<int> index_in_extended_columns;
+
+    const TupleDescriptor* tuple_desc = nullptr;
+    const TupleDescriptor* min_max_tuple_desc = nullptr;
+    std::vector<std::string>* hive_column_names = nullptr;
+    std::string avro_schema_json;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+
+    // TODO: probably should be removed in later version.
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     std::string formatted_name(const std::string& name) const {
-        return params->options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+        return options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
     std::vector<SlotDescriptor*> slot_descs;
@@ -347,12 +380,21 @@ struct HdfsScannerContext {
     // partition column
     std::vector<ColumnInfo> partition_columns;
 
-    // partition column value which read from hdfs file path
+    // ExprContexts for partition column values (evaluated from hdfs file path).
+    // Filled by HiveDataSource before init(); evaluated once in _build_scanner_context()
+    // to produce partition_values below.  Lifetime is managed by HiveDataSource's ObjectPool.
+    std::vector<ExprContext*> partition_expr_ctxs;
+
+    // Evaluated partition column values (constant columns, one per partition slot).
     Columns partition_values;
 
-    // extended column
+    // Extended column metadata (iceberg data_seq_num, etc.).
     std::vector<ColumnInfo> extended_columns;
 
+    // ExprContexts for extended column values.  Same lifetime model as partition_expr_ctxs.
+    std::vector<ExprContext*> extended_col_expr_ctxs;
+
+    // Evaluated extended column values.
     Columns extended_values;
 
     std::vector<HdfsSplitContextPtr> split_tasks;
@@ -369,9 +411,12 @@ struct HdfsScannerContext {
 
     std::string timezone;
 
-    HdfsScanStats* stats = nullptr;
+    HdfsScannerStats* stats = nullptr;
 
-    RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;
+    // Both set by HdfsScanner::_build_scanner_context() during open(); null until then.
+    // predicate_state is allocated from obj_pool so they share the same lifetime.
+    ObjectPool* obj_pool = nullptr;
+    HdfsScannerPredicateState* predicate_state = nullptr;
 
     bool can_use_count_optimization() const;
 
@@ -418,19 +463,14 @@ struct HdfsScannerContext {
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 
     void merge_split_tasks();
-
-    // used for parquet zone map filter only
-    std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
-    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
-    PredicateTree predicate_tree;
 };
 
 struct OpenFileOptions {
     FileSystem* fs = nullptr;
     std::string file_path;
     int64_t file_size = -1;
-    HdfsScanStats* fs_stats = nullptr;
-    HdfsScanStats* app_stats = nullptr;
+    HdfsScannerStats* fs_stats = nullptr;
+    HdfsScannerStats* app_stats = nullptr;
 
     // for datacache
     DataCacheOptions datacache_options;
@@ -444,7 +484,7 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
-    Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
+    Status init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx);
     Status open(RuntimeState* runtime_state);
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     void close() noexcept;
@@ -462,7 +502,7 @@ public:
     virtual Status do_open(RuntimeState* runtime_state) = 0;
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
-    virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
+    virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) = 0;
     virtual void do_update_counter(HdfsScannerProfile* profile);
     virtual Status reinterpret_status(const Status& st);
 
@@ -503,10 +543,10 @@ private:
 
 protected:
     HdfsScannerContext _scanner_ctx;
-    HdfsScannerParams _scanner_params;
+
     RuntimeState* _runtime_state = nullptr;
-    HdfsScanStats _app_stats;
-    HdfsScanStats _fs_stats;
+    HdfsScannerStats _app_stats;
+    HdfsScannerStats _fs_stats;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;

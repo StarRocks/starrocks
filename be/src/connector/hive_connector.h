@@ -106,7 +106,7 @@ private:
 
     Status _init_partition_values();
     Status _init_extended_values();
-    Status _init_global_dicts(HdfsScannerParams* params);
+    Status _init_global_dicts(HdfsScannerContext* ctx);
     Status _init_scanner(RuntimeState* state);
     Status _check_all_slots_nullable();
 
@@ -115,7 +115,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
 
     HdfsScanner* _scanner = nullptr;
-    HdfsScannerParams _scanner_params;
+    HdfsScannerContext _scanner_ctx;
 
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {
@@ -125,6 +125,13 @@ private:
         bool filter_by_eval = false;
     };
     PartitionFilter _partition_filter;
+
+    // ExprContexts for extended column values (iceberg data_seq_num, etc.).
+    // Lifetime managed by _pool; passed to HdfsScannerContext before scanner init.
+    std::vector<ExprContext*> _extended_column_expr_ctxs;
+
+    // Per-range scan_range_id assigned by the global late materialization context.
+    int32_t _scan_range_id = -1;
 
     bool _no_more_chunks = false;
     const TupleDescriptor* _min_max_tuple_desc = nullptr;

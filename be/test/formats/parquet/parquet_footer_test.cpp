@@ -27,7 +27,6 @@ class ParquetFooterTest : public testing::Test {
 public:
     ParquetFooterTest() {
         ctx.stats = &stats;
-        ctx.params = &scanner_params;
     }
 
 protected:
@@ -35,8 +34,7 @@ protected:
         return *FileSystem::Default()->new_random_access_file(file_path);
     }
 
-    HdfsScanStats stats;
-    HdfsScannerParams scanner_params;
+    HdfsScannerStats stats;
     HdfsScannerContext ctx;
 };
 
