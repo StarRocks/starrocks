@@ -47,7 +47,7 @@ namespace starrocks::parquet {
 
 namespace {
 
-void deduplicate_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges) {
+void deduplicate_io_ranges(std::vector<starrocks::io::SharedBufferedInputStream::IORange>* ranges) {
     if (ranges == nullptr || ranges->size() <= 1) {
         return;
     }
@@ -139,14 +139,14 @@ Status GroupReader::prepare() {
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<starrocks::io::SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
         if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
-            _param.stats->group_active_lazy_coalesce_together += 1;
+            _param.stats->active_lazy_coalesce_together += 1;
         } else {
-            _param.stats->group_active_lazy_coalesce_seperately += 1;
+            _param.stats->active_lazy_coalesce_seperately += 1;
         }
         _set_end_offset(end_offset);
         RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
@@ -353,9 +353,12 @@ Status GroupReader::_create_column_readers() {
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
-    opts.timezone = _param.timezone;
-    opts.case_sensitive = _param.case_sensitive;
-    opts.use_file_pagecache = _param.use_file_pagecache;
+    if (_param.scanner_ctx == nullptr) {
+        return Status::InternalError("GroupReader: scanner_ctx must not be null");
+    }
+    opts.timezone = _param.scanner_ctx->timezone;
+    opts.case_sensitive = _param.scanner_ctx->params->options.case_sensitive;
+    opts.use_file_pagecache = _param.scanner_ctx->params->options.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
@@ -370,30 +373,27 @@ Status GroupReader::_create_column_readers() {
     }
 
     // create for partition values
-    if (_param.partition_columns != nullptr && _param.partition_values != nullptr) {
-        for (size_t i = 0; i < _param.partition_columns->size(); i++) {
-            const auto& column = (*_param.partition_columns)[i];
-            const auto* slot_desc = column.slot_desc;
-            const auto value = (*_param.partition_values)[i];
-            _column_readers.emplace(slot_desc->id(), std::make_unique<FixedValueColumnReader>(value->get(0)));
-        }
+    const auto& partition_columns = _param.scanner_ctx->partition_columns;
+    const auto& partition_values = _param.scanner_ctx->partition_values;
+    for (size_t i = 0; i < partition_columns.size(); i++) {
+        const auto& column = partition_columns[i];
+        const auto* slot_desc = column.slot_desc;
+        const auto value = partition_values[i];
+        _column_readers.emplace(slot_desc->id(), std::make_unique<FixedValueColumnReader>(value->get(0)));
     }
 
     // create for not existed column
-    if (_param.not_existed_slots != nullptr) {
-        for (size_t i = 0; i < _param.not_existed_slots->size(); i++) {
-            const auto* slot = (*_param.not_existed_slots)[i];
-            _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
-        }
+    for (const auto* slot : _param.scanner_ctx->not_existed_slots) {
+        _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
     }
 
-    if (_param.reserved_field_slots != nullptr && !_param.reserved_field_slots->empty()) {
+    const auto& reserved_slots = _param.scanner_ctx->reserved_field_slots;
+    if (!reserved_slots.empty()) {
         bool use_legacy_lookup_row_id =
-                std::any_of(_param.reserved_field_slots->begin(), _param.reserved_field_slots->end(),
-                            [](const SlotDescriptor* slot) {
-                                return slot->col_name() == "_row_source_id" || slot->col_name() == "_scan_range_id";
-                            });
-        for (const auto* slot : *_param.reserved_field_slots) {
+                std::any_of(reserved_slots.begin(), reserved_slots.end(), [](const SlotDescriptor* slot) {
+                    return slot->col_name() == "_row_source_id" || slot->col_name() == "_scan_range_id";
+                });
+        for (const auto* slot : reserved_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to computed row_id (firstRowId + position) for non-compacted files.
@@ -456,11 +456,11 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));
         }
-        if (_param.global_dictmaps->contains(column.slot_id())) {
-            ASSIGN_OR_RETURN(
-                    column_reader,
-                    ColumnReaderFactory::create(std::move(column_reader), _param.global_dictmaps->at(column.slot_id()),
-                                                column.slot_id(), _row_group_metadata->num_rows));
+        auto* global_dictmaps = _param.scanner_ctx->params->global_dictmaps;
+        if (global_dictmaps->contains(column.slot_id())) {
+            ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create(
+                                                    std::move(column_reader), global_dictmaps->at(column.slot_id()),
+                                                    column.slot_id(), _row_group_metadata->num_rows));
         }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
@@ -498,8 +498,8 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
 
 // ── IO range collection ─────────────────────────────────────────────────────
 
-void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                    ColumnIOTypeFlags types) {
+void GroupReader::collect_io_ranges(std::vector<starrocks::io::SharedBufferedInputStream::IORange>* ranges,
+                                    int64_t* end_offset, ColumnIOTypeFlags types) {
     int64_t end = 0;
     _column_materializer->collect_io_ranges(ranges, &end, types);
     deduplicate_io_ranges(ranges);

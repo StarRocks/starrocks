@@ -52,6 +52,8 @@ protected:
 
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
+
+    HdfsScannerParams _scanner_params;
 };
 
 std::unique_ptr<RandomAccessFile> PageIndexTest::_create_file(const std::string& file_path) {
@@ -61,11 +63,13 @@ std::unique_ptr<RandomAccessFile> PageIndexTest::_create_file(const std::string&
 HdfsScannerContext* PageIndexTest::_create_scan_context() {
     auto* ctx = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    _scanner_params.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+
+    ctx->params = &_scanner_params;
     ctx->timezone = "Asia/Shanghai";
     ctx->stats = &g_hdfs_scan_stats;
-    ctx->parquet_page_index_enable = true;
-    ctx->parquet_bloom_filter_enable = true;
+    _scanner_params.options.parquet_page_index_enable = true;
+    _scanner_params.options.parquet_bloom_filter_enable = true;
     return ctx;
 }
 
@@ -87,7 +91,7 @@ HdfsScannerContext* PageIndexTest::_create_file_random_read_context(const std::s
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-    ctx->scan_range = (_create_scan_range(file_path));
+    _scanner_params.scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -103,7 +107,7 @@ HdfsScannerContext* PageIndexTest::_create_file_only_c0_context(const std::strin
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-    ctx->scan_range = (_create_scan_range(file_path));
+    _scanner_params.scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -121,7 +125,7 @@ HdfsScannerContext* PageIndexTest::_create_file_c0_c1_c2_context(const std::stri
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-    ctx->scan_range = (_create_scan_range(file_path));
+    _scanner_params.scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -230,21 +234,22 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                 auto ctx = _create_file_random_read_context(file_path);
                 auto file = _create_file(file_path);
                 ctx->conjunct_ctxs_by_slot[0].clear();
-                ctx->min_max_conjunct_ctxs.clear();
+                _scanner_params.conjuncts.min_max_ctxs.clear();
 
                 if (single_flag) {
                     Utils::SlotDesc min_max_slots[] = {
                             {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
                             {""},
                     };
-                    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+                    _scanner_params.min_max_tuple_desc =
+                            Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
                     std::vector<TExpr> t_conjuncts;
                     ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, oprands[0], &t_conjuncts);
                     ParquetUTBase::append_int_conjunct(TExprOpcode::LT, 0, oprands[1], &t_conjuncts);
 
                     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
-                                                        &ctx->min_max_conjunct_ctxs);
+                                                        &_scanner_params.conjuncts.min_max_ctxs);
                     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
                                                         &ctx->conjunct_ctxs_by_slot[0]);
 
@@ -256,7 +261,8 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                             {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
                             {""},
                     };
-                    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+                    _scanner_params.min_max_tuple_desc =
+                            Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
                     std::vector<TExpr> t_conjuncts;
                     ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, oprands[0], &t_conjuncts);
@@ -265,7 +271,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                     ParquetUTBase::append_int_conjunct(TExprOpcode::LT, 1, oprands[3], &t_conjuncts);
 
                     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
-                                                        &ctx->min_max_conjunct_ctxs);
+                                                        &_scanner_params.conjuncts.min_max_ctxs);
 
                     std::vector<TExpr> t_conjuncts_slot0{t_conjuncts[0], t_conjuncts[1]};
                     std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[2], t_conjuncts[3]};
@@ -356,14 +362,15 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         auto ctx = _create_file_only_c0_context(small_page_file);
         auto file = _create_file(small_page_file);
         ctx->conjunct_ctxs_by_slot[0].clear();
-        ctx->min_max_conjunct_ctxs.clear();
-        ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+        _scanner_params.conjuncts.min_max_ctxs.clear();
+        _scanner_params.min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
         std::vector<TExpr> t_conjuncts;
         ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 5500, &t_conjuncts);
         ParquetUTBase::append_int_conjunct(TExprOpcode::LT, 0, 7500, &t_conjuncts);
 
-        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
+                                            &_scanner_params.conjuncts.min_max_ctxs);
         ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
         // tuple desc
@@ -373,7 +380,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         };
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         std::vector<ExprContext*> all_conjuncts{};
-        for (auto* expr : ctx->min_max_conjunct_ctxs) {
+        for (auto* expr : _scanner_params.conjuncts.min_max_ctxs) {
             all_conjuncts.push_back(expr);
         }
         for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
@@ -448,8 +455,8 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         auto file = _create_file(small_page_file);
         ctx->conjunct_ctxs_by_slot[0].clear();
         ctx->conjunct_ctxs_by_slot[1].clear();
-        ctx->min_max_conjunct_ctxs.clear();
-        ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+        _scanner_params.conjuncts.min_max_ctxs.clear();
+        _scanner_params.min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
         std::vector<TExpr> t_conjuncts;
         // c0: 1->20000, c0 > 5000
@@ -457,7 +464,8 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         // c1: 20000->1, c1 > 5000
         ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 5000, &t_conjuncts);
 
-        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts,
+                                            &_scanner_params.conjuncts.min_max_ctxs);
 
         std::vector<TExpr> t_conjuncts_slot0{t_conjuncts[0]};
         ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot0, &ctx->conjunct_ctxs_by_slot[0]);
@@ -474,7 +482,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         };
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         std::vector<ExprContext*> all_conjuncts{};
-        for (auto* expr : ctx->min_max_conjunct_ctxs) {
+        for (auto* expr : _scanner_params.conjuncts.min_max_ctxs) {
             all_conjuncts.push_back(expr);
         }
         for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
@@ -555,8 +563,8 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     auto file = _create_file(small_page_file);
     ctx->conjunct_ctxs_by_slot[0].clear();
     ctx->conjunct_ctxs_by_slot[1].clear();
-    ctx->min_max_conjunct_ctxs.clear();
-    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+    _scanner_params.conjuncts.min_max_ctxs.clear();
+    _scanner_params.min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
     std::vector<TExpr> t_conjuncts;
     // c0: 1->20000, c0 > 500
@@ -564,7 +572,7 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     // c1: 20000->1, c1 > 500
     ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 500, &t_conjuncts);
 
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_params.conjuncts.min_max_ctxs);
 
     std::vector<TExpr> t_conjuncts_slot0{t_conjuncts[0]};
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot0, &ctx->conjunct_ctxs_by_slot[0]);
@@ -652,24 +660,24 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     auto ctx = _create_scan_context();
     auto file = _create_file(file_path);
     ctx->conjunct_ctxs_by_slot[0].clear();
-    ctx->min_max_conjunct_ctxs.clear();
+    _scanner_params.conjuncts.min_max_ctxs.clear();
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-    ctx->scan_range = _create_scan_range(file_path);
-    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+    _scanner_params.scan_range = _create_scan_range(file_path);
+    _scanner_params.min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
     std::vector<TExpr> t_conjuncts;
     // id > 2
     // this triggers page index filtering
     ParquetUTBase::append_bigint_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
 
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &_scanner_params.conjuncts.min_max_ctxs);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
     std::vector<ExprContext*> all_conjuncts;
-    for (auto* expr : ctx->min_max_conjunct_ctxs) {
+    for (auto* expr : _scanner_params.conjuncts.min_max_ctxs) {
         all_conjuncts.push_back(expr);
     }
     for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
