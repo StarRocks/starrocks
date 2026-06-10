@@ -78,30 +78,78 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           # The skill runs inside claude-cli docker where `gh` is unavailable,
-          # so it can only print "Recommended reviewer: <login>" and asks for
-          # manual assignment. Host runner has `gh` + GITHUB_TOKEN, so attach
-          # the reviewer here instead. Idempotent: gh ignores duplicates.
+          # so it can only print recommendation lines and asks for manual
+          # assignment. Host runner has `gh` + GITHUB_TOKEN, so attach the
+          # reviewers here instead. Idempotent: gh ignores duplicates.
+          #
+          # The skill (starrocks-skills/starrocks-assign-pr-reviewer) emits up
+          # to three lines (see SKILL.md "Output Template"):
+          #   Recommended reviewer: <owner login | none>
+          #   Affinity reviewer: <login | none>
+          #   Global reviewer: <team slug | none>
+          # Assign every non-"none" output. The first two are individual logins;
+          # "Global reviewer" is a team and `gh` requires the org/team form.
           ai_output="${RUNNER_TEMP}/ai_output.txt"
           if [ ! -f "$ai_output" ]; then
             echo "no ai_output, skip"
             exit 0
           fi
-          reviewer=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
-            | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
-            | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
-          if [ -z "$reviewer" ] || [ "$reviewer" = "none" ]; then
-            echo "no reviewer extracted, skip"
-            exit 0
-          fi
-          # Self-review guard: GitHub rejects request-review from the PR author.
+
+          extract() {
+            # $1 is the literal field label (without trailing colon).
+            # LLM may wrap the line or value in **bold**; strip leading * and
+            # then keep only valid GitHub login chars (so @, backticks, quotes
+            # all get dropped).
+            local key="$1"
+            grep -iE "^\**${key}:" "$ai_output" | tail -1 \
+              | sed -E "s|^\**[^:]*:\**[[:space:]]*||" \
+              | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1
+          }
+
+          owner=$(extract "Recommended reviewer")
+          affinity=$(extract "Affinity reviewer")
+          global=$(extract "Global reviewer")
           author=$(gh pr view "$PR" -R "$REPO" --json author -q '.author.login' 2>/dev/null || true)
-          if [ -n "$author" ] && [ "$reviewer" = "$author" ]; then
-            echo "skip: recommended reviewer ($reviewer) is the PR author"
-            exit 0
+
+          assign_user() {
+            local r="$1"
+            if [ -z "$r" ] || [ "$r" = "none" ]; then
+              return
+            fi
+            # Self-review guard: GitHub rejects request-review from the author.
+            if [ -n "$author" ] && [ "$r" = "$author" ]; then
+              echo "skip: $r is the PR author"
+              return
+            fi
+            echo "Assigning user: $r"
+            gh pr edit "$PR" -R "$REPO" --add-reviewer "$r" \
+              || echo "WARN: add-reviewer $r failed (permissions, already a reviewer, or transient API error)"
+          }
+
+          assign_team() {
+            local t="$1"
+            if [ -z "$t" ] || [ "$t" = "none" ]; then
+              return
+            fi
+            # gh expects team form `org/team-slug`. If the skill already emits
+            # a qualified form, use it as-is; otherwise default to the org.
+            case "$t" in
+              */*) ;;
+              *)   t="StarRocks/$t" ;;
+            esac
+            echo "Assigning team: $t"
+            gh pr edit "$PR" -R "$REPO" --add-reviewer "$t" \
+              || echo "WARN: add-reviewer $t failed (permissions, already a reviewer, or transient API error)"
+          }
+
+          assign_user "$owner"
+          # De-dup: if affinity == owner, the second call would be a no-op API
+          # round-trip; skip it locally for clarity.
+          if [ -n "$affinity" ] && [ "$affinity" = "$owner" ]; then
+            affinity=""
           fi
-          echo "Assigning reviewer: $reviewer"
-          gh pr edit "$PR" -R "$REPO" --add-reviewer "$reviewer" \
-            || echo "WARN: gh pr edit --add-reviewer failed (permissions, already a reviewer, or transient API error)"
+          assign_user "$affinity"
+          assign_team "$global"
 
       - name: Notify Slack
         env:
@@ -117,20 +165,37 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           cd ci-tool && git pull
 
-          # Parse the primary reviewer from the skill's output.
-          # The skill prints: "Recommended reviewer: <login>"
-          # (see starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md "Output Template").
-          # The LLM often wraps the line/value in markdown bold or italics
-          # (e.g. **Recommended reviewer: kevincai**, Recommended reviewer: **kevincai**).
-          # Tolerate optional leading *, then extract only valid GitHub login chars
-          # ([A-Za-z0-9-]) to drop @, **, backticks, etc.
+          # Parse owner + affinity reviewers from the skill output. The skill
+          # (starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md "Output
+          # Template") emits:
+          #   Recommended reviewer: <owner login | none>
+          #   Affinity reviewer: <login | none>
+          #   Global reviewer: <team slug | none>
+          # Slack-mention both individuals. "Global reviewer" is intentionally
+          # skipped here -- it is a team, and member_slack.json is keyed by
+          # individual login, so we cannot resolve a Slack user-group ID.
+          # The LLM may wrap the line/value in markdown (e.g.
+          # **Recommended reviewer: kevincai**, Recommended reviewer:
+          # **kevincai**); tolerate optional leading * and extract only valid
+          # GitHub login chars to drop @, **, backticks, quotes.
           ai_output="${RUNNER_TEMP}/ai_output.txt"
-          reviewers=""
-          if [ -f "$ai_output" ]; then
-            reviewers=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
-              | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
-              | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
+          if [ ! -f "$ai_output" ]; then
+            echo "no ai_output, skip Slack notification"
+            exit 0
           fi
+
+          extract() {
+            local key="$1"
+            grep -iE "^\**${key}:" "$ai_output" | tail -1 \
+              | sed -E "s|^\**[^:]*:\**[[:space:]]*||" \
+              | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1
+          }
+
+          owner=$(extract "Recommended reviewer")
+          affinity=$(extract "Affinity reviewer")
+          # De-dup + drop empty/none, preserve owner-before-affinity order.
+          reviewers=$(printf '%s\n%s\n' "$owner" "$affinity" \
+            | awk 'NF && $0!="none" && !seen[$0]++')
 
           if [ -z "$reviewers" ]; then
             echo "Could not extract AI-assigned reviewers from output, skip Slack notification"
