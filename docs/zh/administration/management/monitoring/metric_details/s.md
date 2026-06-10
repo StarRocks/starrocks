@@ -1,182 +1,10 @@
 ---
 displayed_sidebar: docs
 hide_table_of_contents: true
-description: "Alphabetical q - z"
+description: "Alphabetical s"
 ---
 
-# 指标 q 到 z
-
-:::note
-
-物化视图和存算分离集群的指标在相应章节中详细介绍：
-
-- [异步物化视图指标](../metrics-materialized_view.md)
-- [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
-
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
-
-:::
-
-## `query_cache_capacity`
-
-- 描述：查询缓存的容量。
-
-## `query_cache_hit_count`
-
-- 单位：计数
-- 描述：查询缓存命中次数。
-
-## `query_cache_hit_ratio`
-
-- 单位：-
-- 描述：查询缓存命中率。
-
-## `query_cache_lookup_count`
-
-- 单位：计数
-- 描述：查询缓存查找总次数。
-
-## `query_cache_usage`
-
-- 单位：字节
-- 描述：当前查询缓存使用量。
-
-## `query_cache_usage_ratio`
-
-- 单位：-
-- 描述：当前查询缓存使用率。
-
-## `query_mem_bytes`
-
-- 单位：字节
-- 描述：查询使用的内存。
-
-## `query_scan_bytes`
-
-- 单位：字节
-- 描述：扫描的总字节数。
-
-## `query_scan_bytes_per_second`
-
-- 单位：字节/秒
-- 描述：每秒扫描字节数的估计速率。
-
-## `query_scan_rows`
-
-- 单位：计数
-- 描述：扫描的总行数。
-
-## `readable_blocks_total (Deprecated)`
-
-## `recycle_bin_database_num`
-
-- 单位：个
-- 描述：FE Catalog 回收站中当前保留的数据库数量。
-
-## `recycle_bin_partition_num`
-
-- 单位：个
-- 描述：FE Catalog 回收站中当前保留的分区数量。
-
-## `recycle_bin_table_num`
-
-- 单位：个
-- 描述：FE Catalog 回收站中当前保留的表数量。
-
-## `resource_group_bigquery_count`
-
-- 单位：计数
-- 描述：每个资源组中触发大查询限制的查询数量。这是一个瞬时值。
-
-## `resource_group_concurrency_overflow_count`
-
-- 单位：计数
-- 描述：每个资源组中触发并发限制的查询数量。这是一个瞬时值。
-
-## `resource_group_connector_scan_use_ratio (Deprecated)`
-
-- 单位：-
-- 描述：每个资源组使用的外部表扫描线程时间片占所有资源组使用总量的比例。这是两次指标检索之间时间间隔内的平均值。
-
-## `resource_group_cpu_limit_ratio`
-
-- 单位：-
-- 描述：每个资源组的 CPU 核限制占所有资源组 CPU 核限制总量的比例。这是一个瞬时值。
-
-## `resource_group_cpu_use_ratio (Deprecated)`
-
-- 单位：-
-- 描述：每个资源组使用的管道线程时间片占所有资源组使用总量的比例。这是两次指标检索之间时间间隔内的平均值。
-
-## `resource_group_inuse_cpu_cores`
-
-- 单位：计数
-- 描述：每个资源组当前使用的 CPU 核的估计数量。这是两次指标检索之间时间间隔内的平均值。
-
-## `resource_group_mem_inuse_bytes`
-
-- 单位：字节
-- 描述：每个资源组当前使用的内存，以字节为单位。这是一个瞬时值。
-
-## `resource_group_mem_limit_bytes`
-
-- 单位：字节
-- 描述：每个资源组的内存限制，以字节为单位。这是一个瞬时值。
-
-## `resource_group_running_queries`
-
-- 单位：计数
-- 描述：每个资源组中当前正在运行的查询数量。这是一个瞬时值。
-
-## `resource_group_scan_use_ratio (Deprecated)`
-
-- 单位：-
-- 描述：每个资源组使用的内部表扫描线程时间片占所有资源组总使用量的比例。这是两次指标检索之间时间间隔内的平均值。
-
-## `resource_group_total_queries`
-
-- 单位：计数
-- 描述：每个资源组中执行的查询总数，包括当前正在运行的查询。这是一个瞬时值。
-
-## `result_block_queue_count`
-
-- 单位：计数
-- 描述：结果块队列中的结果数量。
-
-## `result_buffer_block_count`
-
-- 单位：计数
-- 描述：结果缓冲区中的块数量。
-
-## `routine_load_task_count`
-
-- 单位：计数
-- 描述：当前正在运行的Routine Load任务数量。
-
-## `rowset_count_generated_and_in_use`
-
-- 单位：计数
-- 描述：当前正在使用的rowset ID数量。
-
-## `rowset_metadata_mem_bytes`
-
-- 单位：字节
-- 描述：rowset元数据的总字节数。
-
-## `running_base_compaction_task_num`
-
-- 单位：计数
-- 描述：正在运行的base compaction任务总数。
-
-## `running_cumulative_compaction_task_num`
-
-- 单位：计数
-- 描述：正在运行的cumulative compaction任务总数。
-
-## `running_update_compaction_task_num`
-
-- 单位：计数
-- 描述：当前正在运行的Primary Key表compaction任务总数。
+# 指标 s
 
 ## `schema_change_mem_bytes`
 
@@ -217,6 +45,32 @@ description: "Alphabetical q - z"
 
 - 单位: 计数
 - 描述: 小文件缓存的数量。
+
+## `spill_disk_bytes_used`
+
+- 单位: 字节
+- 标签: `storage_type`
+- 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
+
+## `spm_baseline_count`
+
+- 单位：个
+- 类型：瞬时值
+- 描述：FE Leader 上当前全局 SQL Plan Management（SPM）基线的数量。
+
+## `spm_capture_candidate_total`
+
+- 单位：个
+- 类型：累积值
+- 标签：`result`（`captured`、`skipped_duplicate`、`skipped_table_count`、`skipped_table_missing`、`skipped_db_missing`、`skipped_pattern_mismatch` 或 `failed`）
+- 描述：SPM Auto-Capture 候选处理结果的总次数。不同标签值表示查询历史中的候选 SQL 在自动捕获流程中的不同归类结果。
+
+## `spm_rewrite_total`
+
+- 单位：个
+- 类型：累积值
+- 标签：`result`（`hit`、`miss` 或 `error`）
+- 描述：SPM 改写尝试结果的总次数。`hit` 表示成功匹配并应用了基线，`miss` 表示执行了改写流程但没有命中可用基线，`error` 表示 SPM 改写过程中发生异常并回退到原始查询。
 
 ## `snmp`
 
@@ -746,177 +600,3 @@ description: "Alphabetical q - z"
 
 ##### 分割
 
-## `tablet_base_max_compaction_score`
-
-- 单位: -
-- 描述: 此BE中tablet的最高基础合并分数。
-
-## `tablet_cumulative_max_compaction_score`
-
-- 单位: -
-- 描述: 此BE中tablet的最高累积合并分数。
-
-## `tablet_metadata_mem_bytes`
-
-- 单位: 字节
-- 描述: tablet元数据使用的内存。
-
-## `tablet_schema_mem_bytes`
-
-- 单位: 字节
-- 描述: tablet schema使用的内存。
-
-## `tablet_update_max_compaction_score`
-
-- 单位: -
-- 描述: 当前BE中主键表tablet的最高合并分数。
-
-## `thrift_connections_total`
-
-- 单位: 计数
-- 描述: thrift连接的总数量（包括已完成的连接）。
-
-## `thrift_current_connections (Deprecated)`
-
-## `thrift_opened_clients`
-
-- 单位: 计数
-- 描述: 当前打开的thrift客户端数量。
-
-## `thrift_used_clients`
-
-- 单位: 计数
-- 描述: 当前正在使用的thrift客户端数量。
-
-## `total_column_pool_bytes (Deprecated)`
-
-## `transaction_streaming_load_bytes`
-
-- 单位: 字节
-- 描述: 事务加载的总加载字节数。
-
-## `transaction_streaming_load_current_processing`
-
-- 单位: 计数
-- 描述: 当前正在运行的事务性Stream Load任务数量。
-
-## `transaction_streaming_load_duration_ms`
-
-- 单位: 毫秒
-- 描述: Stream Load事务接口的总耗时。
-
-## `transaction_streaming_load_requests_total`
-
-- 单位: 计数
-- 描述: 事务加载请求的总数量。
-
-## `txn_request`
-
-- 单位: -
-- 描述: BEGIN、COMMIT、ROLLBACK和EXEC的事务请求。
-
-## `uint8_column_pool_bytes`
-
-- 单位: 字节
-- 描述: UINT8列池使用的字节数。
-
-## `unused_rowsets_count`
-
-- 单位: 计数
-- 描述: 未使用的rowset总数量。请注意，这些rowset稍后将被回收。
-
-## `update_apply_queue_count`
-
-- 单位: 计数
-- 描述: 主键表事务APPLY线程池中排队的任务数量。
-
-## `update_compaction_duration_us`
-
-- 单位: 微秒
-- 描述：主键表压缩所花费的总时间。
-
-## `update_compaction_outputs_bytes_total`
-
-- 单位：字节
-- 描述：主键表压缩写入的总字节数。
-
-## `update_compaction_outputs_total`
-
-- 单位：计数
-- 描述：主键表压缩的总次数。
-
-## `update_compaction_task_byte_per_second`
-
-- 单位：字节/秒
-- 描述：主键表压缩的估计速率。
-
-## `update_compaction_task_cost_time_ns`
-
-- 单位：纳秒
-- 描述：主键表压缩所花费的总时间。
-
-## `update_del_vector_bytes_total`
-
-- 单位：字节
-- 描述：主键表中用于缓存 DELETE 向量的总内存。
-
-## `update_del_vector_deletes_new`
-
-- 单位：计数
-- 描述：主键表中使用的最新生成的 DELETE 向量总数。
-
-## `update_del_vector_deletes_total (Deprecated)`
-
-## `update_del_vector_dels_num (Deprecated)`
-
-## `update_del_vector_num`
-
-- 单位：计数
-- 描述：主键表中 DELETE 向量缓存项的数量。
-
-## `update_mem_bytes`
-
-- 单位：字节
-- 描述：主键表 APPLY 任务和主键索引使用的内存。
-
-## `update_primary_index_bytes_total`
-
-- 单位：字节
-- 描述：主键索引的总内存开销。
-
-## `update_primary_index_num`
-
-- 单位：计数
-- 描述：内存中缓存的主键索引数量。
-
-## `update_rowset_commit_apply_duration_us`
-
-- 单位：微秒
-- 描述：主键表 APPLY 任务所花费的总时间。
-
-## `update_rowset_commit_apply_total`
-
-- 单位：计数
-- 描述：主键表的 COMMIT 和 APPLY 总数。
-
-## `update_rowset_commit_request_failed`
-
-- 单位：计数
-- 描述：主键表中失败的行集 COMMIT 请求总数。
-
-## `update_rowset_commit_request_total`
-
-- 单位：计数
-- 描述：主键表中行集 COMMIT 请求总数。
-
-## `wait_base_compaction_task_num`
-
-- 单位：计数
-- 描述：等待执行的基础压缩任务数量。
-
-## `wait_cumulative_compaction_task_num`
-
-- 单位：计数
-- 描述：等待执行的累积压缩任务数量。
-
-## `writable_blocks_total (Deprecated)`

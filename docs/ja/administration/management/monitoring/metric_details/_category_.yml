@@ -1,0 +1,7 @@
+position: 100
+label: 'メトリクス詳細'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index
+  title: 'メトリクス詳細'
