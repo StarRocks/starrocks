@@ -2837,6 +2837,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             Multimap<Long, Long> tableIdToPartitionIds = changedPartitionsMap.get(dbId);
 
+<<<<<<< HEAD
             // use try lock to avoid blocking a long time.
             // if block too long, backend report rpc will timeout.
             Locker locker = new Locker();
@@ -2848,6 +2849,22 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
             try {
                 for (Long tableId : tableIdToPartitionIds.keySet()) {
+=======
+            for (Long tableId : tableIdToPartitionIds.keySet()) {
+                // The DataProperty mutation only touches this table's partitions, so scope the
+                // WRITE to the single table. Use a per-table try lock with timeout to avoid
+                // blocking a long time; if block too long the backend report rpc would time out.
+                // The lock wraps the log-and-apply phase so the synchronous WAL callback stays
+                // protected.
+                Locker locker = new Locker();
+                if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE,
+                        Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("try get db {}-{} table {} write lock but failed when checking backend storage medium",
+                            db.getFullName(), dbId, tableId);
+                    continue;
+                }
+                try {
+>>>>>>> ee66a0a0ab ([BugFix] Narrow DB-WRITE locks to table-scoped intensive WRITE (shared-nothing) (#74523))
                     Table table = getTable(db.getId(), tableId);
                     if (table == null) {
                         continue;
@@ -2881,10 +2898,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
                         }
                     } // end for partitions
-                } // end for tables
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
-            }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+                }
+            } // end for tables
         } // end for dbs
         return storageMediumMap;
     }
