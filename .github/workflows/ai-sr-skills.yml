@@ -27,29 +27,6 @@ jobs:
       !startsWith(github.head_ref, 'mergify/') &&
       !contains(github.head_ref, '-sync-pr-')
     steps:
-      - name: Sync skills to latest
-        run: |
-          set -e
-          SKILL_REPO="$HOME/starrocks-skills"
-          SKILL_DEST="$HOME/.claude/skills"
-
-          if [ -d "$SKILL_REPO/.git" ]; then
-            cd "$SKILL_REPO" && git pull --ff-only --quiet \
-              || echo "WARN: git pull failed, using current checkout"
-          else
-            echo "WARN: $SKILL_REPO is not a git checkout, skip pull"
-          fi
-
-          mkdir -p "$SKILL_DEST"
-          for skill_dir in "$SKILL_REPO"/*/; do
-            [ -d "$skill_dir" ] || continue
-            name=$(basename "$skill_dir")
-            rsync -a --delete "$skill_dir" "$SKILL_DEST/$name/"
-          done
-
-          echo "Skills synced to $SKILL_DEST:"
-          ls -1 "$SKILL_DEST"
-
       - name: Recommend Reviewer (AI)
         run: |
           echo "=== DEBUG ==="
