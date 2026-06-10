@@ -20,6 +20,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -85,6 +86,23 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
     }
 
     @Test
+    void singleOrcFileProducesStatistics() throws Exception {
+        Path orcPath = writeBigintOrc(/*rowCount=*/ 32, /*valueOffset=*/ 0L);
+
+        TableFunctionTable orcSourceTable = mockTableFunctionTable("orc", List.of(brokerFileStatus(orcPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(orcSourceTable, Mockito.mock(ComputeResource.class)),
+                List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        Assertions.assertEquals(32L, totalRowCount(rowGroupStatistics));
+    }
+
+    @Test
     void nonParquetFormatFallsBackToDataTier() throws Exception {
         TableFunctionTable csvSourceTable = mockTableFunctionTable("csv", Collections.emptyList());
         SampleRequest request = new SampleRequest(
@@ -115,6 +133,15 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
                 "message schema { required int64 sort_key; }",
                 rowCount,
                 (group, rowIndex) -> group.append("sort_key", valueOffset + rowIndex));
+    }
+
+    private Path writeBigintOrc(int rowCount, long valueOffset) throws IOException {
+        return PresplitTestSupport.writeOrcFixture(
+                tempDirectory,
+                "struct<sort_key:bigint>",
+                rowCount,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = valueOffset + rowIndex);
     }
 
     private SampleRequest bigintSampleRequest(List<TBrokerFileStatus> fileStatuses, long byteLimit) {
