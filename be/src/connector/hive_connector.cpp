@@ -338,15 +338,18 @@ Status HiveDataSource::_init_partition_values() {
         partition_chunk->append_column(std::move(partition_value_col), slot_id);
     }
 
-    // eval conjuncts and skip if no rows.
-    if (!_scan_range.identity_partition_slot_ids.empty()) {
-        std::vector<ExprContext*> ctxs;
-        for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
-            if (_scanner_params.conjuncts.by_slot.find(slotId) != _scanner_params.conjuncts.by_slot.end()) {
-                ctxs.insert(ctxs.end(), _scanner_params.conjuncts.by_slot.at(slotId).begin(),
-                            _scanner_params.conjuncts.by_slot.at(slotId).end());
-            }
+    // Prefer per-slot conjuncts for identity partition slots materialised in this tuple
+    // (equivalent to the old _has_scan_range_indicate_const_column flag).
+    // If none of the identity slots appear in our tuple, ctxs stays empty and we fall
+    // back to the ordinary partition conjuncts — same behaviour as the old code.
+    std::vector<ExprContext*> ctxs;
+    for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
+        auto it = _scanner_params.conjuncts.by_slot.find(slotId);
+        if (it != _scanner_params.conjuncts.by_slot.end()) {
+            ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
         }
+    }
+    if (!ctxs.empty()) {
         RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, partition_chunk.get()));
     } else if (_partition_filter.has_conjuncts) {
         RETURN_IF_ERROR(
@@ -815,7 +818,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.lazy_column_coalesce_counter = &_provider->_lazy_column_coalesce_counter;
     scanner_params.split_context = down_cast<HdfsSplitContext*>(_split_context);
     if (state->query_options().__isset.connector_max_split_size) {
-        _scanner_params.options.connector_max_split_size = state->query_options().connector_max_split_size;
+        scanner_params.options.connector_max_split_size = state->query_options().connector_max_split_size;
     }
 
     for (const auto& delete_file : scan_range.delete_files) {
@@ -898,12 +901,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        _scanner_params.options.parquet_page_index_enable =
+        scanner_params.options.parquet_page_index_enable =
                 config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
                                                             ? state->query_options().enable_parquet_reader_page_index
                                                             : true
                                                   : false;
-        _scanner_params.options.parquet_bloom_filter_enable =
+        scanner_params.options.parquet_bloom_filter_enable =
                 config::parquet_reader_bloom_filter_enable
                         ? state->query_options().__isset.enable_parquet_reader_bloom_filter
                                   ? state->query_options().enable_parquet_reader_bloom_filter
@@ -911,7 +914,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                         : false;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
-        _scanner_params.options.orc_use_column_names = state->query_options().orc_use_column_names;
+        scanner_params.options.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
