@@ -619,10 +619,13 @@ struct TVectorSearchOptions {
   5: optional map<string, string> query_params;
   6: optional double vector_range;
   7: optional i32 result_order;
-  8: optional bool use_ivfpq;
+  8: optional bool use_ivfpq; // DEPRECATED: superseded by refine_distance; ordinal kept reserved.
   9: optional double pq_refine_factor;
   10: optional double k_factor;
   11: optional i32 vector_slot_id;
+  // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
+  // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
+  12: optional bool refine_distance;
 }
 
 enum SampleMethod {

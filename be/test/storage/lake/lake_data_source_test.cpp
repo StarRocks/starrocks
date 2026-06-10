@@ -414,7 +414,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     TVectorSearchOptions vec_opts;
     vec_opts.__set_enable_use_ann(true);
-    vec_opts.__set_use_ivfpq(false);
+    vec_opts.__set_refine_distance(false);
     vec_opts.__set_vector_distance_column_name("vec_distance");
     // Use a slot id that does NOT match any tuple slot, so init_scanner_columns
     // exercises the else branch for every slot (regular column lookup) without
