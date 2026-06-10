@@ -205,9 +205,8 @@ public final class TabletPreSplitCoordinator {
      * {@link SkipReason#TIMEOUT_PRE_SUBMIT}, {@link SkipReason#SAMPLE_FAILED},
      * {@link SkipReason#NO_USEFUL_CUTS}, {@link SkipReason#SUBMIT_FAILED}.
      *
-     * @param activeComputeNodeCount compute nodes available to the load after
-     *                               warehouse/blocklist filtering (passed to the
-     *                               pipeline's internal tablet-count selector).
+     * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse
+     *                               (passed to the pipeline's internal tablet-count selector).
      */
     public static PreSplitOutcome submitAsynchronously(
             Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
@@ -482,8 +481,8 @@ public final class TabletPreSplitCoordinator {
      *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
-     * @param activeComputeNodeCount compute nodes available to the load, after
-     *                               warehouse/blocklist filtering. Must be {@code >= 1}.
+     * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
+     *                               Must be {@code >= 1}.
      */
     static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
         Objects.requireNonNull(estimates, "estimates");

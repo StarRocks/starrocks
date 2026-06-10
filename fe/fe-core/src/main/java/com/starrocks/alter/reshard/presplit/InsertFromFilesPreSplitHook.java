@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
@@ -24,7 +25,6 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.planner.LoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -217,8 +217,7 @@ public final class InsertFromFilesPreSplitHook {
     private static void runMultiPartitionFlow(
             Database database, OlapTable table, TableFunctionTable sourceTable, ConnectContext context) {
         ComputeResource computeResource = context.getCurrentComputeResource();
-        int activeComputeNodeCount = Math.max(1,
-                LoadScanNode.getAvailableComputeNodes(computeResource).size());
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         long fileTotalBytes = sumFileBytes(sourceTable);
 
         SampleSet samples = runDataTierSampler(table, sourceTable, computeResource);
@@ -509,8 +508,7 @@ public final class InsertFromFilesPreSplitHook {
             PreSplitTargets.EligibleTarget target, TableFunctionTable sourceTable, ConnectContext context) {
         ComputeResource computeResource = context.getCurrentComputeResource();
         InsertFromFilesScanContext scanContext = new InsertFromFilesScanContext(sourceTable, computeResource);
-        int activeComputeNodeCount = Math.max(1,
-                LoadScanNode.getAvailableComputeNodes(computeResource).size());
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         long fileTotalBytes = sumFileBytes(sourceTable);
 
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
