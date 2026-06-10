@@ -27,7 +27,8 @@ struct DeletionVectorBuildStats {
 class DeletionVector {
 public:
     DeletionVector(const HdfsScannerParams& scanner_params)
-            : _deletion_vector_descriptor(scanner_params.deletion_vector_descriptor), _params(scanner_params) {}
+            : _deletion_vector_descriptor(scanner_params.table_specific.deletion_vector_descriptor),
+              _params(scanner_params) {}
 
     Status fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx);
     Status deserialized_inline_dv(std::string& encoded_bitmap_data, const SkipRowsContextPtr& skip_rows_ctx);

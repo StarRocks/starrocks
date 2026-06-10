@@ -102,15 +102,16 @@ private:
 };
 
 bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
-    // if there is no conjuncts, then there is no lazy materialization slot.
-    // we have to read up all fields.
-    if (conjunct_ctxs_by_slot.size() == 0 && scanner_conjunct_ctxs.size() == 0) {
+    // if there are no conjuncts at all, every slot must be read eagerly.
+    if (conjuncts.by_slot.empty() && conjuncts.scanner_ctxs.empty()) {
         return false;
     }
-    if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
+    // slots directly filtered by a by_slot predicate are active (eagerly decoded).
+    if (conjuncts.by_slot.count(slot_id)) {
         return false;
     }
-    if (slots_in_conjunct.find(slot_id) != slots_in_conjunct.end()) {
+    // slots referenced by any conjunct must be eagerly decoded too.
+    if (conjuncts.slots_in_conjunct.count(slot_id)) {
         return false;
     }
     return true;
@@ -149,7 +150,12 @@ Status HdfsScanner::_build_scanner_context() {
         extended_values.emplace_back(std::move(extended_value_column));
     }
 
-    ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
+    // Single pointer replaces 15 individual field copies; all immutable params are
+    // accessed via ctx.params->field throughout the scanner lifetime.
+    ctx.params = &_scanner_params;
+    // conjunct_ctxs_by_slot is a mutable per-scanner shallow copy of by_slot;
+    // update_with_none_existed_slot() erases entries when columns are absent.
+    ctx.conjunct_ctxs_by_slot = _scanner_params.conjuncts.by_slot;
 
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
@@ -162,10 +168,17 @@ Status HdfsScanner::_build_scanner_context() {
             HdfsScannerContext::ColumnInfo column;
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
+            // A slot must be decoded eagerly if it is an output column OR if it
+            // appears in a multi-field conjunct that the reader cannot push down.
             column.decode_needed =
+<<<<<<< HEAD
                     slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
                                                         _scanner_params.slots_of_multi_field_conjunct.end();
             ctx.materialized_columns.emplace_back(std::move(column));
+=======
+                    slot->is_output_column() || _scanner_params.conjuncts.slots_of_multi_field.count(slot->id());
+            ctx.materialized_columns.emplace_back(column);
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
         }
     }
 
@@ -186,33 +199,15 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
-    ctx.scan_range = _scanner_params.scan_range;
-    ctx.scan_range_id = _scanner_params.scan_range_id;
-    ctx.materialize_slot_default_values = _scanner_params.materialize_slot_default_values;
-    ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
-    ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
-    ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
-    ctx.hive_column_names = _scanner_params.hive_column_names;
-    ctx.case_sensitive = _scanner_params.case_sensitive;
-    ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
-    ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
-    ctx.can_use_any_column = _scanner_params.can_use_any_column;
-    ctx.use_count_opt = _scanner_params.use_count_opt;
-    ctx.use_file_metacache = _scanner_params.use_file_metacache;
-    ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
+<<<<<<< HEAD
     ctx.lake_schema = _scanner_params.lake_schema;
+=======
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     ctx.stats = &_app_stats;
-    ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
-    ctx.split_context = _scanner_params.split_context;
-    ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
-    ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
-    ctx.global_dictmaps = _scanner_params.global_dictmaps;
-    ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
-    ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
 
     ScanConjunctsManagerOptions opts;
-    opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
+    opts.conjunct_ctxs_ptr = &_scanner_params.conjuncts.all_ctxs;
     opts.tuple_desc = _scanner_params.tuple_desc;
     opts.obj_pool = _runtime_state->obj_pool();
     opts.runtime_filters = _scanner_params.runtime_filter_collector;
@@ -226,15 +221,15 @@ Status HdfsScanner::_build_scanner_context() {
             opts.obj_pool->add(new ConnectorPredicateParser(&_scanner_params.tuple_desc->decoded_slots()));
     ASSIGN_OR_RETURN(ctx.predicate_tree,
                      ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
-    ctx.rf_scan_range_pruner = opts.obj_pool->add(
+    ctx.runtime_filter_scan_range_pruner = opts.obj_pool->add(
             new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
 
     ctx.update_return_count_columns();
-    if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
+    if (ctx.params->scan_range->__isset.record_count && ctx.params->scan_range->delete_files.empty()) {
         ctx.can_use_file_record_count = true;
     }
-    if (ctx.scan_range->__isset.is_first_split) {
-        ctx.is_first_split = ctx.scan_range->is_first_split;
+    if (ctx.params->scan_range->__isset.is_first_split) {
+        ctx.is_first_split = ctx.params->scan_range->is_first_split;
     }
 
     ctx.update_min_max_columns();
@@ -242,12 +237,12 @@ Status HdfsScanner::_build_scanner_context() {
 }
 
 bool HdfsScannerContext::can_use_count_optimization() const {
-    return use_count_opt && can_use_file_record_count;
+    return params->options.use_count_opt && can_use_file_record_count;
 }
 
 bool HdfsScannerContext::can_use_min_max_optimization() const {
     // @TODO for iceberg _row_id column, we can support min/max optimization in the future
-    return use_min_max_opt && materialized_columns.empty() && reserved_field_slots.empty();
+    return params->options.use_min_max_opt && materialized_columns.empty() && reserved_field_slots.empty();
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -262,7 +257,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     if (_scanner_ctx.can_use_count_optimization()) {
         int64_t file_record_count = 0;
         if (_scanner_ctx.is_first_split) {
-            file_record_count = _scanner_ctx.scan_range->record_count;
+            file_record_count = _scanner_ctx.params->scan_range->record_count;
         }
         _scanner_ctx.append_or_update_count_column_to_chunk(chunk, file_record_count);
         _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, 1);
@@ -288,14 +283,32 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
-        if (!_scanner_params.scanner_conjunct_ctxs.empty()) {
+        // Simple scanners (Text, Avro, JSON, JNI) cannot push single-slot predicates
+        // into their column readers, so the base class applies them here uniformly.
+        // ORC and Parquet return true because they handle by-slot evaluation
+        // internally via lazy materialisation and dict-filter pipelines.
+        if (!scanner_handles_predicate_by_slot_internally()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+            Filter chunk_filter;
+            RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &chunk_filter));
+        }
+        // Multi-slot predicates (e.g. "a + b > 5") evaluated here for formats that
+        // cannot handle them internally (Text, Avro, JSON, JNI).  ORC and Parquet
+        // evaluate them inside do_get_next() after all columns are materialised and
+        // return true from scanner_handles_multi_slot_conjuncts_internally().
+        if (!scanner_handles_multi_slot_conjuncts_internally() && !_scanner_params.conjuncts.scanner_ctxs.empty()) {
+            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+<<<<<<< HEAD
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.scanner_conjunct_ctxs, (*chunk).get()));
+=======
+            RETURN_IF_ERROR(
+                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, (*chunk).get()));
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
-        LOG(ERROR) << "failed to read file: " << _scanner_params.path;
+        LOG(ERROR) << "failed to read file: " << _scanner_params.file_path;
     }
     _app_stats.rows_read += (*chunk)->num_rows();
     return status;
@@ -314,7 +327,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     RETURN_IF_ERROR(do_open(runtime_state));
-    VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
+    VLOG_FILE << "open file success: " << _scanner_params.file_path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], candidate node = " << _scanner_params.scan_range->candidate_node;
@@ -330,7 +343,7 @@ void HdfsScanner::close() noexcept {
     if (_scanner_ctx.can_use_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return;
     }
-    VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
+    VLOG_FILE << "close file success: " << _scanner_params.file_path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], rows = " << _app_stats.rows_read;
@@ -343,9 +356,15 @@ void HdfsScanner::close() noexcept {
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
+<<<<<<< HEAD
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
+=======
+        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
+    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.file_path))
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     int64_t file_size = options.file_size;
     if (file_size < 0) {
         ASSIGN_OR_RETURN(file_size, raw_file->stream()->get_size());
@@ -406,7 +425,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
 
 Status HdfsScanner::open_random_access_file() {
     OpenFileOptions options{.fs = _scanner_params.fs,
-                            .path = _scanner_params.path,
+                            .file_path = _scanner_params.file_path,
                             .file_size = _scanner_params.file_size,
                             .fs_stats = &_fs_stats,
                             .app_stats = &_app_stats,
@@ -474,7 +493,7 @@ int64_t HdfsScanner::estimated_mem_usage() const {
     return 0;
 }
 
-void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
+void HdfsScanner::update_hdfs_counter(HdfsScannerProfile* profile) {
     if (_file == nullptr) return;
     static const char* const kHdfsIOProfileSectionPrefix = "HdfsIOMetrics";
 
@@ -506,10 +525,10 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     }
 }
 
-void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
+void HdfsScanner::do_update_counter(HdfsScannerProfile* profile) {}
 
 Status HdfsScanner::reinterpret_status(const Status& st) {
-    auto msg = fmt::format("file = {}", _scanner_params.path);
+    auto msg = fmt::format("file = {}", _scanner_params.file_path);
 
     Status ret = st;
     // After catching the AWS 404 file not found error and returning it to the FE,
@@ -522,8 +541,8 @@ Status HdfsScanner::reinterpret_status(const Status& st) {
 }
 
 void HdfsScanner::update_counter() {
-    HdfsScanProfile* profile = _scanner_params.profile;
-    if (profile == nullptr) return;
+    HdfsScannerProfile* profile = &_scanner_params.profile;
+    if (profile->runtime_profile == nullptr) return;
 
     update_hdfs_counter(profile);
 
@@ -626,11 +645,11 @@ void HdfsScannerContext::update_return_count_columns() {
 }
 
 void HdfsScannerContext::update_min_max_columns() {
-    if (!use_min_max_opt) {
+    if (!params->options.use_min_max_opt) {
         return;
     }
     std::vector<ColumnInfo> updated_columns;
-    const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
+    const std::map<int32_t, TExprMinMaxValue>& min_max_values = params->scan_range->min_max_values;
     for (auto& column : materialized_columns) {
         if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
             // This column has file-level min/max statistics.  Move it to
@@ -638,7 +657,7 @@ void HdfsScannerContext::update_min_max_columns() {
             // fills the column with the statistics values instead of reading the
             // actual data from the file.
             update_with_none_existed_slot(column.slot_desc);
-        } else if (can_use_any_column) {
+        } else if (params->options.can_use_any_column) {
             // This column has no min/max statistics (e.g. STRING or TIMESTAMP type
             // which are not yet supported, or a placeholder column injected by
             // PruneHDFSScanColumnRule when every queried column is a partition column).
@@ -654,7 +673,7 @@ void HdfsScannerContext::update_min_max_columns() {
     // into not_existed_slots.  reserved_field_slots are meta/hidden columns whose
     // values are irrelevant to the min/max query result, so filling them with defaults
     // is safe and allows can_use_min_max_optimization() to return true.
-    if (can_use_any_column) {
+    if (params->options.can_use_any_column) {
         for (SlotDescriptor* slot_desc : reserved_field_slots) {
             update_with_none_existed_slot(slot_desc);
         }
@@ -666,7 +685,7 @@ void HdfsScannerContext::update_min_max_columns() {
 Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
     std::vector<ColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
-        auto col_name = column.formatted_name(case_sensitive);
+        auto col_name = column.formatted_name(params->options.case_sensitive);
         if (names.find(col_name) == names.end()) {
             update_with_none_existed_slot(column.slot_desc);
         } else {
@@ -682,12 +701,13 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
 
     ChunkPtr& ck = (*chunk);
 
-    if (use_min_max_opt) {
+    if (params->options.use_min_max_opt) {
         append_or_update_min_max_column_to_chunk(chunk, row_count);
     }
 
     for (auto* slot_desc : not_existed_slots) {
-        if (use_min_max_opt && scan_range->min_max_values.find(slot_desc->id()) != scan_range->min_max_values.end()) {
+        if (params->options.use_min_max_opt &&
+            params->scan_range->min_max_values.find(slot_desc->id()) != params->scan_range->min_max_values.end()) {
             // handled in min max column
             continue;
         }
@@ -700,8 +720,8 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
                 col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
                 col->append_datum(int64_t(1));
                 col->assign(row_count, 0);
-            } else if (auto it = materialize_slot_default_values.find(slot_desc->id());
-                       it != materialize_slot_default_values.end()) {
+            } else if (auto it = params->materialize_slot_default_values.find(slot_desc->id());
+                       it != params->materialize_slot_default_values.end()) {
                 RETURN_IF_ERROR(fill_default_value_for_not_existed_slot(slot_desc, it->second, row_count, col.get()));
             } else {
                 col->append_default(row_count);
@@ -727,8 +747,8 @@ void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk,
 
 void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
     for (SlotDescriptor* slot_desc : not_existed_slots) {
-        auto it = scan_range->min_max_values.find(slot_desc->id());
-        if (it == scan_range->min_max_values.end()) {
+        auto it = params->scan_range->min_max_values.find(slot_desc->id());
+        if (it == params->scan_range->min_max_values.end()) {
             continue;
         }
         const TExprMinMaxValue& min_max_value = it->second;
@@ -940,7 +960,7 @@ void HdfsScannerContext::merge_split_tasks() {
         auto head_ctx = split_tasks[head].get();
 
         if ((ctx->split_start != prev_ctx->split_end) ||
-            (ctx->split_end - head_ctx->split_start > connector_max_split_size)) {
+            (ctx->split_end - head_ctx->split_start > params->options.connector_max_split_size)) {
             cut = true;
         }
 
@@ -956,7 +976,7 @@ void HdfsScannerContext::merge_split_tasks() {
     if (new_size >= 2) {
         auto tail_ctx = new_split_tasks[new_size - 1].get();
         size_t tail_size = (tail_ctx->split_end - tail_ctx->split_start);
-        if ((tail_size * 2) < connector_max_split_size) {
+        if ((tail_size * 2) < params->options.connector_max_split_size) {
             auto last_ctx = new_split_tasks[new_size - 2].get();
             if (last_ctx->split_end == tail_ctx->split_start) {
                 last_ctx->split_end = tail_ctx->split_end;

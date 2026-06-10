@@ -19,7 +19,11 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+#include "common/config_scan_io_fwd.h"
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 #include "runtime/runtime_state.h"
 #include "util/timezone_utils.h"
 
@@ -72,7 +76,7 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
 
     _avro_reader = std::make_unique<AvroReader>();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    return _avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
+    return _avro_reader->init(std::move(input_stream), _scanner_params.file_path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
                               /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
                               split_offset, split_length, _scanner_params.avro_schema_json,
@@ -127,6 +131,7 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     _scanner_ctx.append_or_update_partition_column_to_chunk(&ck, row_count);
     _scanner_ctx.append_or_update_extended_column_to_chunk(&ck, row_count);
 
+<<<<<<< HEAD
     // Post-read row-level conjunct evaluation (Avro has no block statistics for pushdown).
     for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
@@ -135,13 +140,16 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
             break;
         }
     }
+=======
+    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 
     // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
     // after do_get_next returns. Do NOT update it here to avoid double-counting.
     return Status::OK();
 }
 
-void HdfsAvroScanner::do_update_counter(HdfsScanProfile* profile) {
+void HdfsAvroScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kAvroProfileSectionPrefix, TUnit::NONE);
 

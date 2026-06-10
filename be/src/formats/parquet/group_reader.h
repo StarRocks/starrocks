@@ -39,6 +39,7 @@
 namespace starrocks {
 class RandomAccessFile;
 struct HdfsScanStats;
+struct HdfsScannerContext;
 class ExprContext;
 class TIcebergSchemaField;
 class THdfsScanRange;
@@ -70,13 +71,21 @@ struct GroupReaderParam {
         const SlotId slot_id() const { return slot_desc->id(); }
     };
 
+    // Non-owning pointer to the scanner context. Provides access to all
+    // context-derived fields (partition columns, not-existed slots, options,
+    // global dicts, etc.) without copying them into every GroupReaderParam.
+    // Always non-null when used from FileReader; may be null in unit tests.
+    // Non-const because unit tests need to populate the context fields after
+    // construction; GroupReader treats it as read-only by convention.
+    HdfsScannerContext* scanner_ctx = nullptr;
+
     // conjunct_ctxs that column is materialized in group reader
+    // Mutable per-group-reader shallow copy of the scanner context's by_slot map;
+    // update_with_none_existed_slot() erases entries for absent columns.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // columns
     std::vector<Column> read_cols;
-
-    std::string timezone;
 
     HdfsScanStats* stats = nullptr;
 
@@ -88,9 +97,6 @@ struct GroupReaderParam {
 
     const FileMetaData* file_metadata = nullptr;
 
-    bool case_sensitive = false;
-
-    bool use_file_pagecache = false;
     int64_t modification_time = 0;
     uint64_t file_size = 0;
     const DataCacheOptions* datacache_options;
@@ -98,6 +104,7 @@ struct GroupReaderParam {
     // used to identify io coalesce
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 
+<<<<<<< HEAD
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
     const PredicateTree* predicate_tree = nullptr;
@@ -113,6 +120,10 @@ struct GroupReaderParam {
     // used for global low cardinality optimization
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 
+=======
+    // Kept directly in GroupReaderParam for test-compatibility; also used by
+    // _get_extended_bigint_value() to read extended_columns from the scan range.
+>>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     int32_t scan_range_id = -1;
     const THdfsScanRange* scan_range = nullptr;
 };
