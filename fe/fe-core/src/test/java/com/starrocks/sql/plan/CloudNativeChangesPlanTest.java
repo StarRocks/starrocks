@@ -31,8 +31,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -128,6 +131,144 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
         }
+    }
+
+    @Test
+    public void testChangesPredicatePushedDownToScan() throws Exception {
+        String name = "ch_pred_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("pred_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("pred_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format(
+                    "SELECT k, v FROM %s [_CHANGES_%d_%d_] WHERE k > 1",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            ChangesScanNode scan = null;
+            for (ScanNode node : planPair.second.getScanNodes()) {
+                if (node instanceof ChangesScanNode) {
+                    scan = (ChangesScanNode) node;
+                    break;
+                }
+            }
+            assertNotNull(scan, "ExecPlan should contain a ChangesScanNode");
+            // The WHERE predicate must be pushed into the scan operator and land as a
+            // ChangesScanNode conjunct, mirroring how OLAP scan absorbs its filter.
+            assertFalse(scan.getConjuncts().isEmpty(),
+                    "WHERE predicate should be pushed into the ChangesScanNode conjuncts:\n"
+                            + planPair.first);
+            // Verify the pushed predicate is the expected one and shows in EXPLAIN the
+            // same way OLAP scan renders it (a PREDICATES line on the CHANGES scan node).
+            String fragmentPlan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(fragmentPlan.contains("PREDICATES:") && fragmentPlan.contains("k > 1"),
+                    "CHANGES scan EXPLAIN should show the pushed predicate content (k > 1):\n"
+                            + fragmentPlan);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testChangesVerbosePredicateFormat() throws Exception {
+        String name = "ch_vpred_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("vpred_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("vpred_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format(
+                    "SELECT k, v FROM %s [_CHANGES_%d_%d_] WHERE k > 1",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            // EXPLAIN VERBOSE must render the CHANGES scan predicate the same way OLAP scan
+            // does: a lowercase "Predicates:" line carrying the typed verbose expression
+            // ("[.. INT ..]"), not the NORMAL-level "PREDICATES:" form.
+            String verbose = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+            assertTrue(verbose.contains("Predicates: ") && verbose.contains("k, INT, true]"),
+                    "CHANGES scan EXPLAIN VERBOSE should render the predicate in OLAP verbose "
+                            + "format (Predicates: [.. INT ..]):\n" + verbose);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testChangesScanColumnPruning() throws Exception {
+        String name = "ch_prune_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name
+                + " (k int, c varchar(10), v int, dim_id int) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("prune_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("prune_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+        String window = String.format("[_CHANGES_%d_%d_]", base.getBookmarkId(), head.getBookmarkId());
+
+        try {
+            // A bare projection prunes every unreferenced table column and both CDC
+            // metadata columns; the scan materializes only k.
+            assertEquals(Set.of("k"),
+                    changesScanColumns(String.format("SELECT k FROM %s %s", name, window)),
+                    "only the selected column should be materialized");
+
+            // A selected CDC metadata column survives; the other CDC column and the
+            // unreferenced table columns are pruned.
+            assertEquals(Set.of("k", "__CHANGE_TYPE__"),
+                    changesScanColumns(String.format("SELECT k, __CHANGE_TYPE__ FROM %s %s", name, window)),
+                    "selected CDC metadata column should be kept, the rest pruned");
+
+            // count(*) needs no specific column; canUseAnyColumn keeps exactly one
+            // (smallest real) column and never a CDC metadata column.
+            Set<String> countCols = changesScanColumns(String.format("SELECT count(*) FROM %s %s", name, window));
+            assertEquals(1, countCols.size(), "count(*) should materialize exactly one column: " + countCols);
+            assertFalse(countCols.contains("__CHANGE_TYPE__") || countCols.contains("__ROW_VERSION__"),
+                    "count(*) must not pick a CDC metadata column: " + countCols);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /** Column names the CHANGES scan in {@code sql}'s plan actually materializes. */
+    private Set<String> changesScanColumns(String sql) throws Exception {
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        for (ScanNode node : planPair.second.getScanNodes()) {
+            if (node instanceof ChangesScanNode) {
+                return node.getDesc().getSlots().stream()
+                        .map(slot -> slot.getColumn().getName())
+                        .collect(Collectors.toSet());
+            }
+        }
+        throw new AssertionError("ExecPlan should contain a ChangesScanNode:\n" + planPair.first);
     }
 
     @Test

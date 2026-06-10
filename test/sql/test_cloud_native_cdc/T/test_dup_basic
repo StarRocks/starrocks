@@ -50,6 +50,17 @@ WHERE k >= 3 ORDER BY k;
 SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk3}_]
 WHERE __CHANGE_TYPE__ = 0;
 
+-- Predicate pushdown: the WHERE lands on the CHANGES scan node itself (a PREDICATES
+-- line), not a filter above it -- verify both the location and the predicate content.
+function: assert_explain_contains("SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_] WHERE k >= 3", "ChangesScanNode", "PREDICATES: ", "k >= 3")
+
+-- A real-column + synthesized-column conjunction pushes BOTH predicates onto the scan...
+function: assert_explain_contains("SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_] WHERE k >= 3 AND __CHANGE_TYPE__ = 0", "PREDICATES: ", "k >= 3", "__CHANGE_TYPE__ = 0")
+
+-- ...and still returns the correctly filtered rows.
+SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_]
+WHERE k >= 3 AND __CHANGE_TYPE__ = 0 ORDER BY k;
+
 -- GROUP BY + HAVING + multi-aggregate over a CHANGES scan.
 SELECT c, count(*) AS cnt, sum(v) AS total, min(k), max(k), avg(v)
 FROM dup_t [_CHANGES_${bk0}_${bk3}_]

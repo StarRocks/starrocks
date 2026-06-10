@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
 public class PushDownPredicateScanRule extends TransformationRule {
     private static final ImmutableSet<OperatorType> SUPPORT = ImmutableSet.of(
             OperatorType.LOGICAL_OLAP_SCAN,
+            OperatorType.LOGICAL_CHANGES_SCAN,
             OperatorType.LOGICAL_HIVE_SCAN,
             OperatorType.LOGICAL_ICEBERG_SCAN,
             OperatorType.LOGICAL_HUDI_SCAN,

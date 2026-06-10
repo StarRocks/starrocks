@@ -42,6 +42,7 @@ import static java.util.function.Function.identity;
 public class PruneScanColumnRule extends TransformationRule {
     private static final Set<OperatorType> SUPPORTED = Set.of(
             OperatorType.LOGICAL_OLAP_SCAN,
+            OperatorType.LOGICAL_CHANGES_SCAN,
             OperatorType.LOGICAL_SCHEMA_SCAN,
             OperatorType.LOGICAL_MYSQL_SCAN,
             OperatorType.LOGICAL_ES_SCAN,

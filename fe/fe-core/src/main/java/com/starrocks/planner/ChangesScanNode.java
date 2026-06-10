@@ -171,6 +171,17 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         StringBuilder output = new StringBuilder();
         output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
 
+        if (!conjuncts.isEmpty()) {
+            // VERBOSE uses the lowercase "Predicates:" title with the type-annotated
+            // expression, matching how other scan nodes render predicates per level.
+            if (detailLevel == TExplainLevel.VERBOSE) {
+                output.append(prefix).append("Predicates: ")
+                        .append(explainExpr(TExplainLevel.VERBOSE, conjuncts)).append("\n");
+            } else {
+                output.append(prefix).append("PREDICATES: ").append(explainExpr(conjuncts)).append("\n");
+            }
+        }
+
         int totalPartitions = delta.getChanges().size();
         output.append(prefix).append(String.format("partitions=%s/%s\n", totalPartitions, totalPartitions));
 

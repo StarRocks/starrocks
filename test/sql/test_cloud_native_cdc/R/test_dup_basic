@@ -76,6 +76,21 @@ WHERE __CHANGE_TYPE__ = 0;
 -- result:
 5
 -- !result
+function: assert_explain_contains("SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_] WHERE k >= 3", "ChangesScanNode", "PREDICATES: ", "k >= 3")
+-- result:
+None
+-- !result
+function: assert_explain_contains("SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_] WHERE k >= 3 AND __CHANGE_TYPE__ = 0", "PREDICATES: ", "k >= 3", "__CHANGE_TYPE__ = 0")
+-- result:
+None
+-- !result
+SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_]
+WHERE k >= 3 AND __CHANGE_TYPE__ = 0 ORDER BY k;
+-- result:
+3	x	300
+4	y	400
+5	x	500
+-- !result
 SELECT c, count(*) AS cnt, sum(v) AS total, min(k), max(k), avg(v)
 FROM dup_t [_CHANGES_${bk0}_${bk3}_]
 GROUP BY c
