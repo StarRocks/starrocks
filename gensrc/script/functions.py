@@ -285,6 +285,19 @@ vectorized_functions = [
     [30013, 'substring', True, False, 'VARCHAR', ['VARCHAR', 'INT', 'INT'], 'StringFunctions::substring',
      'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
 
+    # dict_encode(value, dict_slot_id): translate a constant to its global dictionary code (resolved
+    # once from BE runtime state), so a dict-aware comparison can run on codes. A value absent from
+    # the (complete) dictionary encodes to a guaranteed-absent "no match" code. Emitted by the
+    # low-cardinality rewrite. BE-only (no FE @ConstantFunction) so it is never constant-folded; it
+    # resolves in the FRAGMENT_LOCAL prepare with the dictionary available.
+    [30700, 'dict_encode', True, False, 'INT', ['VARCHAR', 'INT'], 'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
+    # Array overload: encode each element of a constant ARRAY<VARCHAR> to its dict code. Same C++
+    # implementation as the scalar overload (it dispatches on arg0's type).
+    [30701, 'dict_encode', True, False, 'ARRAY_INT', ['ARRAY_VARCHAR', 'INT'],
+     'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
+
     [30020, 'left', True, False, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::left',
      'StringFunctions::left_or_right_prepare', 'StringFunctions::left_or_right_close'],
     [30021, 'strleft', True, False, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::left',

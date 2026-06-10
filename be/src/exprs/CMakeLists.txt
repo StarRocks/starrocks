@@ -105,6 +105,7 @@ set(EXPR_FILES
   table_function/list_rowsets.cpp
   array_functions.cpp
   arrow_function_call.cpp
+  dict_functions.cpp
   dictmapping_expr.cpp
   find_in_set.cpp
   function_call_expr.cpp

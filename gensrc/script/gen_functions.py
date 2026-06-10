@@ -330,6 +330,7 @@ def generate_cpp(path):
         "GinFunctions",
         "AiFunctions",
         "HttpRequestFunctions",
+        "DictFunctions",
     ]
 
     modules_contents = dict()
