@@ -137,8 +137,17 @@ private:
             query_options.__set_batch_size(chunk_size);
         }
         auto query_globals = TQueryGlobals();
+<<<<<<< HEAD
         query_globals.time_zone = timezone;
         RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, nullptr));
+=======
+        // Use the thrift setter: a plain member assignment leaves __isset.time_zone false, so
+        // RuntimeState silently falls back to the default time zone (+08:00) and the `timezone`
+        // argument never takes effect.
+        query_globals.__set_time_zone(timezone);
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
+>>>>>>> 1481abcc57 ([BugFix] FILES()/LOAD respect Parquet isAdjustedToUTC=false for INT64 timestamps (#73674))
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
@@ -314,7 +323,7 @@ private:
     template <bool is_nullable>
     ChunkPtr get_chunk(const std::vector<std::string>& columns_from_file,
                        const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs, std::string specific_file,
-                       size_t expected_rows) {
+                       size_t expected_rows, const std::string& timezone = "UTC") {
         std::vector<std::string> file_names{std::move(specific_file)};
         const std::vector<std::string>& column_names = columns_from_file;
 
@@ -323,7 +332,7 @@ private:
 
         auto ranges = generate_ranges(file_names, columns_from_file.size(), {});
         auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
-        auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
+        auto scanner = create_parquet_scanner(timezone, desc_tbl, dst_slot_exprs, ranges);
 
         ChunkPtr result;
         auto check = [&](const ChunkPtr& chunk) {
@@ -988,8 +997,11 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 
 TEST_F(ParquetScannerTest, int96_timestamp) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
+    // INT96 stores UTC-normalized instants; under the UTC session used by get_chunk they render
+    // as-is. The previous baselines (23:59:59.009999 / 15:04:05) were the same instants rendered
+    // in +08:00 — the harness ignored the timezone argument before query_globals.__set_time_zone.
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
-            {"col_datetime", {"9999-12-31 23:59:59.009999", "2006-01-02 15:04:05"}}};
+            {"col_datetime", {"9999-12-31 15:59:59.009999", "2006-01-02 07:04:05"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
@@ -1006,6 +1018,60 @@ TEST_F(ParquetScannerTest, int96_timestamp) {
             std::string result = col->debug_item(i);
             std::string expect = expected[i];
             EXPECT_EQ(expect, result);
+        }
+    }
+}
+
+// Regression for the INT96 session-timezone shift on the Arrow FILES()/LOAD path
+// (ParquetReaderWrap::_rectify_int96_timezone, see be/src/exec/parquet_reader.cpp).
+//
+// INT96 is a UTC-normalized instant that Arrow decodes timezone-naive, byte-identical
+// to an INT64 isAdjustedToUTC=false wall-clock column. The reader re-tags top-level
+// INT96 columns as "UTC" so the arrow->starrocks converter overrides them with the
+// session timezone and shifts the value (matching the native parquet reader's
+// Int96ToDateTimeConverter), instead of leaving them at wall-clock like a genuinely
+// naive INT64 column. This test reads the same int96_timestamp.parquet under both a
+// UTC session and a non-UTC session and asserts the shift is applied.
+//
+// int96_timestamp.parquet stores the UTC-normalized instants:
+//   row 0: 9999-12-31 15:59:59.009999
+//   row 1: 2006-01-02 07:04:05
+// A fixed -08:00 session must move every instant 8 hours earlier; the rendered
+// wall-clock therefore shifts by -8h relative to the UTC baseline (row 1 crosses
+// midnight into the previous day). A non-shifting (buggy) reader would render
+// identical values regardless of session timezone.
+TEST_F(ParquetScannerTest, int96_timestamp_session_timezone_shift) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
+    const std::vector<std::string> column_names{"col_datetime"};
+    const std::unordered_map<size_t, TExpr> slot_map;
+
+    // Baseline: the UTC session renders the raw UTC-normalized instants.
+    const std::vector<std::string> utc_expected{"9999-12-31 15:59:59.009999", "2006-01-02 07:04:05"};
+    {
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 2, "UTC");
+        ASSERT_EQ(1, chunk->num_columns());
+        auto col = chunk->columns()[0];
+        ASSERT_EQ(2, col->size());
+        for (int i = 0; i < col->size(); i++) {
+            EXPECT_EQ(utc_expected[i], col->debug_item(i));
+        }
+    }
+
+    // Non-UTC session: the same instants must be shifted by the session offset.
+    // A fixed offset avoids DST ambiguity.
+    const std::vector<std::string> shifted_expected{"9999-12-31 07:59:59.009999", "2006-01-01 23:04:05"};
+    {
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 2, "-08:00");
+        ASSERT_EQ(1, chunk->num_columns());
+        auto col = chunk->columns()[0];
+        ASSERT_EQ(2, col->size());
+        for (int i = 0; i < col->size(); i++) {
+            const std::string result = col->debug_item(i);
+            EXPECT_EQ(shifted_expected[i], result);
+            // Explicit timezone-aware regression guard: the non-UTC render must differ
+            // from the UTC baseline, i.e. the session-tz shift was actually applied.
+            EXPECT_NE(utc_expected[i], result)
+                    << "INT96 value at row " << i << " was not shifted by the session timezone";
         }
     }
 }
@@ -1088,10 +1154,14 @@ TEST_F(ParquetScannerTest, get_file_schema) {
 
 TEST_F(ParquetScannerTest, datetime) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/datetime.parquet";
+    // datetime.parquet stores isAdjustedToUTC=true instants (07:04:05 UTC, written as 15:04:05
+    // Asia/Shanghai); under the UTC session used by get_chunk they render as 07:04:05. The
+    // previous 15:04:05 baselines were the +08:00 renders of the same instants — the harness
+    // ignored the timezone argument before query_globals.__set_time_zone.
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
             {"col_datetime",
-             {"2006-01-02 15:04:05", "2006-01-02 15:04:05.900000", "2006-01-02 15:04:05.999900",
-              "2006-01-02 15:04:05.999990", "2006-01-02 15:04:05.999999"}}};
+             {"2006-01-02 07:04:05", "2006-01-02 07:04:05.900000", "2006-01-02 07:04:05.999900",
+              "2006-01-02 07:04:05.999990", "2006-01-02 07:04:05.999999"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
