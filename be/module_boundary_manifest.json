@@ -4,22 +4,48 @@
       "id": "base",
       "doc_label": "Base",
       "summary": "Lowest-level BE primitives. Keep it free of higher-level StarRocks module dependencies.",
-      "owned_targets": ["Base"],
-      "owned_roots": ["be/src/base"],
-      "allowed_include_prefixes": ["base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Gutil"],
-      "allowed_test_targets": ["base_test"],
-      "allowed_test_link_deps": ["Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "Base"
+      ],
+      "owned_roots": [
+        "be/src/base"
+      ],
+      "allowed_include_prefixes": [
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "Gutil"
+      ],
+      "allowed_test_targets": [
+        "base_test"
+      ],
+      "allowed_test_link_deps": [
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Move shared helpers into Base/Gutil or introduce a lower-level interface instead of pulling in higher-level BE modules."
     },
     {
       "id": "gutil",
       "doc_label": "Gutil",
       "summary": "Standalone utility substrate. Do not couple it to BE modules.",
-      "owned_targets": ["Gutil"],
-      "owned_roots": ["be/src/gutil"],
-      "allowed_include_prefixes": ["gutil/"],
-      "allowed_target_deps": ["Common", "Base", "Gutil"],
+      "owned_targets": [
+        "Gutil"
+      ],
+      "owned_roots": [
+        "be/src/gutil"
+      ],
+      "allowed_include_prefixes": [
+        "gutil/"
+      ],
+      "allowed_target_deps": [
+        "Common",
+        "Base",
+        "Gutil"
+      ],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep Gutil independent; move BE-specific logic out instead of importing BE modules."
@@ -28,20 +54,44 @@
       "id": "common",
       "doc_label": "Common",
       "summary": "Core shared infrastructure above Base/Gutil and generated code only. Higher-level BE modules must not leak back into it.",
-      "owned_targets": ["Common"],
-      "owned_roots": ["be/src/common"],
-      "allowed_include_prefixes": ["common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["common_test"],
-      "allowed_test_link_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "Common"
+      ],
+      "owned_roots": [
+        "be/src/common"
+      ],
+      "allowed_include_prefixes": [
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "common_test"
+      ],
+      "allowed_test_link_deps": [
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code."
     },
     {
       "id": "cache",
       "doc_label": "Cache",
       "summary": "Cache implementation module for DataCache facade, cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.",
-      "owned_targets": ["Cache"],
-      "owned_roots": ["be/src/cache"],
+      "owned_targets": [
+        "Cache"
+      ],
+      "owned_roots": [
+        "be/src/cache"
+      ],
       "allowed_include_prefixes": [
         "cache/",
         "common/brpc/",
@@ -67,8 +117,18 @@
       "forbidden_includes": [
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["cache_test"],
+      "allowed_target_deps": [
+        "RuntimeCore",
+        "FSCore",
+        "IO",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "cache_test"
+      ],
       "allowed_test_link_deps": [
         "Cache",
         "RuntimeCore",
@@ -85,7 +145,9 @@
       "id": "httpcore",
       "doc_label": "HttpCore",
       "summary": "Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.",
-      "owned_targets": ["HttpCore"],
+      "owned_targets": [
+        "HttpCore"
+      ],
       "owned_globs": [
         "be/src/http/http_handler.h",
         "be/src/http/http_auth.*",
@@ -101,8 +163,16 @@
         "be/src/http/http_client.*",
         "be/src/http/ev_http_server.*"
       ],
-      "allowed_include_prefixes": ["http/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["http/action/"],
+      "allowed_include_prefixes": [
+        "http/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "http/action/"
+      ],
       "forbidden_includes": [
         "http/default_path_handlers.h",
         "http/download_action.h",
@@ -111,29 +181,65 @@
         "http/utils.h",
         "http/web_page_handler.h"
       ],
-      "allowed_target_deps": ["Common", "Base", "Gutil"],
-      "allowed_test_targets": ["http_core_test"],
-      "allowed_test_link_deps": ["HttpCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "Common",
+        "Base",
+        "Gutil"
+      ],
+      "allowed_test_targets": [
+        "http_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "HttpCore",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward."
     },
     {
       "id": "io",
       "doc_label": "IO",
       "summary": "Minimal IO foundation used by FS and upper layers.",
-      "owned_targets": ["IO"],
-      "owned_roots": ["be/src/io"],
-      "allowed_include_prefixes": ["io/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "owned_targets": [
+        "IO"
+      ],
+      "owned_roots": [
+        "be/src/io"
+      ],
+      "allowed_include_prefixes": [
+        "io/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
       "forbidden_include_prefixes": [],
-      "allowed_target_deps": ["Common", "Base", "Gutil"],
-      "allowed_test_targets": ["io_test"],
-      "allowed_test_link_deps": ["IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "Common",
+        "Base",
+        "Gutil"
+      ],
+      "allowed_test_targets": [
+        "io_test"
+      ],
+      "allowed_test_link_deps": [
+        "IO",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep IO free of higher FS/runtime/storage/exec/service code; move the dependency upward or add a lower-level interface."
     },
     {
       "id": "fscore",
       "doc_label": "FSCore",
       "summary": "Minimal filesystem core on top of IO.",
-      "owned_targets": ["FSCore"],
+      "owned_targets": [
+        "FSCore"
+      ],
       "owned_globs": [
         "be/src/fs/fs.*",
         "be/src/fs/fd_cache.*",
@@ -147,8 +253,20 @@
         "be/src/fs/fs_scheme.*",
         "be/src/fs/fs_util.*"
       ],
-      "allowed_include_prefixes": ["fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
+      "allowed_include_prefixes": [
+        "fs/",
+        "io/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "fs/azure/",
+        "fs/credential/",
+        "fs/hdfs/",
+        "fs/s3/"
+      ],
       "forbidden_includes": [
         "fs/fs_broker.h",
         "fs/fs_options_helper.h",
@@ -157,41 +275,106 @@
         "fs/key_cache.h",
         "fs/output_stream_adapter.h"
       ],
-      "allowed_target_deps": ["IO", "Common", "Base", "Gutil"],
-      "allowed_test_targets": ["fs_core_test"],
-      "allowed_test_link_deps": ["FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "IO",
+        "Common",
+        "Base",
+        "Gutil"
+      ],
+      "allowed_test_targets": [
+        "fs_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "FSCore",
+        "IO",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep FSCore limited to IO plus core FS abstractions; move backend-specific behavior into FileSystem."
     },
     {
       "id": "platform",
       "doc_label": "Platform",
       "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.",
-      "owned_targets": ["Platform"],
-      "owned_roots": ["be/src/platform"],
-      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["HttpCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["platform_test"],
-      "allowed_test_link_deps": ["Platform"],
+      "owned_targets": [
+        "Platform"
+      ],
+      "owned_roots": [
+        "be/src/platform"
+      ],
+      "allowed_include_prefixes": [
+        "platform/",
+        "http/",
+        "fs/",
+        "io/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "HttpCore",
+        "FSCore",
+        "IO",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "platform_test"
+      ],
+      "allowed_test_link_deps": [
+        "Platform"
+      ],
       "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."
     },
     {
       "id": "typecore",
       "doc_label": "Types",
       "summary": "Core type system without runtime/storage/exec coupling.",
-      "owned_targets": ["Types"],
-      "owned_globs": ["be/src/types/**"],
-      "allowed_include_prefixes": ["types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Common", "Base", "Gutil"],
-      "allowed_test_targets": ["types_test"],
-      "allowed_test_link_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "Types"
+      ],
+      "owned_globs": [
+        "be/src/types/**"
+      ],
+      "allowed_include_prefixes": [
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "Common",
+        "Base",
+        "Gutil"
+      ],
+      "allowed_test_targets": [
+        "types_test"
+      ],
+      "allowed_test_link_deps": [
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep Types independent of runtime/util/storage/exec layers; move integration code into higher layers."
     },
     {
       "id": "columncore",
       "doc_label": "ColumnCore",
       "summary": "Core column representations that must stay independent of ChunkCore and higher layers.",
-      "owned_targets": ["ColumnCore"],
-      "owned_globs": ["be/src/column/**"],
+      "owned_targets": [
+        "ColumnCore"
+      ],
+      "owned_globs": [
+        "be/src/column/**"
+      ],
       "excluded_globs": [
         "be/src/column/chunk.*",
         "be/src/column/chunk_factory.*",
@@ -204,28 +387,78 @@
         "be/src/column/schema.*",
         "be/src/column/segmented_chunk.*"
       ],
-      "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["column_test"],
-      "allowed_test_link_deps": ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_include_prefixes": [
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "column_test"
+      ],
+      "allowed_test_link_deps": [
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ColumnCore free of ChunkCore/Runtime/Exec/Storage coupling; move integration code upward or introduce an interface."
     },
     {
       "id": "chunkcore",
       "doc_label": "ChunkCore",
       "summary": "Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.",
-      "owned_targets": ["ChunkCore"],
-      "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["chunk_test"],
-      "allowed_test_link_deps": ["ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "ChunkCore"
+      ],
+      "allowed_include_prefixes": [
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "chunk_test"
+      ],
+      "allowed_test_link_deps": [
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ChunkCore limited to chunk/schema helpers and free of Runtime/Exec/Storage/Serde coupling."
     },
     {
       "id": "runtimecore",
       "doc_label": "RuntimeCore",
       "summary": "Core runtime building blocks without full Runtime/Exec/Storage coupling.",
-      "owned_targets": ["RuntimeCore"],
+      "owned_targets": [
+        "RuntimeCore"
+      ],
       "additional_owned_globs": [
         "be/src/runtime/arena_allocator.h",
         "be/src/runtime/bucket_aware_partition.h",
@@ -258,7 +491,16 @@
         "be/src/runtime/service_contexts.h",
         "be/src/runtime/memory/*.h"
       ],
-      "allowed_include_prefixes": ["runtime/", "platform/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": [
+        "runtime/",
+        "platform/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
       "forbidden_include_prefixes": [
         "runtime/batch_write/",
         "runtime/routine_load/",
@@ -308,43 +550,140 @@
         "runtime/tablets_channel.h",
         "runtime/variable_result_writer.h"
       ],
-      "allowed_target_deps": ["Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["runtime_core_test"],
-      "allowed_test_link_deps": ["RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "Platform",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "runtime_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "RuntimeCore",
+        "Platform",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime."
     },
     {
       "id": "formatsio",
       "doc_label": "FormatsIO",
       "summary": "Format-oriented output stream primitives above RuntimeCore, FSCore, and Types.",
-      "owned_targets": ["FormatsIO"],
-      "owned_globs": ["be/src/formats/io/**"],
-      "allowed_include_prefixes": ["formats/io/", "runtime/", "fs/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["RuntimeCore", "FSCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["formats_io_test"],
-      "allowed_test_link_deps": ["FormatsIO", "RuntimeCore", "FSCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "FormatsIO"
+      ],
+      "owned_globs": [
+        "be/src/formats/io/**"
+      ],
+      "allowed_include_prefixes": [
+        "formats/io/",
+        "runtime/",
+        "fs/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "RuntimeCore",
+        "FSCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "formats_io_test"
+      ],
+      "allowed_test_link_deps": [
+        "FormatsIO",
+        "RuntimeCore",
+        "FSCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep FormatsIO limited to reusable format output stream primitives; move connector orchestration and higher execution policy upward."
     },
     {
       "id": "runtimeenv",
       "doc_label": "RuntimeEnv",
       "summary": "Process-scoped runtime environment resources below full Runtime and above RuntimeCore.",
-      "owned_targets": ["RuntimeEnv"],
-      "owned_roots": ["be/src/runtime/env"],
-      "allowed_include_prefixes": ["runtime/env/", "runtime/", "platform/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "udf/"],
-      "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["Platform", "RuntimeCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["runtime_env_test"],
-      "allowed_test_link_deps": ["RuntimeEnv", "Platform", "RuntimeCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "RuntimeEnv"
+      ],
+      "owned_roots": [
+        "be/src/runtime/env"
+      ],
+      "allowed_include_prefixes": [
+        "runtime/env/",
+        "runtime/",
+        "platform/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "storage/",
+        "service/",
+        "connector/",
+        "udf/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": [
+        "Platform",
+        "RuntimeCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "runtime_env_test"
+      ],
+      "allowed_test_link_deps": [
+        "RuntimeEnv",
+        "Platform",
+        "RuntimeCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward."
     },
     {
       "id": "storageprimitive",
       "doc_label": "StoragePrimitive",
       "summary": "Primitive storage contracts and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
-      "owned_targets": ["StoragePrimitive"],
-      "owned_roots": ["be/src/storage/primitive"],
+      "owned_targets": [
+        "StoragePrimitive"
+      ],
+      "owned_roots": [
+        "be/src/storage/primitive"
+      ],
       "allowed_include_prefixes": [
         "storage/primitive/",
         "exprs/",
@@ -356,19 +695,56 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["storage/", "exec/", "service/", "connector/", "http/", "cache/", "util/"],
-      "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["storage_primitive_test"],
-      "allowed_test_link_deps": ["StoragePrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "forbidden_include_prefixes": [
+        "storage/",
+        "exec/",
+        "service/",
+        "connector/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": [
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "storage_primitive_test"
+      ],
+      "allowed_test_link_deps": [
+        "StoragePrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep StoragePrimitive limited to reusable storage contracts and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward."
     },
     {
       "id": "storagebase",
       "doc_label": "StorageBase",
       "summary": "Base storage algorithms and mask-buffer helpers above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
-      "owned_targets": ["StorageBase"],
-      "owned_roots": ["be/src/storage/base"],
+      "owned_targets": [
+        "StorageBase"
+      ],
+      "owned_roots": [
+        "be/src/storage/base"
+      ],
       "allowed_include_prefixes": [
         "storage/base/",
         "storage/primitive/",
@@ -381,19 +757,63 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["storage/", "compute_env/", "exec/", "service/", "connector/", "cache/", "http/", "agent/"],
-      "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["ComputeEnv", "StoragePrimitive", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["storage_base_test"],
-      "allowed_test_link_deps": ["StorageBase", "ComputeEnv", "StoragePrimitive", "Serde", "FSCore", "IO", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "forbidden_include_prefixes": [
+        "storage/",
+        "compute_env/",
+        "exec/",
+        "service/",
+        "connector/",
+        "cache/",
+        "http/",
+        "agent/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": [
+        "ComputeEnv",
+        "StoragePrimitive",
+        "Serde",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "storage_base_test"
+      ],
+      "allowed_test_link_deps": [
+        "StorageBase",
+        "ComputeEnv",
+        "StoragePrimitive",
+        "Serde",
+        "FSCore",
+        "IO",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward."
     },
     {
       "id": "computeenv",
       "doc_label": "ComputeEnv",
       "summary": "Shared compute-side BE environment boundary for process-scoped compute resources, query-cache primitives, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.",
-      "owned_targets": ["ComputeEnv"],
-      "owned_roots": ["be/src/compute_env"],
+      "owned_targets": [
+        "ComputeEnv"
+      ],
+      "owned_roots": [
+        "be/src/compute_env"
+      ],
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/runtime_filter/",
@@ -425,23 +845,78 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/"],
-      "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
-      "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "storage/",
+        "service/",
+        "connector/",
+        "agent/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": [
+        "StoragePrimitive",
+        "ExecPrimitive",
+        "ExprCore",
+        "Serde",
+        "Util",
+        "RuntimeEnv",
+        "RuntimeCore",
+        "Platform",
+        "FSCore",
+        "IO",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "compute_env_test",
+        "compute_env_sorting_test"
+      ],
+      "allowed_test_link_deps": [
+        "ComputeEnv",
+        "ExprCore",
+        "RuntimeCore",
+        "FSCore",
+        "IO",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ComputeEnv limited to process-scoped compute resources, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
       "id": "exprcore",
       "doc_label": "ExprCore",
       "summary": "Core expression infrastructure that depends only on RuntimeCore and lower layers.",
-      "owned_targets": ["ExprCore"],
+      "owned_targets": [
+        "ExprCore"
+      ],
       "additional_owned_globs": [
         "be/src/exprs/table_function/table_function.h"
       ],
-      "allowed_include_prefixes": ["exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exprs/agg/"],
+      "allowed_include_prefixes": [
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "exprs/agg/"
+      ],
       "forbidden_includes": [
         "exprs/array_functions.h",
         "exprs/arrow_function_call.h",
@@ -463,16 +938,39 @@
         "exprs/substring_index.h",
         "exprs/utility_functions.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["expr_core_test"],
-      "allowed_test_link_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "expr_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs."
     },
     {
       "id": "execprimitive",
       "doc_label": "ExecPrimitive",
       "summary": "Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",
-      "owned_targets": ["ExecPrimitive"],
+      "owned_targets": [
+        "ExecPrimitive"
+      ],
       "additional_owned_globs": [
         "be/src/exec/runtime_filter/**",
         "be/src/exec/pipeline/primitives/driver_executor.h",
@@ -515,7 +1013,16 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
+      "forbidden_include_prefixes": [
+        "exec/pipeline/",
+        "compute_env/workgroup/",
+        "storage/",
+        "service/",
+        "http/",
+        "connector/",
+        "cache/",
+        "util/"
+      ],
       "forbidden_includes": [
         "exec/data_sink.h",
         "exec/pipeline/fragment_context.h",
@@ -526,16 +1033,41 @@
         "exec/pipeline/scan/morsel.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["exec_primitive_test"],
-      "allowed_test_link_deps": ["ExecPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "exec_primitive_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExecPrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, storage, service, and connector integration upward."
     },
     {
       "id": "execruntime",
       "doc_label": "ExecRuntime",
       "summary": "Execution runtime driver lifecycle and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.",
-      "owned_targets": ["ExecRuntime"],
+      "owned_targets": [
+        "ExecRuntime"
+      ],
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/pipeline/pipeline_driver.h",
@@ -565,7 +1097,16 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "cache/", "http/", "agent/", "util/"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "storage/",
+        "service/",
+        "connector/",
+        "cache/",
+        "http/",
+        "agent/",
+        "util/"
+      ],
       "forbidden_includes": [
         "exec/pipeline/fragment_context.h",
         "exec/pipeline/pipeline.h",
@@ -576,16 +1117,57 @@
         "exec/pipeline/scan/morsel.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["exec_runtime_test"],
-      "allowed_test_link_deps": ["ExecRuntime", "ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ComputeEnv",
+        "ExecPrimitive",
+        "StoragePrimitive",
+        "ExprCore",
+        "Serde",
+        "RuntimeEnv",
+        "RuntimeCore",
+        "Platform",
+        "FSCore",
+        "IO",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "exec_runtime_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExecRuntime",
+        "ComputeEnv",
+        "ExecPrimitive",
+        "StoragePrimitive",
+        "ExprCore",
+        "Serde",
+        "RuntimeEnv",
+        "RuntimeCore",
+        "Platform",
+        "FSCore",
+        "IO",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ExecRuntime limited to driver lifecycle and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward."
     },
     {
       "id": "connectorprimitive",
       "doc_label": "ConnectorPrimitive",
       "summary": "Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.",
-      "owned_targets": ["ConnectorPrimitive"],
+      "owned_targets": [
+        "ConnectorPrimitive"
+      ],
       "allowed_include_prefixes": [
         "connector/connector.h",
         "connector/data_source.h",
@@ -603,15 +1185,48 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["connector/", "exec/", "storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_include_prefixes": [
+        "connector/",
+        "exec/",
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
       "forbidden_includes": [
         "connector/connector_chunk_sink.h",
         "connector/connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ExecPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["connector_primitive_test"],
-      "allowed_test_link_deps": ["ConnectorPrimitive", "ExecPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ExecPrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "connector_primitive_test"
+      ],
+      "allowed_test_link_deps": [
+        "ConnectorPrimitive",
+        "ExecPrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward."
     },
     {
@@ -619,7 +1234,9 @@
       "doc_label": "ConnectorBenchmark",
       "summary": "Benchgen-backed benchmark connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
       "agents_path": "be/src/connector/benchmark/AGENTS.md",
-      "owned_targets": ["ConnectorBenchmark"],
+      "owned_targets": [
+        "ConnectorBenchmark"
+      ],
       "allowed_include_prefixes": [
         "connector/benchmark/",
         "connector/connector.h",
@@ -634,20 +1251,90 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
       "forbidden_includes": [
         "connector/connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ConnectorPrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+    },
+    {
+      "id": "connectorlance",
+      "doc_label": "ConnectorLance",
+      "summary": "Lance JNI connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
+      "owned_targets": [
+        "ConnectorLance"
+      ],
+      "allowed_include_prefixes": [
+        "connector/lance/",
+        "connector/connector.h",
+        "connector/data_source.h",
+        "connector/data_source_provider.h",
+        "exec/hdfs_scanner/jni_scanner.h",
+        "exec/hdfs_scanner/hdfs_scanner.h",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": [
+        "ConnectorPrimitive",
+        "Connector",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen",
+        "Exec"
+      ],
+      "remediation": "Keep ConnectorLance limited to the Lance JNI connector implementation; move registration into ConnectorBootstrap and avoid pulling storage, service, or full Exec code into the connector library."
     },
     {
       "id": "connectorelasticsearch",
       "doc_label": "ConnectorElasticsearch",
       "summary": "Elasticsearch connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
       "agents_path": "be/src/connector/elasticsearch/AGENTS.md",
-      "owned_targets": ["ConnectorElasticsearch"],
+      "owned_targets": [
+        "ConnectorElasticsearch"
+      ],
       "allowed_include_prefixes": [
         "connector/elasticsearch/",
         "connector/connector.h",
@@ -663,14 +1350,47 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "cache/", "util/"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "storage/",
+        "service/",
+        "cache/",
+        "util/"
+      ],
       "forbidden_includes": [
         "connector/connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorPrimitive", "HttpCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["connector_elasticsearch_test"],
-      "allowed_test_link_deps": ["ConnectorElasticsearch", "ConnectorPrimitive", "HttpCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ConnectorPrimitive",
+        "HttpCore",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "connector_elasticsearch_test"
+      ],
+      "allowed_test_link_deps": [
+        "ConnectorElasticsearch",
+        "ConnectorPrimitive",
+        "HttpCore",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
@@ -678,7 +1398,9 @@
       "doc_label": "ConnectorMySQL",
       "summary": "MySQL connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
       "agents_path": "be/src/connector/mysql/AGENTS.md",
-      "owned_targets": ["ConnectorMySQL"],
+      "owned_targets": [
+        "ConnectorMySQL"
+      ],
       "allowed_include_prefixes": [
         "connector/mysql/",
         "connector/connector.h",
@@ -693,27 +1415,64 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
       "forbidden_includes": [
         "connector/connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["connector_mysql_test"],
-      "allowed_test_link_deps": ["ConnectorMySQL", "ConnectorPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ConnectorPrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "connector_mysql_test"
+      ],
+      "allowed_test_link_deps": [
+        "ConnectorMySQL",
+        "ConnectorPrimitive",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
       "id": "connectorbootstrap",
       "doc_label": "ConnectorBootstrap",
       "summary": "Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.",
-      "owned_targets": ["ConnectorBootstrap"],
-      "additional_owned_globs": ["be/src/connector/connector_bootstrap.h"],
+      "owned_targets": [
+        "ConnectorBootstrap"
+      ],
+      "additional_owned_globs": [
+        "be/src/connector/connector_bootstrap.h"
+      ],
       "allowed_include_prefixes": [
         "connector/connector_bootstrap.h",
         "connector/benchmark/",
         "connector/elasticsearch/",
         "connector/mysql/",
+        "connector/lance/",
         "connector/connector.h",
         "connector/connector_registry.h",
         "common/",
@@ -721,20 +1480,43 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "runtime/", "storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "runtime/",
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
       "forbidden_includes": [
         "connector/builtin_connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "Connector",
+        "ConnectorBenchmark",
+        "ConnectorElasticsearch",
+        "ConnectorMySQL",
+        "ConnectorLance",
+        "ConnectorPrimitive",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap."
     },
     {
       "id": "connectorbuiltinregistry",
       "doc_label": "ConnectorBuiltinRegistry",
       "summary": "Top-level built-in connector registration composition above connector contracts and concrete connector libraries.",
-      "owned_targets": ["ConnectorBuiltinRegistry"],
-      "additional_owned_globs": ["be/src/connector/builtin_connector_registry.h"],
+      "owned_targets": [
+        "ConnectorBuiltinRegistry"
+      ],
+      "additional_owned_globs": [
+        "be/src/connector/builtin_connector_registry.h"
+      ],
       "allowed_include_prefixes": [
         "connector/builtin_connector_registry.h",
         "connector/",
@@ -743,75 +1525,231 @@
         "gutil/",
         "gen_cpp/"
       ],
-      "forbidden_include_prefixes": ["exec/", "runtime/", "storage/", "service/", "http/", "cache/", "util/"],
-      "allowed_target_deps": ["Connector", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "runtime/",
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
+      "allowed_target_deps": [
+        "Connector",
+        "ConnectorPrimitive",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target."
     },
     {
       "id": "execsinkcore",
       "doc_label": "ExecSinkCore",
       "summary": "DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.",
-      "owned_targets": ["ExecSinkCore"],
-      "allowed_include_prefixes": ["exec/data_sink.h", "exec/pipeline/pipeline_fwd.h", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "connector/", "storage/", "http/", "service/", "cache/", "runtime/"],
+      "owned_targets": [
+        "ExecSinkCore"
+      ],
+      "allowed_include_prefixes": [
+        "exec/data_sink.h",
+        "exec/pipeline/pipeline_fwd.h",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "exec/pipeline/",
+        "connector/",
+        "storage/",
+        "http/",
+        "service/",
+        "cache/",
+        "runtime/"
+      ],
       "forbidden_includes": [
         "exec/exec_node.h",
         "exec/multi_olap_table_sink.h",
         "exec/tablet_sink.h"
       ],
-      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["data_sink_core_test"],
-      "allowed_test_link_deps": ["ExecSinkCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "data_sink_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExecSinkCore",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ExecSinkCore limited to the DataSink base contract; move construction, concrete sinks, pipeline decomposition, and future sink IO behavior into higher modules."
     },
     {
       "id": "execschemascannercore",
       "doc_label": "ExecSchemaScannerCore",
       "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",
-      "owned_targets": ["ExecSchemaScannerCore"],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/schema_scanner/", "exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "owned_targets": [
+        "ExecSchemaScannerCore"
+      ],
+      "allowed_include_prefixes": [
+        "exec/schema_scanner.h",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "exec/schema_scanner/",
+        "exec/pipeline/",
+        "storage/",
+        "http/",
+        "service/",
+        "cache/"
+      ],
       "forbidden_includes": [
         "runtime/exec_env.h",
         "exec/exec_node.h",
         "exec/data_sink.h"
       ],
-      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["schema_scanner_core_test"],
-      "allowed_test_link_deps": ["ExecSchemaScannerCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "schema_scanner_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExecSchemaScannerCore",
+        "ExprCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
     },
     {
       "id": "execschemascanners",
       "doc_label": "ExecSchemaScanners",
       "summary": "Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.",
-      "owned_targets": ["ExecSchemaScanners"],
+      "owned_targets": [
+        "ExecSchemaScanners"
+      ],
       "additional_owned_globs": [
         "be/src/exec/schema_scanner/schema_column_filler.h"
       ],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "allowed_include_prefixes": [
+        "exec/schema_scanner.h",
+        "exec/schema_scanner/schema_column_filler.h",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "exec/pipeline/",
+        "storage/",
+        "http/",
+        "service/",
+        "cache/"
+      ],
       "forbidden_includes": [
         "exec/schema_scanner/schema_helper.h",
         "runtime/exec_env.h",
         "exec/exec_node.h",
         "exec/data_sink.h"
       ],
-      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["exec_schema_scanners_test"],
-      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ExecSchemaScannerCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "exec_schema_scanners_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExecSchemaScanners",
+        "ExecSchemaScannerCore",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
     },
     {
       "id": "execjoincore",
       "doc_label": "ExecJoinCore",
       "summary": "Reusable exec join hash table algorithms without join nodes, pipeline, storage, service, or util coupling.",
-      "owned_targets": ["ExecJoinCore"],
+      "owned_targets": [
+        "ExecJoinCore"
+      ],
       "owned_globs": [
         "be/src/exec/join/**"
       ],
-      "allowed_include_prefixes": ["exec/join/", "compute_env/sorting/sort_helper.h", "exprs/", "serde/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/", "exec/pipeline/", "compute_env/spill/", "compute_env/workgroup/", "runtime/batch_write/", "runtime/routine_load/", "runtime/stream_load/", "storage/", "service/", "http/", "cache/", "connector/", "util/"],
+      "allowed_include_prefixes": [
+        "exec/join/",
+        "compute_env/sorting/sort_helper.h",
+        "exprs/",
+        "serde/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "exec/",
+        "exec/pipeline/",
+        "compute_env/spill/",
+        "compute_env/workgroup/",
+        "runtime/batch_write/",
+        "runtime/routine_load/",
+        "runtime/stream_load/",
+        "storage/",
+        "service/",
+        "http/",
+        "cache/",
+        "connector/",
+        "util/"
+      ],
       "forbidden_includes": [
         "exec/cross_join_node.h",
         "exec/data_sink.h",
@@ -821,21 +1759,71 @@
         "exec/hash_joiner.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ComputeEnv", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["exec_join_core_test"],
-      "allowed_test_link_deps": ["ExecJoinCore", "ComputeEnv", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": [
+        "ComputeEnv",
+        "ExprCore",
+        "Serde",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "exec_join_core_test"
+      ],
+      "allowed_test_link_deps": [
+        "ExecJoinCore",
+        "ComputeEnv",
+        "ExprCore",
+        "Serde",
+        "RuntimeCore",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     },
     {
       "id": "starosintegration",
       "doc_label": "StarOSIntegration",
       "summary": "StarRocks-owned Starlet integration for worker runtime, shard metadata, status conversion, StarCache updates, and worker metrics outside service bootstrap.",
-      "owned_targets": ["StarOSIntegration"],
-      "owned_roots": ["be/src/staros_integration"],
-      "allowed_include_prefixes": ["staros_integration/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["staros_integration_test"],
-      "allowed_test_link_deps": ["StarOSIntegration", "Common", "Base", "Gutil", "StarRocksGen"],
+      "owned_targets": [
+        "StarOSIntegration"
+      ],
+      "owned_roots": [
+        "be/src/staros_integration"
+      ],
+      "allowed_include_prefixes": [
+        "staros_integration/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "allowed_target_deps": [
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": [
+        "staros_integration_test"
+      ],
+      "allowed_test_link_deps": [
+        "StarOSIntegration",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
       "remediation": "Keep the Starlet adapter independent of service/bootstrap, storage, runtime, and filesystem modules; expose narrow accessors instead of pulling higher layers into lower layers."
     }
   ]

@@ -120,6 +120,8 @@ Usage: $0 <options>
                         build Backend without the Elasticsearch connector
      --without-connector-mysql
                         build Backend without the MySQL connector
+     --without-connector-lance
+                        build Backend without the Lance JNI connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
@@ -178,6 +180,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-benchmark' \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-mysql' \
+  -l 'without-connector-lance' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
@@ -218,6 +221,7 @@ WITH_BENCH=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_MYSQL=ON
+WITH_CONNECTOR_LANCE=ON
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
 THIN_ARCHIVE=OFF
@@ -343,6 +347,7 @@ else
             --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+            --without-connector-lance) WITH_CONNECTOR_LANCE=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
@@ -409,6 +414,7 @@ echo "Get params:
     WITH_CONNECTOR_BENCHMARK    -- $WITH_CONNECTOR_BENCHMARK
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
+    WITH_CONNECTOR_LANCE        -- $WITH_CONNECTOR_LANCE
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
@@ -560,6 +566,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
+                  -DWITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \

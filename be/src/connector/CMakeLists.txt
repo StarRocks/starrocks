@@ -134,6 +134,27 @@ if (WITH_CONNECTOR_BENCHMARK)
     )
 endif()
 
+if (WITH_CONNECTOR_LANCE)
+    ADD_BE_LIB(ConnectorLance
+            lance/lance_connector.cpp
+    )
+
+    target_link_libraries(ConnectorLance PUBLIC
+            ConnectorPrimitive
+            Connector
+            Exec
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+endif()
+
 ADD_BE_LIB(ConnectorBootstrap
         connector_bootstrap.cpp
 )
@@ -167,6 +188,13 @@ if (WITH_CONNECTOR_MYSQL)
     target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
     target_link_libraries(ConnectorBootstrap PRIVATE
             ConnectorMySQL
+    )
+endif()
+
+if (WITH_CONNECTOR_LANCE)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_LANCE)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorLance
     )
 endif()
 

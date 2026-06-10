@@ -889,11 +889,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
-    bool use_lance_jni_reader = false;
-    if (scan_range.__isset.use_lance_jni_reader) {
-        use_lance_jni_reader = scan_range.use_lance_jni_reader;
-    }
-
     bool use_avro_jni_reader = true;
     if (scan_range.__isset.use_avro_jni_reader) {
         use_avro_jni_reader = scan_range.use_avro_jni_reader;
@@ -917,8 +912,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = create_iceberg_metadata_jni_scanner(jni_scanner_create_options).release();
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
-    } else if (use_lance_jni_reader) {
-        scanner = create_lance_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner_params.parquet_page_index_enable =
                 config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
