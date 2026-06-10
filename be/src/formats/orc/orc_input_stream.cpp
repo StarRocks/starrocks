@@ -73,9 +73,9 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     bool active_lazy_column_coalesce = true;
     if (isIOAdaptiveCoalesceEnabled() && _lazy_column_coalesce_counter->load(std::memory_order_relaxed) < 0) {
         active_lazy_column_coalesce = false;
-        _app_stats->orc_stripe_active_lazy_coalesce_seperately++;
+        _app_stats->active_lazy_coalesce_seperately++;
     } else {
-        _app_stats->orc_stripe_active_lazy_coalesce_together++;
+        _app_stats->active_lazy_coalesce_together++;
     }
 
     const Status st = setIORanges(bs_io_ranges, active_lazy_column_coalesce);

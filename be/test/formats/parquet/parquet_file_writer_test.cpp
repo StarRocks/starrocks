@@ -48,9 +48,12 @@ public:
     void TearDown() override {}
 
 protected:
+    HdfsScannerParams _scanner_params;
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
-        ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
+
+        ctx->params = &_scanner_params;
+        _scanner_params.lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
 
         std::vector<parquet::Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {
@@ -64,7 +67,7 @@ protected:
         parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-        ctx->scan_range = _create_scan_range(_file_path, file_size);
+        _scanner_params.scan_range = _create_scan_range(_file_path, file_size);
         ctx->timezone = "Asia/Shanghai";
         ctx->stats = &_hdfs_scan_stats;
 
