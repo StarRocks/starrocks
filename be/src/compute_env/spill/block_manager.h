@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 
+#include "base/container/raw_container.h"
 #include "base/metrics.h"
 #include "base/string/slice.h"
 #include "common/runtime_profile.h"
@@ -105,11 +106,24 @@ public:
     // if the Block has reached the end, should return EndOfFile status
     virtual Status read_fully(void* data, int64_t count);
 
+    // read exactly `count` bytes like read_fully, but prefer returning a
+    // zero-copy view into the internal read buffer. When the data cannot be
+    // served from the buffer (buffer read disabled or `count` exceeds the
+    // buffer capacity), the bytes are copied into `fallback` and the returned
+    // slice points into it. The returned slice is invalidated by any
+    // subsequent read on this reader and by any other use of `fallback`, so
+    // it must be fully consumed before either is touched again and must not
+    // be stored.
+    [[nodiscard]] StatusOr<Slice> read_view(raw::RawString* fallback, int64_t count);
+
     virtual std::string debug_string() = 0;
 
     virtual const Block* block() const = 0;
 
 protected:
+    Status _init_readable();
+    void _update_io_metrics(int64_t io_ns, int64_t read_len);
+
     const Block* _block = nullptr;
     std::unique_ptr<io::InputStreamWrapper> _readable;
     size_t _length = 0;

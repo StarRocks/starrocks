@@ -32,6 +32,16 @@
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
+
+// how a mem table's in-memory chunks are exposed as an input stream
+enum class MemTableReadMode {
+    // the mem table keeps its chunks; the stream serves deep copies, so
+    // multiple readers can each see all rows
+    SHARED,
+    // destructive: the chunks are handed over to the (single) stream without
+    // copying and the mem table is left empty
+    EXCLUSIVE,
+};
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
 
@@ -79,7 +89,7 @@ public:
     // NOTE: The implementation of `finalize` needs to ensure reentrancy in order to implement io task yield mechanism
     virtual Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& block) = 0;
 
-    virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
+    virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(MemTableReadMode mode) {
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
@@ -89,6 +99,10 @@ public:
 
     // mem table is done. we can't append data any more
     bool is_done() const { return _is_done; }
+
+    // whether the in-memory chunks were destructively handed over to a
+    // non-shared input stream and no data has been appended since
+    virtual bool consumed_by_exclusive_read() const { return false; }
 
 protected:
     RuntimeState* _runtime_state;
@@ -114,13 +128,16 @@ public:
     Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
     void reset() override;
 
-    StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
+    StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(MemTableReadMode mode) override;
+
+    bool consumed_by_exclusive_read() const override { return _consumed_by_exclusive_read; }
 
     std::vector<ChunkPtr>& get_chunks() { return _chunks; }
 
 private:
     size_t _processed_index = 0;
     std::vector<ChunkPtr> _chunks;
+    bool _consumed_by_exclusive_read = false;
 };
 
 class OrderedMemTable final : public SpillableMemTable {

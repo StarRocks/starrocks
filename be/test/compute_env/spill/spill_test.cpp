@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -32,6 +33,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
@@ -832,5 +834,246 @@ TEST_F(SpillTest, file_group_test) {
     }
 }
 */
+
+namespace {
+
+spill::BlockReaderOptions make_block_read_options(RuntimeProfile* profile, bool enable_buffer_read,
+                                                  size_t max_buffer_bytes) {
+    spill::BlockReaderOptions opts;
+    opts.enable_buffer_read = enable_buffer_read;
+    opts.max_buffer_bytes = max_buffer_bytes;
+    opts.read_io_timer = ADD_TIMER(profile, "read_io_timer");
+    opts.read_io_count = ADD_COUNTER(profile, "read_io_count", TUnit::UNIT);
+    opts.read_io_bytes = ADD_COUNTER(profile, "read_io_bytes", TUnit::BYTES);
+    return opts;
+}
+
+ChunkPtr make_int_chunk(int32_t base, size_t rows) {
+    auto col = Int32Column::create();
+    for (size_t i = 0; i < rows; ++i) {
+        col->append(base + i);
+    }
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(std::move(col), 0);
+    return chunk;
+}
+
+} // namespace
+
+TEST_F(SpillTest, block_reader_read_view) {
+    spill::AcquireBlockOptions aopts;
+    aopts.query_id = generate_uuid();
+    aopts.fragment_instance_id = aopts.query_id;
+    aopts.plan_node_id = 1;
+    aopts.name = "read_view";
+    aopts.block_size = 1 << 20;
+    auto block_res = dummy_block_mgr->acquire_block(aopts);
+    ASSERT_OK(block_res.status());
+    auto block = block_res.value();
+
+    // records of [12-byte header][body]; body sizes chosen to exercise the
+    // buffered path (<= max_buffer_bytes, including the exact boundary), the
+    // fallback path (> max_buffer_bytes) and refills with a partial tail
+    constexpr size_t kMaxBuffer = 16384;
+    const std::vector<size_t> body_sizes = {100, kMaxBuffer, 40000, 5000, 1, 12345, kMaxBuffer - 1, 7000};
+    std::string master;
+    for (size_t len : body_sizes) {
+        for (size_t i = 0; i < 12 + len; ++i) {
+            master.push_back(static_cast<char>((master.size() * 131 + 7) % 251));
+        }
+    }
+    ASSERT_OK(block->append({Slice(master)}));
+    ASSERT_OK(block->flush());
+
+    auto verify = [&](bool enable_buffer_read) {
+        auto ropts = make_block_read_options(&dummy_profile, enable_buffer_read, kMaxBuffer);
+        auto reader = block->get_reader(ropts);
+        raw::RawString fallback;
+        size_t off = 0;
+        for (size_t len : body_sizes) {
+            char header[12];
+            ASSERT_OK(reader->read_fully(header, 12));
+            ASSERT_EQ(0, memcmp(header, master.data() + off, 12));
+            off += 12;
+            auto view = reader->read_view(&fallback, len);
+            ASSERT_OK(view.status());
+            ASSERT_EQ(len, view.value().size);
+            ASSERT_EQ(0, memcmp(view.value().data, master.data() + off, len));
+            off += len;
+        }
+        ASSERT_EQ(master.size(), off);
+        // the block is fully consumed
+        raw::RawString tail;
+        ASSERT_TRUE(reader->read_view(&tail, 1).status().is_end_of_file());
+        char dummy;
+        ASSERT_TRUE(reader->read_fully(&dummy, 1).is_end_of_file());
+    };
+    verify(true);
+    verify(false);
+
+    {
+        // a negative size (e.g. from a corrupted header) must fail instead of
+        // defeating the bounds checks
+        auto ropts = make_block_read_options(&dummy_profile, true, kMaxBuffer);
+        auto reader = block->get_reader(ropts);
+        raw::RawString fallback;
+        auto view = reader->read_view(&fallback, -8);
+        ASSERT_FALSE(view.ok());
+        ASSERT_FALSE(view.status().is_end_of_file());
+    }
+}
+
+TEST_F(SpillTest, raw_chunk_input_stream_move_or_clone) {
+    workgroup::YieldContext yield_ctx;
+    spill::SerdeContext serde_ctx;
+
+    {
+        // exclusively owned chunk: handed over without copying
+        auto chunk = make_int_chunk(0, 16);
+        const Column* raw_column = chunk->columns()[0].get();
+        std::vector<ChunkPtr> chunks;
+        chunks.emplace_back(std::move(chunk));
+        auto stream = spill::SpillInputStream::as_stream(std::move(chunks), nullptr);
+        auto res = stream->get_next(yield_ctx, serde_ctx);
+        ASSERT_OK(res.status());
+        ASSERT_EQ(raw_column, res.value()->columns()[0].get());
+        ASSERT_EQ(16, res.value()->num_rows());
+        ASSERT_TRUE(stream->get_next(yield_ctx, serde_ctx).status().is_end_of_file());
+    }
+
+    {
+        // the chunk itself is shared: served as a deep copy, the source stays
+        // intact
+        auto chunk = make_int_chunk(100, 8);
+        const Column* raw_column = chunk->columns()[0].get();
+        std::vector<ChunkPtr> chunks;
+        chunks.emplace_back(chunk);
+        auto stream = spill::SpillInputStream::as_stream(std::move(chunks), nullptr);
+        auto res = stream->get_next(yield_ctx, serde_ctx);
+        ASSERT_OK(res.status());
+        ASSERT_NE(raw_column, res.value()->columns()[0].get());
+        ASSERT_EQ(8, chunk->num_rows());
+        ASSERT_EQ(8, res.value()->num_rows());
+    }
+
+    {
+        // unique top-level column wrapping a shared child: the nested sharing
+        // must force a copy
+        auto data = Int64Column::create();
+        for (int i = 0; i < 4; ++i) {
+            data->append(i);
+        }
+        ColumnPtr shared_data = std::move(data);
+        auto nullable = NullableColumn::create(shared_data, NullColumn::create(4, 0));
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(std::move(nullable), 0);
+        const Column* raw_column = chunk->columns()[0].get();
+        std::vector<ChunkPtr> chunks;
+        chunks.emplace_back(std::move(chunk));
+        auto stream = spill::SpillInputStream::as_stream(std::move(chunks), nullptr);
+        auto res = stream->get_next(yield_ctx, serde_ctx);
+        ASSERT_OK(res.status());
+        ASSERT_NE(raw_column, res.value()->columns()[0].get());
+        ASSERT_EQ(4, shared_data->size());
+        ASSERT_EQ(4, res.value()->num_rows());
+    }
+}
+
+TEST_F(SpillTest, unordered_mem_table_read_modes) {
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+
+    auto mem_table = std::make_shared<spill::UnorderedMemTable>(&dummy_rt_st, 1L << 30, nullptr, spiller.get());
+    size_t input_rows = 0;
+    for (int i = 0; i < 10; ++i) {
+        auto chunk = make_int_chunk(i * 100, 64);
+        input_rows += chunk->num_rows();
+        ASSERT_OK(mem_table->append(std::move(chunk)));
+    }
+    size_t consumption = mem_table->mem_usage();
+    ASSERT_GT(consumption, 0);
+
+    workgroup::YieldContext yield_ctx;
+    spill::SerdeContext serde_ctx;
+    auto drain = [&](const std::shared_ptr<spill::SpillInputStream>& stream) {
+        size_t rows = 0;
+        while (true) {
+            auto res = stream->get_next(yield_ctx, serde_ctx);
+            if (res.status().is_end_of_file()) {
+                break;
+            }
+            EXPECT_OK(res.status());
+            rows += res.value()->num_rows();
+        }
+        return rows;
+    };
+
+    {
+        // shared read keeps the mem table intact
+        auto stream_st = mem_table->as_input_stream(spill::MemTableReadMode::SHARED);
+        ASSERT_OK(stream_st.status());
+        ASSERT_EQ(input_rows, drain(stream_st.value()));
+        ASSERT_FALSE(mem_table->is_empty());
+        ASSERT_FALSE(mem_table->consumed_by_exclusive_read());
+        ASSERT_EQ(consumption, mem_table->mem_usage());
+    }
+
+    {
+        // exclusive read consumes the mem table but keeps the accounting
+        // until reset
+        auto stream_st = mem_table->as_input_stream(spill::MemTableReadMode::EXCLUSIVE);
+        ASSERT_OK(stream_st.status());
+        ASSERT_TRUE(mem_table->is_empty());
+        ASSERT_TRUE(mem_table->consumed_by_exclusive_read());
+        ASSERT_EQ(consumption, mem_table->mem_usage());
+        ASSERT_EQ(input_rows, drain(stream_st.value()));
+    }
+
+    // both drains were served from in-memory chunks
+    ASSERT_EQ(2 * input_rows, metrics.restore_from_mem_table_rows->value());
+    ASSERT_GT(metrics.restore_from_mem_table_bytes->value(), 0);
+
+    // appending again makes the mem table reusable
+    ASSERT_OK(mem_table->append(make_int_chunk(0, 8)));
+    ASSERT_FALSE(mem_table->consumed_by_exclusive_read());
+
+    mem_table->reset();
+    ASSERT_FALSE(mem_table->consumed_by_exclusive_read());
+    ASSERT_EQ(0, mem_table->mem_usage());
+}
+
+TEST_F(SpillTest, mem_table_double_exclusive_acquire) {
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+    ASSERT_FALSE(spill_options.read_shared);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    // spill some data but do not flush, so the mem table stays in memory
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, make_int_chunk(0, 128), EmptyMemGuard{}));
+
+    auto writer = spiller->_writer->as<spill::RawSpillerWriter*>();
+    std::shared_ptr<spill::SpillInputStream> first;
+    ASSERT_OK(writer->acquire_stream(&first));
+
+    // the in-memory rows were handed over to the first stream; acquiring a
+    // second exclusive stream must fail loudly instead of losing them
+    std::shared_ptr<spill::SpillInputStream> second;
+    auto st = writer->acquire_stream(&second);
+    ASSERT_FALSE(st.ok());
+}
 
 } // namespace starrocks::vectorized

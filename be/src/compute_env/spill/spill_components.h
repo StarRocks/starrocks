@@ -301,7 +301,7 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
-    Status spill_partition(workgroup::YieldContext& ctx, SerdeContext& context, SpilledPartition* partition);
+    Status spill_partition(workgroup::YieldContext& ctx, SpilledPartition* partition);
 
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
@@ -347,10 +347,10 @@ private:
     // prepare and acquire mem_table for each partition in _id_to_partitions
     void _prepare_partitions(RuntimeState* state);
 
-    Status _spill_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
+    Status _spill_input_partitions(workgroup::YieldContext& ctx,
                                    const std::vector<SpilledPartition*>& spilling_partitions);
 
-    Status _split_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
+    Status _split_input_partitions(workgroup::YieldContext& ctx,
                                    const std::vector<SpilledPartition*>& splitting_partitions);
 
     Status _pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions);
@@ -362,9 +362,8 @@ private:
     // 1. We can actually split partitions based on blocks (they all belong to the same partition, but
     // can be executed in splitting out more parallel tasks). Process all blocks that hit this partition while processing the task
     // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
-    Status _split_partition(workgroup::YieldContext& ctx, SerdeContext& context, SpillerReader* reader,
-                            SpilledPartition* partition, SpilledPartition* left_partition,
-                            SpilledPartition* right_partition);
+    Status _split_partition(workgroup::YieldContext& ctx, SpillerReader* reader, SpilledPartition* partition,
+                            SpilledPartition* left_partition, SpilledPartition* right_partition);
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);

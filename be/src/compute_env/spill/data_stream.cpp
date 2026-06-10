@@ -148,7 +148,7 @@ Status DataTranster::transfer(workgroup::YieldContext& yield_ctx, RuntimeState* 
     // read data from input stream and append to output stream
     bool need_aligned = state->spill_enable_direct_io();
     auto task_context = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
-    SerdeContext read_ctx;
+    SerdeContext& read_ctx = task_context->serde_ctx;
     while (true) {
         SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
         if (!input_stream->is_ready()) {
