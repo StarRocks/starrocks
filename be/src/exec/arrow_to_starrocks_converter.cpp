@@ -100,6 +100,63 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
         ctx->report_error_message("column type is not null but data is null", "");
     }
 }
+<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
+=======
+
+Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elements, const arrow::Array* array,
+                                     Column* column, size_t batch_start_idx, size_t chunk_start_idx,
+                                     Filter* chunk_filter, ArrowConvertContext* conv_ctx) {
+    if (array->type_id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
+        auto sliced_array = array->Slice(batch_start_idx, num_elements);
+        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
+        if (!decoded_array_res.ok()) {
+            return Status::InternalError(decoded_array_res.status().ToString());
+        }
+        return convert_arrow_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0,
+                                             chunk_start_idx, chunk_filter, conv_ctx);
+    }
+
+    // Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
+    // isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
+    // `timezone`, see arrow/type.h TimestampType docstring) and must be
+    // displayed identically regardless of session timezone. Only override the
+    // column timezone when it is already timezone-aware (isAdjustedToUTC=true
+    // -> non-empty Arrow tz). This preserves PR #50448's fix for complex-type
+    // timezone-aware timestamps while restoring spec compliance for naive ones.
+    if (array->type_id() == ArrowTypeId::TIMESTAMP) {
+        auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
+        auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+        if (conv_ctx != nullptr && !conv_ctx->timezone.empty() && !mutable_timezone.empty()) {
+            mutable_timezone = conv_ctx->timezone;
+        }
+    }
+
+    uint8_t* null_data;
+    Column* data_column;
+    if (column->is_nullable()) {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto null_column = nullable_column->null_column_raw_ptr();
+        size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, chunk_start_idx);
+        nullable_column->set_has_null(null_count != 0);
+        null_data = &null_column->get_data().front() + chunk_start_idx;
+        data_column = nullable_column->data_column_raw_ptr();
+    } else {
+        null_data = nullptr;
+        // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
+        fill_filter(array, batch_start_idx, num_elements, chunk_filter, chunk_start_idx, conv_ctx);
+        data_column = column;
+    }
+
+    auto st = conv_func->func(array, batch_start_idx, num_elements, data_column, chunk_start_idx, null_data,
+                              chunk_filter, conv_ctx, conv_func);
+    if (st.ok() && column->is_nullable()) {
+        // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+        down_cast<NullableColumn*>(column)->update_has_null();
+    }
+    return st;
+}
+>>>>>>> 1481abcc57 ([BugFix] FILES()/LOAD respect Parquet isAdjustedToUTC=false for INT64 timestamps (#73674)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
 // A general arrow converter for fixed length type
 //
 // case#1: is_directly_copy(AT, LT>==true
@@ -685,6 +742,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             }
         } else if constexpr (at_is_datetime<AT>) {
             auto timezone = concrete_type->timezone();
+<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
             if (timezone.empty()) {
                 // Quote from https://github.com/apache/arrow/blob/4743e181596b9ee45c6b063bcf59fdf9eb72418f/cpp/src/arrow/type.h#L1217
 
@@ -698,6 +756,18 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
 
                 // When the parquet timezone is empty, populate data with runtime timezone instead.
                 timezone = ctx->state->timezone();
+=======
+            const bool is_timezone_naive = timezone.empty();
+            if (is_timezone_naive) {
+                // Arrow timezone-naive = Parquet isAdjustedToUTC=false. Per
+                // Parquet LogicalTypes.md TIMESTAMP, the value must be
+                // displayed "the same way, regardless of the local time zone
+                // in effect." Use UTC so the cctz lookup yields offset=0 and
+                // convert_datetime becomes a no-op for the wall-clock case.
+                // Matches Trino's `DateTimeZone.UTC` pattern in
+                // ColumnReaderFactory.java for the same case.
+                timezone = "UTC";
+>>>>>>> 1481abcc57 ([BugFix] FILES()/LOAD respect Parquet isAdjustedToUTC=false for INT64 timestamps (#73674)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
             }
 
             cctz::time_zone ctz;
