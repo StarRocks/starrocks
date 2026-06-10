@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Before getting your new StarRocks cluster into production, you must secure the initial account and set the necessary variables and properties to allow your cluster to run properly."
+description: "Before getting your new StarRocks cluster into production, you must secure the initial account and set the necessary variables and properties to allow your..."
 ---
 
 # Post-deployment setup

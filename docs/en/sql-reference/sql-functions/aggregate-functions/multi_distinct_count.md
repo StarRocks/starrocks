@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the total number of rows of the `expr`, equivalent to count(distinct expr)."
+description: "Returns the total number of rows of the expr, equivalent to count(distinct expr)."
 ---
 
 # multi_distinct_count

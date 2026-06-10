@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This chapter describes how to deploy, upgrade, and downgrade a StarRocks cluster in a production environment."
+description: "Overview of the procedures to deploy, upgrade, and downgrade a StarRocks cluster in production."
 ---
 
 # Deployment Overview

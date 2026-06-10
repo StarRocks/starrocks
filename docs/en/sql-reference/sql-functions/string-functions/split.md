@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function splits a given string according to the separators, and returns the split parts in ARRAY."
+description: "Splits a string by a delimiter and returns the resulting parts as an ARRAY."
 ---
 
 # split

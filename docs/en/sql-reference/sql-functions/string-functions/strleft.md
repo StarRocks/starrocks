@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function extracts a number of characters from a string with specified length (starting from left)."
+description: "Returns a specified number of characters from the left of a string; alias of left."
 ---
 
 # strleft

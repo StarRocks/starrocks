@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: AWS
-description: "This topic describes how to authenticate with AWS"
+description: "How to configure StarRocks to authenticate with AWS for accessing S3 and other AWS resources."
 ---
 
 # Authenticate to AWS resources

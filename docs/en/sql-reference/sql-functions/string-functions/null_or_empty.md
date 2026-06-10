@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function returns true when the string is empty or NULL."
+description: "Returns true if the string is NULL or an empty string."
 ---
 
 # null_or_empty

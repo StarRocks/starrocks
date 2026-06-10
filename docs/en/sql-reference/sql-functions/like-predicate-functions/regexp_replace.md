@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function uses repl to replace a sequence of characters in str that matches a regular expression pattern."
+description: "Replaces substrings matching a regular expression pattern with a replacement string."
 ---
 
 # regexp_replace

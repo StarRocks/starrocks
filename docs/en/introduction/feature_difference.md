@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Feature Differences"
-description: "This topic lists the differences of features supported in shared-nothing and shared-data clusters."
+description: "Comparison of features supported in StarRocks shared-nothing versus shared-data cluster deployments."
 ---
 
 import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'

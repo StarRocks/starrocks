@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "By default, only users or roles with the `user_admin` role can access this view."
+description: "System view showing the privileges granted to each user-defined role in StarRocks."
 ---
 
 # grants_to_roles

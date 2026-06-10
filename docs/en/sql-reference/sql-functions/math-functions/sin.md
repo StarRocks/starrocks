@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the sine of `x`, where `x` is in radians."
+description: "Returns the sine of x, where x is in radians."
 ---
 
 # sin

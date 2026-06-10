@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function is the same as [from_base64](from_base64.md)."
+description: "Alias of from_base64; decodes a Base64-encoded string to its original string value."
 ---
 
 # base64_decode_string

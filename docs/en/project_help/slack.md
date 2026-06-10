@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: Community Chat
-description: Slack with the community
+description: "How to join the StarRocks community chat on Slack."
 ---
 
 # Community Chat (via Slack)

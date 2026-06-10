@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes how to inspect the metadata information of Iceberg tables in StarRocks."
+description: "How to inspect Iceberg table metadata in StarRocks using metadata tables for snapshots, manifests, and file history."
 ---
 
 # Iceberg Metadata Tables

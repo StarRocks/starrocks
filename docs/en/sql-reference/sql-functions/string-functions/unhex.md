@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function performs the opposite operation of hex()."
+description: "Converts a hexadecimal string to its original binary string; inverse of hex."
 ---
 
 # unhex

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "If you encounter any of the following issues when executing SQL queries with StarRocks, you can use query_dump to obtain the SQL details and send the information to StarRocks technical support for ..."
+description: "How to use the query_dump interface in StarRocks to capture SQL query details for troubleshooting."
 ---
 
 # query_dump interface

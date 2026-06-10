@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`collations` contains the available collations."
+description: "collations contains the available collations."
 ---
 
 # collations

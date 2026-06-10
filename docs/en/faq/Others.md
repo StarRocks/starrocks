@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic provides answers to some general questions."
+description: "General FAQ for miscellaneous StarRocks questions."
 ---
 
 # Other FAQ

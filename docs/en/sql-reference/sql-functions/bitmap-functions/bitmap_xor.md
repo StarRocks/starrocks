@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Calculates the set consisting elements unique to `lhs` and `rhs`."
+description: "Calculates the set consisting elements unique to lhs and rhs."
 ---
 
 # bitmap_xor

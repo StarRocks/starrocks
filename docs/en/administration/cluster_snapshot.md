@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Cluster Snapshot"
 keywords: ['backup','restore','shared data','snapshot']
-description: "This feature is supported from v3.4.2 onwards and only available on shared-data clusters."
+description: "How to create, restore, and manage cluster snapshots for backup and disaster recovery in StarRocks shared-data clusters."
 ---
 <head><meta name="docsearch:pagerank" content="100"/></head>
 

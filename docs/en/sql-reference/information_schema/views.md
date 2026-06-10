@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`views` provides information about all user-defined views."
+description: "views provides information about all user-defined views."
 ---
 
 # views

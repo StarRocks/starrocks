@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`be_compactions` provides statistical information on compaction tasks."
+description: "be_compactions provides statistical information on compaction tasks."
 ---
 
 # be_compactions

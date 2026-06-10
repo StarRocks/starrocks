@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
-description: "This error may happen if the role is not activated."
+description: "FAQ for common StarRocks privilege and authorization questions, including role activation issues."
 ---
 
 # Privilege FAQ

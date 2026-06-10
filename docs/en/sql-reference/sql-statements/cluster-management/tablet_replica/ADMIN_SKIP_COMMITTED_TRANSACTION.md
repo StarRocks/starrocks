@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Force-abort a transaction that is stuck in the `COMMITTED` state on a shared-data (lake) table by performing a no-op publish: the transaction's data contribution is discarded, while the partition's..."
+description: "Force-abort a transaction stuck in the COMMITTED state on a shared-data table, discarding its data while advancing the partition version."
 ---
 
 # ADMIN SKIP COMMITTED TRANSACTION

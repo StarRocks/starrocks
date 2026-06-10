@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 2
-description: Separate compute and storage
+description: "Quick start guide for deploying StarRocks in shared-data mode with separate compute and storage."
 ---
 
 # Separate storage and compute

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "ADMIN SET CONFIG is used to set configuration items for the cluster (Currently, only FE dynamic configuration items can be set using this command)."
+description: "ADMIN SET CONFIG sets FE dynamic configuration items for the StarRocks cluster at runtime."
 ---
 
 # ADMIN SET CONFIG
