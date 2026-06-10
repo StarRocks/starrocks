@@ -57,11 +57,13 @@ Status LanceDataSource::open(RuntimeState* state) {
     std::string scanner_factory_class = "com/starrocks/lance/reader/LanceSplitScannerFactory";
     _scanner = std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 
-    // Build minimal HdfsScannerParams needed by JniScanner
+    // Build HdfsScannerParams needed by JniScanner
     HdfsScannerParams scanner_params;
     scanner_params.tuple_desc = _tuple_desc;
-    for (auto* slot : _tuple_desc->slots()) {
+    for (int i = 0; i < _tuple_desc->slots().size(); i++) {
+        auto* slot = _tuple_desc->slots()[i];
         scanner_params.materialize_slots.push_back(slot);
+        scanner_params.materialize_index_in_chunk.push_back(i);
     }
     scanner_params.scanner_conjunct_ctxs = _conjunct_ctxs;
 
