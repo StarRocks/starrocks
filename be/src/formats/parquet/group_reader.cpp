@@ -403,8 +403,8 @@ Status GroupReader::_create_column_readers() {
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
     opts.timezone = _param.scanner_ctx->timezone;
-    opts.case_sensitive = _param.scanner_ctx->params->options->case_sensitive;
-    opts.use_file_pagecache = _param.scanner_ctx->params->options->use_file_pagecache;
+    opts.case_sensitive = _param.scanner_ctx->params->options.case_sensitive;
+    opts.use_file_pagecache = _param.scanner_ctx->params->options.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;

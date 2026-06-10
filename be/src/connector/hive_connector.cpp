@@ -209,21 +209,22 @@ Status HiveDataSource::open(RuntimeState* state) {
     // Only support file metacache in starcache engine
 #ifdef WITH_STARCACHE
     if (state->query_options().__isset.enable_file_metacache) {
-        _options.use_file_metacache = state->query_options().enable_file_metacache;
+        _scanner_params.options.use_file_metacache = state->query_options().enable_file_metacache;
     }
-    _options.use_file_metacache &= DataCache::GetInstance()->page_cache_available();
+    _scanner_params.options.use_file_metacache &= DataCache::GetInstance()->page_cache_available();
 
     if (state->query_options().__isset.enable_file_pagecache) {
-        _options.use_file_pagecache = state->query_options().enable_file_pagecache;
+        _scanner_params.options.use_file_pagecache = state->query_options().enable_file_pagecache;
     }
-    _options.use_file_pagecache &= DataCache::GetInstance()->page_cache_available();
+    _scanner_params.options.use_file_pagecache &= DataCache::GetInstance()->page_cache_available();
 #endif
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
-        _options.enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
+        _scanner_params.options.enable_dynamic_prune_scan_range =
+                state->query_options().enable_dynamic_prune_scan_range;
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
-        _options.enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+        _scanner_params.options.enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -270,7 +271,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts,
-                                                       &_conjuncts.min_max_ctxs, state));
+                                                       &_scanner_params.conjuncts.min_max_ctxs, state));
     }
 
     if (hdfs_scan_node.__isset.partition_conjuncts) {
@@ -280,12 +281,12 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     }
 
     if (hdfs_scan_node.__isset.case_sensitive) {
-        _options.case_sensitive = hdfs_scan_node.case_sensitive;
+        _scanner_params.options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
 
-    RETURN_IF_ERROR(ExprExecutor::prepare(_conjuncts.min_max_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_params.conjuncts.min_max_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_partition_filter.conjunct_ctxs, state));
-    RETURN_IF_ERROR(ExprExecutor::open(_conjuncts.min_max_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_scanner_params.conjuncts.min_max_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_partition_filter.conjunct_ctxs, state));
     _update_has_any_predicate();
 
@@ -294,11 +295,11 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     // Build all_ctxs: clone of (min_max_ctxs ∪ scan conjuncts), used to build
     // ScanConjunctsManager / PredicateTree inside each scanner's context.
     std::vector<ExprContext*> cloned;
-    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _conjuncts.min_max_ctxs, &cloned));
-    for (auto* ctx : cloned) _conjuncts.all_ctxs.emplace_back(ctx);
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _scanner_params.conjuncts.min_max_ctxs, &cloned));
+    for (auto* ctx : cloned) _scanner_params.conjuncts.all_ctxs.emplace_back(ctx);
     cloned.clear();
     RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned));
-    for (auto* ctx : cloned) _conjuncts.all_ctxs.emplace_back(ctx);
+    for (auto* ctx : cloned) _scanner_params.conjuncts.all_ctxs.emplace_back(ctx);
 
     return Status::OK();
 }
@@ -341,8 +342,9 @@ Status HiveDataSource::_init_partition_values() {
     if (!_scan_range.identity_partition_slot_ids.empty()) {
         std::vector<ExprContext*> ctxs;
         for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
-            if (_conjuncts.by_slot.find(slotId) != _conjuncts.by_slot.end()) {
-                ctxs.insert(ctxs.end(), _conjuncts.by_slot.at(slotId).begin(), _conjuncts.by_slot.at(slotId).end());
+            if (_scanner_params.conjuncts.by_slot.find(slotId) != _scanner_params.conjuncts.by_slot.end()) {
+                ctxs.insert(ctxs.end(), _scanner_params.conjuncts.by_slot.at(slotId).begin(),
+                            _scanner_params.conjuncts.by_slot.at(slotId).end());
             }
         }
         RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, partition_chunk.get()));
@@ -356,7 +358,7 @@ Status HiveDataSource::_init_partition_values() {
         return Status::OK();
     }
 
-    if (_options.enable_dynamic_prune_scan_range && _runtime_filters) {
+    if (_scanner_params.options.enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_runtime_filter_counters();
         _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_membership_filter_eval_context);
         if (!partition_chunk->has_rows()) {
@@ -453,10 +455,10 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
     }
     if (hdfs_scan_node.__isset.case_sensitive) {
-        _options.case_sensitive = hdfs_scan_node.case_sensitive;
+        _scanner_params.options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
-        _options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+        _scanner_params.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -464,13 +466,13 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // the scanner can avoid reading that placeholder column from the data file when
     // min/max optimization is active.
     if (hdfs_scan_node.__isset.can_use_any_column) {
-        _options.can_use_any_column = hdfs_scan_node.can_use_any_column;
+        _scanner_params.options.can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
-        _options.use_count_opt = hdfs_scan_node.can_use_count_opt;
+        _scanner_params.options.use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
-        _options.use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+        _scanner_params.options.use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
     }
 
     // The reason why we need double check here is for iceberg table.
@@ -493,15 +495,15 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         return true;
     };
     if (!check_partition_opt()) {
-        _options.use_partition_column_value_only = false;
-        _options.use_count_opt = false;
+        _scanner_params.options.use_partition_column_value_only = false;
+        _scanner_params.options.use_count_opt = false;
     }
 
     // for min/max optimization, we already check that on FE side this iceberg table
     // is unpartitioned, or all partition columns are constant value.
     // so we just need to make sure there is no delete file.
     if (!_scan_range.delete_files.empty()) {
-        _options.use_min_max_opt = false;
+        _scanner_params.options.use_min_max_opt = false;
     }
 }
 
@@ -523,7 +525,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         std::vector<SlotId> slot_ids;
         root_expr->get_slot_ids(&slot_ids);
         for (SlotId slot_id : slot_ids) {
-            _conjuncts.slots_in_conjunct.insert(slot_id);
+            _scanner_params.conjuncts.slots_in_conjunct.insert(slot_id);
         }
 
         // For some conjunct like (a < 1) or (a > 7)
@@ -549,117 +551,125 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
             }
         }
         if (!single_slot || slot_ids.empty() || !single_field) {
-            _conjuncts.scanner_ctxs.emplace_back(ctx);
+            _scanner_params.conjuncts.scanner_ctxs.emplace_back(ctx);
             for (SlotId slot_id : slot_ids) {
-                _conjuncts.slots_of_multi_field.insert(slot_id);
+                _scanner_params.conjuncts.slots_of_multi_field.insert(slot_id);
             }
             continue;
         }
 
         SlotId slot_id = slot_ids[0];
         if (slot_by_id.find(slot_id) != slot_by_id.end()) {
-            _conjuncts.by_slot[slot_id].emplace_back(ctx);
+            _scanner_params.conjuncts.by_slot[slot_id].emplace_back(ctx);
         }
     }
     // rewrite dict
     auto* fragment_dict_state = state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
-    RETURN_IF_ERROR(
-            fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_conjuncts.scanner_ctxs));
+    RETURN_IF_ERROR(fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(
+            state, &_scanner_params.conjuncts.scanner_ctxs));
     return Status::OK();
 }
 
 void HiveDataSource::_init_counter(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
 
-    _profile.runtime_profile = _runtime_profile;
-    _profile.raw_rows_read_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
-    _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.late_materialize_skip_rows_counter = ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
-    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
-    _profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
+    _scanner_params.profile.runtime_profile = _runtime_profile;
+    _scanner_params.profile.raw_rows_read_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
+    _scanner_params.profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _scanner_params.profile.late_materialize_skip_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
+    _scanner_params.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
+    _scanner_params.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
 
-    _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
-    _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+    _scanner_params.profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
+    _scanner_params.profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
+    _scanner_params.profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+    _scanner_params.profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
+    _scanner_params.profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
     {
         static const char* prefix = "SharedBuffered";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        _profile.shared_buffered_shared_io_bytes =
+        _scanner_params.profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
-        _profile.shared_buffered_shared_align_io_bytes =
+        _scanner_params.profile.shared_buffered_shared_align_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedAlignIOBytes", TUnit::BYTES, prefix);
-        _profile.shared_buffered_shared_io_count =
+        _scanner_params.profile.shared_buffered_shared_io_count =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
-        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
-        _profile.shared_buffered_direct_io_bytes =
+        _scanner_params.profile.shared_buffered_shared_io_timer =
+                ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
+        _scanner_params.profile.shared_buffered_direct_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
-        _profile.shared_buffered_direct_io_count =
+        _scanner_params.profile.shared_buffered_direct_io_count =
                 ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
-        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
+        _scanner_params.profile.shared_buffered_direct_io_timer =
+                ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
     }
 
     if (_scanner_params.datacache_options.enable_datacache) {
         static const char* prefix = "DataCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        _profile.runtime_profile->add_info_string("DataCachePriority",
-                                                  std::to_string(_scanner_params.datacache_options.datacache_priority));
-        _profile.runtime_profile->add_info_string(
+        _scanner_params.profile.runtime_profile->add_info_string(
+                "DataCachePriority", std::to_string(_scanner_params.datacache_options.datacache_priority));
+        _scanner_params.profile.runtime_profile->add_info_string(
                 "DataCacheTTLSeconds", std::to_string(_scanner_params.datacache_options.datacache_ttl_seconds));
-        _profile.datacache_read_counter =
+        _scanner_params.profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
-        _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
-        _profile.datacache_read_mem_bytes =
+        _scanner_params.profile.datacache_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
+        _scanner_params.profile.datacache_read_mem_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadMemBytes", TUnit::BYTES, "DataCacheReadBytes");
-        _profile.datacache_read_disk_bytes =
+        _scanner_params.profile.datacache_read_disk_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadDiskBytes", TUnit::BYTES, "DataCacheReadBytes");
-        _profile.datacache_skip_read_counter =
+        _scanner_params.profile.datacache_skip_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadCounter", TUnit::UNIT, prefix);
-        _profile.datacache_skip_read_bytes =
+        _scanner_params.profile.datacache_skip_read_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
-        _profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
-        _profile.datacache_read_peer_counter =
+        _scanner_params.profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
+        _scanner_params.profile.datacache_read_peer_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerCounter", TUnit::UNIT, prefix);
-        _profile.datacache_read_peer_bytes =
+        _scanner_params.profile.datacache_read_peer_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerBytes", TUnit::BYTES, prefix);
-        _profile.datacache_read_peer_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadPeerTimer", prefix);
-        _profile.datacache_skip_read_peer_counter =
+        _scanner_params.profile.datacache_read_peer_timer =
+                ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadPeerTimer", prefix);
+        _scanner_params.profile.datacache_skip_read_peer_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadPeerCounter", TUnit::UNIT, prefix);
-        _profile.datacache_skip_read_peer_bytes =
+        _scanner_params.profile.datacache_skip_read_peer_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadPeerBytes", TUnit::BYTES, prefix);
-        _profile.datacache_write_counter =
+        _scanner_params.profile.datacache_write_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
-        _profile.datacache_write_bytes =
+        _scanner_params.profile.datacache_write_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteBytes", TUnit::BYTES, prefix);
-        _profile.datacache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheWriteTimer", prefix);
-        _profile.datacache_write_fail_counter =
+        _scanner_params.profile.datacache_write_timer =
+                ADD_CHILD_TIMER(_runtime_profile, "DataCacheWriteTimer", prefix);
+        _scanner_params.profile.datacache_write_fail_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailCounter", TUnit::UNIT, prefix);
-        _profile.datacache_write_fail_bytes =
+        _scanner_params.profile.datacache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailBytes", TUnit::BYTES, prefix);
-        _profile.datacache_skip_write_counter =
+        _scanner_params.profile.datacache_skip_write_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipWriteCounter", TUnit::UNIT, prefix);
-        _profile.datacache_skip_write_bytes =
+        _scanner_params.profile.datacache_skip_write_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipWriteBytes", TUnit::BYTES, prefix);
-        _profile.datacache_read_block_buffer_counter =
+        _scanner_params.profile.datacache_read_block_buffer_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
-        _profile.datacache_read_block_buffer_bytes =
+        _scanner_params.profile.datacache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
     }
 
     {
         static const char* prefix = "InputStream";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        _profile.app_io_bytes_read_counter =
+        _scanner_params.profile.app_io_bytes_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
-        _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
-        _profile.app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
-        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOBytesRead", TUnit::BYTES, prefix);
-        _profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
-        _profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
+        _scanner_params.profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
+        _scanner_params.profile.app_io_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
+        _scanner_params.profile.fs_bytes_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "FSIOBytesRead", TUnit::BYTES, prefix);
+        _scanner_params.profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
+        _scanner_params.profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {
@@ -730,7 +740,7 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
-    SCOPED_TIMER(_profile.open_file_timer);
+    SCOPED_TIMER(_scanner_params.profile.open_file_timer);
 
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
@@ -757,7 +767,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     bool disable_column_access_path_hints = false;
-    HdfsScannerParams scanner_params;
+    HdfsScannerParams scanner_params = _scanner_params;
     if (hdfs_scan_node.__isset.column_access_paths && !disable_column_access_path_hints &&
         _column_access_paths.empty()) {
         bool failed = false;
@@ -793,9 +803,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params._partition_index_in_hdfs_partition_columns =
             _scanner_params._partition_index_in_hdfs_partition_columns;
     scanner_params.partition_values = _partition_filter.values;
-    // Pass a non-owning pointer; _conjuncts is owned by this HiveDataSource.
-    scanner_params.conjuncts = &_conjuncts;
-
     scanner_params.extended_col_slots = _scanner_params.extended_col_slots;
     scanner_params.extended_col_index_in_chunk = _scanner_params.extended_col_index_in_chunk;
     scanner_params.index_in_extended_columns = _scanner_params.index_in_extended_columns;
@@ -806,15 +813,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table)) {
         scanner_params.avro_schema_json = hdfs_desc->get_avro_schema_json();
     }
-    // Pass a non-owning pointer; _options is owned by this HiveDataSource.
-    // Format-specific options (parquet_*, orc_*) are written into _options
-    // inside the format branch below before the scanner is initialised.
-    scanner_params.options = &_options;
-    scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = &_provider->_lazy_column_coalesce_counter;
     scanner_params.split_context = down_cast<HdfsSplitContext*>(_split_context);
     if (state->query_options().__isset.connector_max_split_size) {
-        _options.connector_max_split_size = state->query_options().connector_max_split_size;
+        _scanner_params.options.connector_max_split_size = state->query_options().connector_max_split_size;
     }
 
     for (const auto& delete_file : scan_range.delete_files) {
@@ -884,7 +886,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                                             .scan_node = &hdfs_scan_node};
     if (_scanner_params.datacache_options.enable_cache_select) {
         scanner = new CacheSelectScanner();
-    } else if (_options.use_partition_column_value_only) {
+    } else if (_scanner_params.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
@@ -897,12 +899,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        _options.parquet_page_index_enable = config::parquet_page_index_enable
-                                                     ? state->query_options().__isset.enable_parquet_reader_page_index
-                                                               ? state->query_options().enable_parquet_reader_page_index
-                                                               : true
-                                                     : false;
-        _options.parquet_bloom_filter_enable =
+        _scanner_params.options.parquet_page_index_enable =
+                config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
+                                                            ? state->query_options().enable_parquet_reader_page_index
+                                                            : true
+                                                  : false;
+        _scanner_params.options.parquet_bloom_filter_enable =
                 config::parquet_reader_bloom_filter_enable
                         ? state->query_options().__isset.enable_parquet_reader_bloom_filter
                                   ? state->query_options().enable_parquet_reader_bloom_filter
@@ -910,7 +912,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                         : false;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
-        _options.orc_use_column_names = state->query_options().orc_use_column_names;
+        _scanner_params.options.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
@@ -966,16 +968,16 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         if (!_scanner->has_split_tasks()) {
-            COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
-            COUNTER_UPDATE(_profile.scan_ranges_size, _scan_range.length);
+            COUNTER_UPDATE(_scanner_params.profile.scan_ranges_counter, 1);
+            COUNTER_UPDATE(_scanner_params.profile.scan_ranges_size, _scan_range.length);
         }
         _scanner->close();
     }
-    ExprExecutor::close(_conjuncts.min_max_ctxs, state);
+    ExprExecutor::close(_scanner_params.conjuncts.min_max_ctxs, state);
     ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
     ExprExecutor::close(_partition_filter.values, state);
-    ExprExecutor::close(_conjuncts.scanner_ctxs, state);
-    for (auto& it : _conjuncts.by_slot) {
+    ExprExecutor::close(_scanner_params.conjuncts.scanner_ctxs, state);
+    for (auto& it : _scanner_params.conjuncts.by_slot) {
         ExprExecutor::close(it.second, state);
     }
 }

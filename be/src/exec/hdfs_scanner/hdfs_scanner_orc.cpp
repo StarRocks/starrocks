@@ -89,7 +89,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, Or
     if (_scanner_ctx.params->min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = "
                   << _scanner_ctx.params->min_max_tuple_desc->debug_string();
-        for (ExprContext* ctx : _scanner_ctx.params->conjuncts->min_max_ctxs) {
+        for (ExprContext* ctx : _scanner_ctx.params->conjuncts.min_max_ctxs) {
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
@@ -171,7 +171,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
 
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
-    for (auto& min_max_conjunct_ctx : _scanner_ctx.params->conjuncts->min_max_ctxs) {
+    for (auto& min_max_conjunct_ctx : _scanner_ctx.params->conjuncts.min_max_ctxs) {
         // TODO: add a warning log here
         auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
         auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
@@ -403,8 +403,8 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.params->hive_column_names,
-                                          reader->getType(), _scanner_ctx.params->options->case_sensitive,
-                                          _scanner_ctx.params->options->orc_use_column_names);
+                                          reader->getType(), _scanner_ctx.params->options.case_sensitive,
+                                          _scanner_ctx.params->options.orc_use_column_names);
     RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -415,7 +415,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = Utils::format_name(column.name(), _scanner_ctx.params->options->case_sensitive);
+        auto col_name = Utils::format_name(column.name(), _scanner_ctx.params->options.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
@@ -433,8 +433,8 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
         // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
         {
-            auto it = _scanner_params.conjuncts->by_slot.find(column.slot_id());
-            if (it != _scanner_params.conjuncts->by_slot.end()) {
+            auto it = _scanner_params.conjuncts.by_slot.find(column.slot_id());
+            if (it != _scanner_params.conjuncts.by_slot.end()) {
                 _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
             }
         }
@@ -448,7 +448,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes) {
     // we can split task if we enable split tasks feature and have >= 2 stripes.
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks = (_scanner_ctx.params->options->enable_split_tasks && stripes.size() >= 2) &&
+    bool enable_split_tasks = (_scanner_ctx.params->options.enable_split_tasks && stripes.size() >= 2) &&
                               (_scanner_ctx.params->split_context == nullptr);
     if (!enable_split_tasks) return Status::OK();
 
@@ -530,8 +530,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     _orc_reader->set_hive_column_names(_scanner_ctx.params->hive_column_names);
-    _orc_reader->set_case_sensitive(_scanner_ctx.params->options->case_sensitive);
-    _orc_reader->set_use_orc_column_names(_scanner_ctx.params->options->orc_use_column_names);
+    _orc_reader->set_case_sensitive(_scanner_ctx.params->options.case_sensitive);
+    _orc_reader->set_use_orc_column_names(_scanner_ctx.params->options.orc_use_column_names);
     // for hive table, we set this flag
     _orc_reader->set_invalid_as_null(true);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
@@ -549,7 +549,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         // also fold multi-slot predicates into the search argument; ORC can use them
         // for stripe-level skipping even though the post-read pass in get_next() is
         // still needed for correctness.
-        for (const auto& it : _scanner_params.conjuncts->scanner_ctxs) {
+        for (const auto& it : _scanner_params.conjuncts.scanner_ctxs) {
             conjuncts.push_back(it->root());
         }
     }
@@ -574,7 +574,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
     size_t rows_read = 0;
 
-    if (_scanner_ctx.params->options->use_count_opt) {
+    if (_scanner_ctx.params->options.use_count_opt) {
         ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
     } else {
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
@@ -590,9 +590,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     // ORC already folded these into search arguments during do_open() for
     // stripe-level skipping, but that is an approximate optimisation only; this
     // row-level pass is still required for correctness.
-    if (rows_read > 0 && !_scanner_params.conjuncts->scanner_ctxs.empty()) {
+    if (rows_read > 0 && !_scanner_params.conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts->scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
         rows_read = (*chunk)->num_rows();
     }
 
@@ -746,7 +746,7 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     return Status::OK();
 }
 
-void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
+void HdfsOrcScanner::do_update_counter(HdfsScannerProfile* profile) {
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {

@@ -70,7 +70,7 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
         std::vector<char> deletion_vector(serialized_bitmap_length);
         RETURN_IF_ERROR(dv_file->read_at_fully(offset, deletion_vector.data(), serialized_bitmap_length));
 
-        update_dv_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
+        update_dv_file_io_counter(_params.profile.runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
         return deserialized_deletion_vector(magic_number_from_deletion_vector_file, deletion_vector,
                                             serialized_bitmap_length, skip_rows_ctx);
@@ -134,7 +134,7 @@ Status DeletionVector::deserialized_deletion_vector(uint32_t magic_number, std::
         skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
     }
 #ifndef BE_TEST
-    update_dv_build_counter(_params.profile->runtime_profile, _build_stats);
+    update_dv_build_counter(_params.profile.runtime_profile, _build_stats);
 #endif
     return Status::OK();
 }

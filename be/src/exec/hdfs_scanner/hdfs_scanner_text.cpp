@@ -291,7 +291,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-void HdfsTextScanner::do_update_counter(HdfsScanProfile* profile) {
+void HdfsTextScanner::do_update_counter(HdfsScannerProfile* profile) {
     profile->runtime_profile->add_info_string("TextCompression", CompressionTypePB_Name(_compression_type));
 }
 
@@ -465,7 +465,7 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
         return Status::OK();
     }
 
-    const bool case_sensitive = _scanner_ctx.params->options->case_sensitive;
+    const bool case_sensitive = _scanner_ctx.params->options.case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)
     std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;

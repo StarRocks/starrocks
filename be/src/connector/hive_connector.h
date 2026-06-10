@@ -115,10 +115,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
 
     HdfsScanner* _scanner = nullptr;
-    HdfsScannerConjuncts _conjuncts;
-    HdfsScannerOptions _options;
     HdfsScannerParams _scanner_params;
-    HdfsScanProfile _profile;
 
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {

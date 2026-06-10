@@ -62,7 +62,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
     return Status::OK();
 }
 
-void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
+void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     // deletion vector build only in the first task which used for split sub-tasks,
@@ -271,9 +271,9 @@ Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     // This pass is the correctness guarantee; statistics-based skipping inside
     // FileReader is approximate.  In the future, expression-driven lazy
     // materialisation will replace this with interleaved column-load/evaluate.
-    if ((*chunk)->num_rows() > 0 && !_scanner_params.conjuncts->scanner_ctxs.empty()) {
+    if ((*chunk)->num_rows() > 0 && !_scanner_params.conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts->scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
     }
     return Status::OK();
 }

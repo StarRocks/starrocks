@@ -54,7 +54,7 @@ FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    if (ctx->params->options->use_file_metacache) {
+    if (ctx->params->options.use_file_metacache) {
         _cache = DataCache::GetInstance()->page_cache();
     }
 
@@ -92,10 +92,10 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
         // the parquet file carries field ids.  Without field ids, the lake schema cannot
         // be matched reliably and we fall back to ParquetMetaHelper which handles
         // col_unique_id / col_physical_name / name lookup chains correctly.
-        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options->case_sensitive,
+        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options.case_sensitive,
                                                 _scanner_ctx->params->table_specific.iceberg_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options->case_sensitive);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options.case_sensitive);
     }
 }
 
@@ -116,7 +116,7 @@ Status FileReader::_build_split_tasks() {
     // don't do split in following cases:
     // 1. this feature is not enabled
     // 2. we have already done split before (that's why `split_context` is nullptr)
-    if (!_scanner_ctx->params->options->enable_split_tasks || _scanner_ctx->params->split_context != nullptr) {
+    if (!_scanner_ctx->params->options.enable_split_tasks || _scanner_ctx->params->split_context != nullptr) {
         return Status::OK();
     }
 
@@ -171,8 +171,8 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     bool& filtered = group_reader->get_is_group_filtered();
     filtered = false;
     auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicate_tree, group_reader.get(),
-                                            _scanner_ctx->params->options->parquet_page_index_enable,
-                                            _scanner_ctx->params->options->parquet_bloom_filter_enable};
+                                            _scanner_ctx->params->options.parquet_page_index_enable,
+                                            _scanner_ctx->params->options.parquet_bloom_filter_enable};
     auto sparse_range = _scanner_ctx->predicate_tree.visit(visitor);
     _group_reader_param.stats->bloom_filter_tried_counter += visitor.counter.bloom_filter_tried_counter;
     _group_reader_param.stats->bloom_filter_success_counter += visitor.counter.bloom_filter_success_counter;
@@ -256,10 +256,10 @@ Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_rea
         std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         ColumnIOTypeFlags flags = 0;
-        if (_scanner_ctx->params->options->parquet_page_index_enable) {
+        if (_scanner_ctx->params->options.parquet_page_index_enable) {
             flags |= ColumnIOType::PAGE_INDEX;
         }
-        if (_scanner_ctx->params->options->parquet_bloom_filter_enable) {
+        if (_scanner_ctx->params->options.parquet_bloom_filter_enable) {
             flags |= ColumnIOType::BLOOM_FILTER;
         }
         group_reader->collect_io_ranges(&ranges, &end_offset, flags);
@@ -411,7 +411,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = 0;
-        if (_scanner_ctx->params->options->use_count_opt) {
+        if (_scanner_ctx->params->options.use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
             _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
             _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);

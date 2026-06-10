@@ -51,25 +51,6 @@ struct SkipRowsContext {
 };
 using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 
-struct OptimizationCounter {
-    int bloom_filter_tried_counter = 0;
-    int bloom_filter_success_counter = 0;
-    int statistics_tried_counter = 0;
-    int statistics_success_counter = 0;
-    int page_index_tried_counter = 0;
-    int page_index_filter_group_counter = 0;
-    int page_index_success_counter = 0;
-    OptimizationCounter& operator+=(const OptimizationCounter& counter) {
-        bloom_filter_tried_counter += counter.bloom_filter_tried_counter;
-        bloom_filter_success_counter += counter.bloom_filter_success_counter;
-        statistics_tried_counter += counter.statistics_tried_counter;
-        statistics_success_counter += counter.statistics_success_counter;
-        page_index_tried_counter += counter.page_index_tried_counter;
-        page_index_filter_group_counter += counter.page_index_filter_group_counter;
-        page_index_success_counter += counter.page_index_success_counter;
-        return *this;
-    }
-};
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
@@ -161,9 +142,7 @@ struct HdfsScanStats {
     int page_index_success_counter = 0;
 };
 
-class HdfsParquetProfile;
-
-struct HdfsScanProfile {
+struct HdfsScannerProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
@@ -296,9 +275,9 @@ struct HdfsScannerParams {
 
     const HdfsSplitContext* split_context = nullptr;
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
-    const HdfsScannerConjuncts* conjuncts = nullptr;
-    const HdfsScannerOptions* options = nullptr;
-    HdfsScanProfile* profile = nullptr;
+    HdfsScannerConjuncts conjuncts;
+    HdfsScannerOptions options;
+    HdfsScannerProfile profile;
     DataCacheOptions datacache_options{};
 
     // ---- materialized columns ----
@@ -356,7 +335,7 @@ struct HdfsScannerContext {
     const HdfsScannerParams* params = nullptr;
 
     std::string formatted_name(const std::string& name) const {
-        return params->options->case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+        return params->options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
     std::vector<SlotDescriptor*> slot_descs;
@@ -484,7 +463,7 @@ public:
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
-    virtual void do_update_counter(HdfsScanProfile* profile);
+    virtual void do_update_counter(HdfsScannerProfile* profile);
     virtual Status reinterpret_status(const Status& st);
 
     // ORC and Parquet push conjunct_ctxs_by_slot into their own column-level
@@ -520,7 +499,7 @@ private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
     Status _build_scanner_context();
-    void update_hdfs_counter(HdfsScanProfile* profile);
+    void update_hdfs_counter(HdfsScannerProfile* profile);
 
 protected:
     HdfsScannerContext _scanner_ctx;

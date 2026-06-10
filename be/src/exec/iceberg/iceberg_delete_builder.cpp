@@ -98,8 +98,6 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
 
     auto scanner_ctx = std::make_unique<HdfsScannerContext>();
     HdfsScannerParams local_params;
-    HdfsScannerOptions local_options;
-    local_params.options = &local_options;
     scanner_ctx->params = &local_params;
 
     std::vector<HdfsScannerContext::ColumnInfo> columns;
@@ -157,7 +155,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
         RETURN_IF_ERROR(fill_skip_rowids(chunk));
     }
     _skip_rows_ctx->deletion_bitmap = _deletion_bitmap;
-    update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
+    update_delete_file_io_counter(_params.profile.runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();
 }
@@ -210,7 +208,7 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
         RETURN_IF_ERROR(fill_skip_rowids(ret.value()));
     }
     _skip_rows_ctx->deletion_bitmap = _deletion_bitmap;
-    update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
+    update_delete_file_io_counter(_params.profile.runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();
 }

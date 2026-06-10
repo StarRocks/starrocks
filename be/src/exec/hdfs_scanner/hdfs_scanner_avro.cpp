@@ -134,7 +134,7 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-void HdfsAvroScanner::do_update_counter(HdfsScanProfile* profile) {
+void HdfsAvroScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kAvroProfileSectionPrefix, TUnit::NONE);
 
