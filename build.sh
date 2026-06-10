@@ -122,6 +122,8 @@ Usage: $0 <options>
                         build Backend without the JDBC connector
      --without-connector-mysql
                         build Backend without the MySQL connector
+     --without-connector-lance
+                        build Backend without the Lance JNI connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --with-glibc-compat
@@ -190,6 +192,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
+  -l 'without-connector-lance' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
@@ -233,6 +236,7 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
+WITH_CONNECTOR_LANCE=ON
 WITH_CLANG_TIDY=OFF
 WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
@@ -361,6 +365,7 @@ else
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
             --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+            --without-connector-lance) WITH_CONNECTOR_LANCE=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
@@ -435,6 +440,7 @@ echo "Get params:
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
     WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
+    WITH_CONNECTOR_LANCE        -- $WITH_CONNECTOR_LANCE
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_GLIBC_COMPAT           -- $WITH_GLIBC_COMPAT
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
@@ -589,6 +595,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
                   -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC}            \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
+                  -DWITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_GLIBC_COMPAT=${WITH_GLIBC_COMPAT}              \
