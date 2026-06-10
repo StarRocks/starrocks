@@ -23,11 +23,13 @@
 #include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
@@ -256,49 +258,39 @@ static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
     return unmodified_column_ids;
 }
 
-// Decide which vector index ids to persist on the rewritten (dest) partial-update segment. The
-// dest segment is a full segment, so a vector index whose column is materialized in it needs a
-// .vi. This mirrors HorizontalGeneralTabletWriter::record_segment_vector_index_ids but for the
-// rewrite path, which has no SegmentWriter to query:
-//   - async indexes are recorded once the segment clears the deferred-build threshold (the dest
-//     segment is a standalone rewrite file, never a bundle), so the FE-scheduled build task
-//     rebuilds the .vi from the dest segment;
-//   - sync indexes are recorded only when the .vi was actually built inline by
-//     rewrite_partial_update, i.e. the indexed column is among the rewritten (unmodified) columns.
-// |rewritten_column_ids| are schema column ordinals (see get_read_columns_ids).
-static std::vector<int64_t> collect_rewrite_segment_vector_index_ids(const TabletSchemaCSPtr& schema,
-                                                                     const std::vector<ColumnId>& rewritten_column_ids,
-                                                                     bool defer_build, int64_t num_rows) {
-    auto is_rewritten = [&](uint32_t ordinal) {
-        for (auto id : rewritten_column_ids) {
-            if (id == ordinal) return true;
-        }
-        return false;
-    };
-    const uint32_t threshold = defer_build ? get_vector_index_build_threshold(schema) : 0;
-    std::vector<int64_t> ids;
-    for (uint32_t i = 0, num_cols = schema->num_columns(); i < num_cols; i++) {
-        const auto& column = schema->column(i);
-        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
-            continue;
-        }
-        std::unordered_map<IndexType, TabletIndex> tablet_index;
-        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
-            continue;
-        }
-        auto it = tablet_index.find(IndexType::VECTOR);
-        if (it == tablet_index.end()) {
-            continue;
-        }
-        if (defer_build) {
-            if (num_rows >= static_cast<int64_t>(threshold)) {
-                ids.push_back(it->second.index_id());
-            }
-        } else if (is_rewritten(i)) {
-            ids.push_back(it->second.index_id());
-        }
+// Resolve the rewrite-path vector index options for the dest segment, mirroring the normal lake
+// writer (reset_segment_writer): location-provider-resolved .vi paths keyed on |dest_path| — also
+// filled in async mode, where they only feed id recording — plus the schema's index_build_mode
+// and deferred-build threshold.
+static StatusOr<RewriteVectorIndexOptions> resolve_rewrite_vector_index_options(const RowsetUpdateStateParams& params,
+                                                                                const std::string& dest_path) {
+    RewriteVectorIndexOptions vi_opts;
+    SegmentWriterOptions opts;
+    RETURN_IF_ERROR(fill_vector_index_file_paths(params.tablet_schema, params.tablet->id(), dest_path,
+                                                 params.tablet->tablet_mgr(), /*location_provider=*/nullptr,
+                                                 /*fs=*/nullptr, opts));
+    vi_opts.file_paths = std::move(opts.vector_index_file_paths);
+    vi_opts.defer_build = has_async_vector_index(params.tablet_schema);
+    vi_opts.build_threshold = get_vector_index_build_threshold(params.tablet_schema);
+    return vi_opts;
+}
+
+// A partial update whose update set includes a vector-indexed column raw-copies that column's
+// data into the dest segment (rewrite_partial_update creates no column writer for it), so a sync
+// .vi built inline for the src partial segment is still valid for the dest — the rewrite keeps
+// the row order. Carry it over to the dest segment name and record the id; the src ids in the
+// op_write metadata list exactly the indexes whose .vi was built on the updated columns. Async
+// mode has no src .vi to carry: the dest ids recorded by the rewrite already cover all indexes.
+static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& params,
+                                               const SegmentMetadataPB& src_seg_meta, const std::string& src_path,
+                                               const std::string& dest_path, FileInfo* file_info) {
+    for (int64_t index_id : src_seg_meta.vector_index_ids()) {
+        auto src_vi = params.tablet->segment_location(gen_vector_index_filename(src_path, index_id));
+        auto dest_vi = params.tablet->segment_location(gen_vector_index_filename(dest_path, index_id));
+        RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
+        file_info->vector_index_ids.push_back(index_id);
     }
-    return ids;
+    return Status::OK();
 }
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
@@ -527,6 +519,16 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         src.bundle_file_offset = src_seg_meta.bundle_file_offset();
     }
 
+    // The dest segment is a full rewrite, so mirror the normal lake writer's vector-index
+    // handling: sync indexes are built inline at the reader-visible location-provider path;
+    // async builds are deferred to the FE-scheduled VectorIndexBuildTask; and the dest segment's
+    // vector_index_ids are persisted via the replace FileInfo. Without this the SegmentWriter
+    // would fall back to the IndexDescriptor path (unreachable in shared-data, since reads/builds
+    // key off the segment-name path) and the dest segment would carry no vector_index_ids,
+    // silently dropping the index after publish.
+    ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
+    const bool defer_vector_index_build = vector_index_opts.defer_build;
+
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
@@ -535,43 +537,25 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids,
                 has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                params.tablet));
+                params.tablet, std::move(vector_index_opts)));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
 
-        // The dest segment is a full rewrite that re-materializes the unmodified columns, which for
-        // a typical partial update include the vector column. Mirror the normal lake writer's
-        // vector-index handling so the dest segment's .vi lands at the reader-visible
-        // location-provider path and its ids are persisted: sync indexes are built inline here;
-        // async indexes are deferred to the FE-scheduled VectorIndexBuildTask. Without this the
-        // SegmentWriter would fall back to the IndexDescriptor path (unreachable in shared-data,
-        // since reads/builds key off the segment-name path) and the dest segment would carry no
-        // vector_index_ids, silently dropping the index after publish.
-        const bool defer_vector_index_build = has_async_vector_index(params.tablet_schema);
-        std::map<int64_t, std::string> vector_index_file_paths;
-        if (!defer_vector_index_build) {
-            SegmentWriterOptions vi_opts;
-            RETURN_IF_ERROR(fill_vector_index_file_paths(params.tablet_schema, params.tablet->id(), dest_path,
-                                                         params.tablet->tablet_mgr(), /*location_provider=*/nullptr,
-                                                         /*fs=*/nullptr, vi_opts));
-            vector_index_file_paths = std::move(vi_opts.vector_index_file_paths);
-        }
-
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                 src, &file_info, params.tablet_schema, unmodified_column_ids,
                 _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer,
-                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_file_paths),
-                defer_vector_index_build));
+                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts)));
         file_info.path = dest_path;
 
-        const int64_t dest_num_rows = _partial_update_states[segment_id].write_columns.empty()
-                                              ? 0
-                                              : _partial_update_states[segment_id].write_columns[0]->size();
-        file_info.vector_index_ids = collect_rewrite_segment_vector_index_ids(
-                params.tablet_schema, unmodified_column_ids, defer_vector_index_build, dest_num_rows);
+        // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is
+        // raw-copied without a column writer); carry the src partial segment's .vi over to the
+        // dest segment name instead. Async mode never has a src .vi to carry.
+        if (!defer_vector_index_build) {
+            RETURN_IF_ERROR(carry_src_segment_vector_indexes(params, src_seg_meta, src_path, dest_path, &file_info));
+        }
         (*replace_segments)[segment_id] = file_info;
     } else {
         need_rename = false;
@@ -591,6 +575,16 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
             file_meta.set_shared(src_seg_meta.shared());
         }
         orphan_files->push_back(std::move(file_meta));
+        // A sync .vi built for the replaced src segment is keyed on the src segment name and
+        // unreachable after the replace (the dest segment has its own copy); orphan it too. In
+        // async mode the src ids only marked a scheduled build — no .vi file ever existed.
+        if (!defer_vector_index_build) {
+            for (int64_t index_id : src_seg_meta.vector_index_ids()) {
+                FileMetaPB vi_meta;
+                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), index_id));
+                orphan_files->push_back(std::move(vi_meta));
+            }
+        }
     }
     TRACE("end rewrite segment");
     return Status::OK();

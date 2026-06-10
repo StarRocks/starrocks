@@ -20,6 +20,19 @@ class TabletSchema;
 
 class Column;
 
+// Directs how the segment rewrite produces vector indexes for the dest segment. Shared-data
+// callers fill the location-provider-resolved .vi paths (keyed on the dest segment name) plus the
+// schema's index_build_mode/threshold; the rewrite then mirrors the normal lake writer: sync
+// indexes are built inline at the reader-visible path, async builds are deferred to the
+// FE-scheduled VectorIndexBuildTask, and the actually-produced/scheduled index ids are recorded
+// on the dest FileInfo. Shared-nothing callers leave the defaults (empty paths, sync, threshold
+// 0): the SegmentWriter then uses its IndexDescriptor fallback paths and no ids are recorded.
+struct RewriteVectorIndexOptions {
+    std::map<int64_t, std::string> file_paths;
+    bool defer_build = false;
+    uint32_t build_threshold = 0;
+};
+
 class SegmentRewriter {
 public:
     SegmentRewriter();
@@ -29,19 +42,12 @@ public:
     // read from src, write to dest
     // this function will read data from src_file and write to dest file first
     // then append write_column to dest file
-    //
-    // |vector_index_file_paths| / |defer_vector_index_build| direct how vector indexes on the
-    // rewritten columns are produced. Shared-data callers pass the location-provider-resolved .vi
-    // paths (sync mode, so the SegmentWriter builds .vi at the reader-visible path instead of the
-    // IndexDescriptor fallback) or set defer=true (async mode, so .vi is left to the FE-scheduled
-    // build task). Shared-nothing callers leave the defaults: an empty map and defer=false.
     static Status rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                          const std::shared_ptr<const TabletSchema>& tschema,
                                          std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                          uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
                                          SegmentFileMark segment_file_mark = {},
-                                         std::map<int64_t, std::string> vector_index_file_paths = {},
-                                         bool defer_vector_index_build = false);
+                                         RewriteVectorIndexOptions vector_index_opts = {});
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
@@ -51,7 +57,7 @@ public:
             const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
-            const starrocks::lake::Tablet* tablet);
+            const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {});
 };
 
 } // namespace starrocks

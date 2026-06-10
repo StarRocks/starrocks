@@ -183,10 +183,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
-        // The rewrite produces a full segment; refresh its vector_index_ids to reflect the .vi the
-        // rewrite built inline (sync) or that the FE-scheduled build task will build (async). The
-        // partial segment recorded none of its own (it omitted the vector column), so without this
-        // the dest segment would carry no vector_index_ids and lose its vector index after publish.
+        // The rewrite produces a full segment under a new name; the replace FileInfo carries the
+        // authoritative vector_index_ids for it (built inline / carried over from the partial
+        // segment in sync mode, or scheduled for the FE build task in async mode). Any ids copied
+        // from the partial segment's own metadata refer to .vi files keyed on the old segment
+        // name, so refresh them wholesale.
         segment_meta->clear_vector_index_ids();
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
@@ -232,9 +233,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
-    // collect trash files
+    // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : orphan_files) {
-        DCHECK(is_segment(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
         _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
     }
     if (!_tablet_meta->rowset_to_schema().empty()) {
@@ -1308,9 +1309,9 @@ Status MetaFileBuilder::set_final_rowset() {
     // If rowset doesn't contain segment files, still increment next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
 
-    // Collect orphan files
+    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
-        DCHECK(is_segment(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
         _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
     }
 
