@@ -109,10 +109,16 @@ jobs:
               return
             fi
             # gh expects team form `org/team-slug`. If the skill already emits
-            # a qualified form, use it as-is; otherwise default to the org.
+            # a qualified form, use it as-is; otherwise scope to the current
+            # repo's org. This file is synced to both StarRocks/starrocks and
+            # CelerData/celerdata-enterprise, and each org has its own
+            # `global-reviewer` team -- StarRocks/global-reviewer vs
+            # CelerData/global-reviewer. Hardcoding one org would route the
+            # wrong team in the other repo, so derive org from $REPO
+            # (`<owner>/<repo>`) at runtime.
             case "$t" in
               */*) ;;
-              *)   t="StarRocks/$t" ;;
+              *)   t="${REPO%%/*}/${t}" ;;
             esac
             echo "Assigning team: $t"
             gh pr edit "$PR" -R "$REPO" --add-reviewer "$t" \
