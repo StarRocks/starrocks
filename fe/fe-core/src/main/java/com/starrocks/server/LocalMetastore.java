@@ -47,6 +47,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobExecutor;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.authorization.AccessDeniedException;
@@ -1029,6 +1030,54 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return olapTable;
     }
 
+    /**
+     * Whether a partition may be added to {@code olapTable} while it is in a non-NORMAL state.
+     * Only the metadata-only, provably-safe alter situations are tolerated (gated by
+     * {@link Config#enable_concurrent_add_partition_during_alter}): the transient UPDATING_META
+     * window of fast schema evolution, and the shared-data ADD/DROP INDEX fast-path jobs that
+     * declare {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}. The
+     * consistency guarantee for the newly built tablets is provided by checkIfMetaChange under
+     * the table WRITE lock, not by this coarse table-state check.
+     */
+    private boolean allowAddPartitionDuringAlter(OlapTable olapTable) {
+        if (!Config.enable_concurrent_add_partition_during_alter) {
+            return false;
+        }
+        OlapTable.OlapTableState state = olapTable.getState();
+        return state == OlapTable.OlapTableState.UPDATING_META
+                || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
+    }
+
+    /**
+     * Variant of {@link #checkTable(Database, String)} for the ADD PARTITION path: it keeps the
+     * existence / native-table checks but skips the table-state check when
+     * {@link #allowAddPartitionDuringAlter(OlapTable)} tolerates the current state.
+     */
+    private OlapTable checkTableForAddPartitions(Database db, String tableName) throws DdlException {
+        CatalogUtils.checkTableExist(db, tableName);
+        Table table = getTable(db.getFullName(), tableName);
+        CatalogUtils.checkNativeTable(db, table);
+        OlapTable olapTable = (OlapTable) table;
+        if (!allowAddPartitionDuringAlter(olapTable)) {
+            CatalogUtils.checkTableState(olapTable, tableName);
+        }
+        return olapTable;
+    }
+
+    private OlapTable checkTableForAddPartitions(Database db, Long tableId) throws DdlException {
+        Table table = getTable(db.getId(), tableId);
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableId);
+        }
+        CatalogUtils.checkNativeTable(db, table);
+        OlapTable olapTable = (OlapTable) table;
+        if (!allowAddPartitionDuringAlter(olapTable)) {
+            CatalogUtils.checkTableState(olapTable, table.getName());
+        }
+        return olapTable;
+    }
+
     private void checkPartitionType(PartitionInfo partitionInfo) throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
         if (!partitionInfo.isRangePartition() && partitionType != PartitionType.LIST) {
@@ -1299,7 +1348,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
                                boolean isTempPartition, DistributionDesc distributionDesc) throws DdlException {
         DistributionInfo distributionInfo;
-        OlapTable olapTable = checkTable(db, tableName);
+        OlapTable olapTable = checkTableForAddPartitions(db, tableName);
         OlapTable copiedTable;
 
         Locker locker = new Locker();
@@ -1359,7 +1408,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             try {
                 // Use ID-based lookup to ensure we get the same table we locked,
                 // avoiding lock leak when a concurrent SWAP changes the name-to-table mapping.
-                olapTable = checkTable(db, olapTable.getId());
+                olapTable = checkTableForAddPartitions(db, olapTable.getId());
                 existPartitionNameSet = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable,
                         partitionDescs);
                 if (!existPartitionNameSet.isEmpty()) {
