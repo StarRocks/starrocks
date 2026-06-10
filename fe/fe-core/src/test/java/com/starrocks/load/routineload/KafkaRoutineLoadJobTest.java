@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -60,6 +61,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.NodePosition;
@@ -67,6 +69,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -372,6 +375,250 @@ public class KafkaRoutineLoadJobTest {
                 typeName, customProperties);
         Deencapsulation.setField(createRoutineLoadStmt, "name", jobName);
         return createRoutineLoadStmt;
+    }
+
+    @Test
+    public void testFromCreateStmtWithPartitionDiscovery(@Mocked GlobalStateMgr globalStateMgr,
+                                                         @Injectable Database database,
+                                                         @Injectable OlapTable table) throws StarRocksException {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        partitionIdToOffset.add(new Pair<>(1, 10L));
+        partitionIdToOffset.add(new Pair<>(2, 20L));
+        partitionIdToOffset.add(new Pair<>(3, 30L));
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionDiscovery", true);
+        long dbId = 1L;
+        long tableId = 2L;
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                table.getId();
+                minTimes = 0;
+                result = tableId;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+
+        // partitions are seeds for the initial offsets, not a pinned consume list
+        List<Integer> pinnedPartitions = Deencapsulation.getField(kafkaRoutineLoadJob, "customKafkaPartitions");
+        Assertions.assertTrue(pinnedPartitions.isEmpty(), "kafka_partition_discovery=true should not pin partitions");
+        KafkaProgress progress = Deencapsulation.getField(kafkaRoutineLoadJob, "progress");
+        for (Pair<Integer, Long> partitionOffset : partitionIdToOffset) {
+            Assertions.assertEquals(partitionOffset.second, progress.getOffsetByPartition(partitionOffset.first));
+        }
+    }
+
+    @Test
+    public void testFromCreateStmtWithPartitionDiscoveryInvalidSeedPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                                                             @Injectable Database database,
+                                                                             @Injectable OlapTable table) {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        partitionIdToOffset.add(new Pair<>(1, 10L));
+        partitionIdToOffset.add(new Pair<>(999, 20L));
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionDiscovery", true);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+                table.getId();
+                minTimes = 0;
+                result = 2L;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        // a seeded partition that does not exist in the topic must be rejected at creation time:
+        // it is never pinned into customKafkaPartitions, so the prepare()-time check skips it and
+        // the typo would otherwise silently discard the seeded offset
+        LoadException e = Assertions.assertThrows(LoadException.class,
+                () -> KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt));
+        Assertions.assertTrue(e.getMessage().contains("999"), e.getMessage());
+    }
+
+    @Test
+    public void testLaterDiscoveredPartitionDefaultsToBeginning() {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        // the job already has consuming progress; partition 7 shows up afterwards
+        KafkaProgress progress = Deencapsulation.getField(routineLoadJob, "progress");
+        progress.addPartitionOffset(Pair.create(0, 100L));
+        Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Lists.newArrayList(0, 7));
+
+        Deencapsulation.invoke(routineLoadJob, "updateNewPartitionProgress");
+
+        Assertions.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, progress.getOffsetByPartition(7).longValue());
+        Assertions.assertEquals(100L, progress.getOffsetByPartition(0).longValue());
+    }
+
+    @Test
+    public void testInitialDiscoveryDefaultsToEnd() {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        // empty progress: the job's very first discovery keeps the start-from-latest default
+        Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Lists.newArrayList(7));
+
+        Deencapsulation.invoke(routineLoadJob, "updateNewPartitionProgress");
+
+        KafkaProgress progress = Deencapsulation.getField(routineLoadJob, "progress");
+        Assertions.assertEquals(KafkaProgress.OFFSET_END_VAL, progress.getOffsetByPartition(7).longValue());
+    }
+
+    @Test
+    public void testKafkaDefaultOffsetsWinsForLaterDiscoveredPartition() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        Map<String, String> customProperties = Maps.newHashMap();
+        customProperties.put("kafka_default_offsets", "OFFSET_END");
+        Deencapsulation.setField(routineLoadJob, "customProperties", customProperties);
+        routineLoadJob.convertCustomProperties(true);
+        KafkaProgress progress = Deencapsulation.getField(routineLoadJob, "progress");
+        progress.addPartitionOffset(Pair.create(0, 100L));
+        Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Lists.newArrayList(0, 7));
+
+        Deencapsulation.invoke(routineLoadJob, "updateNewPartitionProgress");
+
+        Assertions.assertEquals(KafkaProgress.OFFSET_END_VAL, progress.getOffsetByPartition(7).longValue());
+    }
+
+    @Test
+    public void testAlterEnablePartitionDiscoveryUnpinsPartitions() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(routineLoadJob, "customKafkaPartitions", Lists.newArrayList(1, 2, 3));
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("property.kafka_partition_discovery", "true");
+        RoutineLoadDataSourceProperties dataSourceProperties = new RoutineLoadDataSourceProperties("KAFKA", properties);
+        dataSourceProperties.analyze();
+
+        routineLoadJob.modifyDataSourceProperties(dataSourceProperties);
+
+        List<Integer> pinnedPartitions = Deencapsulation.getField(routineLoadJob, "customKafkaPartitions");
+        Assertions.assertTrue(pinnedPartitions.isEmpty(),
+                "enabling kafka_partition_discovery should unpin the partition list");
+        Assertions.assertTrue((Boolean) Deencapsulation.getField(routineLoadJob, "kafkaPartitionDiscovery"));
+    }
+
+    @Test
+    public void testAlterDisablePartitionDiscoveryRejected() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(routineLoadJob, "customKafkaPartitions", Lists.newArrayList(1, 2, 3));
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("property.kafka_partition_discovery", "false");
+        RoutineLoadDataSourceProperties dataSourceProperties = new RoutineLoadDataSourceProperties("KAFKA", properties);
+        dataSourceProperties.analyze();
+
+        Assertions.assertThrows(DdlException.class,
+                () -> routineLoadJob.checkDataSourceProperties(dataSourceProperties));
+    }
+
+    @Test
+    public void testAlterSeedOffsetsBeyondPinnedSetWithPartitionDiscovery() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(routineLoadJob, "customKafkaPartitions", Lists.newArrayList(1, 2));
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2,3");
+        properties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "10,20,30");
+        properties.put("property.kafka_partition_discovery", "true");
+        RoutineLoadDataSourceProperties dataSourceProperties = new RoutineLoadDataSourceProperties("KAFKA", properties);
+        dataSourceProperties.analyze();
+
+        // with discovery enabled the seed list may go beyond the pinned set; validated against the broker
+        routineLoadJob.checkDataSourceProperties(dataSourceProperties);
+        routineLoadJob.modifyDataSourceProperties(dataSourceProperties);
+
+        KafkaProgress progress = Deencapsulation.getField(routineLoadJob, "progress");
+        Assertions.assertEquals(30L, progress.getOffsetByPartition(3).longValue());
+        List<Integer> pinnedPartitions = Deencapsulation.getField(routineLoadJob, "customKafkaPartitions");
+        Assertions.assertTrue(pinnedPartitions.isEmpty());
+    }
+
+    @Test
+    public void testAlterSeedInvalidPartitionErrorSurfacesRootCause() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(routineLoadJob, "customKafkaPartitions", Lists.newArrayList(1, 2));
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,999");
+        properties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "10,20");
+        properties.put("property.kafka_partition_discovery", "true");
+        RoutineLoadDataSourceProperties dataSourceProperties = new RoutineLoadDataSourceProperties("KAFKA", properties);
+        dataSourceProperties.analyze();
+
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> routineLoadJob.checkDataSourceProperties(dataSourceProperties));
+        // the error must surface the real cause (the partition does not exist in the topic)
+        // instead of the misleading "not in the consumed partitions" wrapper
+        Assertions.assertTrue(e.getMessage().contains("999"), e.getMessage());
     }
 
     @Test

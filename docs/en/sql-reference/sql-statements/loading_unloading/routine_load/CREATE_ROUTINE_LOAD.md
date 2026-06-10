@@ -256,7 +256,12 @@ The properties of the data source.
 #### `property.kafka_default_offsets`
 
 **Required**: No\
-**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.
+**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property. Partitions that are discovered after the job already has consuming progress (for example, partitions added to the Kafka topic later) start from this offset, or from `OFFSET_BEGINNING` if this property is not specified.
+
+#### `property.kafka_partition_discovery`
+
+**Required**: No\
+**Description**: Whether the Routine Load job keeps discovering new Kafka partitions even if `kafka_partitions` is specified. Valid values: `true` and `false` (default). By default, specifying `kafka_partitions` pins the consumed partitions to that list, and partitions added to the topic later are not consumed. If this property is set to `true`, `kafka_partitions` and `kafka_offsets` only specify the starting offsets of the listed partitions, and the job consumes all partitions of the topic, including partitions added later. A partition that is not listed in `kafka_partitions` starts from the offset specified in `property.kafka_default_offsets`, or from `OFFSET_BEGINNING` if `property.kafka_default_offsets` is not specified. This property can only be used together with `kafka_partitions`.
 
 #### `confluent.schema.registry.url`
 
