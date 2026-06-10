@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic introduces StarRocks' Time Travel feature for Iceberg catalogs."
+description: "How to query historical Iceberg table snapshots in StarRocks using time travel with the AS OF clause."
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

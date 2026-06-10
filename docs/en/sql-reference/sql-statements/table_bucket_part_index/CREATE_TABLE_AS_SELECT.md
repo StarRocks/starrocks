@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['CTAS']
-description: "Use the CREATE TABLE AS SELECT (CTAS) statement to synchronously or asynchronously query a table and create a new table based on the query result, and then insert the query result into the new table."
+description: "CREATE TABLE AS SELECT (CTAS) creates a new table and populates it with query results, supporting synchronous and asynchronous modes."
 ---
 
 # CREATE TABLE AS SELECT

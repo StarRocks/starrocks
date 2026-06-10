@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes some commonly asked questions (FAQ) about data lake and provides solutions to these issues."
+description: "FAQ for common data lake analytics issues in StarRocks, including catalog setup and query problems."
 ---
 
 # Data lake FAQ

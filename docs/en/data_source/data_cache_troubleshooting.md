@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes some frequently asked questions (FAQ) and common issues about Data Cache and provides troubleshooting steps and solutions to these issues."
+description: "FAQ and troubleshooting guide for common Data Cache issues in StarRocks, including cache miss and performance problems."
 ---
 
 # Data Cache FAQ

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Some data lake analytics and shared-data cluster scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing."
+description: "How to use Block Cache Warmup in StarRocks to proactively load remote storage data into local cache before queries."
 ---
 
 # Block cache warmup
