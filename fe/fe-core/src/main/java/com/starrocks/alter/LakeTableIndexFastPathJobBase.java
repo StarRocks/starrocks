@@ -405,12 +405,21 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         //   - a force cancel performs a no-op publish that writes V (V-1
         //     content tagged as V) on BE, then advances FE's VisibleVersion to
         //     V before releasing the table back to NORMAL.
+        // commitVersionMap is populated at the RUNNING -> FINISHED_REWRITING
+        // transition, so a live FINISHED_REWRITING job always has it. Guard
+        // defensively anyway: a job deserialized via the copy ctor / replay may
+        // carry a null (or empty) map, and with no reserved version there is no
+        // version-chain hole to heal — so skip the special handling entirely
+        // (refuse nothing, publish nothing) rather than NPE in
+        // lakePublishVersionWithSkip's commitVersionMap.keySet().
+        boolean hasReservedVersion = commitVersionMap != null && !commitVersionMap.isEmpty();
         boolean tableStillExists = tableExists();
-        if (jobState == JobState.FINISHED_REWRITING && tableStillExists && !force) {
+        if (jobState == JobState.FINISHED_REWRITING && tableStillExists && hasReservedVersion && !force) {
             return false;
         }
 
-        boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableStillExists;
+        boolean advanceVersionForForce =
+                force && jobState == JobState.FINISHED_REWRITING && tableStillExists && hasReservedVersion;
         if (advanceVersionForForce) {
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // The no-op publish RPC failed; leave the job in
