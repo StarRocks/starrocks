@@ -18,6 +18,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -28,7 +29,6 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.planner.LoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -473,15 +473,13 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
         SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
         TabletReshardJob combinedJob = mock(TabletReshardJob.class);
 
-        try (MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
-
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
                     .thenReturn(List.of(bigintColumn("sort_col")));
             grouper.when(() -> PartitionSampleGrouper.group(
@@ -525,7 +523,7 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
             AtomicReference<SampleRequest> capturedRequest = new AtomicReference<>();
 
-            try (MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+            try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                     MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                     MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                     MockedStatic<TabletPreSplitCoordinator> coordinator =
@@ -535,7 +533,6 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
                                 capturedRequest.set(invocation.getArgument(0));
                                 return samples;
                             }))) {
-                loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
                 metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
                         .thenReturn(List.of(bigintColumn("sort_col")));
                 // Empty grouped list -> short-circuits after the sample; we only need
@@ -572,7 +569,7 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
         TabletReshardJobMgr reshardMgr = mock(TabletReshardJobMgr.class);
 
         try (MockedStatic<GlobalStateMgr> gsm = Mockito.mockStatic(GlobalStateMgr.class);
-                MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+                MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
@@ -582,7 +579,6 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
             GlobalStateMgr globalState = mock(GlobalStateMgr.class);
             when(globalState.getTabletReshardJobMgr()).thenReturn(reshardMgr);
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
-            loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
 
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
                     .thenReturn(List.of(bigintColumn("sort_col")));
@@ -614,7 +610,7 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
         ConnectContext context = mockConnectContextWithSessionPreSplit(true);
         when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
 
-        try (MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
@@ -622,7 +618,6 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class)))
                                 .thenThrow(new StarRocksException("synthetic sample failure")))) {
-            loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
                     .thenReturn(List.of(bigintColumn("sort_col")));
 
@@ -648,14 +643,13 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
 
         SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        try (MockedStatic<LoadScanNode> loadScanNode = Mockito.mockStatic(LoadScanNode.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            loadScanNode.when(() -> LoadScanNode.getAvailableComputeNodes(any())).thenReturn(List.of());
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
                     .thenReturn(List.of(bigintColumn("sort_col")));
             grouper.when(() -> PartitionSampleGrouper.group(
