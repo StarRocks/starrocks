@@ -228,6 +228,62 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
     ASSERT_TRUE(status.ok());
 }
 
+#if defined(WITH_STARCACHE)
+// CACHE SELECT writes its planned IO ranges separately. Reader-owned reads through RandomAccessFile,
+// such as parquet footer reads, must populate DataCache through the regular file stream too.
+TEST_F(HdfsScannerTest, TestCacheSelectReaderReadPopulatesDataCache) {
+    auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
+    auto block_cache = TestCacheUtils::create_cache(cache_options);
+    DataCache::GetInstance()->set_block_cache(block_cache);
+
+    ASSIGN_OR_ABORT(auto file_size, FileSystem::Default()->get_file_size(default_parquet_file));
+    const DataCacheOptions datacache_options{
+            .enable_datacache = true, .enable_cache_select = true, .enable_populate_datacache = true};
+
+    auto read_file = [&](HdfsScanStats* fs_stats, CacheInputStream::Stats* select_stats,
+                         CacheInputStream::Stats* populate_stats) {
+        HdfsScanStats app_stats;
+        OpenFileOptions options{.fs = FileSystem::Default(),
+                                .path = default_parquet_file,
+                                .file_size = file_size,
+                                .fs_stats = fs_stats,
+                                .app_stats = &app_stats,
+                                .datacache_options = datacache_options};
+        std::shared_ptr<SharedBufferedInputStream> shared_stream;
+        std::shared_ptr<CacheInputStream> cache_stream;
+        std::shared_ptr<CacheInputStream> populate_stream;
+        ASSIGN_OR_ABORT(auto file,
+                        HdfsScanner::create_random_access_file(shared_stream, cache_stream, options, &populate_stream));
+
+        char buffer[8];
+        ASSERT_OK(file->read_at_fully(0, buffer, sizeof(buffer)));
+        // The CacheSelectInputStream handed back as cache_stream never serves reader-owned reads;
+        // those flow through the separate populate_stream, which is where their cache writes land.
+        ASSERT_TRUE(populate_stream != nullptr);
+        *select_stats = cache_stream->stats();
+        *populate_stats = populate_stream->stats();
+    };
+
+    HdfsScanStats first_fs_stats;
+    CacheInputStream::Stats first_select_stats;
+    CacheInputStream::Stats first_populate_stats;
+    read_file(&first_fs_stats, &first_select_stats, &first_populate_stats);
+    ASSERT_GT(first_fs_stats.bytes_read, 0);
+    // The footer/init reads populate the cache through populate_stream, not the CacheSelect stream.
+    // update_counter() folds these in; without the fold the write bytes would go unreported.
+    EXPECT_GT(first_populate_stats.write_block_cache_bytes, 0);
+    EXPECT_EQ(first_select_stats.write_block_cache_bytes, 0);
+
+    HdfsScanStats second_fs_stats;
+    CacheInputStream::Stats second_select_stats;
+    CacheInputStream::Stats second_populate_stats;
+    read_file(&second_fs_stats, &second_select_stats, &second_populate_stats);
+    EXPECT_EQ(second_fs_stats.bytes_read, 0);
+    // Second pass is served from cache: reads counted on populate_stream, no new backing-store IO.
+    EXPECT_GT(second_populate_stats.read_block_cache_bytes, 0);
+}
+#endif
+
 TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
