@@ -46,8 +46,6 @@ description: "Alphabetical s"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
-<<<<<<< HEAD:docs/zh/administration/management/monitoring/metric_details/q-z.md
-=======
 ## `spill_disk_bytes_used`
 
 - 单位: 字节
@@ -74,7 +72,6 @@ description: "Alphabetical s"
 - 标签：`result`（`hit`、`miss` 或 `error`）
 - 描述：SPM 改写尝试结果的总次数。`hit` 表示成功匹配并应用了基线，`miss` 表示执行了改写流程但没有命中可用基线，`error` 表示 SPM 改写过程中发生异常并回退到原始查询。
 
->>>>>>> 35b4a361a7 ([Doc] Split metrics q-z page and convert ja/zh metrics.md to intro pages (#74242)):docs/zh/administration/management/monitoring/metric_details/s.md
 ## `snmp`
 
 - 单位: -
