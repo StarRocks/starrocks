@@ -45,6 +45,7 @@
 #include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
+#include "storage/flexible_partial_update.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
@@ -596,6 +597,22 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
+        // SDCG flexible partial update: materialize the per-load set-id dictionary that the
+        // coordinator shipped on the eos request into THIS CN's process-global registry (keyed by
+        // _txn_id), STRICTLY BEFORE the dw->finish() loop below -- finish() folds the dict into
+        // RowsetTxnMetaPB.distinct_column_sets by reading FlexiblePartialUpdateRegistry::get(_txn_id)
+        // (delta_writer.cpp). Tablet writers on a CN other than the load coordinator otherwise read
+        // an empty registry and silently degrade the flexible load to a homogeneous union partial
+        // update (NULLing every column a row did not declare). populate_from_snapshot is idempotent,
+        // so populating on every sender's eos is safe no matter which sender closes the channel.
+        if (request.has_column_set_dict() && request.column_set_dict().sets_size() > 0) {
+            std::vector<std::vector<std::string>> sets;
+            sets.reserve(request.column_set_dict().sets_size());
+            for (const auto& set_pb : request.column_set_dict().sets()) {
+                sets.emplace_back(set_pb.column_names().begin(), set_pb.column_names().end());
+            }
+            FlexiblePartialUpdateRegistry::instance()->get_or_create(_txn_id)->populate_from_snapshot(sets);
+        }
         int unfinished_senders = _close_sender(request.partition_ids().data(), request.partition_ids().size());
         if (unfinished_senders > 0) {
             count_down_latch.count_down(_delta_writers.size());

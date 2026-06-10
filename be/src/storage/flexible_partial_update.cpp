@@ -56,6 +56,26 @@ ColumnSetId ColumnSetDict::intern(std::vector<std::string> names) {
     return id;
 }
 
+void ColumnSetDict::populate_from_snapshot(const std::vector<std::vector<std::string>>& sets) {
+    std::lock_guard<std::mutex> l(_mu);
+    if (!_sets.empty()) {
+        // Already populated (the coordinator broadcasts the same snapshot on every sender's eos;
+        // any one of them may arrive first). Idempotent no-op.
+        return;
+    }
+    _sets.reserve(sets.size());
+    for (auto names : sets) {
+        // Canonicalize identically to intern() so the canonical_key index resolves, and so the
+        // set-id order matches the coordinator (which interned canonicalized sets).
+        std::sort(names.begin(), names.end());
+        names.erase(std::unique(names.begin(), names.end()), names.end());
+        std::string key = canonical_key(names);
+        auto id = static_cast<ColumnSetId>(_sets.size());
+        _index.emplace(std::move(key), id);
+        _sets.emplace_back(std::move(names));
+    }
+}
+
 FlexiblePartialUpdateRegistry* FlexiblePartialUpdateRegistry::instance() {
     static FlexiblePartialUpdateRegistry s_instance;
     return &s_instance;

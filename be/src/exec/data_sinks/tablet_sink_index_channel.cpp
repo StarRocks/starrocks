@@ -43,6 +43,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
+#include "storage/flexible_partial_update.h"
 
 namespace starrocks {
 
@@ -93,6 +94,26 @@ PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<s
             if (it != _spec.index_id_to_partition_ids->end()) {
                 for (auto pid : it->second) {
                     sub->add_partition_ids(pid);
+                }
+            }
+        }
+        // SDCG flexible partial update: on the eos request, attach the per-load set-id dictionary
+        // (column-NAME sets in set-id order) read from the process-global registry by this index's
+        // txn_id. The dictionary is interned by the JSON scanner in THIS coordinator process, so it
+        // is complete at eos time (eos is the only request sent after the scan ends). It is absent /
+        // empty for non-flexible loads -> no payload, zero overhead. Sending NAMES (not uids) keeps
+        // the remote delta-writer's name->uid translation unchanged. Every NodeChannel's eos carries
+        // this, so every remote tablet-writer CN receives the dict before its writers finish.
+        if (opts.eos) {
+            if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(s.txn_id);
+                dict != nullptr && dict->size() > 0) {
+                auto snapshot = dict->snapshot();
+                auto* dict_pb = sub->mutable_column_set_dict();
+                for (const auto& names : snapshot) {
+                    auto* set_pb = dict_pb->add_sets();
+                    for (const auto& name : names) {
+                        set_pb->add_column_names(name);
+                    }
                 }
             }
         }

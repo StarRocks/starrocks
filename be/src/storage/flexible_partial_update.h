@@ -88,6 +88,14 @@ public:
         return _sets;
     }
 
+    // Bulk-load the dictionary from a coordinator-side snapshot received over the wire (SDCG
+    // cross-node delivery). `sets` is in set-id order (index == set-id); each entry is a list of
+    // column NAMES. Set-ids are assigned by position so they line up EXACTLY with the coordinator's
+    // intern() ordering -- the receiving side MUST NOT call intern() (that would mint different ids
+    // under concurrency). Idempotent: a no-op if the dictionary is already populated, because every
+    // sender's eos request may carry the same snapshot and they can arrive in any order.
+    void populate_from_snapshot(const std::vector<std::vector<std::string>>& sets);
+
 private:
     static std::string canonical_key(const std::vector<std::string>& sorted_names);
 
