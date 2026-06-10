@@ -111,6 +111,11 @@ public class MysqlChannel {
         return remoteIp;
     }
 
+    public void setRemoteAddress(String ip, int port) {
+        this.remoteIp = ip;
+        this.remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(ip, port);
+    }
+
     private int packetId() {
         byte[] header = headerByteBuffer.array();
         return header[3] & 0xFF;
@@ -177,8 +182,32 @@ public class MysqlChannel {
         return readLen;
     }
 
+    protected int readAllPlainWithTimeout(ByteBuffer dstBuf, long timeoutMs) throws IOException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        int readLen = 0;
+        while (dstBuf.remaining() != 0) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                throw new IOException("Timed out after " + timeoutMs + "ms waiting for PROXY protocol header");
+            }
+            int ret = realNetReadWithTimeout(dstBuf, remaining);
+            if (ret == 0) {
+                throw new IOException("Timed out after " + timeoutMs + "ms waiting for PROXY protocol header");
+            }
+            if (ret == -1) {
+                return readLen;
+            }
+            readLen += ret;
+        }
+        return readLen;
+    }
+
     public int realNetRead(ByteBuffer dstBuf) throws IOException {
         return Channels.readBlocking(conn.getSourceChannel(), dstBuf);
+    }
+
+    protected int realNetReadWithTimeout(ByteBuffer dstBuf, long timeoutMs) throws IOException {
+        return Channels.readBlocking(conn.getSourceChannel(), dstBuf, timeoutMs, TimeUnit.MILLISECONDS);
     }
 
     // read one logical mysql protocol packet
