@@ -3388,11 +3388,11 @@ TEST_F(HdfsScannerTest, TestOrcFooterCache) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
     param->datacache_options = _mock_datacache_options();
-    param->use_file_metacache = true;
+    param->options.use_file_metacache = true;
 
     // first scanner, populate footer cache
     auto scanner = std::make_shared<HdfsOrcScanner>();

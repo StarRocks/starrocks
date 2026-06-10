@@ -20,7 +20,7 @@
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
