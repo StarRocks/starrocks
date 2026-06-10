@@ -208,7 +208,7 @@ Status HdfsScanner::_build_scanner_context() {
     opts.runtime_state = _runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
-    opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = _runtime_state->fragment_runtime_state()->pred_tree_params();
     ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
     auto* predicate_parser =

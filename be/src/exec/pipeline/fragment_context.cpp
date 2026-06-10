@@ -170,7 +170,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
         params.__set_fragment_instance_id(fragment_instance_id());
         // params.query_id = query_id();
         // params.fragment_instance_id = fragment_instance_id();
-        const auto& fe_addr = state->fragment_ctx()->fe_addr();
+        const auto& fe_addr = state->fragment_runtime_state()->fe_addr();
 
         class RpcRunnable : public Runnable {
         public:

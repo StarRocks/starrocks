@@ -79,8 +79,8 @@ public:
     }
     FragmentRuntimeState& fragment_runtime_state() { return _fragment_runtime_state; }
     const FragmentRuntimeState& fragment_runtime_state() const { return _fragment_runtime_state; }
-    void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
-    const TNetworkAddress& fe_addr() { return _fe_addr; }
+    void set_fe_addr(const TNetworkAddress& fe_addr) { _fragment_runtime_state.set_fe_addr(fe_addr); }
+    const TNetworkAddress& fe_addr() const { return _fragment_runtime_state.fe_addr(); }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
@@ -143,18 +143,20 @@ public:
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
-    void set_enable_adaptive_dop(bool val) { _enable_adaptive_dop = val; }
-    bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
+    void set_enable_adaptive_dop(bool val) { _fragment_runtime_state.set_enable_adaptive_dop(val); }
+    bool enable_adaptive_dop() const { return _fragment_runtime_state.enable_adaptive_dop(); }
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
-    const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
-    void set_pred_tree_params(const PredicateTreeParams& params) { _pred_tree_params = params; }
+    const PredicateTreeParams& pred_tree_params() const { return _fragment_runtime_state.pred_tree_params(); }
+    void set_pred_tree_params(const PredicateTreeParams& params) {
+        _fragment_runtime_state.set_pred_tree_params(params);
+    }
 
     size_t next_driver_id() { return _next_driver_id++; }
 
-    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
-    const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
-    bool enable_resource_group() const { return _workgroup != nullptr; }
+    void set_workgroup(workgroup::WorkGroupPtr wg) { _fragment_runtime_state.set_workgroup(std::move(wg)); }
+    const workgroup::WorkGroupPtr& workgroup() const { return _fragment_runtime_state.workgroup(); }
+    bool enable_resource_group() const { return workgroup() != nullptr; }
     TQueryType::type query_type() const;
 
     size_t expired_log_count() { return _expired_log_count; }
@@ -192,7 +194,6 @@ private:
     TUniqueId _query_id;
     // Id of this instance
     FragmentRuntimeState _fragment_runtime_state;
-    TNetworkAddress _fe_addr;
 
     // Hold tplan data datasink from delivery request to create driver lazily
     // after delivery request has been finished.
@@ -218,8 +219,6 @@ private:
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
 
     MorselQueueFactoryMap _morsel_queue_factories;
-    workgroup::WorkGroupPtr _workgroup = nullptr;
-
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
     std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
@@ -227,10 +226,7 @@ private:
     query_cache::CacheParam _cache_param;
     std::vector<StreamLoadContext*> _stream_load_contexts;
 
-    bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
-
-    PredicateTreeParams _pred_tree_params;
 
     size_t _expired_log_count = 0;
 
