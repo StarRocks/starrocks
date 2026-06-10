@@ -41,6 +41,8 @@ public final class QueryStatisticsItem {
     private final String resourceGroupName;
     // PENDING/RUNNING/FINISHED
     private final String execState;
+    // Query/Internal/Statistics/Task/MV
+    private final String queryType;
 
     private QueryStatisticsItem(Builder builder) {
         this.customQueryId = builder.customQueryId;
@@ -56,6 +58,7 @@ public final class QueryStatisticsItem {
         this.warehouseName = builder.warehouseName;
         this.resourceGroupName = builder.resourceGroupName;
         this.execState = builder.execState;
+        this.queryType = builder.queryType;
     }
 
     public String getDb() {
@@ -115,6 +118,10 @@ public final class QueryStatisticsItem {
         return execState;
     }
 
+    public String getQueryType() {
+        return queryType;
+    }
+
     public static final class Builder {
         private String customQueryId;
         private String queryId;
@@ -129,6 +136,7 @@ public final class QueryStatisticsItem {
         private String warehouseName;
         private String resourceGroupName;
         private String execState;
+        private String queryType;
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
@@ -199,6 +207,11 @@ public final class QueryStatisticsItem {
             return this;
         }
 
+        public Builder queryType(String queryType) {
+            this.queryType = queryType;
+            return this;
+        }
+
         public QueryStatisticsItem build() {
             initDefaultValue(this);
             return new QueryStatisticsItem(this);
@@ -227,6 +240,10 @@ public final class QueryStatisticsItem {
 
             if (connId == null) {
                 builder.connId = "";
+            }
+
+            if (queryType == null) {
+                builder.queryType = "";
             }
 
             if (queryProfile == null) {
