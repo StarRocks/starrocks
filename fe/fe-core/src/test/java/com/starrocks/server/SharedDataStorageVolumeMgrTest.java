@@ -515,6 +515,39 @@ public class SharedDataStorageVolumeMgrTest {
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSharedKey());
         Assert.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSasToken());
+<<<<<<< HEAD
+=======
+
+        // Test ADLS2 OAuth2 with client endpoint (was broken by a typo: azure_adls2_oauth2_oauth2_client_endpoint)
+        Config.azure_adls2_shared_key = "";
+        Config.azure_adls2_sas_token = "";
+        Config.azure_adls2_oauth2_use_managed_identity = false;
+        Config.azure_adls2_oauth2_tenant_id = "tenant_id";
+        Config.azure_adls2_oauth2_client_id = "client_id";
+        Config.azure_adls2_oauth2_client_secret = "client_secret";
+        Config.azure_adls2_oauth2_client_endpoint = "https://login.microsoftonline.com/tenant_id";
+        sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assertions.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getEndpoint());
+        Assertions.assertEquals("tenant_id",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getTenantId());
+        Assertions.assertEquals("client_id",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getClientId());
+        Assertions.assertEquals("client_secret",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getClientSecret());
+        Assertions.assertEquals("https://login.microsoftonline.com/tenant_id",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getAuthorityHost());
+
+        Config.cloud_native_storage_type = "GS";
+        Config.gcp_gcs_use_compute_engine_service_account = "true";
+        Config.gcp_gcs_path = "gs://gs_path";
+        sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assertions.assertEquals(true,
+                sv.getCloudConfiguration().toFileStoreInfo().getGsFsInfo().getUseComputeEngineServiceAccount());
+>>>>>>> 14d2a0cf85 ([BugFix] Fix typo in azure_adls2_oauth2_client_endpoint config field name (#74581))
     }
 
     @Test
