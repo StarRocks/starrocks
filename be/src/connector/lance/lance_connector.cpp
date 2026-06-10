@@ -77,13 +77,11 @@ void LanceDataSource::close(RuntimeState* state) {
 
 Status LanceDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     RETURN_IF_ERROR(_init_chunk_if_needed(chunk, state->chunk_size()));
-    bool eos = false;
-    do {
-        RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
-    } while (!eos && (*chunk)->num_rows() == 0);
-    if (eos) {
-        return Status::EndOfFile("");
+    Status status = _scanner->get_next(state, chunk);
+    if (status.is_end_of_file()) {
+        return status;
     }
+    RETURN_IF_ERROR(status);
     _rows_read += (*chunk)->num_rows();
     _bytes_read += (*chunk)->bytes_usage();
     return Status::OK();
