@@ -1310,7 +1310,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
 // Helper: build a tablet_metadata-like vector of rowset PBs with explicit num_dels set,
 // so pick_rowset_indexes does not need to consult UpdateManager for delete counts.
 // Each rowset carries one segment meta: real rowsets always have >= 1 segment, and
-// the v2 gate's benefit_cost_ratio counts input segments via segment_metas_size() —
+// the gate's benefit_cost_ratio counts input segments via segment_metas_size() —
 // leaving the segment list empty would zero out the benefit term and disable bcr.
 static void build_rowsets_with_dels(const std::vector<std::pair<int64_t /*bytes*/, int64_t /*dels*/>>& specs,
                                     std::vector<RowsetMetadataPB>* rowset_metas) {
@@ -1429,12 +1429,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
         EXPECT_GE(picked.size(), 1);
     }
 
-    // (d) Sparse mid-tier WITH a few deletes: under v2 semantics deletes no longer grant
-    // a binary gate bypass. With all override configs at their defaults (disabled), a
-    // below-threshold level is skipped even when it carries delete vectors — the v1
-    // "any delete forces compaction" collapse was the design hole v2 closes. The
-    // quantitative delete-pressure path (bcr override) is covered in
-    // test_pr1prime_v2_gate_overrides Cases 1-3.
+    // (d) Sparse mid-tier WITH a few deletes: deletes do not grant a binary gate bypass.
+    // With all override configs at their defaults (disabled), a below-threshold level is
+    // skipped even when it carries delete vectors. The quantitative delete-pressure path
+    // (bcr override) is covered in test_gate_overrides Cases 1-3.
     auto delete_md = build_metadata({{700LL * 1024 * 1024, 0},
                                      {700LL * 1024 * 1024, 0},
                                      {700LL * 1024 * 1024, 0},
@@ -1443,18 +1441,18 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
     {
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, delete_policy.pick_rowset_indexes(delete_md, &has_dels));
-        EXPECT_EQ(picked.size(), 0) << "v2: sparse below-threshold level with low delete density must still be "
+        EXPECT_EQ(picked.size(), 0) << "sparse below-threshold level with low delete density must still be "
                                     << "skipped when bcr/size_overflow/emergency overrides are disabled";
     }
 }
 
-// PR-1' v2 coverage:
-//   - delete_ratio folded into bcr (no more binary has_deletes collapse)
+// Gate override coverage:
+//   - delete_ratio folded into bcr (quantitative, not a binary has_deletes collapse)
 //   - real_benefit_segs uses (input_segs - output_segs), not raw input_segs
 //   - io_mb uses raw bytes, not read_bytes (which subtracts delete_bytes)
 //   - size_overflow_ratio override uses max_rowset_bytes from picked level
 //     (not the stale compact_level after pick_max_level merges levels)
-TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
+TEST_P(LakePrimaryKeyCompactionTest, test_gate_overrides) {
     const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
     const double old_mls = config::lake_pk_compaction_min_level_score;
     const double old_bcr = config::lake_pk_compaction_min_benefit_cost_ratio;
@@ -1541,7 +1539,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
     // ===== Case 3: 1 single delete in 1 rowset out of 8 (binary-style collapse case) =====
     // delete_ratio = 1 / (8 * 1000) = 0.000125 (tiny)
     // benefit_score = 7 + 0.000125 * 8 * 12 = 7.012, bcr = 7.012 / 4000 ≈ 0.00175 < 0.005 → skip
-    // (PR-1' v1 would have force-compacted on this; v2 correctly skips.)
+    // (a single delete carries negligible delete pressure, so the gate correctly skips.)
     {
         config::lake_pk_compaction_min_level_score = 2.0;
         config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
@@ -1561,8 +1559,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
         EXPECT_EQ(picked.size(), 0)
-                << "single delete in one of 8 rowsets has negligible delete_ratio, gate must still skip "
-                << "(this case is the v1 design hole that v2 fixes)";
+                << "single delete in one of 8 rowsets has negligible delete_ratio, gate must still skip";
     }
 
     // ===== Case 4: size_overflow fires when accumulation crosses threshold =====
@@ -1645,8 +1642,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
                 << "after pick_max_level merge — total 4GB is below the 5GB threshold and gate should skip";
     }
 
-    // ===== Case 7: All v2 overrides at 0 (legacy ba3328b behavior) =====
-    // With every override disabled, gate skips for low-score clean levels just like ba3328b.
+    // ===== Case 7: All overrides at 0 (default behavior) =====
+    // With every override disabled, the gate skips low-score clean levels.
     {
         config::lake_pk_compaction_min_level_score = 2.0;
         config::lake_pk_compaction_min_benefit_cost_ratio = 0.0;

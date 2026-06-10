@@ -171,40 +171,38 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // reduction. Levels containing overlapped rowsets or deletes always compact regardless.
 CONF_mDouble(lake_pk_compaction_min_level_score, "0.0");
 
-// PR-1' (#72411 design fix): minimum benefit/cost ratio (segments-saved per MB rewritten)
-// for accepting a sparse-mid-tier compaction pick. Together with the read-pressure
-// emergency override below, this replaces the binary `min_level_score` gate with a
-// graduated decision: low-pressure partitions skip uneconomical rewrites, high-pressure
-// ones bypass the gate to keep up. Default 0.0 = gate disabled (legacy + min_level_score
-// alone). Recommended 0.005 once production-validated.
+// Minimum benefit/cost ratio (segments-saved per MB rewritten) for accepting a
+// sparse-mid-tier compaction pick. Together with the read-pressure emergency override
+// below, this turns the binary `min_level_score` gate into a graduated decision:
+// low-pressure partitions skip uneconomical rewrites, high-pressure ones bypass the
+// gate to keep up. Default 0.0 disables this override (only `min_level_score` applies).
 CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.0");
 
-// PR-1' read-pressure emergency override. When the partition's read_pressure_score
+// Read-pressure emergency override. When the partition's read_pressure_score
 // (segment count) exceeds this threshold, the gate auto-relaxes proportionally so that
 // hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
-// disable the override (gate always applies). Default 0 keeps legacy behavior.
+// disable the override (gate always applies).
 CONF_mDouble(lake_pk_compaction_emergency_score, "0.0");
 
-// PR-1' v2: weight that converts a level's delete pressure into segment-equivalent
-// benefit units, folded into the bcr numerator:
+// Weight that converts a level's delete pressure into segment-equivalent benefit units,
+// folded into the bcr numerator:
 //   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
 // Intuition: one rowset that is 100% deleted is "worth w segments saved" from the
 // reader's perspective (i.e., cleaning it has the same benefit as eliminating w
 // hypothetical segments). For a sparse mid-tier with 8 input rowsets at 20% level-wide
 // delete_ratio, w=12 contributes 0.20 * 8 * 12 = 19.2 segment-equivalents on top of
-// the segment-count benefit (typically ~7), driving bcr well above the typical
-// 0.005 threshold and allowing compaction. Tune up (e.g., 20) to be more aggressive
-// against delete accumulation; tune down (e.g., 4) to favor WA. Default 0 disables
-// the delete contribution (bcr falls back to segment-only benefit, equals ba3328b).
+// the segment-count benefit. Tune up (e.g., 20) to be more aggressive against delete
+// accumulation; tune down (e.g., 4) to favor write amplification. Default 0 disables
+// the delete contribution (bcr falls back to segment-only benefit).
 CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "0.0");
 
-// PR-1' v2: size accumulation upper-bound. When the picked level's total bytes exceed
+// Size accumulation upper-bound. When the picked level's total bytes exceed
 // alpha * max_rowset_bytes * size_tiered_level_multiple (i.e., alpha * next-tier-target),
-// force compaction regardless of mls/bcr. alpha=2 caps long-tail accumulation at 2x the
-// natural size-tiered promotion target, preventing unbounded mid-tier growth while
-// preserving v9 -72% WA benefit. Note: uses max_rowset_bytes from the actual picked
-// rowsets (not pick_level_ptr->compact_level, which can be stale after pick_max_level
-// merges levels). Default 0 disables the override (no size cap, equals ba3328b).
+// force compaction regardless of min_level_score/bcr. alpha=2 caps long-tail
+// accumulation at 2x the natural size-tiered promotion target, preventing unbounded
+// mid-tier growth. Note: uses max_rowset_bytes from the actual picked rowsets, not the
+// level's compact_level which can be stale after pick_max_level merges levels.
+// Default 0 disables the override (no size cap).
 CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "0.0");
 
 // Skip get from pk index when light pk compaction publish is enabled

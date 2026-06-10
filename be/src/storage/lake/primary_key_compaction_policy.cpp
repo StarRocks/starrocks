@@ -203,11 +203,6 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
 // Levels containing deletes are also allowed, since delete vectors must eventually
 // be applied/cleaned up via compaction.
 //
-// PR-1' v2 (#72411 design fix, second iteration): replace the binary `has_deletes`
-// collapse with a quantitative delete_ratio folded into bcr, fix the bcr formula
-// (real_benefit_segs = input - output, io_mb uses input bytes not read_bytes), and
-// add a size_overflow_ratio override to bound long-tail mid-tier accumulation.
-//
 // Four overrides (any one fires => compaction proceeds):
 //   [A] has_overlap            - structural read amp, always compact
 //   [B] size_overflow_ratio    - level total bytes exceed alpha * next-tier-target
