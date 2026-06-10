@@ -17,7 +17,7 @@
 #include <chrono>
 #include <thread>
 
-#include "exec/pipeline/primitives/query_runtime_state.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 

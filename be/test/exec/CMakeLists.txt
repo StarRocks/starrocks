@@ -22,10 +22,8 @@ set(EXEC_PRIMITIVE_TEST_FILES
     exec_node_exec_primitive_test.cpp
     morsel_primitive_test.cpp
     pipeline_event_exec_primitive_test.cpp
-    pipeline_fragment_runtime_state_exec_primitive_test.cpp
     pipeline_metrics_exec_primitive_test.cpp
     pipeline_observer_exec_primitive_test.cpp
-    pipeline_query_runtime_state_exec_primitive_test.cpp
     runtime_filter_exec_primitive_test.cpp
 )
 
@@ -58,6 +56,8 @@ target_link_libraries(exec_primitive_test ${EXEC_PRIMITIVE_TEST_LINK_LIBS} gtest
 set(EXEC_RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     pipeline_driver_exec_runtime_test.cpp
+    pipeline_fragment_runtime_state_exec_runtime_test.cpp
+    pipeline_query_runtime_state_exec_runtime_test.cpp
 )
 
 set(EXEC_RUNTIME_TEST_LINK_LIBS

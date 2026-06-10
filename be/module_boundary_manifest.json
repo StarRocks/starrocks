@@ -477,10 +477,8 @@
         "be/src/exec/runtime_filter/**",
         "be/src/exec/pipeline/primitives/driver_executor.h",
         "be/src/exec/pipeline/primitives/driver_observer.h",
-        "be/src/exec/pipeline/primitives/fragment_runtime_state.h",
         "be/src/exec/pipeline/primitives/operator_exec_stats.h",
         "be/src/exec/pipeline/primitives/operator_runtime_access.h",
-        "be/src/exec/pipeline/primitives/query_runtime_state.h",
         "be/src/exec/pipeline/runtime_filter_hub.h",
         "be/src/exec/pipeline/runtime_filter_core_types.h",
         "be/src/exec/pipeline/scan/dynamic_morsel_queue_builder.h",
@@ -536,8 +534,13 @@
       "doc_label": "ExecRuntime",
       "summary": "Execution runtime driver lifecycle and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.",
       "owned_targets": ["ExecRuntime"],
+      "additional_owned_globs": [
+        "be/src/exec/runtime/fragment_runtime_state.h",
+        "be/src/exec/runtime/query_runtime_state.h"
+      ],
       "allowed_include_prefixes": [
         "compute_env/",
+        "exec/runtime/",
         "exec/pipeline/pipeline_driver.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
