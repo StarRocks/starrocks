@@ -107,8 +107,8 @@ Status OlapScanContext::capture_tablet_rowsets(RuntimeState* state,
 
     if (enable_glm) {
         int32_t scan_node_id = scan_node()->id();
-        auto* glm_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
-        auto* obj_pool = state->query_ctx()->object_pool();
+        auto* glm_mgr = state->query_runtime_state()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = state->query_runtime_state()->object_pool();
         auto creator = [&]() {
             auto* ctx = obj_pool->add(new OlapScanLazyMaterializationContext());
             return ctx;

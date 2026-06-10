@@ -30,7 +30,9 @@
 #include "gen_cpp/Types_types.h" // for TUniqueId
 
 namespace starrocks {
+class GlobalLateMaterilizationContextMgr;
 class MemTracker;
+class ObjectPool;
 class QueryStatistics;
 namespace spill {
 class QuerySpillManager;
@@ -38,6 +40,8 @@ class QuerySpillManager;
 } // namespace starrocks
 
 namespace starrocks::pipeline {
+
+struct ConnectorScanOperatorMemShareArbitrator;
 
 class QueryRuntimeState {
 public:
@@ -62,6 +66,28 @@ public:
     }
     spill::QuerySpillManager* query_spill_manager() { return _query_spill_manager; }
     const spill::QuerySpillManager* query_spill_manager() const { return _query_spill_manager; }
+    void set_object_pool(ObjectPool* object_pool) { _object_pool = object_pool; }
+    ObjectPool* object_pool() { return _object_pool; }
+    void set_connector_scan_mem_tracker(MemTracker* connector_scan_mem_tracker) {
+        _connector_scan_mem_tracker = connector_scan_mem_tracker;
+    }
+    MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker; }
+    void set_connector_scan_operator_mem_share_arbitrator(ConnectorScanOperatorMemShareArbitrator* arb) {
+        _connector_scan_operator_mem_share_arbitrator = arb;
+    }
+    ConnectorScanOperatorMemShareArbitrator* connector_scan_operator_mem_share_arbitrator() const {
+        return _connector_scan_operator_mem_share_arbitrator;
+    }
+    void set_global_late_materialization_ctx_mgr(GlobalLateMaterilizationContextMgr* mgr) {
+        _global_late_materialization_ctx_mgr = mgr;
+    }
+    GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
+        return _global_late_materialization_ctx_mgr;
+    }
+    void set_static_query_mem_limit(int64_t static_query_mem_limit) {
+        _static_query_mem_limit = static_query_mem_limit;
+    }
+    int64_t static_query_mem_limit() const { return _static_query_mem_limit; }
 
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -200,6 +226,13 @@ private:
     MemTracker* _query_mem_tracker = nullptr;
     // QueryContext owns the query spill manager lifecycle; QueryRuntimeState only exposes a non-owning reference.
     spill::QuerySpillManager* _query_spill_manager = nullptr;
+    // QueryContext owns the lifecycle of all the services below; QueryRuntimeState only exposes non-owning
+    // references, published by QueryContext at construction (_object_pool) or inside init_mem_tracker.
+    ObjectPool* _object_pool = nullptr;
+    MemTracker* _connector_scan_mem_tracker = nullptr;
+    ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
+    GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
+    int64_t _static_query_mem_limit = 0;
 };
 
 } // namespace starrocks::pipeline
