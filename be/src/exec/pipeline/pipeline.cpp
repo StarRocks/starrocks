@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/pipeline.h"
 
-#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
@@ -22,11 +21,8 @@
 
 namespace starrocks::pipeline {
 
-Pipeline::Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group)
-        : _id(id),
-          _op_factories(std::move(op_factories)),
-          _pipeline_event(Event::create_event()),
-          _execution_group(execution_group) {
+Pipeline::Pipeline(uint32_t id, OpFactories op_factories, PipelineGroupRawPtr group)
+        : _id(id), _op_factories(std::move(op_factories)), _pipeline_event(Event::create_event()), _group(group) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
 }
 
@@ -40,7 +36,7 @@ void Pipeline::on_driver_finished(RuntimeState* state) {
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
         _pipeline_event->finish(state);
-        _execution_group->count_down_pipeline(state);
+        _group->count_down_pipeline(state);
     }
 }
 
@@ -59,8 +55,7 @@ Drivers& Pipeline::mutable_drivers() {
 void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
     runtime_state->runtime_profile()->add_child(runtime_profile(), true, nullptr);
     // Set pipeline-level counters once here rather than redundantly in every setup_drivers_profile call.
-    runtime_profile()->add_info_string("IsGroupExecution",
-                                       _execution_group->is_colocate_exec_group() ? "true" : "false");
+    runtime_profile()->add_info_string("IsGroupExecution", _group->is_group_execution() ? "true" : "false");
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));
