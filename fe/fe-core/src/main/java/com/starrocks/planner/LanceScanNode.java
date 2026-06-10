@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
@@ -198,6 +199,10 @@ public class LanceScanNode extends ScanNode {
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        TConnectorScanNode connectorScanNode = new TConnectorScanNode();
+        connectorScanNode.setConnector_name("lance");
+        msg.connector_scan_node = connectorScanNode;
 
         String sqlPredicates = getExplainString(conjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);

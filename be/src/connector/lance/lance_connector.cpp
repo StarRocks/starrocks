@@ -63,6 +63,7 @@ Status LanceDataSource::open(RuntimeState* state) {
     for (auto* slot : _tuple_desc->slots()) {
         scanner_params.materialize_slots.push_back(slot);
     }
+    scanner_params.scanner_conjunct_ctxs = _conjunct_ctxs;
 
     RETURN_IF_ERROR(_scanner->init(state, scanner_params));
     RETURN_IF_ERROR(_scanner->open(state));
