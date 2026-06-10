@@ -90,8 +90,9 @@ public:
     };
 
 public:
-    PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id);
+    PipelineDriver(const Operators& operators, QueryContext* query_ctx, QueryRuntimeState* query_runtime_state,
+                   FragmentContext* fragment_ctx, Pipeline* pipeline, DriverObserver* driver_observer,
+                   int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
 

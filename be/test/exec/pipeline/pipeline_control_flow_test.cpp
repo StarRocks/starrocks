@@ -564,12 +564,14 @@ struct SpillDriverTestHarness {
         query_ctx.set_query_id(generate_uuid());
         query_ctx.set_query_execution_services(&query_execution_services);
         EXPECT_OK(query_ctx.init_spill_manager(TQueryOptions{}));
+        EXPECT_EQ(query_ctx.spill_manager(), query_ctx.query_runtime_state().query_spill_manager());
         query_ctx.set_query_execution_services(nullptr);
 
         fragment_ctx.set_query_id(query_ctx.query_id());
         fragment_ctx.set_fragment_instance_id(generate_uuid());
         auto runtime_state = std::make_shared<RuntimeState>(TQueryGlobals{});
-        runtime_state->set_query_ctx(&query_ctx);
+        runtime_state->set_query_execution_services(&query_execution_services);
+        runtime_state->set_query_runtime_state(&query_ctx.query_runtime_state());
         runtime_state->set_fragment_ctx(&fragment_ctx);
         fragment_ctx.set_runtime_state(std::move(runtime_state));
     }
@@ -669,13 +671,16 @@ TEST(PipelineDriverSpillResourceManagerTest, test_operator_manager_lifecycle) {
     SpillLifecycleOperatorFactory spillable_factory(2, 20, true, false);
     Operators operators{source_factory.create(1, 0), spillable_factory.create(1, 0)};
 
-    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, -1);
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
+                              &harness.fragment_ctx, &harness.pipeline, &harness.pipeline, -1);
 
     ASSERT_OK(driver.prepare(harness.state()));
     ASSERT_EQ(config::local_exchange_buffer_mem_limit_per_driver +
                       spill::OperatorMemoryResourceManager::compute_available_memory_bytes(*harness.state()),
               harness.global_spill_manager.spill_expected_reserved_bytes());
+    ASSERT_EQ(&harness.query_execution_services, harness.state()->query_execution_services());
+    ASSERT_EQ(nullptr, harness.state()->query_ctx());
+    ASSERT_EQ(harness.query_ctx.spill_manager(), harness.state()->query_runtime_state()->query_spill_manager());
     ASSERT_EQ(1, harness.global_spill_manager.spillable_operators());
 
     ASSERT_OK(driver.prepare_local_state(harness.state()));
@@ -690,8 +695,8 @@ TEST(PipelineDriverSpillResourceManagerTest, test_prepare_failure_rolls_back_all
     SpillLifecycleOperatorFactory failing_factory(2, 20, true, false, Status::InternalError("prepare failed"));
     Operators operators{source_factory.create(1, 0), failing_factory.create(1, 0)};
 
-    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.fragment_ctx, &harness.pipeline,
-                              &harness.pipeline, -1);
+    TestPipelineDriver driver(operators, &harness.query_ctx, &harness.query_ctx.query_runtime_state(),
+                              &harness.fragment_ctx, &harness.pipeline, &harness.pipeline, -1);
 
     auto st = driver.prepare(harness.state());
     ASSERT_FALSE(st.ok());
