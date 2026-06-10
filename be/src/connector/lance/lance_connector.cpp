@@ -20,7 +20,7 @@
 namespace starrocks::connector {
 
 DataSourceProviderPtr LanceConnector::create_data_source_provider(ConnectorScanNode* scan_node,
-                                                                   const TPlanNode& plan_node) const {
+                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<LanceDataSourceProvider>(scan_node, plan_node);
 }
 
