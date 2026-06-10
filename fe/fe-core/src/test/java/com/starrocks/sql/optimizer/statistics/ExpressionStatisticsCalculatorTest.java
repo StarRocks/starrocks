@@ -2224,9 +2224,8 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
         ColumnRefOperator col2 = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
 
-        // Attach non-boolean (integer) MCVs to the column statistics, simulating the scenario where a predicate
-        // falls through to the default visitor and returns its first child's statistics (which has integer MCVs).
-        Map<String, Long> integerMcvs = Map.of("10", 200L, "20", 300L, "30", 500L);
+
+        Map<String, Long> integerMcvs = Map.of("1", 200L, "20", 300L, "30", 500L);
         Histogram intHistogram = new Histogram(Collections.emptyList(), integerMcvs);
 
         Statistics statistics = Statistics.builder()

@@ -317,7 +317,7 @@ public class ExpressionStatisticCalculator {
                     .setMaxValue(1)
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(operator.getType().getTypeSize())
-                    .setDistinctValuesCount(mcvs.size());
+                    .setDistinctValuesCount(2);
 
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
