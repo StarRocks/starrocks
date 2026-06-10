@@ -211,6 +211,10 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
 //   [D] emergency_score        - tablet-wide read pressure forces compaction
 static bool skip_sparse_low_score_level(const PKSizeTieredLevel& pick_level,
                                         const std::vector<RowsetCandidate>& rowset_vec, int64_t tablet_id) {
+    if (!config::enable_lake_pk_compaction_score_gate) {
+        // Gate disabled in one step: never skip, every picked level compacts (pre-gate behavior).
+        return false;
+    }
     if (pick_level.score >= config::lake_pk_compaction_min_level_score) {
         return false;
     }

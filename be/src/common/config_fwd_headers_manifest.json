@@ -711,6 +711,7 @@
         "lake_enable_compaction_async_write",
         "lake_pk_compaction_max_input_rowsets",
         "lake_pk_compaction_min_input_segments",
+        "enable_lake_pk_compaction_score_gate",
         "lake_pk_compaction_min_level_score",
         "lake_pk_compaction_min_benefit_cost_ratio",
         "lake_pk_compaction_emergency_score",

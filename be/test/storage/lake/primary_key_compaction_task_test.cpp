@@ -1337,9 +1337,22 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
     // The new lake_pk_compaction_min_level_score config skips these picks.
 
     const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const bool old_gate = config::enable_lake_pk_compaction_score_gate;
     const double old_threshold = config::lake_pk_compaction_min_level_score;
+    const double old_bcr = config::lake_pk_compaction_min_benefit_cost_ratio;
+    const double old_em = config::lake_pk_compaction_emergency_score;
+    const double old_size_overflow = config::lake_pk_compaction_size_overflow_ratio;
+    const double old_delvec_w = config::lake_pk_compaction_delvec_benefit_weight;
     const int64_t old_result_bytes = config::update_compaction_result_bytes;
     config::enable_pk_size_tiered_compaction_strategy = true;
+    config::enable_lake_pk_compaction_score_gate = true;
+    // This test isolates the pure min_level_score gate, so disable the bcr / emergency /
+    // size_overflow overrides (which are enabled by default) — cases (b) and (d) assert a
+    // skip that only holds when no override fires.
+    config::lake_pk_compaction_min_benefit_cost_ratio = 0.0;
+    config::lake_pk_compaction_emergency_score = 0.0;
+    config::lake_pk_compaction_size_overflow_ratio = 0.0;
+    config::lake_pk_compaction_delvec_benefit_weight = 0.0;
     // Raise the per-round result-bytes cap (default 1GB, or 0.5x tablet size) so the
     // 4 x 700MB sparse level below is picked in full. This test exercises the
     // min_level_score gate; the input-size cap is unrelated and would otherwise stop
@@ -1347,7 +1360,12 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
     config::update_compaction_result_bytes = 8LL * 1024 * 1024 * 1024;
     DeferOp restore([&] {
         config::enable_pk_size_tiered_compaction_strategy = old_strategy;
+        config::enable_lake_pk_compaction_score_gate = old_gate;
         config::lake_pk_compaction_min_level_score = old_threshold;
+        config::lake_pk_compaction_min_benefit_cost_ratio = old_bcr;
+        config::lake_pk_compaction_emergency_score = old_em;
+        config::lake_pk_compaction_size_overflow_ratio = old_size_overflow;
+        config::lake_pk_compaction_delvec_benefit_weight = old_delvec_w;
         config::update_compaction_result_bytes = old_result_bytes;
     });
 
@@ -1404,7 +1422,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
 
     PrimaryCompactionPolicy policy(_tablet_mgr.get(), sparse_md, /*force_base_compaction=*/false);
 
-    // (a) threshold=0 (default): legacy behavior — picks the 4 rowsets.
+    // (a) threshold=0: the gate is a no-op (a level's score is always >= 0) — picks all 4.
     config::lake_pk_compaction_min_level_score = 0.0;
     {
         std::vector<bool> has_dels;
@@ -1430,9 +1448,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
     }
 
     // (d) Sparse mid-tier WITH a few deletes: deletes do not grant a binary gate bypass.
-    // With all override configs at their defaults (disabled), a below-threshold level is
-    // skipped even when it carries delete vectors. The quantitative delete-pressure path
-    // (bcr override) is covered in test_gate_overrides Cases 1-3.
+    // With the overrides disabled (set above), a below-threshold level is skipped even when
+    // it carries delete vectors. The quantitative delete-pressure path (bcr override) is
+    // covered in test_gate_overrides Cases 1-3.
     auto delete_md = build_metadata({{700LL * 1024 * 1024, 0},
                                      {700LL * 1024 * 1024, 0},
                                      {700LL * 1024 * 1024, 0},
@@ -1443,6 +1461,71 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
         ASSIGN_OR_ABORT(auto picked, delete_policy.pick_rowset_indexes(delete_md, &has_dels));
         EXPECT_EQ(picked.size(), 0) << "sparse below-threshold level with low delete density must still be "
                                     << "skipped when bcr/size_overflow/emergency overrides are disabled";
+    }
+}
+
+// The master switch turns the whole score gate off in one step: with it disabled, a sparse
+// low-score level that the gate would otherwise skip compacts unconditionally (pre-gate
+// behavior). Enabled (the default), the same level is skipped.
+TEST_P(LakePrimaryKeyCompactionTest, test_score_gate_master_switch) {
+    const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const bool old_gate = config::enable_lake_pk_compaction_score_gate;
+    const double old_threshold = config::lake_pk_compaction_min_level_score;
+    const double old_bcr = config::lake_pk_compaction_min_benefit_cost_ratio;
+    const double old_em = config::lake_pk_compaction_emergency_score;
+    const double old_size_overflow = config::lake_pk_compaction_size_overflow_ratio;
+    const double old_delvec_w = config::lake_pk_compaction_delvec_benefit_weight;
+    const int64_t old_min_segs = config::lake_pk_compaction_min_input_segments;
+    const int64_t old_result_bytes = config::update_compaction_result_bytes;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    config::lake_pk_compaction_min_level_score = 2.0; // production default; sparse level scores ~0.006
+    // Disable the overrides so the master switch is the only thing that can let the sparse
+    // level through.
+    config::lake_pk_compaction_min_benefit_cost_ratio = 0.0;
+    config::lake_pk_compaction_emergency_score = 0.0;
+    config::lake_pk_compaction_size_overflow_ratio = 0.0;
+    config::lake_pk_compaction_delvec_benefit_weight = 0.0;
+    config::lake_pk_compaction_min_input_segments = 2;
+    config::update_compaction_result_bytes = 8LL * 1024 * 1024 * 1024;
+    DeferOp restore([&] {
+        config::enable_pk_size_tiered_compaction_strategy = old_strategy;
+        config::enable_lake_pk_compaction_score_gate = old_gate;
+        config::lake_pk_compaction_min_level_score = old_threshold;
+        config::lake_pk_compaction_min_benefit_cost_ratio = old_bcr;
+        config::lake_pk_compaction_emergency_score = old_em;
+        config::lake_pk_compaction_size_overflow_ratio = old_size_overflow;
+        config::lake_pk_compaction_delvec_benefit_weight = old_delvec_w;
+        config::lake_pk_compaction_min_input_segments = old_min_segs;
+        config::update_compaction_result_bytes = old_result_bytes;
+    });
+
+    // Sparse mid-tier: 4 large non-overlapped rowsets, no deletes -> level score ~0.006 << 2.0.
+    auto md = std::make_shared<TabletMetadataPB>();
+    md->set_id(_tablet_metadata->id());
+    md->set_version(1);
+    std::vector<RowsetMetadataPB> rowset_metas;
+    build_rowsets_with_dels(
+            {{700LL * 1024 * 1024, 0}, {700LL * 1024 * 1024, 0}, {700LL * 1024 * 1024, 0}, {700LL * 1024 * 1024, 0}},
+            &rowset_metas);
+    for (auto& rm : rowset_metas) {
+        *md->add_rowsets() = rm;
+    }
+    PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+
+    // Gate enabled (the default): the sparse low-score level is skipped.
+    config::enable_lake_pk_compaction_score_gate = true;
+    {
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 0) << "gate enabled: sparse low-score level must be skipped";
+    }
+
+    // Master switch off: the same level compacts unconditionally (legacy pre-gate behavior).
+    config::enable_lake_pk_compaction_score_gate = false;
+    {
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 4) << "gate disabled via master switch: level compacts like legacy";
     }
 }
 
