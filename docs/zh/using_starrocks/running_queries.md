@@ -30,6 +30,7 @@ sidebar_position: 9
 | Warehouse | 查询使用的 Warehouse |
 | CustomQueryId | 用户自定义的查询 ID |
 | ResourceGroup | 查询使用的资源组 |
+| QueryType | 查询类型：`Query`（用户查询）、`Statistics`（统计信息采集，如 ANALYZE）、`Task`（任务执行）、`MV`（物化视图刷新）或 `Internal`（其他内部查询） |
 
 
 
@@ -53,6 +54,7 @@ ExecTime      | 4.077 s
 Warehouse     | default_warehouse
 CustomQueryId |
 ResourceGroup | rg1
+QueryType     | Query
 ```
 
 
@@ -81,6 +83,7 @@ ExecTime      | 3.032 s
 Warehouse     | default_warehouse
 CustomQueryId |
 ResourceGroup | rg1
+QueryType     | Query
 
 ```
 
