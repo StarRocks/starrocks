@@ -20,6 +20,7 @@
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime/fragment_runtime_state.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -157,7 +158,7 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->name = "agg-distinct-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
-    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 

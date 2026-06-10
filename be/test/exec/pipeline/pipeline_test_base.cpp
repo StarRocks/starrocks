@@ -110,7 +110,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
     _query_ctx->attach_to_runtime_state(_runtime_state);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     _obj_pool = _runtime_state->obj_pool();

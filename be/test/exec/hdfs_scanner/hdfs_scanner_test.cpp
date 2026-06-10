@@ -100,7 +100,7 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     _runtime_state->init_instance_mem_tracker();
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
-    _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_ctx(fragment_context, &fragment_context->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
 }
 

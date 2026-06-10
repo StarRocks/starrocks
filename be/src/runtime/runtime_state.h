@@ -155,7 +155,8 @@ public:
     QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
     const pipeline::FragmentContext* fragment_ctx() const { return _fragment_ctx; }
-    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx,
+                          pipeline::FragmentRuntimeState* fragment_runtime_state);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
