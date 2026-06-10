@@ -300,7 +300,12 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::HDFS_SCAN_NODE:
     case TPlanNodeType::KUDU_SCAN_NODE: {
         TPlanNode new_node = tnode;
-        new_node.connector_scan_node = make_connector_scan_node(tnode, connector::Connector::HIVE);
+        std::string connector_name = connector::Connector::HIVE;
+        if (tnode.__isset.connector_scan_node && tnode.connector_scan_node.__isset.connector_name &&
+            tnode.connector_scan_node.connector_name == "lance") {
+            connector_name = connector::Connector::LANCE;
+        }
+        new_node.connector_scan_node = make_connector_scan_node(tnode, connector_name);
         CREATE_NODE(ConnectorScanNode, pool, new_node, descs);
         return Status::OK();
     }
