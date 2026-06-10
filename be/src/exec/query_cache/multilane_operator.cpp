@@ -132,6 +132,35 @@ bool MultilaneOperator::is_finished() const {
     return all_lanes_finished && passthrough_finished;
 }
 
+bool MultilaneOperator::pending_finish() const {
+    return std::any_of(_lanes.begin(), _lanes.end(), [](const auto& lane) { return lane.processor->pending_finish(); });
+}
+
+bool MultilaneOperator::supports_intermediate_wakeup() const {
+    return std::any_of(_lanes.begin(), _lanes.end(),
+                       [](const auto& lane) { return lane.processor->supports_intermediate_wakeup(); });
+}
+
+pipeline::BlockReason MultilaneOperator::block_reason() const {
+    // The lanes are instances of one operator type; the blocked one names the reason, a runnable lane
+    // returns NONE.
+    for (const auto& lane : _lanes) {
+        auto reason = lane.processor->block_reason();
+        if (reason != pipeline::BlockReason::NONE) {
+            return reason;
+        }
+    }
+    return pipeline::BlockReason::NONE;
+}
+
+uint32_t MultilaneOperator::covered_wakeups() const {
+    uint32_t mask = 0;
+    for (const auto& lane : _lanes) {
+        mask |= lane.processor->covered_wakeups();
+    }
+    return mask;
+}
+
 Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
                                   const starrocks::query_cache::MultilaneOperator::FinishCallback& finish_cb) {
     _input_finished = true;
@@ -332,6 +361,14 @@ RuntimeFilterProbeCollector* MultilaneOperatorFactory::get_runtime_bloom_filters
 
 const RuntimeFilterProbeCollector* MultilaneOperatorFactory::get_runtime_bloom_filters() const {
     return _factory->get_runtime_bloom_filters();
+}
+
+bool MultilaneOperatorFactory::support_event_scheduler() const {
+    return _factory->support_event_scheduler();
+}
+
+bool MultilaneOperatorFactory::supports_intermediate_wakeup() const {
+    return _factory->supports_intermediate_wakeup();
 }
 
 pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
