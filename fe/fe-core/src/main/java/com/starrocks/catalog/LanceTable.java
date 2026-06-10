@@ -39,6 +39,6 @@ public class LanceTable extends Table {
 
     @Override
     public boolean isSupported() {
-        return false;
+        return true;
     }
 }
